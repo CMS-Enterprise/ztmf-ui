@@ -18,9 +18,20 @@ interface LoaderData {
   preferred_username?: string
   groups?: string[]
 }
+const emptyUser: LoaderData = {
+  email: '',
+  name: '',
+  preferred_username: '',
+  groups: [],
+}
 const Title: React.FC = (): JSX.Element => {
   const loaderData = useLoaderData() as string
-  const userInfo = jwtDecode(loaderData) as LoaderData
+  console.log(loaderData)
+  const userInfo: LoaderData =
+    loaderData !== 'unauthorized'
+      ? emptyUser
+      : (jwtDecode(loaderData) as LoaderData)
+
   return (
     <>
       <UsaBanner />
