@@ -26,7 +26,6 @@ const emptyUser: LoaderData = {
 }
 const Title: React.FC = (): JSX.Element => {
   const loaderData = useLoaderData() as string
-  console.log(loaderData)
   const userInfo: LoaderData =
     loaderData !== 'unauthorized'
       ? emptyUser
