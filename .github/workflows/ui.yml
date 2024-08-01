@@ -1,12 +1,13 @@
 name: UI
 
 on:
-  workflow_call:
-    inputs:
-      environment:
-        type: string
-        description: environment to deploy to
-        required: true
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
 
 jobs:
   deploy:
