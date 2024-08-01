@@ -13,7 +13,7 @@ jobs:
   deploy:
     name: Deploy
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    environment: dev
     permissions:
       id-token: write
       contents: read
@@ -37,7 +37,7 @@ jobs:
       - name: Build dev bundle
         uses: borales/actions-yarn@v4
         with:
-          cmd: build:${{ inputs.environment }} # will run `yarn build:dev` command
+          cmd: build:dev # will run `yarn build:dev` command
 
       - name: Get AWS Creds
         uses: aws-actions/configure-aws-credentials@v4
