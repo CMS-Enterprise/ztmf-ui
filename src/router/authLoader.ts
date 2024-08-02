@@ -4,28 +4,18 @@
  * @see {@link dashboard/Routes}
  */
 
-interface RequestOptions {
-  method: string
-  headers: Headers
-  redirect: 'follow' | 'error' | 'manual'
-}
-
 const authLoader = async (): Promise<unknown> => {
-  // const myHeaders = new Headers()
-  // myHeaders.append('Authorization', process.env.AUTH_TOKEN!)
-  // const requestOptions: RequestOptions = {
-  //   method: 'GET',
-  //   headers: myHeaders,
-  //   redirect: 'follow',
-  // }
   return fetch('/whoami')
-    .then((response) => response.text())
-    .then((result) => {
-      return result
+    .then(async (response) => {
+      let body: string | Promise<string>
+      if (!response.ok) {
+        body = ''
+      } else {
+        body = await response.text()
+      }
+      return { ok: response.ok, response: body }
     })
-    .catch((error) => {
-      return error
-    })
+    .catch((e) => console.log(e))
 }
 
 export default authLoader

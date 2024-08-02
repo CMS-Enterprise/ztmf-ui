@@ -26,12 +26,15 @@ const emptyUser: LoaderData = {
   preferred_username: '',
   groups: [],
 }
+interface PromiseType {
+  ok: boolean
+  response: string
+}
 const Title: React.FC = (): JSX.Element => {
-  const loaderData = useLoaderData() as string
-  const userInfo: LoaderData =
-    loaderData === 'unauthorized\n'
-      ? emptyUser
-      : (jwtDecode(loaderData) as LoaderData)
+  const loaderData = useLoaderData() as PromiseType
+  const userInfo: LoaderData = !loaderData.ok
+    ? emptyUser
+    : (jwtDecode(loaderData.response as string) as LoaderData)
 
   return (
     <>
