@@ -8,6 +8,8 @@ import { UsaBanner } from '@cmsgov/design-system'
 import { jwtDecode } from 'jwt-decode'
 import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
+import 'core-js/stable/atob'
+
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -27,7 +29,7 @@ const emptyUser: LoaderData = {
 const Title: React.FC = (): JSX.Element => {
   const loaderData = useLoaderData() as string
   const userInfo: LoaderData =
-    loaderData !== 'unauthorized'
+    loaderData === 'unauthorized\n'
       ? emptyUser
       : (jwtDecode(loaderData) as LoaderData)
 
