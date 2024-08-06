@@ -7,6 +7,9 @@ updates:
       interval: 'daily'
       time: '08:00'
       timezone: 'America/New_York'
+    ignore:
+      - dependency-name: "node"
+        versions: ["20.16.0"]
     labels:
       - 'dependencies'
     open-pull-requests-limit: 10

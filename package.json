@@ -3,14 +3,14 @@
   "private": true,
   "version": "0.0.0-semantic-release",
   "license": "UNLICENSED",
-  "description": "Boilerplate for React + Vite project",
+  "description": "CMS ZTMF UI Application",
   "homepage": "https://github.com/aquia-inc/template-vite-react#readme",
   "bugs": {
     "url": "https://github.com/aquia-inc/template-vite-react/issues"
   },
-  "author": "Aquia, Inc.",
+  "author": "CMS",
   "contributors": [
-    "Sinan Bolel"
+    "Alex Tran"
   ],
   "type": "module",
   "packageManager": "yarn@4.0.2",
