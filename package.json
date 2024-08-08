@@ -1,16 +1,17 @@
 {
-  "name": "template-vite-react",
+  "name": "ztmf-ui",
   "private": true,
   "version": "0.0.0-semantic-release",
   "license": "UNLICENSED",
   "description": "CMS ZTMF UI Application",
-  "homepage": "https://github.com/aquia-inc/template-vite-react#readme",
+  "homepage": "https://github.com/CMS-Enterprise/ztmf-ui",
   "bugs": {
-    "url": "https://github.com/aquia-inc/template-vite-react/issues"
+    "url": "https://github.com/CMS-Enterprise/ztmf-ui/issues"
   },
-  "author": "CMS",
+  "author": "Noblis & Aquia, Inc.",
   "contributors": [
-    "Alex Tran"
+    "Alex Tran",
+    "Sinan Bolel"
   ],
   "type": "module",
   "packageManager": "yarn@4.4.0",
