@@ -22,22 +22,36 @@ jobs:
 
       - uses: actions/setup-node@v4
         with:
-          node-version: '20.11.0'
+          node-version-file: '.nvmrc'
+          cache: 'yarn'
+          cache-dependency-path: 'yarn.lock'
 
-      - name: Run install
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: install # will run `yarn install` command
+      - name: DEBUG - node, npm, yarn versions
+        run: |
+          echo "node --version: $(node --version)"
+          echo "npm --version: $(npm --version)"
+          echo "yarn --version: $(yarn --version)"
+          
+      - name: CACHE - get yarn cache folder path
+        id: yarn-cache-path
+        run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
 
-      - name: Run Linting and fixing
-        uses: borales/actions-yarn@v4
+      - name: CACHE - yarn dependencies
+        id: yarn-cache
+        uses: actions/cache@v4
         with:
-          cmd: fix:js
+          path: ${{ steps.yarn-cache-path.outputs.dir }}
+          key: ${{ runner.os }}-yarn-${{ hashFiles('**/yarn.lock', '.yarnrc.yml') }}
+          restore-keys: ${{ runner.os }}-yarn-
 
-      - name: Build dev bundle
-        uses: borales/actions-yarn@v4
-        with:
-          cmd: build:dev # will run `yarn build:dev` command
+      - name: INSTALL - dependencies
+        run: yarn install --immutable
+
+      - name: LINT
+        run: yarn lint
+
+      - name: BUILD
+        run: yarn build:dev
 
       - name: Get AWS Creds
         uses: aws-actions/configure-aws-credentials@v4
@@ -47,5 +61,5 @@ jobs:
           aws-region: us-east-1
 
       - name: AWS Sync
-        run: aws s3 sync ./dist s3://${{ secrets.BUCKET_NAME }}/ --delete 
-          
+        run: aws s3 sync ./dist s3://${{ secrets.BUCKET_NAME }}/ --delete
+      
