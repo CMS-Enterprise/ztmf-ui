@@ -15,7 +15,7 @@
   "type": "module",
   "packageManager": "yarn@4.4.0",
   "engines": {
-    "node": "20.11.0",
+    "node": "20",
     "npm": "please-use-yarn",
     "yarn": "4.4.0"
   },
