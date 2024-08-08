@@ -31,7 +31,7 @@ jobs:
           echo "node --version: $(node --version)"
           echo "npm --version: $(npm --version)"
           echo "yarn --version: $(yarn --version)"
-          
+
       - name: CACHE - get yarn cache folder path
         id: yarn-cache-path
         run: echo "dir=$(yarn config get cacheFolder)" >> $GITHUB_OUTPUT
@@ -62,4 +62,3 @@ jobs:
 
       - name: AWS Sync
         run: aws s3 sync ./dist s3://${{ secrets.BUCKET_NAME }}/ --delete
-      
