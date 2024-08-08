@@ -5,11 +5,8 @@ updates:
     directory: '/'
     schedule:
       interval: 'daily'
-      time: '08:00'
+      time: '09:55'
       timezone: 'America/New_York'
-    ignore:
-      - dependency-name: "node"
-        versions: ["20.16.0"]
     labels:
       - 'dependencies'
     open-pull-requests-limit: 10
@@ -17,3 +14,6 @@ updates:
     reviewers:
       - 'ATNoblis'
     versioning-strategy: increase
+    ignore:
+      - dependency-name: '*'
+        update-types: ['version-update:semver-major']
