@@ -1,19 +1,18 @@
 import * as React from 'react'
-import Typography from '@mui/material/Typography'
 import InputLabel from '@mui/material/InputLabel'
 import MenuItem from '@mui/material/MenuItem'
 import FormControl from '@mui/material/FormControl'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import Select, { SelectChangeEvent } from '@mui/material/Select'
 import { useQuery } from '@apollo/client'
-import Button from '@mui/material/Button'
+import { Button, Typography } from '@mui/material'
 import gql from 'graphql-tag'
 import { Link } from 'react-router-dom'
 import { DocumentNode } from '@apollo/client'
-
+import { QuestionnareModal } from '../QuestionnareModal/QuestionnareModal'
 /**
- * Component that renders the contents of the Dashboard view.
- * @returns {JSX.Element} Component that renders the dashboard contents.
+ * Component that renders the contents of the Home view.
+ * @returns {JSX.Element} Component that renders the home contents.
  */
 
 const FISMASYSTEMS_QUERY: DocumentNode = gql(`
@@ -40,7 +39,7 @@ type FISMASYSTEM = {
 }
 type Dictionary = { [key: string]: SYSTEMPROPS }
 
-const HomePageContainer: React.FC = (): JSX.Element => {
+export default function HomePageContainer() {
   const [fismaSystem, setFismaSystem] = React.useState<string>('')
   const [fismaSubsystem, setFimsaSubsystem] = React.useState<string>('')
   const [fismaTable, setFismaTable] = React.useState<Dictionary>({})
@@ -66,7 +65,6 @@ const HomePageContainer: React.FC = (): JSX.Element => {
     const acronym = (event.target as HTMLElement).innerText.trimEnd()
     const fismasubsystem = fismaTable[acronym].subsystem
     const fismaSubsystemId = fismaTable[acronym].id
-    // console.log(subsystem)
     if (fismasubsystem.length > 1) {
       setHaveSubsystem(true)
       setSubsystem(fismasubsystem)
@@ -80,7 +78,6 @@ const HomePageContainer: React.FC = (): JSX.Element => {
     }
   }
 
-  // TODO: refactor this code to use a loader
   React.useEffect(() => {
     if (data) {
       const seenAcronyms: Set<string> = new Set()
@@ -201,10 +198,10 @@ const HomePageContainer: React.FC = (): JSX.Element => {
                 </Link>
               )}
             </div>
+            <QuestionnareModal />
           </div>
         </>
       )}
     </>
   )
 }
-export default HomePageContainer

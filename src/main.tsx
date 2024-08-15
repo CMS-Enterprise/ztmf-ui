@@ -14,14 +14,30 @@ import {
   ApolloProvider,
   ApolloClient,
   InMemoryCache,
+  ApolloLink,
   HttpLink,
+  concat,
 } from '@apollo/client'
+// import { setContext } from '@apollo/client/link/context'
+// import { ApolloClient, HttpLink, ApolloLink, InMemoryCache, concat } from '@apollo/client';
 
-export const client = new ApolloClient({
-  link: new HttpLink({
-    uri: import.meta.env.GRAPH_URI,
-  }),
+const httpLink = new HttpLink({ uri: '/graphql' })
+
+const authMiddleware = new ApolloLink((operation, forward) => {
+  // add the authorization to the headers
+  operation.setContext(({ headers = {} }) => ({
+    headers: {
+      ...headers,
+      authorization: import.meta.env.VITE_GRAPHQL_TOKEN || null,
+    },
+  }))
+
+  return forward(operation)
+})
+
+const client = new ApolloClient({
   cache: new InMemoryCache(),
+  link: concat(authMiddleware, httpLink),
 })
 
 // IIFE that initializes the root node and renders the application.

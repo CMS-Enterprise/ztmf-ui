@@ -1,6 +1,3 @@
-import * as React from 'react'
-// import Grid from '@mui/material/Grid'
-// import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { Container } from '@mui/material'
 import { Outlet, useLoaderData } from 'react-router-dom'
@@ -30,7 +27,7 @@ interface PromiseType {
   ok: boolean
   response: string
 }
-const Title: React.FC = (): JSX.Element => {
+export default function Title() {
   const loaderData = useLoaderData() as PromiseType
   const userInfo: LoaderData = !loaderData.ok
     ? emptyUser
@@ -85,5 +82,3 @@ const Title: React.FC = (): JSX.Element => {
     </>
   )
 }
-
-export default Title
