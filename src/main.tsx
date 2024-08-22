@@ -57,7 +57,7 @@ const client = new ApolloClient({
   // if NODE_ENV is production, return early. otherwise, run dev tools.
   if (process.env.NODE_ENV === 'development') {
     console.debug(SIGN_IN_GREETING, CONFIG)
-
+    // console.log(`Running in environment: ${process.env.NODE_ENV}`)
     // enable React performance measurement tools.
     // see https://create-react-app.dev/docs/measuring-performance/
     const { onCLS, onFID, onFCP, onINP, onLCP, onTTFB } = await import(

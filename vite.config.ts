@@ -7,6 +7,7 @@ import sass from 'sass'
 
 // https://vitejs.dev/config/
 export default defineConfig(({ mode }) => {
+  process.env = { ...process.env, ...loadEnv(mode, process.cwd()) }
   return {
     define: {
       'process.env': {},
@@ -52,12 +53,12 @@ export default defineConfig(({ mode }) => {
       port: 5174,
       proxy: {
         '/graphql': {
-          target: 'http://localhost:3000/',
+          target: process.env.VITE_CF_DOMAIN,
           changeOrigin: true,
           secure: false,
         },
-        '/whoami': {
-          target: 'http://localhost:3000/',
+        '/api': {
+          target: process.env.VITE_CF_DOMAIN,
           changeOrigin: true,
           secure: false,
         },

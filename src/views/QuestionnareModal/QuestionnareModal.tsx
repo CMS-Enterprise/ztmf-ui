@@ -12,11 +12,16 @@ import { styled } from '@mui/system'
 import TextField from '@mui/material/TextField'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
-// export interface IAppProps {
-// }
+import { FismaSystemType } from '@/types'
 interface QuestionnareProps {
   name: string
   steps: string[]
+}
+
+type SystemDetailsModalProps = {
+  open: boolean
+  onClose: () => void
+  system: FismaSystemType | null
 }
 const categories: QuestionnareProps[] = [
   {
@@ -108,12 +113,15 @@ const CssTextField = styled(TextField)({
   },
 })
 
-export function QuestionnareModal() {
+export default function QuestionnareModal({
+  open,
+  onClose,
+  system,
+}: SystemDetailsModalProps) {
   const [activeCategoryIndex, setActiveCategoryIndex] =
     React.useState<number>(0)
   const [activeStepIndex, setActiveStepIndex] = React.useState<number>(0)
-  const [open, setOpen] = React.useState(false)
-
+  // const [open, setOpen] = React.useState(false)
   const activeCategory = categories[activeCategoryIndex]
   const activeStep = activeCategory.steps[activeStepIndex]
 
@@ -138,20 +146,11 @@ export function QuestionnareModal() {
     setActiveCategoryIndex(categoryIndex)
     setActiveStepIndex(stepIndex)
   }
-
-  const handleDialogOpen = () => {
-    setOpen(true)
-  }
-
-  const handleDialogClose = () => {
-    setOpen(false)
-    setActiveCategoryIndex(0)
-    setActiveStepIndex(0)
-  }
+  console.log(system)
   return (
     <>
-      <CmsButton onClick={handleDialogOpen}>Click to show modal</CmsButton>
-      <Dialog open={open} onClose={handleDialogClose} maxWidth="lg" fullWidth>
+      {/* <CmsButton onClick={handleDialogOpen}>Click to show modal</CmsButton> */}
+      <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
         <DialogTitle align="center">
           <div>
             <Typography variant="h3">{'Questionnare'}</Typography>
@@ -275,7 +274,7 @@ export function QuestionnareModal() {
           </Box>
         </DialogContent>
         <DialogActions>
-          <CmsButton onClick={handleDialogClose} color="primary">
+          <CmsButton onClick={onClose} color="primary">
             Close
           </CmsButton>
         </DialogActions>

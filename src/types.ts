@@ -61,7 +61,33 @@ export type FormField = {
   value?: string | number | boolean | null
   component: React.ElementType
 }
-
+export type userData = {
+  userid: string
+  email: string
+  fullname: string
+  role: string
+  assignedfismasystems?: number[]
+}
+export type RequestOptions = {
+  method: string
+  headers: Headers
+  redirect: 'follow' | 'error' | 'manual'
+}
+export type FismaSystemType = {
+  fismasystemid: string | number
+  fismauid: string | number
+  fismaacronym: string
+  fismaname: string
+  fismasubsystem: string
+  component: string
+  mission: string
+  fismaimpactlevel: string
+  issoemail: string
+  datacenterenvironment: string
+}
+export type FismaSystems = {
+  fismaSystems: FismaSystemType[]
+}
 export type ThemeColor =
   | 'primary'
   | 'secondary'

@@ -2,37 +2,32 @@ import Typography from '@mui/material/Typography'
 import { Container } from '@mui/material'
 import { Outlet, useLoaderData } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
-import { jwtDecode } from 'jwt-decode'
 import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
+import { userData } from '@/types'
+// import { useEffect, useState } from 'react'
+// import axiosInstance from '@/axiosConfig'
 
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
  */
-interface LoaderData {
-  email?: string
-  name?: string
-  preferred_username?: string
-  groups?: string[]
-}
-const emptyUser: LoaderData = {
+const emptyUser: userData = {
+  userid: '',
   email: '',
-  name: '',
-  preferred_username: '',
-  groups: [],
+  fullname: '',
+  role: '',
+  assignedfismasystems: [],
 }
-interface PromiseType {
+
+type PromiseType = {
   ok: boolean
-  response: string
+  response: userData
 }
 export default function Title() {
   const loaderData = useLoaderData() as PromiseType
-  const userInfo: LoaderData = !loaderData.ok
-    ? emptyUser
-    : (jwtDecode(loaderData.response as string) as LoaderData)
-
+  const userInfo: userData = !loaderData.ok ? emptyUser : loaderData.response
   return (
     <>
       <UsaBanner />
@@ -56,12 +51,12 @@ export default function Title() {
               <div className="ds-l-col--4 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0 ds-u-margin-top--5 ds-u-font-weight--semibold">
                 <div className="ds-u-float--right">
                   <AccountCircleIcon fontSize={'large'} />
-                  {userInfo.name ? (
+                  {userInfo.fullname ? (
                     <span
                       style={{ verticalAlign: '13px' }}
                       className="ds-text-body--md"
                     >
-                      {userInfo.name}
+                      {userInfo.fullname}
                     </span>
                   ) : (
                     ''
