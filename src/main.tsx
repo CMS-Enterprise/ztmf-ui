@@ -10,35 +10,6 @@ import router from '@/router/router'
 import { SIGN_IN_GREETING } from '@/locales/en'
 import '@/sass/style.scss'
 import onPerfEntry from './utils/onPerfEntry'
-import {
-  ApolloProvider,
-  ApolloClient,
-  InMemoryCache,
-  ApolloLink,
-  HttpLink,
-  concat,
-} from '@apollo/client'
-// import { setContext } from '@apollo/client/link/context'
-// import { ApolloClient, HttpLink, ApolloLink, InMemoryCache, concat } from '@apollo/client';
-
-const httpLink = new HttpLink({ uri: '/graphql' })
-
-const authMiddleware = new ApolloLink((operation, forward) => {
-  // add the authorization to the headers
-  operation.setContext(({ headers = {} }) => ({
-    headers: {
-      ...headers,
-      authorization: import.meta.env.VITE_GRAPHQL_TOKEN || null,
-    },
-  }))
-
-  return forward(operation)
-})
-
-const client = new ApolloClient({
-  cache: new InMemoryCache(),
-  link: concat(authMiddleware, httpLink),
-})
 
 // IIFE that initializes the root node and renders the application.
 ;(async function () {
@@ -48,9 +19,7 @@ const client = new ApolloClient({
   // create the React root node and render the application
   ReactDOMClient.createRoot(rootElement).render(
     <React.StrictMode>
-      <ApolloProvider client={client}>
-        <RouterProvider router={router} />
-      </ApolloProvider>
+      <RouterProvider router={router} />
     </React.StrictMode>
   )
 
