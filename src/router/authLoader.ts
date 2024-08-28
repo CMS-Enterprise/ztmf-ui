@@ -17,12 +17,20 @@ const emptyUser: userData = {
 }
 const authLoader = async (): Promise<unknown> => {
   try {
-    const axiosUser = await axiosInstance.get('/whoami')
-    if (!axiosUser.statusText) {
+    const headers: HeadersInit = {
+      'Content-Type': 'application/json',
+    }
+    if (process.env.NODE_ENV === 'development') {
+      headers['Authorization'] =
+        `Bearer ${import.meta.env.VITE_AUTH_TOKEN3 || ''}`
+    }
+    const axiosUser = await fetch('/whoami', { headers })
+    if (axiosUser.status !== 200) {
       return { ok: false, response: emptyUser }
     }
+    const axiosUserBody = await axiosUser.text()
     const userEmail = jwtDecode(
-      axiosUser.data.split(' ')[1] as string
+      axiosUserBody.split(' ')[1] as string
     ) as userData
     const userInfo = await axiosInstance.get(`/users/${userEmail.email}`)
     if (!userInfo.statusText) {

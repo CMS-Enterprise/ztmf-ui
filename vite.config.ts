@@ -52,12 +52,12 @@ export default defineConfig(({ mode }) => {
       host: true,
       port: 5174,
       proxy: {
-        '/graphql': {
+        '/api/v1': {
           target: process.env.VITE_CF_DOMAIN,
           changeOrigin: true,
           secure: false,
         },
-        '/api/v1': {
+        '/whoami': {
           target: process.env.VITE_CF_DOMAIN,
           changeOrigin: true,
           secure: false,
