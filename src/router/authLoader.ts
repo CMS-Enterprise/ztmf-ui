@@ -24,7 +24,7 @@ const authLoader = async (): Promise<unknown> => {
       headers['Authorization'] =
         `Bearer ${import.meta.env.VITE_AUTH_TOKEN3 || ''}`
     }
-    const axiosUser = await fetch('/whoami', { headers })
+    const axiosUser = await fetch('/whoami')
     if (axiosUser.status === 403 || axiosUser.status === 401) {
       // Redirect to /login if the status is 403
       const loginUrl = `https://${window.location.hostname}/login`
