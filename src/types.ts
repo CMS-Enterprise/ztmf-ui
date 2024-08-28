@@ -88,6 +88,35 @@ export type FismaSystemType = {
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
 }
+
+export type FismaFunction = {
+  functionid: number
+  function: string
+  description: string
+  datacenterenvironment: string
+}
+export type FismaQuestion = {
+  questionid: number
+  question: string
+  notesprompt: string
+  pillar: string
+  function: FismaFunction
+}
+
+export type QuestionOption = {
+  description: string
+  functionid: number
+  functionoptionid: number
+  optionname: string
+  score: number
+}
+
+export type SystemDetailsModalProps = {
+  open: boolean
+  onClose: () => void
+  system: FismaSystemType | null
+}
+
 export type ThemeColor =
   | 'primary'
   | 'secondary'

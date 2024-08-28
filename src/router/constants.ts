@@ -25,12 +25,6 @@ export enum Routes {
   DASHBOARD = `/${RouteIds.PROTECTED}`,
   HOME = `/${RouteIds.HOME}`,
   AUTH = `/${RouteIds.AUTH}/*`,
-  PILLARS = `/${RouteIds.PILLARS}/:systemId`,
-  IDENTITY = `${PILLARS}/${RouteIds.IDENTITY}`,
-  DEVICES = `${PILLARS}/${RouteIds.DEVICES}`,
-  NETWORKS = `${PILLARS}/${RouteIds.NETWORKS}`,
-  APPLICATIONS = `${PILLARS}/${RouteIds.APPLICATIONS}`,
-  DATA = `${PILLARS}/${RouteIds.DATA}`,
   AUTH_LOGIN = `/${RouteIds.AUTH}/${RouteIds.LOGIN}`,
   AUTH_LOGOUT = `/${RouteIds.AUTH}/${RouteIds.LOGOUT}`,
 }

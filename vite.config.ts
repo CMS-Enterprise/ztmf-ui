@@ -57,7 +57,7 @@ export default defineConfig(({ mode }) => {
           changeOrigin: true,
           secure: false,
         },
-        '/api': {
+        '/api/v1': {
           target: process.env.VITE_CF_DOMAIN,
           changeOrigin: true,
           secure: false,

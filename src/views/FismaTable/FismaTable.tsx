@@ -11,8 +11,6 @@ import { FismaSystemType } from '@/types'
 import { useEffect, useState } from 'react'
 import axiosInstance from '@/axiosConfig'
 import { TableSortLabel } from '@mui/material'
-import { visuallyHidden } from '@mui/utils'
-import Box from '@mui/material/Box'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
 import Link from '@mui/material/Link'
 type ColumnData = {
@@ -48,7 +46,7 @@ const columns: ColumnData[] = [
     numeric: false,
   },
   {
-    width: 10,
+    width: 5,
     label: 'Details',
     dataKey: 'fismauid',
     disablePadding: false,
@@ -84,7 +82,7 @@ function stableSort<T>(array: T[], comparator: (a: T, b: T) => number): T[] {
   return array.slice().sort(comparator)
 }
 
-interface EnhancedTableProps {
+type EnhancedTableProps = {
   onRequestSort: (
     event: React.MouseEvent<unknown>,
     property: keyof FismaSystemType
@@ -97,7 +95,9 @@ function EnhancedTableHead(props: EnhancedTableProps) {
   const { order, orderBy, onRequestSort } = props
   const createSortHandler =
     (property: keyof FismaSystemType) => (event: React.MouseEvent<unknown>) => {
-      onRequestSort(event, property)
+      if (property !== 'fismauid') {
+        onRequestSort(event, property)
+      }
     }
 
   return (
@@ -116,30 +116,29 @@ function EnhancedTableHead(props: EnhancedTableProps) {
             }}
             sortDirection={orderBy === headCell.dataKey ? order : false}
           >
-            <TableSortLabel
-              active={orderBy === headCell.dataKey}
-              direction={orderBy === headCell.dataKey ? order : 'asc'}
-              onClick={createSortHandler(headCell.dataKey)}
-              sx={{
-                color: 'white', // Set default color to white
-                '&.Mui-active': {
-                  color: 'white', // Ensure it stays white when active
-                },
-                '&:hover': {
-                  color: 'white', // Ensure it stays white on hover
-                },
-                '& .MuiTableSortLabel-icon': {
-                  color: 'white !important', // Set the icon color to white
-                },
-              }}
-            >
-              {headCell.label}
-              {orderBy === headCell.dataKey ? (
-                <Box component="span" sx={visuallyHidden}>
-                  {order === 'desc' ? 'sorted descending' : 'sorted ascending'}
-                </Box>
-              ) : null}
-            </TableSortLabel>
+            {headCell.dataKey !== 'fismauid' ? (
+              <TableSortLabel
+                active={orderBy === headCell.dataKey}
+                direction={orderBy === headCell.dataKey ? order : 'asc'}
+                onClick={createSortHandler(headCell.dataKey)}
+                sx={{
+                  color: 'white', // Set default color to white
+                  '&.Mui-active': {
+                    color: 'white', // Ensure it stays white when active
+                  },
+                  '&:hover': {
+                    color: 'white', // Ensure it stays white on hover
+                  },
+                  '& .MuiTableSortLabel-icon': {
+                    color: 'white !important', // Set the icon color to white
+                  },
+                }}
+              >
+                {headCell.label}
+              </TableSortLabel>
+            ) : (
+              headCell.label
+            )}
           </TableCell>
         ))}
       </TableRow>

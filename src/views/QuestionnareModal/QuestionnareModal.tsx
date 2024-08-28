@@ -7,86 +7,18 @@ import {
   DialogTitle,
   DialogActions,
   Typography,
+  Radio,
+  RadioGroup,
+  FormControlLabel,
+  FormControl,
 } from '@mui/material'
 import { styled } from '@mui/system'
 import TextField from '@mui/material/TextField'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
-import { FismaSystemType } from '@/types'
-interface QuestionnareProps {
-  name: string
-  steps: string[]
-}
-
-type SystemDetailsModalProps = {
-  open: boolean
-  onClose: () => void
-  system: FismaSystemType | null
-}
-const categories: QuestionnareProps[] = [
-  {
-    name: 'IDENTITY',
-    steps: [
-      'ACCESS MANAGEMENT',
-      'AUTOMATION & ORCHESTRATION',
-      'GOVERNANCE CAPABILITY',
-      'IDENTITY STORES',
-      'RISK ASSESSMENT',
-      'USER AUTH',
-      'VISABILITY & ANALYTICS',
-    ],
-  },
-  {
-    name: 'DEVICES',
-    steps: [
-      'ASSET RISK MANAGEMENT',
-      'AUTOMATION & ORCHESTRATION',
-      'GOVERNANCE',
-      'THREAT PROTECTION',
-      'POLICY ENFORCEMENT',
-      'VISIBILITY ANALYTICS',
-      'RESOURCE ACCESS',
-    ],
-  },
-  {
-    name: 'NETWORK',
-    steps: [
-      'AUTOMATION & ORCHESTRATION',
-      'ENCRYPTION',
-      'GOVERNANCE CAPABILITY',
-      'RESILIENCE',
-      'NETWORK SEGMENTATION',
-      'TRAFFIC MANAGEMENT',
-      'VISIBILITY & ANALYTICS',
-    ],
-  },
-  {
-    name: 'APPLICATION',
-    steps: [
-      'ACCESSABILITY',
-      'ACCESS AUTHORIZATION-USERS',
-      'AUTOMATION & ORCHESTRATION',
-      'GOVERNANCE',
-      'SECURE DEVELOPER DEPLOY WORKFLOW',
-      'SECURITY TESTING',
-      'THREAT PROTECTION',
-      'VISIBILITY & ANALYTICS',
-    ],
-  },
-  {
-    name: 'DATA',
-    steps: [
-      'ACCESS DETERMINATION',
-      'AUTOMATION & ORCHESTRATION',
-      'AVAILABILITY',
-      'CATEGORIZATION',
-      'ENCRYPTION',
-      'GOVERNANCE CAPABILITY',
-      'INVENTORY MANAGEMENT',
-      'VISIBILITY & ANALYTICS',
-    ],
-  },
-]
+import { FismaQuestion, QuestionOption, SystemDetailsModalProps } from '@/types'
+import axiosInstance from '@/axiosConfig'
+import CircularProgress from '@mui/material/CircularProgress'
 
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
@@ -113,6 +45,11 @@ const CssTextField = styled(TextField)({
   },
 })
 
+type Category = {
+  name: string
+  steps: FismaQuestion[]
+}
+
 export default function QuestionnareModal({
   open,
   onClose,
@@ -121,36 +58,142 @@ export default function QuestionnareModal({
   const [activeCategoryIndex, setActiveCategoryIndex] =
     React.useState<number>(0)
   const [activeStepIndex, setActiveStepIndex] = React.useState<number>(0)
-  // const [open, setOpen] = React.useState(false)
+  const [questionId, setQuestionId] = React.useState<number | null>(null)
+  const [categories, setCategories] = React.useState<Category[]>([])
+  const [options, setOptions] = React.useState<QuestionOption[]>([])
+  const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
+  const [notes, setNotes] = React.useState<string>('')
   const activeCategory = categories[activeCategoryIndex]
-  const activeStep = activeCategory.steps[activeStepIndex]
-
+  const activeStep = activeCategory?.steps[activeStepIndex]
   const handleQuestionnareNext = () => {
-    if (activeStepIndex < activeCategory.steps.length - 1) {
-      setActiveStepIndex((prevIndex: number) => prevIndex + 1)
-    } else if (activeCategoryIndex < categories.length - 1) {
-      setActiveCategoryIndex((prevIndex: number) => prevIndex + 1)
-      setActiveStepIndex(0)
+    let nextCategoryIndex = activeCategoryIndex
+    let nextStepIndex = activeStepIndex + 1
+
+    if (nextStepIndex >= activeCategory.steps.length) {
+      nextCategoryIndex += 1
+      nextStepIndex = 0
+    }
+
+    if (nextCategoryIndex < categories.length) {
+      const nextStep = categories[nextCategoryIndex].steps[nextStepIndex]
+      setActiveCategoryIndex(nextCategoryIndex)
+      setActiveStepIndex(nextStepIndex)
+      handleStepClick(
+        nextCategoryIndex,
+        nextStepIndex,
+        nextStep.function.functionid
+      )
     }
   }
 
   const handleQuestionnareBack = () => {
-    if (activeStepIndex > 0) {
-      setActiveStepIndex((prevIndex: number) => prevIndex - 1)
-    } else if (activeCategoryIndex > 0) {
-      setActiveCategoryIndex((prevIndex: number) => prevIndex - 1)
-      setActiveStepIndex(categories[activeCategoryIndex - 1].steps.length - 1)
+    let prevCategoryIndex = activeCategoryIndex
+    let prevStepIndex = activeStepIndex - 1
+
+    if (prevStepIndex < 0) {
+      prevCategoryIndex -= 1
+      if (prevCategoryIndex >= 0) {
+        prevStepIndex = categories[prevCategoryIndex].steps.length - 1
+      }
+    }
+
+    if (prevCategoryIndex >= 0) {
+      const prevStep = categories[prevCategoryIndex].steps[prevStepIndex]
+      setActiveCategoryIndex(prevCategoryIndex)
+      setActiveStepIndex(prevStepIndex)
+      handleStepClick(
+        prevCategoryIndex,
+        prevStepIndex,
+        prevStep.function.functionid
+      )
     }
   }
-  const handleStepClick = (categoryIndex: number, stepIndex: number) => {
+
+  const handleStepClick = (
+    categoryIndex: number,
+    stepIndex: number,
+    id: number | null
+  ) => {
+    setLoadingQuestion(true)
     setActiveCategoryIndex(categoryIndex)
     setActiveStepIndex(stepIndex)
+    setQuestionId(id)
   }
-  console.log(system)
+  const handClose = () => {
+    setQuestionId(null)
+    setLoadingQuestion(true)
+    onClose()
+  }
+  React.useEffect(() => {
+    if (open && system) {
+      axiosInstance
+        .get(`/fismasystems/${system.fismasystemid}/questions`)
+        .then((response) => {
+          const data = response.data
+          const organizedData: Record<string, FismaQuestion[]> = {}
+          data.forEach((question: FismaQuestion) => {
+            if (!organizedData[question.pillar]) {
+              organizedData[question.pillar] = []
+            }
+            organizedData[question.pillar].push(question)
+          })
+
+          // Convert the organized data into categories format
+          const categoriesData: Category[] = Object.keys(organizedData).map(
+            (pillar) => ({
+              name: pillar,
+              steps: organizedData[pillar],
+            })
+          )
+
+          setCategories(categoriesData)
+          if (data.length > 0) {
+            // console.log(categoriesData)
+            setQuestionId(categoriesData[0]['steps'][0].function.functionid)
+          }
+        })
+        .catch((error) => {
+          console.error('Error fetching data:', error)
+        })
+    }
+  }, [open, system])
+
+  React.useEffect(() => {
+    if (questionId) {
+      try {
+        axiosInstance.get(`functions/${questionId}/options`).then((res) => {
+          // console.log(res.data)
+          setOptions(res.data)
+          setLoadingQuestion(false)
+        })
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      }
+      // setQuestionId(firstQuestionnaireId)
+    }
+  }, [questionId])
+  const renderRadioGroup = (options: QuestionOption[]) => {
+    return (
+      <FormControl component="fieldset">
+        <RadioGroup>
+          {options.map((option) => (
+            <FormControlLabel
+              key={option.functionoptionid}
+              value={option.score}
+              control={<Radio />}
+              label={option.description}
+              sx={{ m: 0 }}
+            />
+          ))}
+        </RadioGroup>
+      </FormControl>
+    )
+  }
+  // Set initial notes when the active step changes
   return (
     <>
       {/* <CmsButton onClick={handleDialogOpen}>Click to show modal</CmsButton> */}
-      <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
+      <Dialog open={open} onClose={handClose} maxWidth="lg" fullWidth>
         <DialogTitle align="center">
           <div>
             <Typography variant="h3">{'Questionnare'}</Typography>
@@ -162,7 +205,6 @@ export default function QuestionnareModal({
               display="flex"
               flexDirection="column"
               flex={0.3}
-              // padding="16px"
               overflow="auto"
               maxHeight="100%"
               sx={{ paddingRight: '40px' }}
@@ -172,14 +214,16 @@ export default function QuestionnareModal({
                   <Typography variant="h6" align="center">
                     {category.name}
                   </Typography>
-                  <Box
-                    // display="flex"
-                    // flexDirection="row"
-                    flexWrap="wrap"
-                  >
+                  <Box>
                     {category.steps.map((step, stepIndex) => (
                       <Box
-                        key={step}
+                        key={
+                          step.pillar +
+                          '_' +
+                          step.questionid +
+                          '_' +
+                          step.function.functionid
+                        }
                         padding="8px"
                         margin="8px"
                         bgcolor={
@@ -210,67 +254,86 @@ export default function QuestionnareModal({
                           textAlign: 'left',
                         }}
                         onClick={() =>
-                          handleStepClick(categoryIndex, stepIndex)
+                          handleStepClick(
+                            categoryIndex,
+                            stepIndex,
+                            step.function.functionid
+                          )
                         }
                       >
-                        {step}
+                        {step.question}
                       </Box>
                     ))}
                   </Box>
                 </Box>
               ))}
             </Box>
-
-            {/* Right Side: Content Area */}
-            <Box
-              flex={0.7}
-              padding="16px"
-              marginLeft={'10px'}
-              bgcolor="grey.100"
-              borderRadius="8px"
-              position="relative"
-              overflow="hidden"
-            >
-              <Typography variant="h5">Content Area</Typography>
-              <Typography variant="body1">
-                {`You have selected the step: ${activeStep} from category: ${activeCategory.name}.`}
-              </Typography>
-              <CssTextField
-                label="Notes"
-                placeholder="Notes"
-                multiline
-                rows={4}
-                fullWidth
-              />
-              <Box
-                position="absolute"
-                bottom="10px"
-                display="flex"
-                width="100%"
-                // padding="16px"
-                justifyContent={'space-between'}
-              >
-                <CmsButton
-                  onClick={handleQuestionnareBack}
-                  color="primary"
-                  disabled={activeCategoryIndex === 0 && activeStepIndex === 0}
-                >
-                  <NavigateBeforeIcon sx={{ pt: '2px' }} />
-                  Back
-                </CmsButton>
-                <CmsButton
-                  className="ds-u-margin-right--4"
-                  onClick={handleQuestionnareNext}
-                  disabled={
-                    activeCategoryIndex === categories.length - 1 &&
-                    activeStepIndex === activeCategory.steps.length - 1
-                  }
-                >
-                  Next
-                  <NavigateNextIcon sx={{ pt: '2px' }} />
-                </CmsButton>
+            {loadingQuestion ? (
+              <Box sx={{ display: 'flex' }}>
+                <CircularProgress />
               </Box>
-            </Box>
+            ) : (
+              <Box
+                flex={0.7}
+                padding="16px"
+                marginLeft={'10px'}
+                bgcolor="grey.100"
+                borderRadius="8px"
+                position="relative"
+                overflow="auto"
+              >
+                <Typography variant="h5">{activeStep?.question}</Typography>
+                <Box
+                  display="flex"
+                  flexDirection="column"
+                  flex={0.3}
+                  maxHeight="100%"
+                  sx={{ paddingRight: '40px' }}
+                >
+                  {renderRadioGroup(options)}
+                </Box>
+                <Typography variant="body1">
+                  {activeStep?.notesprompt || ''}
+                </Typography>
+                <CssTextField
+                  multiline
+                  label="Notes"
+                  rows={4}
+                  fullWidth
+                  value={notes}
+                  onChange={(e) => setNotes(e.target.value)}
+                />
+                <Box
+                  position="relative"
+                  // bottom="10px"
+                  display="flex"
+                  width="100%"
+                  justifyContent={'space-between'}
+                  sx={{ marginTop: 1 }}
+                >
+                  <CmsButton
+                    onClick={handleQuestionnareBack}
+                    color="primary"
+                    disabled={
+                      activeCategoryIndex === 0 && activeStepIndex === 0
+                    }
+                  >
+                    <NavigateBeforeIcon sx={{ pt: '2px' }} />
+                    Back
+                  </CmsButton>
+                  <CmsButton
+                    onClick={handleQuestionnareNext}
+                    disabled={
+                      activeCategoryIndex === categories.length - 1 &&
+                      activeStepIndex === activeCategory.steps.length - 1
+                    }
+                  >
+                    Next
+                    <NavigateNextIcon sx={{ pt: '2px' }} />
+                  </CmsButton>
+                </Box>
+              </Box>
+            )}
           </Box>
         </DialogContent>
         <DialogActions>
