@@ -24,10 +24,10 @@ const authLoader = async (): Promise<unknown> => {
       headers['Authorization'] =
         `Bearer ${import.meta.env.VITE_AUTH_TOKEN3 || ''}`
     }
-    const isLogin = await fetch('/login', { headers })
-    if (isLogin.status !== 200) {
-      return { ok: false, response: emptyUser }
-    }
+    // const isLogin = await fetch('/login', { headers })
+    // if (isLogin.status !== 200) {
+    //   return { ok: false, response: emptyUser }
+    // }
     const axiosUser = await fetch('/whoami', { headers })
     if (axiosUser.status !== 200) {
       return { ok: false, response: emptyUser }
