@@ -24,19 +24,15 @@ const authLoader = async (): Promise<unknown> => {
       headers['Authorization'] =
         `Bearer ${import.meta.env.VITE_AUTH_TOKEN3 || ''}`
     }
-    // const isLogin = await fetch('/login', { headers })
-    // if (isLogin.status !== 200) {
-    //   return { ok: false, response: emptyUser }
-    // }
     const axiosUser = await fetch('/whoami', { headers })
     if (axiosUser.status === 403 || axiosUser.status === 401) {
       // Redirect to /login if the status is 403
       window.location.href = '/login'
       return
     }
-    if (axiosUser.status !== 200) {
-      return { ok: false, response: emptyUser }
-    }
+    // if (axiosUser.status !== 200) {
+    //   return { ok: false, response: emptyUser }
+    // }
     const axiosUserBody = await axiosUser.text()
     const userEmail = jwtDecode(
       axiosUserBody.split(' ')[1] as string
