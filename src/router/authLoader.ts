@@ -27,8 +27,7 @@ const authLoader = async (): Promise<unknown> => {
     const axiosUser = await fetch('/whoami', { headers })
     if (axiosUser.status === 403 || axiosUser.status === 401) {
       // Redirect to /login if the status is 403
-      window.location.href = window.location.hostname + '/login'
-      return
+      return window.location.hostname + '/login'
     }
     // if (axiosUser.status !== 200) {
     //   return { ok: false, response: emptyUser }
