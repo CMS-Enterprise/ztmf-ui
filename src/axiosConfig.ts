@@ -12,8 +12,6 @@ const axiosInstance: AxiosInstance = axios.create({
 if (process.env.NODE_ENV === 'development') {
   axiosInstance.defaults.headers.common['Authorization'] =
     `Bearer ${import.meta.env.VITE_AUTH_TOKEN3 || ''}`
-} else {
-  axiosInstance.defaults.headers.common['Authorization'] = null
 }
 
 export default axiosInstance

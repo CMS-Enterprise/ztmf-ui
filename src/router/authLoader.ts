@@ -20,7 +20,6 @@ const authLoader = async (): Promise<unknown> => {
     if (axiosUser.status != 200) {
       return { ok: false, response: emptyUser }
     }
-    // const userInfo = await axiosInstance.get(`/users/${user.email}`)
     if (axiosUser.status != 200) {
       return { status: false, response: emptyUser }
     }
