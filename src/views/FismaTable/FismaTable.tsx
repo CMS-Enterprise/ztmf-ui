@@ -190,7 +190,7 @@ export default function FismaTable() {
     const fetchFismaSystems = async () => {
       try {
         const fismaSystems = await axiosInstance.get('/fismasystems')
-        if (!fismaSystems.statusText) {
+        if (fismaSystems.status !== 200) {
           throw new Error('Failed to fetch data')
         }
         setFismaSystems(fismaSystems.data)
