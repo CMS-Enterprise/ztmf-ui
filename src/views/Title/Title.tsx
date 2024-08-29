@@ -22,12 +22,13 @@ const emptyUser: userData = {
 }
 
 type PromiseType = {
-  ok: boolean
+  status: boolean | number
   response: userData
 }
 export default function Title() {
   const loaderData = useLoaderData() as PromiseType
-  const userInfo: userData = !loaderData.ok ? emptyUser : loaderData.response
+  const userInfo: userData =
+    loaderData.status != 200 ? emptyUser : loaderData.response
   return (
     <>
       <UsaBanner />
