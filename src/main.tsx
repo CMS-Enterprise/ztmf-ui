@@ -4,7 +4,7 @@
  */
 import * as React from 'react'
 import * as ReactDOMClient from 'react-dom/client'
-import { RouterProvider } from 'react-router-dom'
+import { RouterProvider, BrowserRouter } from 'react-router-dom'
 import CONFIG from '@/utils/config'
 import router from '@/router/router'
 import { SIGN_IN_GREETING } from '@/locales/en'
@@ -19,7 +19,9 @@ import onPerfEntry from './utils/onPerfEntry'
   // create the React root node and render the application
   ReactDOMClient.createRoot(rootElement).render(
     <React.StrictMode>
-      <RouterProvider router={router} />
+      <BrowserRouter>
+        <RouterProvider router={router} />
+      </BrowserRouter>
     </React.StrictMode>
   )
 
