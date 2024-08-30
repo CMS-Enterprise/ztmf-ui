@@ -1,11 +1,12 @@
 import Typography from '@mui/material/Typography'
 import { Container } from '@mui/material'
-import { Outlet, useLoaderData } from 'react-router-dom'
+import { Outlet, useLoaderData, Navigate } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData } from '@/types'
+import { useEffect, useState, useRef } from 'react'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -24,6 +25,13 @@ type PromiseType = {
 }
 export default function Title() {
   const loaderData = useLoaderData() as PromiseType
+  const hasRedirected = useRef(false)
+  useEffect(() => {
+    if (loaderData.status !== 200 && !hasRedirected.current) {
+      hasRedirected.current = true
+      window.location.href = '/login'
+    }
+  }, [loaderData])
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
   return (
