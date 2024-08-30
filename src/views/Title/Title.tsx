@@ -6,10 +6,7 @@ import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData } from '@/types'
-import { useEffect } from 'react'
-import { useNavigate } from 'react-router-dom'
-// import { useEffect, useState } from 'react'
-// import axiosInstance from '@/axiosConfig'
+import { useEffect, useState } from 'react'
 
 /**
  * Component that renders the contents of the Dashboard view.
@@ -29,12 +26,14 @@ type PromiseType = {
 }
 export default function Title() {
   const loaderData = useLoaderData() as PromiseType
-  const navigate = useNavigate()
+  const [redirected, setRedirected] = useState(false)
+
   useEffect(() => {
-    if (loaderData.status != 200) {
-      navigate('/login')
+    if (loaderData.status !== 200 && !redirected) {
+      setRedirected(true)
+      window.location.href = '/login'
     }
-  }, [loaderData, navigate])
+  }, [loaderData, redirected])
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
   return (
