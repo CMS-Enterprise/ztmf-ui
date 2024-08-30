@@ -6,8 +6,6 @@ import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData } from '@/types'
-import { useEffect, useState } from 'react'
-
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -26,14 +24,6 @@ type PromiseType = {
 }
 export default function Title() {
   const loaderData = useLoaderData() as PromiseType
-  const [redirected, setRedirected] = useState(false)
-
-  useEffect(() => {
-    if (loaderData.status !== 200 && !redirected) {
-      setRedirected(true)
-      window.location.href = '/login'
-    }
-  }, [loaderData, redirected])
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
   return (
