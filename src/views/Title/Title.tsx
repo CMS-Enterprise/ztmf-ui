@@ -6,6 +6,8 @@ import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData } from '@/types'
+import { useEffect } from 'react'
+import { useNavigate } from 'react-router-dom'
 // import { useEffect, useState } from 'react'
 // import axiosInstance from '@/axiosConfig'
 
@@ -27,6 +29,12 @@ type PromiseType = {
 }
 export default function Title() {
   const loaderData = useLoaderData() as PromiseType
+  const navigate = useNavigate()
+  useEffect(() => {
+    if (loaderData.status != 200) {
+      navigate('/login')
+    }
+  }, [loaderData, navigate])
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
   return (
