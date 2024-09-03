@@ -111,6 +111,14 @@ export type QuestionOption = {
   score: number
 }
 
+export type QuestionScores = {
+  scoreid: number
+  fismasystemid: number
+  datecalculated: number
+  notes: string
+  functionoptionid: number
+  datacallid: number
+}
 export type SystemDetailsModalProps = {
   open: boolean
   onClose: () => void

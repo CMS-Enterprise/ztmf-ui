@@ -16,7 +16,12 @@ import { styled } from '@mui/system'
 import TextField from '@mui/material/TextField'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
-import { FismaQuestion, QuestionOption, SystemDetailsModalProps } from '@/types'
+import {
+  FismaQuestion,
+  QuestionOption,
+  SystemDetailsModalProps,
+  QuestionScores,
+} from '@/types'
 import axiosInstance from '@/axiosConfig'
 import CircularProgress from '@mui/material/CircularProgress'
 
@@ -49,7 +54,9 @@ type Category = {
   name: string
   steps: FismaQuestion[]
 }
-
+type questionScoreMap = {
+  [key: number]: QuestionScores
+}
 export default function QuestionnareModal({
   open,
   onClose,
@@ -62,6 +69,9 @@ export default function QuestionnareModal({
   const [categories, setCategories] = React.useState<Category[]>([])
   const [options, setOptions] = React.useState<QuestionOption[]>([])
   const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
+  const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
+    {}
+  )
   const [notes, setNotes] = React.useState<string>('')
   const activeCategory = categories[activeCategoryIndex]
   const activeStep = activeCategory?.steps[activeStepIndex]
@@ -148,12 +158,25 @@ export default function QuestionnareModal({
 
           setCategories(categoriesData)
           if (data.length > 0) {
-            // console.log(categoriesData)
             setQuestionId(categoriesData[0]['steps'][0].function.functionid)
           }
         })
         .catch((error) => {
           console.error('Error fetching data:', error)
+        })
+      axiosInstance
+        .get(`scores?datacallid=2&fismasystemid=${system.fismasystemid}`)
+        .then((res) => {
+          const hashTable: questionScoreMap = Object.assign(
+            {},
+            ...res.data.map((item: QuestionScores) => ({
+              [item.functionoptionid]: item,
+            }))
+          )
+          setQuestionScores(hashTable)
+        })
+        .catch((error) => {
+          console.error('Error fetching question scores:', error)
         })
     }
   }, [open, system])
@@ -162,16 +185,19 @@ export default function QuestionnareModal({
     if (questionId) {
       try {
         axiosInstance.get(`functions/${questionId}/options`).then((res) => {
-          // console.log(res.data)
           setOptions(res.data)
+          res.data.forEach((item: QuestionOption) => {
+            if (item.functionoptionid in questionScores) {
+              setNotes(questionScores[item.functionoptionid].notes)
+            }
+          })
           setLoadingQuestion(false)
         })
       } catch (error) {
         console.error('Error fetching data:', error)
       }
-      // setQuestionId(firstQuestionnaireId)
     }
-  }, [questionId])
+  }, [questionId, questionScores])
   const renderRadioGroup = (options: QuestionOption[]) => {
     return (
       <FormControl component="fieldset">
@@ -183,6 +209,7 @@ export default function QuestionnareModal({
               control={<Radio />}
               label={option.description}
               sx={{ m: 0 }}
+              checked={questionScores[option.functionoptionid] !== undefined}
             />
           ))}
         </RadioGroup>
@@ -292,7 +319,7 @@ export default function QuestionnareModal({
                 >
                   {renderRadioGroup(options)}
                 </Box>
-                <Typography variant="body1">
+                <Typography variant="body1" sx={{ mb: 2 }}>
                   {activeStep?.notesprompt || ''}
                 </Typography>
                 <CssTextField

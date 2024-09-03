@@ -1,12 +1,12 @@
 import Typography from '@mui/material/Typography'
 import { Container } from '@mui/material'
-import { Outlet, useLoaderData, Navigate } from 'react-router-dom'
+import { Outlet, useLoaderData } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData } from '@/types'
-import { useEffect, useState, useRef } from 'react'
+import { useEffect, useRef } from 'react'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
