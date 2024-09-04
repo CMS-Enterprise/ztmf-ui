@@ -72,10 +72,75 @@ export default function QuestionnareModal({
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
   )
+  const [scoreid, setScoreId] = React.useState<number>(0)
   const [notes, setNotes] = React.useState<string>('')
+  const [selectQuestionOption, setSelectQuestionOption] =
+    React.useState<number>(0)
   const activeCategory = categories[activeCategoryIndex]
   const activeStep = activeCategory?.steps[activeStepIndex]
+
+  const fetchQuestionScores = async (
+    systemId: number | string | undefined,
+    setQuestionScores: (scores: questionScoreMap) => void
+  ) => {
+    try {
+      const response = await axiosInstance.get(
+        `scores?datacallid=2&fismasystemid=${systemId}`
+      )
+      const hashTable: questionScoreMap = Object.assign(
+        {},
+        ...response.data.map((item: QuestionScores) => ({
+          [item.functionoptionid]: item,
+        }))
+      )
+      setQuestionScores(hashTable)
+    } catch (error) {
+      console.error('Error fetching question scores:', error)
+    }
+  }
+
   const handleQuestionnareNext = () => {
+    // TODO: datacallid is hardcoded to 2, need to make it dynamic
+    setLoadingQuestion(true)
+    if (scoreid) {
+      axiosInstance
+        .put(`scores/${scoreid}`, {
+          fismasystemid: system?.fismasystemid,
+          notes: notes,
+          functionoptionid: selectQuestionOption,
+          datacallid: 2,
+        })
+        .then((res) => {
+          if (res.status != 200) {
+            console.error('Error updating score')
+          }
+        })
+        .catch((error) => {
+          console.error('Error updating score:', error)
+        })
+        .finally(() => {
+          fetchQuestionScores(Number(system?.fismasystemid), setQuestionScores)
+          setLoadingQuestion(false)
+        })
+    } else {
+      axiosInstance
+        .post(`scores`, {
+          fismasystemid: system?.fismasystemid,
+          notes: notes,
+          functionoptionid: selectQuestionOption,
+          datacallid: 2,
+        })
+        .then(() => {
+          console.log('Created score')
+        })
+        .catch((error) => {
+          console.error('Error creating score:', error)
+        })
+        .finally(() => {
+          fetchQuestionScores(Number(system?.fismasystemid), setQuestionScores)
+          setLoadingQuestion(false)
+        })
+    }
     let nextCategoryIndex = activeCategoryIndex
     let nextStepIndex = activeStepIndex + 1
 
@@ -180,14 +245,20 @@ export default function QuestionnareModal({
         })
     }
   }, [open, system])
-
+  const handleQuestionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectQuestionOption(Number(event.target.value))
+  }
   React.useEffect(() => {
-    if (questionId) {
+    if (questionId && questionScores) {
+      console.log('questionId:', questionId)
       try {
         axiosInstance.get(`functions/${questionId}/options`).then((res) => {
           setOptions(res.data)
           res.data.forEach((item: QuestionOption) => {
             if (item.functionoptionid in questionScores) {
+              console.log(questionScores[item.functionoptionid])
+              setSelectQuestionOption(item.functionoptionid)
+              setScoreId(questionScores[item.functionoptionid].scoreid)
               setNotes(questionScores[item.functionoptionid].notes)
             }
           })
@@ -201,25 +272,30 @@ export default function QuestionnareModal({
   const renderRadioGroup = (options: QuestionOption[]) => {
     return (
       <FormControl component="fieldset">
-        <RadioGroup>
+        <RadioGroup
+          value={selectQuestionOption}
+          onChange={handleQuestionChange}
+        >
           {options.map((option) => (
             <FormControlLabel
               key={option.functionoptionid}
-              value={option.score}
+              value={option.functionoptionid}
               control={<Radio />}
               label={option.description}
-              sx={{ m: 0 }}
-              checked={questionScores[option.functionoptionid] !== undefined}
+              sx={{
+                m: '3px',
+              }}
+              checked={
+                selectQuestionOption === option.functionoptionid ? true : false
+              }
             />
           ))}
         </RadioGroup>
       </FormControl>
     )
   }
-  // Set initial notes when the active step changes
   return (
     <>
-      {/* <CmsButton onClick={handleDialogOpen}>Click to show modal</CmsButton> */}
       <Dialog open={open} onClose={handClose} maxWidth="lg" fullWidth>
         <DialogTitle align="center">
           <div>
@@ -280,13 +356,18 @@ export default function QuestionnareModal({
                           width: '20vw',
                           textAlign: 'left',
                         }}
-                        onClick={() =>
-                          handleStepClick(
-                            categoryIndex,
-                            stepIndex,
-                            step.function.functionid
-                          )
-                        }
+                        onClick={() => {
+                          if (
+                            activeCategoryIndex !== categoryIndex ||
+                            activeStepIndex !== stepIndex
+                          ) {
+                            handleStepClick(
+                              categoryIndex,
+                              stepIndex,
+                              step.function.functionid
+                            )
+                          }
+                        }}
                       >
                         {step.question}
                       </Box>
@@ -314,7 +395,6 @@ export default function QuestionnareModal({
                   display="flex"
                   flexDirection="column"
                   flex={0.3}
-                  maxHeight="100%"
                   sx={{ paddingRight: '40px' }}
                 >
                   {renderRadioGroup(options)}
