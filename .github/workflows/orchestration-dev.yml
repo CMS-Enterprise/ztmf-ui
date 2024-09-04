@@ -1,0 +1,19 @@
+name: Orchestration DEV
+
+on:
+  pull_request:
+    branches:
+      - main
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+jobs:     
+  ui:
+    name: ui
+    uses: ./.github/workflows/ui.yml
+    with:
+      environment: dev
+    secrets: inherit
+  
