@@ -8,8 +8,8 @@ on:
       - closed
 
 jobs:     
-  if: ${{ github.event.pull_request.merged }}
   ui:
+    if: ${{ github.event.pull_request.merged }}
     name: ui
     uses: ./.github/workflows/ui.yml
     with:
