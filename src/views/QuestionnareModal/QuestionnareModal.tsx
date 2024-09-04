@@ -250,13 +250,11 @@ export default function QuestionnareModal({
   }
   React.useEffect(() => {
     if (questionId && questionScores) {
-      console.log('questionId:', questionId)
       try {
         axiosInstance.get(`functions/${questionId}/options`).then((res) => {
           setOptions(res.data)
           res.data.forEach((item: QuestionOption) => {
             if (item.functionoptionid in questionScores) {
-              console.log(questionScores[item.functionoptionid])
               setSelectQuestionOption(item.functionoptionid)
               setScoreId(questionScores[item.functionoptionid].scoreid)
               setNotes(questionScores[item.functionoptionid].notes)
