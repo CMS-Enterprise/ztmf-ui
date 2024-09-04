@@ -197,6 +197,9 @@ export default function QuestionnareModal({
   const handClose = () => {
     setQuestionId(null)
     setLoadingQuestion(true)
+    setActiveCategoryIndex(0)
+    setActiveStepIndex(0)
+    setNotes('')
     onClose()
   }
   React.useEffect(() => {
@@ -253,13 +256,23 @@ export default function QuestionnareModal({
       try {
         axiosInstance.get(`functions/${questionId}/options`).then((res) => {
           setOptions(res.data)
+          let isValidOption: boolean = false
+          let funcOptId: number = 0
           res.data.forEach((item: QuestionOption) => {
             if (item.functionoptionid in questionScores) {
-              setSelectQuestionOption(item.functionoptionid)
-              setScoreId(questionScores[item.functionoptionid].scoreid)
-              setNotes(questionScores[item.functionoptionid].notes)
+              isValidOption = true
+              funcOptId = item.functionoptionid
             }
           })
+          if (!isValidOption) {
+            setSelectQuestionOption(0)
+            setScoreId(0)
+            setNotes('')
+          } else {
+            setSelectQuestionOption(funcOptId)
+            setScoreId(questionScores[funcOptId].scoreid)
+            setNotes(questionScores[funcOptId].notes)
+          }
           setLoadingQuestion(false)
         })
       } catch (error) {
@@ -442,7 +455,7 @@ export default function QuestionnareModal({
           </Box>
         </DialogContent>
         <DialogActions>
-          <CmsButton onClick={onClose} color="primary">
+          <CmsButton onClick={handClose} color="primary">
             Close
           </CmsButton>
         </DialogActions>
