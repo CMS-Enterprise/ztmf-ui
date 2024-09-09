@@ -193,7 +193,7 @@ export default function FismaTable() {
         if (fismaSystems.status !== 200) {
           throw new Error('Failed to fetch data. Status was not 200')
         }
-        setFismaSystems(fismaSystems.data)
+        setFismaSystems(fismaSystems.data.data)
       } catch (error) {
         console.log(error)
       } finally {

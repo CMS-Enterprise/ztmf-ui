@@ -89,7 +89,7 @@ export default function QuestionnareModal({
       )
       const hashTable: questionScoreMap = Object.assign(
         {},
-        ...response.data.map((item: QuestionScores) => ({
+        ...response.data.data.map((item: QuestionScores) => ({
           [item.functionoptionid]: item,
         }))
       )
@@ -207,7 +207,7 @@ export default function QuestionnareModal({
       axiosInstance
         .get(`/fismasystems/${system.fismasystemid}/questions`)
         .then((response) => {
-          const data = response.data
+          const data = response.data.data
           const organizedData: Record<string, FismaQuestion[]> = {}
           data.forEach((question: FismaQuestion) => {
             if (!organizedData[question.pillar]) {
@@ -237,7 +237,7 @@ export default function QuestionnareModal({
         .then((res) => {
           const hashTable: questionScoreMap = Object.assign(
             {},
-            ...res.data.map((item: QuestionScores) => ({
+            ...res.data.data.map((item: QuestionScores) => ({
               [item.functionoptionid]: item,
             }))
           )
@@ -255,10 +255,10 @@ export default function QuestionnareModal({
     if (questionId && questionScores) {
       try {
         axiosInstance.get(`functions/${questionId}/options`).then((res) => {
-          setOptions(res.data)
+          setOptions(res.data.data)
           let isValidOption: boolean = false
           let funcOptId: number = 0
-          res.data.forEach((item: QuestionOption) => {
+          res.data.data.forEach((item: QuestionOption) => {
             if (item.functionoptionid in questionScores) {
               isValidOption = true
               funcOptId = item.functionoptionid

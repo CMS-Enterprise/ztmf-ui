@@ -20,7 +20,7 @@ const authLoader = async (): Promise<unknown> => {
     if (axiosUser.status != 200) {
       return { ok: false, response: emptyUser }
     }
-    return { status: axiosUser.status, response: axiosUser.data }
+    return { status: axiosUser.status, response: axiosUser.data.data }
   } catch (error) {
     console.error('Error:', error)
   }
