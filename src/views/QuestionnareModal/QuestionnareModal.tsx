@@ -393,9 +393,14 @@ export default function QuestionnareModal({
                   display: 'flex',
                   justifyContent: 'center',
                   alignItems: 'center',
+                  height: '100vh',
+                  width: '100%',
+                  position: 'absolute',
+                  top: 0,
+                  left: 0,
                 }}
               >
-                <CircularProgress />
+                <CircularProgress size={80} />
               </Box>
             ) : (
               <Box
