@@ -8,8 +8,7 @@ import TableHead from '@mui/material/TableHead'
 import TablePagination from '@mui/material/TablePagination'
 import TableRow from '@mui/material/TableRow'
 import { FismaSystemType } from '@/types'
-import { useEffect, useState } from 'react'
-import axiosInstance from '@/axiosConfig'
+import { useState } from 'react'
 import { TableSortLabel } from '@mui/material'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
 import Link from '@mui/material/Link'
@@ -146,9 +145,11 @@ function EnhancedTableHead(props: EnhancedTableProps) {
   )
 }
 
-export default function FismaTable() {
-  const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
-  const [loading, setLoading] = useState<boolean>(true)
+export default function FismaTable({
+  fismaSystems,
+}: {
+  fismaSystems: FismaSystemType[]
+}) {
   const [page, setPage] = useState(0)
   const [rowsPerPage, setRowsPerPage] = useState(10)
   const [order, setOrder] = useState<Order>('asc')
@@ -185,28 +186,6 @@ export default function FismaTable() {
     setRowsPerPage(+event.target.value)
     setPage(0)
   }
-
-  useEffect(() => {
-    const fetchFismaSystems = async () => {
-      try {
-        const fismaSystems = await axiosInstance.get('/fismasystems')
-        if (fismaSystems.status !== 200) {
-          throw new Error('Failed to fetch data. Status was not 200')
-        }
-        setFismaSystems(fismaSystems.data.data)
-      } catch (error) {
-        console.log(error)
-      } finally {
-        setLoading(false)
-      }
-    }
-    fetchFismaSystems()
-  }, [])
-
-  if (loading) {
-    return <p>Loading ...</p>
-  }
-
   return (
     <Paper style={{ height: 500, width: '100%', marginBottom: '5vh' }}>
       <TableContainer sx={{ maxHeight: 440 }}>

@@ -74,7 +74,7 @@ export type RequestOptions = {
   redirect: 'follow' | 'error' | 'manual'
 }
 export type FismaSystemType = {
-  fismasystemid: string | number
+  fismasystemid: number
   fismauid: string | number
   fismaacronym: string
   fismaname: string
@@ -123,6 +123,11 @@ export type SystemDetailsModalProps = {
   open: boolean
   onClose: () => void
   system: FismaSystemType | null
+}
+export type ScoreData = {
+  datacallid: number
+  fismasystemid: number
+  systemscore: number
 }
 
 export type ThemeColor =
