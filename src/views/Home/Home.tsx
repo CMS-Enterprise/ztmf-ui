@@ -53,14 +53,14 @@ export default function HomePageContainer() {
   if (loading) {
     return (
       <Box
+        flex={1}
         sx={{
           display: 'flex',
           justifyContent: 'center',
           alignItems: 'center',
-          height: '100vh',
         }}
       >
-        <CircularProgress />
+        <CircularProgress size={100} />
       </Box>
     )
   }
