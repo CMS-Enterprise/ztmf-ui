@@ -14,7 +14,7 @@ const emptyUser: userData = {
   role: '',
   assignedfismasystems: [],
 }
-const authLoader = async (): Promise<unknown> => {
+const authLoader = async () => {
   try {
     const axiosUser = await axiosInstance.get('/users/current')
     if (axiosUser.status != 200) {
