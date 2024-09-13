@@ -3,7 +3,7 @@ import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import { Typography } from '@mui/material'
 import { styled } from '@mui/material/styles'
-import { FismaSystemType, ScoreData } from '@/types'
+import { FismaSystemType } from '@/types'
 const StatisticsPaper = styled(Paper)(({ theme }) => ({
   width: 120,
   height: 120,
@@ -18,7 +18,7 @@ export default function StatisticsBlocks({
   scores,
 }: {
   fismaSystems: FismaSystemType[]
-  scores: ScoreData[]
+  scores: Record<number, number>
 }) {
   const [totalSystems, setTotalSystems] = useState<number>(0)
   const [avgSystemScore, setAvgSystemScore] = useState<number>(0)
@@ -26,42 +26,37 @@ export default function StatisticsBlocks({
   const [maxSystemScore, setMaxSystemScore] = useState<number>(0)
   const [minSystemScore, setMinSystemScore] = useState<number>(0)
   const [minSystemAcronym, setMinSystemAcronym] = useState<string>('')
-  const [loading, setLoading] = useState<boolean>(true)
+  const [loading, setLoading] = useState<boolean>(false)
+
   useEffect(() => {
-    if (scores.length > 0) {
-      const scoresMap = scores.reduce(
-        (acc, score) => {
-          acc[score.fismasystemid] = score.systemscore
-          return acc
-        },
-        {} as Record<number, number>
-      )
-      let maxScore: number = 0
-      let maxScoreSystem: string = ''
-      let minScore: number = Number.POSITIVE_INFINITY
-      let minScoreSystem: string = ''
-      let totalScores: number = 0
-      for (const system of fismaSystems) {
-        if (scoresMap[system.fismasystemid] > maxScore) {
-          maxScore = scoresMap[system.fismasystemid]
+    const totalCount = fismaSystems.length
+    let maxScore: number = 0
+    let maxScoreSystem: string = ''
+    let minScore: number = Number.POSITIVE_INFINITY
+    let minScoreSystem: string = ''
+    let totalScores: number = 0
+    for (const system of fismaSystems) {
+      if (scores[system.fismasystemid]) {
+        if (scores[system.fismasystemid] > maxScore) {
+          maxScore = scores[system.fismasystemid]
           maxScoreSystem = system.fismaacronym
-        } else if (scoresMap[system.fismasystemid] < minScore) {
-          minScore = scoresMap[system.fismasystemid]
+        } else if (scores[system.fismasystemid] < minScore) {
+          minScore = scores[system.fismasystemid]
           minScoreSystem = system.fismaacronym
         }
-        if (scoresMap[system.fismasystemid]) {
-          totalScores += scoresMap[system.fismasystemid]
+        if (scores[system.fismasystemid]) {
+          totalScores += scores[system.fismasystemid]
         }
       }
-      setTotalSystems(fismaSystems.length)
-      setAvgSystemScore(Number((totalScores / fismaSystems.length).toFixed(2)))
-      setMaxSystemScore(maxScore)
-      setMaxSystemAcronym(maxScoreSystem || '')
-      setMinSystemScore(minScore)
-      setMinSystemAcronym(minScoreSystem || '')
     }
+    setTotalSystems(totalCount)
+    setAvgSystemScore(Number((totalScores / totalCount).toFixed(2)))
+    setMaxSystemScore(maxScore)
+    setMaxSystemAcronym(maxScoreSystem || '')
+    setMinSystemScore(minScore)
+    setMinSystemAcronym(minScoreSystem || '')
     setLoading(false)
-  }, [scores, fismaSystems])
+  }, [fismaSystems, scores])
   if (loading) {
     return <p>Loading ...</p>
   }

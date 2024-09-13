@@ -1,10 +1,11 @@
 import FismaTable from '../FismaTable/FismaTable'
 import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
-import { useState, useEffect, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import axiosInstance from '@/axiosConfig'
-import { FismaSystemType, ScoreData } from '@/types'
+import { FismaSystemType } from '@/types'
 import CircularProgress from '@mui/material/CircularProgress'
 import { Box } from '@mui/material'
+
 /**
  * Component that renders the contents of the Home view.
  * @returns {JSX.Element} Component that renders the home contents.
@@ -13,43 +14,44 @@ import { Box } from '@mui/material'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
-  const hasRedirected = useRef(false)
-  const [scores, setScores] = useState<ScoreData[]>([])
-
+  const [scoreMap, setScoreMap] = useState<Record<number, number>>({})
   useEffect(() => {
-    const fetchFismaSystems = async () => {
+    async function fetchFismaSystems() {
       try {
         const fismaSystems = await axiosInstance.get('/fismasystems')
-        if (fismaSystems.status !== 200 && !hasRedirected.current) {
-          hasRedirected.current = true
-          window.location.href = '/login'
+        if (fismaSystems.status !== 200) {
+          setLoading(true)
+          return
         }
         setFismaSystems(fismaSystems.data.data)
+        setLoading(false)
       } catch (error) {
         console.log(error)
-      } finally {
-        setLoading(false)
       }
     }
     fetchFismaSystems()
   }, [])
+
   useEffect(() => {
-    const fetchScores = async () => {
+    async function fetchScores() {
       try {
         const scores = await axiosInstance.get('/scores/aggregate')
-        if (scores.status !== 200 && !hasRedirected.current) {
-          hasRedirected.current = true
-          window.location.href = '/login'
+        const scoresMap: Record<number, number> = {}
+        for (const obj of scores.data.data) {
+          let score = 0
+          if (obj.systemscore) {
+            score = obj.systemscore
+          }
+          scoresMap[obj.fismasystemid] = score
         }
-        setScores(scores.data.data)
+        setScoreMap(scoresMap)
+        setLoading(false)
       } catch (error) {
         console.log(error)
-      } finally {
-        setLoading(false)
       }
     }
     fetchScores()
-  }, [fismaSystems])
+  }, [])
   if (loading) {
     return (
       <Box
@@ -67,8 +69,8 @@ export default function HomePageContainer() {
   return (
     <>
       <div>
-        <StatisticsBlocks fismaSystems={fismaSystems} scores={scores} />
-        <FismaTable fismaSystems={fismaSystems} />
+        <StatisticsBlocks fismaSystems={fismaSystems} scores={scoreMap} />
+        <FismaTable fismaSystems={fismaSystems} scores={scoreMap} />
       </div>
     </>
   )
