@@ -48,21 +48,25 @@ export default function Title() {
               <div className="ds-l-col--3 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0 ds-u-margin-top--5 ds-u-font-weight--semibold">
                 Centers for Medicare &amp; Medicaid Services
               </div>
-              <div className="ds-l-col--4 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0 ds-u-margin-top--5 ds-u-font-weight--semibold">
-                <div className="ds-u-float--right">
-                  <AccountCircleIcon fontSize={'large'} />
-                  {userInfo.fullname ? (
-                    <span
-                      style={{ verticalAlign: '13px' }}
-                      className="ds-text-body--md"
-                    >
-                      {userInfo.fullname}
-                    </span>
-                  ) : (
-                    ''
-                  )}
+              {loaderData.status == 200 ? (
+                <div className="ds-l-col--4 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0 ds-u-margin-top--5 ds-u-font-weight--semibold">
+                  <div className="ds-u-float--right">
+                    <AccountCircleIcon fontSize={'large'} />
+                    {userInfo.fullname ? (
+                      <span
+                        style={{ verticalAlign: '13px' }}
+                        className="ds-text-body--md"
+                      >
+                        {userInfo.fullname}
+                      </span>
+                    ) : (
+                      ''
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div></div>
+              )}
             </div>
           </div>
         </div>
