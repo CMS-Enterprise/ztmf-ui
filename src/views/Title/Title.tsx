@@ -6,7 +6,8 @@ import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData } from '@/types'
-import { useEffect, useRef } from 'react'
+import { Button as CmsButton } from '@cmsgov/design-system'
+import { Box } from '@mui/material'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -25,13 +26,6 @@ type PromiseType = {
 }
 export default function Title() {
   const loaderData = useLoaderData() as PromiseType
-  const hasRedirected = useRef(false)
-  useEffect(() => {
-    if (loaderData.status !== 200 && !hasRedirected.current) {
-      hasRedirected.current = true
-      window.location.href = '/login'
-    }
-  }, [loaderData])
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
   return (
@@ -54,21 +48,25 @@ export default function Title() {
               <div className="ds-l-col--3 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0 ds-u-margin-top--5 ds-u-font-weight--semibold">
                 Centers for Medicare &amp; Medicaid Services
               </div>
-              <div className="ds-l-col--4 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0 ds-u-margin-top--5 ds-u-font-weight--semibold">
-                <div className="ds-u-float--right">
-                  <AccountCircleIcon fontSize={'large'} />
-                  {userInfo.fullname ? (
-                    <span
-                      style={{ verticalAlign: '13px' }}
-                      className="ds-text-body--md"
-                    >
-                      {userInfo.fullname}
-                    </span>
-                  ) : (
-                    ''
-                  )}
+              {loaderData.status == 200 ? (
+                <div className="ds-l-col--4 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0 ds-u-margin-top--5 ds-u-font-weight--semibold">
+                  <div className="ds-u-float--right">
+                    <AccountCircleIcon fontSize={'large'} />
+                    {userInfo.fullname ? (
+                      <span
+                        style={{ verticalAlign: '13px' }}
+                        className="ds-text-body--md"
+                      >
+                        {userInfo.fullname}
+                      </span>
+                    ) : (
+                      ''
+                    )}
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div></div>
+              )}
             </div>
           </div>
         </div>
@@ -78,7 +76,21 @@ export default function Title() {
         <Typography variant="h3" align="center">
           Zero Trust Maturity Score Dashboard
         </Typography>
-        <Outlet />
+        {loaderData.status !== 200 ? (
+          <Box
+            flex={1}
+            sx={{
+              display: 'flex',
+              justifyContent: 'center',
+              alignItems: 'center',
+              height: '50vh',
+            }}
+          >
+            <CmsButton href="/login">Login</CmsButton>
+          </Box>
+        ) : (
+          <Outlet />
+        )}
       </Container>
     </>
   )
