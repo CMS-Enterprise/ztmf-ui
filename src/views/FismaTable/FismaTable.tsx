@@ -5,6 +5,7 @@ import { useState } from 'react'
 
 import Link from '@mui/material/Link'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
+import { first } from 'lodash'
 type FismaTable2Props = {
   fismaSystems: FismaSystemType[]
   scores: Record<number, number>
@@ -42,9 +43,9 @@ export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
       renderCell: (params) => {
         const name = params.row.issoemail.split('@')
         const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        return fullName.length > 1
-          ? `${fullName[0]} ${fullName[1]}`
-          : fullName[0]
+        const firstName = fullName[0][0].toUpperCase() + fullName[0].slice(1)
+        const lastName = fullName[1][0].toUpperCase() + fullName[1].slice(1)
+        return fullName.length > 1 ? `${firstName} ${lastName}` : fullName[0]
       },
     },
     {

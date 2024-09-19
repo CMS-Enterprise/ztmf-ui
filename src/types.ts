@@ -99,7 +99,7 @@ export type FismaQuestion = {
   questionid: number
   question: string
   notesprompt: string
-  pillar: string
+  pillar: questionPillar
   function: FismaFunction
 }
 
@@ -109,6 +109,12 @@ export type QuestionOption = {
   functionoptionid: number
   optionname: string
   score: number
+}
+
+export type questionPillar = {
+  pillar: string
+  pillarid: number
+  order: number
 }
 
 export type QuestionScores = {
