@@ -50,15 +50,6 @@ const CssTextField = styled(TextField)({
   },
 })
 
-const pillarOrder: Record<string, number> = {
-  Identity: 1,
-  Devices: 2,
-  Networks: 3,
-  Applications: 4,
-  Data: 5,
-  CrossCutting: 6,
-}
-
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -216,9 +207,11 @@ export default function QuestionnareModal({
         .then((response) => {
           const data = response.data.data
           const organizedData: Record<string, FismaQuestion[]> = {}
+          const pillarOrder: Record<string, number> = {}
           data.forEach((question: FismaQuestion) => {
             if (!organizedData[question.pillar.pillar]) {
               organizedData[question.pillar.pillar] = []
+              pillarOrder[question.pillar.pillar] = question.pillar.order
             }
             organizedData[question.pillar.pillar].push(question)
           })
