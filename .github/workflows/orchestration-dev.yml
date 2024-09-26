@@ -9,7 +9,12 @@ on:
       - reopened
       - synchronize
 
-jobs:     
+jobs:
+  analysis:
+    name: Analysis
+    uses: ./.github/workflows/analysis.yml
+    secrets: inherit
+
   ui:
     name: ui
     uses: ./.github/workflows/ui.yml

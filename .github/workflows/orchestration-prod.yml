@@ -7,7 +7,12 @@ on:
     types:
       - closed
 
-jobs:     
+jobs:
+  analysis:
+    name: Analysis
+    if: ${{ github.event.pull_request.merged }}
+    uses: ./.github/workflows/analysis.yml
+    secrets: inherit     
   ui:
     if: ${{ github.event.pull_request.merged }}
     name: ui
