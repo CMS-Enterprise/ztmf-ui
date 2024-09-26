@@ -17,6 +17,8 @@ jobs:
 
   ui:
     name: ui
+    needs: 
+      - analysis
     uses: ./.github/workflows/ui.yml
     with:
       environment: dev

@@ -16,6 +16,8 @@ jobs:
   ui:
     if: ${{ github.event.pull_request.merged }}
     name: ui
+    needs: 
+      - analysis
     uses: ./.github/workflows/ui.yml
     with:
       environment: prod

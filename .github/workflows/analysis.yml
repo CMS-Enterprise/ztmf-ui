@@ -5,7 +5,7 @@ on:
 
 jobs:
   Snyk-Test:
-    name: synk test
+    name: snyk test
     runs-on: ubuntu-latest
     permissions:
       contents: read
