@@ -5,7 +5,6 @@
 import { useNavigate, useRouteError } from 'react-router-dom'
 import { ErrorResponse } from '@remix-run/router'
 import Container from '@mui/material/Container'
-import { Routes } from '@/router/constants'
 import {
   GENERIC_ERROR_MESSAGE,
   NOT_FOUND_ERROR_MESSAGE,
@@ -37,16 +36,11 @@ const useErrorTitle = (error: ErrorResponse): string => {
  * @returns {JSX.Element}
  */
 const ErrorBoundary: React.FC = (): JSX.Element => {
-  const navigate = useNavigate()
   const error = useRouteError() as ErrorResponse
   const title = useErrorTitle(error)
   const message = useErrorMessage(error)
 
-  if (error.status === 401) {
-    setTimeout(() => navigate(Routes.AUTH_LOGOUT), 5000)
-  }
-
-  console.log({ error })
+  console.error(error)
 
   return (
     <Container sx={{ m: 3 }}>

@@ -57,7 +57,7 @@
     "@mui/x-data-grid": "^6.19.4",
     "@popperjs/core": "^2.11.8",
     "apollo-client": "^2.6.10",
-    "aws-amplify": "^5.3.23",
+    "axios": "^1.7.7",
     "classnames": "^2.5.1",
     "clipboard-copy": "^4.0.1",
     "core-js": "^3.37.1",

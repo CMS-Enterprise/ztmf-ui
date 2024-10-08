@@ -18,7 +18,6 @@ import Title from '@/views/Title/Title'
  */
 const router = createHashRouter([
   {
-    // index: true,
     id: RouteIds.ROOT,
     path: Routes.ROOT,
     element: <Title />,
