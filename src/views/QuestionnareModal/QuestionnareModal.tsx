@@ -24,6 +24,7 @@ import {
 } from '@/types'
 import axiosInstance from '@/axiosConfig'
 import CircularProgress from '@mui/material/CircularProgress'
+import { useSnackbar } from 'notistack'
 
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
@@ -62,6 +63,7 @@ export default function QuestionnareModal({
   onClose,
   system,
 }: SystemDetailsModalProps) {
+  const { enqueueSnackbar } = useSnackbar()
   const [activeCategoryIndex, setActiveCategoryIndex] =
     React.useState<number>(0)
   const [activeStepIndex, setActiveStepIndex] = React.useState<number>(0)
@@ -114,6 +116,13 @@ export default function QuestionnareModal({
           if (res.status != 204) {
             return console.error('Error updating score')
           }
+          enqueueSnackbar(`Saved`, {
+            variant: 'success',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+          })
           fetchQuestionScores(Number(system?.fismasystemid), setQuestionScores)
           setLoadingQuestion(false)
         })
@@ -199,6 +208,20 @@ export default function QuestionnareModal({
   }
   const handleQuestionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSelectQuestionOption(Number(event.target.value))
+  }
+  const addSpace = (str: string) => {
+    for (let i = 0; i < str.length; i++) {
+      if (
+        i > 0 &&
+        str[i] === str[i].toUpperCase() &&
+        // str[i - 1] !== '-' &&
+        str[i - 1] !== ' '
+      ) {
+        str = str.slice(0, i) + ' ' + str.slice(i)
+        i++
+      }
+    }
+    return str
   }
   React.useEffect(() => {
     if (open && system) {
@@ -320,7 +343,7 @@ export default function QuestionnareModal({
               sx={{ paddingRight: '40px' }}
             >
               {categories.map((category, categoryIndex) => (
-                <Box key={category.name} marginBottom="16px">
+                <Box key={category.name} sx={{ mb: 2, mt: 0 }}>
                   <Typography variant="h6" align="center">
                     {category.name === 'CrossCutting'
                       ? 'Cross Cutting'
@@ -336,8 +359,6 @@ export default function QuestionnareModal({
                           '_' +
                           step.function.functionid
                         }
-                        padding="8px"
-                        margin="8px"
                         bgcolor={
                           activeCategoryIndex === categoryIndex &&
                           activeStepIndex === stepIndex
@@ -357,13 +378,12 @@ export default function QuestionnareModal({
                             ? 2
                             : 1
                         }
-                        style={{
+                        sx={{
+                          p: 1,
+                          m: 1,
                           cursor: 'pointer',
-                          overflow: 'hidden',
-                          textOverflow: 'ellipsis',
-                          whiteSpace: 'nowrap',
-                          width: '20vw',
-                          textAlign: 'left',
+                          width: '14vw',
+                          textAlign: 'center',
                         }}
                         onClick={() => {
                           if (
@@ -378,84 +398,89 @@ export default function QuestionnareModal({
                           }
                         }}
                       >
-                        {step.question}
+                        {addSpace(step.function.function)}
                       </Box>
                     ))}
                   </Box>
                 </Box>
               ))}
             </Box>
-            {loadingQuestion ? (
-              <Box
-                flex={0.7}
-                sx={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                }}
-              >
-                <CircularProgress size={80} />
-              </Box>
-            ) : (
-              <Box
-                flex={0.7}
-                padding="16px"
-                marginLeft={'10px'}
-                bgcolor="grey.100"
-                borderRadius="8px"
-                position="relative"
-                overflow="auto"
-              >
-                <Typography variant="h5">{activeStep?.question}</Typography>
+            <Box
+              flex={0.7}
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                maxHeight: '100%',
+                overflow: 'auto',
+                backgroundColor: 'rgb(245,245,245)',
+              }}
+            >
+              {loadingQuestion ? (
                 <Box
-                  display="flex"
-                  flexDirection="column"
-                  flex={0.3}
-                  sx={{ paddingRight: '40px' }}
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    maxHeight: '100%',
+                  }}
                 >
-                  {renderRadioGroup(options)}
+                  <CircularProgress size={80} />
                 </Box>
-                <Typography variant="body1" sx={{ mb: 2 }}>
-                  {activeStep?.notesprompt || ''}
-                </Typography>
-                <CssTextField
-                  multiline
-                  label="Notes"
-                  rows={4}
-                  fullWidth
-                  value={notes}
-                  onChange={(e) => setNotes(e.target.value)}
-                />
-                <Box
-                  position="relative"
-                  display="flex"
-                  width="100%"
-                  justifyContent={'space-between'}
-                  sx={{ marginTop: 1 }}
-                >
-                  <CmsButton
-                    onClick={handleQuestionnareBack}
-                    color="primary"
-                    disabled={
-                      activeCategoryIndex === 0 && activeStepIndex === 0
-                    }
+              ) : (
+                <Box sx={{ maxHeight: '100%', pl: 2, pr: 2 }}>
+                  <Typography variant="h5">{activeStep?.question}</Typography>
+                  <Box
+                    display="flex"
+                    flexDirection="column"
+                    flex={0.3}
+                    sx={{ paddingRight: '40px' }}
                   >
-                    <NavigateBeforeIcon sx={{ pt: '2px' }} />
-                    Back
-                  </CmsButton>
-                  <CmsButton
-                    onClick={handleQuestionnareNext}
-                    disabled={
-                      activeCategoryIndex === categories.length - 1 &&
-                      activeStepIndex === activeCategory.steps.length - 1
-                    }
+                    {renderRadioGroup(options)}
+                  </Box>
+                  <Typography variant="body1" sx={{ mb: 2 }}>
+                    {activeStep?.notesprompt || ''}
+                  </Typography>
+                  <CssTextField
+                    multiline
+                    label="Notes"
+                    rows={4}
+                    fullWidth
+                    value={notes}
+                    onChange={(e) => setNotes(e.target.value)}
+                  />
+                  <Box
+                    position="relative"
+                    display="flex"
+                    width="100%"
+                    justifyContent={'space-between'}
                   >
-                    Next
-                    <NavigateNextIcon sx={{ pt: '2px' }} />
-                  </CmsButton>
+                    <CmsButton
+                      onClick={handleQuestionnareBack}
+                      color="primary"
+                      disabled={
+                        activeCategoryIndex === 0 && activeStepIndex === 0
+                      }
+                      style={{ marginBottom: '8px', marginTop: '8px' }}
+                    >
+                      <NavigateBeforeIcon sx={{ pt: '2px' }} />
+                      Back
+                    </CmsButton>
+                    <CmsButton
+                      onClick={handleQuestionnareNext}
+                      disabled={
+                        activeCategoryIndex === categories.length - 1 &&
+                        activeStepIndex === activeCategory.steps.length - 1
+                      }
+                      style={{ marginBottom: '8px', marginTop: '8px' }}
+                    >
+                      Next
+                      <NavigateNextIcon sx={{ pt: '2px' }} />
+                    </CmsButton>
+                  </Box>
                 </Box>
-              </Box>
-            )}
+              )}
+            </Box>
           </Box>
         </DialogContent>
         <DialogActions>

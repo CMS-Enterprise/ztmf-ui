@@ -5,7 +5,6 @@ import { useState } from 'react'
 
 import Link from '@mui/material/Link'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
-import { first } from 'lodash'
 type FismaTable2Props = {
   fismaSystems: FismaSystemType[]
   scores: Record<number, number>

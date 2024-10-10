@@ -95,6 +95,15 @@ export type ScoreData = {
   systemscore: number
 }
 
+export type users = {
+  assignedfismasystems: number[]
+  email: string
+  fullname: string
+  role: string
+  userid: string
+  isNew?: boolean
+}
+
 export type ThemeColor =
   | 'primary'
   | 'secondary'
