@@ -6,6 +6,12 @@ export enum RouteIds {
   LOGIN = 'login',
   LOGOUT = 'logout',
   HOME = 'home',
+  PILLARS = 'pillars',
+  IDENTITY = 'identity',
+  DEVICES = 'devices',
+  NETWORKS = 'networks',
+  APPLICATIONS = 'applications',
+  DATA = 'data',
   USERS = 'users',
 }
 
