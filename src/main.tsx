@@ -10,7 +10,7 @@ import router from '@/router/router'
 import { SIGN_IN_GREETING } from '@/locales/en'
 import '@/sass/style.scss'
 import onPerfEntry from './utils/onPerfEntry'
-
+import { SnackbarProvider } from 'notistack'
 // IIFE that initializes the root node and renders the application.
 ;(async function () {
   // create the root element in the DOM
@@ -19,7 +19,9 @@ import onPerfEntry from './utils/onPerfEntry'
   // create the React root node and render the application
   ReactDOMClient.createRoot(rootElement).render(
     <React.StrictMode>
-      <RouterProvider router={router} />
+      <SnackbarProvider>
+        <RouterProvider router={router} />
+      </SnackbarProvider>
     </React.StrictMode>
   )
 

@@ -4,11 +4,12 @@
  * @see {@link dashboard/main} for usage.
  */
 import { createHashRouter } from 'react-router-dom'
-import ErrorBoundary from '@/components/ErrorBoundary'
 import authLoader from './authLoader'
 import { RouteIds, Routes } from '@/router/constants'
-import HomePageContainer from '@/views/Home/Home'
 import Title from '@/views/Title/Title'
+import ErrorBoundary from '@/components/ErrorBoundary'
+import HomePageContainer from '@/views/Home/Home'
+import UserTable from '@/views/UserTable/UserTable'
 /**
  * The hash router for the application that defines routes
  *  and specifies the loaders for routes with dynamic data.
@@ -29,7 +30,14 @@ const router = createHashRouter([
         element: <HomePageContainer />,
         errorElement: <ErrorBoundary />,
       },
+      {
+        path: Routes.USERS,
+        id: RouteIds.USERS,
+        element: <UserTable />,
+        errorElement: <ErrorBoundary />,
+      },
     ],
+    errorElement: <ErrorBoundary />,
   },
 ])
 
