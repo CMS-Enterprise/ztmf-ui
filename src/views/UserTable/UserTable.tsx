@@ -18,6 +18,8 @@ import {
   GridRowModel,
   GridRowEditStopReasons,
 } from '@mui/x-data-grid'
+import Tooltip from '@mui/material/Tooltip'
+import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
 import { users } from '@/types'
 import { useFismaSystems } from '../Title/Context'
@@ -32,7 +34,6 @@ interface EditToolbarProps {
     newModel: (oldModel: GridRowModesModel) => GridRowModesModel
   ) => void
 }
-
 function EditToolbar(props: EditToolbarProps) {
   const { setRows, setRowModesModel } = props
   const addUserRow = () => {
@@ -171,7 +172,6 @@ export default function UserTable() {
       }
     })
   }, [fismaSystems])
-
   const columns: GridColDef[] = [
     {
       field: 'fullname',
@@ -197,6 +197,7 @@ export default function UserTable() {
         return value.row.role
       },
       valueOptions: roles,
+      cellClassName: 'single-select-dropdown',
     },
     {
       field: 'actions',
@@ -237,13 +238,19 @@ export default function UserTable() {
             onClick={handleEditClick(id)}
             color="inherit"
           />,
-          <GridActionsCellItem
-            icon={<ChecklistIcon />}
-            key={id}
-            label="assignedSystems"
-            onClick={() => handleOpenModal(id)}
-            color="inherit"
-          />,
+          <Tooltip
+            title={`Assign Fisma Systems`}
+            key={`tooltip-${id}`}
+            placement="right-start"
+          >
+            <GridActionsCellItem
+              icon={<ChecklistIcon />}
+              key={id}
+              label="assignedSystems"
+              onClick={() => handleOpenModal(id)}
+              color="inherit"
+            />
+          </Tooltip>,
         ]
       },
     },
@@ -268,6 +275,11 @@ export default function UserTable() {
           columns={columns}
           editMode="row"
           getRowId={(row) => row.userid}
+          initialState={{
+            sorting: {
+              sortModel: [{ field: 'role', sort: 'asc' }],
+            },
+          }}
           rowModesModel={rowModesModel}
           onRowModesModelChange={handleRowModesModelChange}
           onRowEditStop={handleRowEditStop}
@@ -301,13 +313,13 @@ export default function UserTable() {
               color: '#fff',
             },
             '& .MuiFormControl-root.MuiTextField-root': {
-              marginTop: 0,
+              mt: 0,
             },
             '& .MuiTablePagination-selectLabel': {
-              marginBottom: 2,
+              mb: 2,
             },
             '& .MuiTablePagination-displayedRows': {
-              marginBottom: 2,
+              mb: 2,
             },
           }}
         />
