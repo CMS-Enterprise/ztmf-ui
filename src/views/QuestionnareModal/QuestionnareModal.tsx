@@ -271,32 +271,34 @@ export default function QuestionnareModal({
     }
   }, [open, system])
   React.useEffect(() => {
-    try {
-      axiosInstance.get(`functions/${questionId}/options`).then((res) => {
-        setOptions(res.data.data)
-        let isValidOption: boolean = false
-        let funcOptId: number = 0
-        res.data.data.forEach((item: QuestionOption) => {
-          if (item.functionoptionid in questionScores) {
-            isValidOption = true
-            funcOptId = item.functionoptionid
+    if (questionId) {
+      try {
+        axiosInstance.get(`functions/${questionId}/options`).then((res) => {
+          setOptions(res.data.data)
+          let isValidOption: boolean = false
+          let funcOptId: number = 0
+          res.data.data.forEach((item: QuestionOption) => {
+            if (item.functionoptionid in questionScores) {
+              isValidOption = true
+              funcOptId = item.functionoptionid
+            }
+          })
+          if (!isValidOption) {
+            setSelectQuestionOption(0)
+            setScoreId(0)
+            setNotes('')
+          } else {
+            const id = questionScores[funcOptId].scoreid
+            const notes = questionScores[funcOptId].notes
+            setSelectQuestionOption(funcOptId)
+            setScoreId(id)
+            setNotes(notes)
           }
+          setLoadingQuestion(false)
         })
-        if (!isValidOption) {
-          setSelectQuestionOption(0)
-          setScoreId(0)
-          setNotes('')
-        } else {
-          const id = questionScores[funcOptId].scoreid
-          const notes = questionScores[funcOptId].notes
-          setSelectQuestionOption(funcOptId)
-          setScoreId(id)
-          setNotes(notes)
-        }
-        setLoadingQuestion(false)
-      })
-    } catch (error) {
-      console.error('Error fetching data:', error)
+      } catch (error) {
+        console.error('Error fetching data:', error)
+      }
     }
   }, [questionId, questionScores])
   const renderRadioGroup = (options: QuestionOption[]) => {
