@@ -47,7 +47,6 @@ export default function Title() {
         if (fismaSystems.status !== 200) {
           return
         }
-        console.log(fismaSystems.data.data)
         setFismaSystems(fismaSystems.data.data)
       } catch (error) {
         console.log(error)
