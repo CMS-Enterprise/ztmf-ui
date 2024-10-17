@@ -16,8 +16,18 @@ import {
   GridEventListener,
   GridRowId,
   GridRowModel,
+  GridPreProcessEditCellProps,
   GridRowEditStopReasons,
+  useGridApiRef,
 } from '@mui/x-data-grid'
+import {
+  Dialog,
+  DialogActions,
+  DialogContent,
+  DialogTitle,
+  Typography,
+} from '@mui/material'
+import { Button as CmsButton } from '@cmsgov/design-system'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
@@ -26,6 +36,7 @@ import { useFismaSystems } from '../Title/Context'
 import Box from '@mui/material/Box'
 import SavedSnackbar from '../Snackbar/Snackbar'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
+
 const roles = ['ISSO', 'ISSM', 'ADMIN']
 
 interface EditToolbarProps {
@@ -58,12 +69,22 @@ function EditToolbar(props: EditToolbarProps) {
 }
 
 export default function UserTable() {
+  const apiRef = useGridApiRef()
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const { fismaSystems } = useFismaSystems()
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const [open, setOpen] = useState<boolean>(false)
   const [openModal, setOpenModal] = useState<boolean>(false)
+  const [openAlert, setOpenAlert] = useState<boolean>(false)
+  const [selectedRow, setSelectedRow] = useState<users | undefined>({
+    userid: '',
+    email: '',
+    fullname: '',
+    role: '',
+    assignedfismasystems: [],
+  })
+  const [userName, setUserName] = useState<string | undefined>(undefined)
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
     Record<number, string>
   >({})
@@ -75,7 +96,25 @@ export default function UserTable() {
       event.defaultMuiPrevented = true
     }
   }
-
+  const preProcessEditCellProps = (params: GridPreProcessEditCellProps) => {
+    const curRow = rows.find((row) => row.userid === params.id)
+    setSelectedRow(curRow)
+    if (params.props.value === 'ADMIN') {
+      setUserName(curRow?.fullname)
+      setOpenAlert(true)
+    }
+    return Promise.resolve()
+  }
+  const handleAlertCloseModal = (response: boolean) => {
+    if (response == false && selectedRow) {
+      apiRef.current.setEditCellValue({
+        id: selectedRow.userid,
+        field: 'role',
+        value: selectedRow.role, // Replace with the desired value
+      })
+    }
+    setOpenAlert(false)
+  }
   const handleEditClick = (id: GridRowId) => () => {
     setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } })
   }
@@ -105,10 +144,9 @@ export default function UserTable() {
       setRows(rows.filter((row) => row.userid !== id))
     }
   }
-
   const processRowUpdate = (newRow: GridRowModel) => {
-    let newUser = {} as users
     if (newRow.isNew) {
+      let newUser = {} as users
       axiosInstance
         .post('/users', {
           email: newRow.email,
@@ -154,7 +192,9 @@ export default function UserTable() {
   const handleRowModesModelChange = (newRowModesModel: GridRowModesModel) => {
     setRowModesModel(newRowModesModel)
   }
-
+  const handleProcessRowUpdateError = (error: unknown) => {
+    console.error('Error updating row:', error)
+  }
   // TODO: Custom hook for fetching data
   useEffect(() => {
     axiosInstance.get('/users').then((res) => {
@@ -193,10 +233,8 @@ export default function UserTable() {
       flex: 1,
       editable: true,
       type: 'singleSelect',
-      valueGetter: (value) => {
-        return value.row.role
-      },
       valueOptions: roles,
+      preProcessEditCellProps,
       cellClassName: 'single-select-dropdown',
     },
     {
@@ -272,6 +310,7 @@ export default function UserTable() {
       >
         <DataGrid
           rows={rows}
+          apiRef={apiRef}
           columns={columns}
           editMode="row"
           getRowId={(row) => row.userid}
@@ -282,6 +321,7 @@ export default function UserTable() {
           }}
           rowModesModel={rowModesModel}
           onRowModesModelChange={handleRowModesModelChange}
+          onProcessRowUpdateError={handleProcessRowUpdateError}
           onRowEditStop={handleRowEditStop}
           processRowUpdate={processRowUpdate}
           slots={{
@@ -331,6 +371,29 @@ export default function UserTable() {
         handleClose={handleCloseModal}
         userid={userId}
       />
+      <Dialog
+        open={openAlert}
+        onClose={() => setOpenAlert(false)}
+        maxWidth="sm"
+        fullWidth
+      >
+        <DialogTitle>
+          <div>
+            <Typography variant="h4">Confirm Role Change</Typography>
+          </div>
+        </DialogTitle>
+        <DialogContent>
+          <Box>
+            <Typography variant="h6">
+              Are you sure you want to change {userName} as an ADMIN?
+            </Typography>
+          </Box>
+        </DialogContent>
+        <DialogActions>
+          <CmsButton onClick={() => handleAlertCloseModal(false)}>No</CmsButton>
+          <CmsButton onClick={() => handleAlertCloseModal(true)}>Yes</CmsButton>
+        </DialogActions>
+      </Dialog>
     </>
   )
 }
