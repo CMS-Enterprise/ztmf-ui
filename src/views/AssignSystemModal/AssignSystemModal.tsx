@@ -9,7 +9,7 @@ import {
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { GridRowId } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
-import SavedSnackbar from '../Snackbar/Snackbar'
+import CustomSnackbar from '../Snackbar/Snackbar'
 import Checkbox from '@mui/material/Checkbox'
 import TextField from '@mui/material/TextField'
 import Autocomplete from '@mui/material/Autocomplete'
@@ -135,9 +135,11 @@ export default function AssignSystemModal({
           <CmsButton onClick={handleClose}>Close</CmsButton>
         </DialogActions>
       </Dialog>
-      <SavedSnackbar
+      <CustomSnackbar
         open={openSnackBar}
         handleClose={() => setOpenSnackBar(false)}
+        severity="success"
+        text="Saved"
       />
     </>
   )
