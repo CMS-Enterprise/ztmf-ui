@@ -5,9 +5,16 @@ import React, { useState, useEffect } from 'react'
 type SnackbarProps = {
   open: boolean
   handleClose: () => void
+  severity?: 'success' | 'error' | 'warning' | 'info'
+  text: string
 }
 
-export default function SavedSnackbar({ open, handleClose }: SnackbarProps) {
+export default function SavedSnackbar({
+  open,
+  handleClose,
+  severity,
+  text,
+}: SnackbarProps) {
   const [localOpen, setLocalOpen] = useState(open)
 
   useEffect(() => {
@@ -32,8 +39,8 @@ export default function SavedSnackbar({ open, handleClose }: SnackbarProps) {
         autoHideDuration={2000}
         onClose={handleSnackbarClose}
       >
-        <Alert severity="success" variant="filled" sx={{ width: '100%' }}>
-          Saved
+        <Alert severity={severity} variant="filled" sx={{ width: '100%' }}>
+          {text}
         </Alert>
       </Snackbar>
     </div>

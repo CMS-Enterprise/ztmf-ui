@@ -364,7 +364,12 @@ export default function UserTable() {
           }}
         />
       </Box>
-      <SavedSnackbar open={open} handleClose={handleCloseSnackbar} />
+      <SavedSnackbar
+        open={open}
+        handleClose={handleCloseSnackbar}
+        severity="success"
+        text="Saved"
+      />
       <AssignSystemModal
         fismaSystemMap={fismaSystemsMap}
         open={openModal}
