@@ -32,6 +32,13 @@ export function CustomFooterSaveComponent(
   props: NonNullable<GridSlotsComponentsProps['footer']>
 ) {
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false)
+  const getFilenameFromContentDisposition = (contentDisposition: string) => {
+    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
+    const matches = filenameRegex.exec(contentDisposition)
+    return matches != null && matches[1]
+      ? matches[1].replace(/['"]/g, '')
+      : 'filename.xlsx'
+  }
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
   }
@@ -56,11 +63,16 @@ export function CustomFooterSaveComponent(
           if (response.status !== 200) {
             console.log('Error saving systems')
           } else {
+            const contentDisposition = response.headers[
+              'content-disposition'
+            ] as string
+            const filename =
+              getFilenameFromContentDisposition(contentDisposition)
             const contentType = response.headers['content-type']
             const data = new Blob([response.data], { type: contentType })
             const tempLink = document.createElement('a')
             tempLink.href = window.URL.createObjectURL(data)
-            tempLink.setAttribute('download', 'ZTMF_FY2023Q4.xlsx')
+            tempLink.setAttribute('download', filename)
             tempLink.click()
             window.URL.revokeObjectURL(tempLink.href)
           }
@@ -79,11 +91,15 @@ export function CustomFooterSaveComponent(
         if (response.status !== 200) {
           console.log('Error saving systems')
         } else {
+          const contentDisposition = response.headers[
+            'content-disposition'
+          ] as string
+          const filename = getFilenameFromContentDisposition(contentDisposition)
           const contentType = response.headers['content-type']
           const data = new Blob([response.data], { type: contentType })
           const tempLink = document.createElement('a')
           tempLink.href = window.URL.createObjectURL(data)
-          tempLink.setAttribute('download', 'filename.xlsx')
+          tempLink.setAttribute('download', filename)
           tempLink.click()
           window.URL.revokeObjectURL(tempLink.href)
         }
