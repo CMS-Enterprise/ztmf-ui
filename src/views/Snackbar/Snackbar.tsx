@@ -9,7 +9,7 @@ type SnackbarProps = {
   text: string
 }
 
-export default function SavedSnackbar({
+export default function CustomSnackbar({
   open,
   handleClose,
   severity,

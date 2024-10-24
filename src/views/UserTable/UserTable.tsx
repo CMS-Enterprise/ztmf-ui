@@ -34,7 +34,7 @@ import axiosInstance from '@/axiosConfig'
 import { users } from '@/types'
 import { useFismaSystems } from '../Title/Context'
 import Box from '@mui/material/Box'
-import SavedSnackbar from '../Snackbar/Snackbar'
+import CustomSnackbar from '../Snackbar/Snackbar'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 
 const roles = ['ISSO', 'ISSM', 'ADMIN']
@@ -364,7 +364,7 @@ export default function UserTable() {
           }}
         />
       </Box>
-      <SavedSnackbar
+      <CustomSnackbar
         open={open}
         handleClose={handleCloseSnackbar}
         severity="success"

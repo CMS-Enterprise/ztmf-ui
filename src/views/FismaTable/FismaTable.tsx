@@ -14,7 +14,7 @@ import SaveIcon from '@mui/icons-material/Save'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
 import Link from '@mui/material/Link'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
-import SavedSnackbar from '../Snackbar/Snackbar'
+import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 
 type FismaTable2Props = {
@@ -117,12 +117,12 @@ export function CustomFooterSaveComponent(
         </Box>
         <GridFooter />
       </GridFooterContainer>
-      <SavedSnackbar
+      <CustomSnackbar
         open={openSnackbar}
         handleClose={handleCloseSnackbar}
         severity="error"
         text="No systems selected"
-      ></SavedSnackbar>
+      />
     </>
   )
 }
