@@ -63,18 +63,15 @@ export function CustomFooterSaveComponent(
           if (response.status !== 200) {
             console.log('Error saving systems')
           } else {
-            const contentDisposition = response.headers[
-              'content-disposition'
-            ] as string
-            const filename =
-              getFilenameFromContentDisposition(contentDisposition)
             const contentType = response.headers['content-type']
             const data = new Blob([response.data], { type: contentType })
+            const url = window.URL.createObjectURL(data)
             const tempLink = document.createElement('a')
-            tempLink.href = window.URL.createObjectURL(data)
-            tempLink.setAttribute('download', filename)
+            tempLink.href = url
+            tempLink.setAttribute('download', 'Selected_Systems_Export.xlsx')
+            tempLink.setAttribute('target', '_blank')
             tempLink.click()
-            window.URL.revokeObjectURL(tempLink.href)
+            window.URL.revokeObjectURL(url)
           }
         })
         .catch((error) => {
@@ -91,17 +88,15 @@ export function CustomFooterSaveComponent(
         if (response.status !== 200) {
           console.log('Error saving systems')
         } else {
-          const contentDisposition = response.headers[
-            'content-disposition'
-          ] as string
-          const filename = getFilenameFromContentDisposition(contentDisposition)
           const contentType = response.headers['content-type']
           const data = new Blob([response.data], { type: contentType })
+          const url = window.URL.createObjectURL(data)
           const tempLink = document.createElement('a')
-          tempLink.href = window.URL.createObjectURL(data)
-          tempLink.setAttribute('download', filename)
+          tempLink.href = url
+          tempLink.setAttribute('download', 'All_Systems_Export.xlsx')
+          tempLink.setAttribute('target', '_blank')
           tempLink.click()
-          window.URL.revokeObjectURL(tempLink.href)
+          window.URL.revokeObjectURL(url)
         }
       })
       .catch((error) => {
