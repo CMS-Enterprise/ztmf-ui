@@ -97,11 +97,13 @@ export default function UserTable() {
     }
   }
   const preProcessEditCellProps = (params: GridPreProcessEditCellProps) => {
-    const curRow = rows.find((row) => row.userid === params.id)
-    setSelectedRow(curRow)
-    if (params.props.value === 'ADMIN') {
-      setUserName(curRow?.fullname)
-      setOpenAlert(true)
+    if (params.hasChanged) {
+      const curRow = rows.find((row) => row.userid === params.id)
+      setSelectedRow(curRow)
+      if (params.props.value === 'ADMIN' && curRow?.role !== 'ADMIN') {
+        setUserName(curRow?.fullname)
+        setOpenAlert(true)
+      }
     }
     return Promise.resolve()
   }
