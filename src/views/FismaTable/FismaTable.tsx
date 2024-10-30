@@ -10,7 +10,6 @@ import {
 import Tooltip from '@mui/material/Tooltip'
 import { Box, IconButton } from '@mui/material'
 import { useState } from 'react'
-import SaveIcon from '@mui/icons-material/Save'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
 import Link from '@mui/material/Link'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
@@ -26,37 +25,44 @@ type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
+    fismaSystems: FismaSystemType[]
   }
 }
 export function CustomFooterSaveComponent(
   props: NonNullable<GridSlotsComponentsProps['footer']>
 ) {
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false)
-  const getFilenameFromContentDisposition = (contentDisposition: string) => {
-    const filenameRegex = /filename[^;=\n]*=((['"]).*?\2|[^;\n]*)/
-    const matches = filenameRegex.exec(contentDisposition)
-    return matches != null && matches[1]
-      ? matches[1].replace(/['"]/g, '')
-      : 'filename.xlsx'
-  }
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
   }
-  const saveSelectedSystems = async () => {
+  const saveSystemAnswers = async () => {
     if (props.selectedRows && props.selectedRows.length === 0) {
       setOpenSnackbar(true)
     } else {
-      let idString: string = ''
-      if (props.selectedRows) {
-        props.selectedRows.forEach((id, index) => {
-          idString += 'fsids=' + id
-          if (index < (props.selectedRows ?? []).length - 1) {
-            idString += '&'
-          }
-        })
+      let exportUrl = '/datacalls/2/export'
+      let exportFileName = ''
+      if (
+        props.selectedRows &&
+        props.fismaSystems &&
+        props.selectedRows.length < props.fismaSystems.length
+      ) {
+        exportUrl += '?'
+        exportFileName = 'Selected_Systems_Export.xlsx'
+        let idString: string = ''
+        if (props.selectedRows) {
+          props.selectedRows.forEach((id, index) => {
+            idString += 'fsids=' + id
+            if (index < (props.selectedRows ?? []).length - 1) {
+              idString += '&'
+            }
+          })
+        }
+        exportUrl += idString
+      } else {
+        exportFileName = 'All_Systems_Export.xlsx'
       }
       return await axiosInstance
-        .get(`/datacalls/2/export?${idString}`, {
+        .get(exportUrl, {
           responseType: 'blob',
         })
         .then((response) => {
@@ -68,7 +74,7 @@ export function CustomFooterSaveComponent(
             const url = window.URL.createObjectURL(data)
             const tempLink = document.createElement('a')
             tempLink.href = url
-            tempLink.setAttribute('download', 'Selected_Systems_Export.xlsx')
+            tempLink.setAttribute('download', exportFileName)
             tempLink.setAttribute('target', '_blank')
             tempLink.click()
             window.URL.revokeObjectURL(url)
@@ -78,30 +84,6 @@ export function CustomFooterSaveComponent(
           console.error('Error saving system answers: ', error)
         })
     }
-  }
-  const saveAllSystems = async () => {
-    return await axiosInstance
-      .get('/datacalls/2/export', {
-        responseType: 'blob',
-      })
-      .then((response) => {
-        if (response.status !== 200) {
-          console.log('Error saving systems')
-        } else {
-          const contentType = response.headers['content-type']
-          const data = new Blob([response.data], { type: contentType })
-          const url = window.URL.createObjectURL(data)
-          const tempLink = document.createElement('a')
-          tempLink.href = url
-          tempLink.setAttribute('download', 'All_Systems_Export.xlsx')
-          tempLink.setAttribute('target', '_blank')
-          tempLink.click()
-          window.URL.revokeObjectURL(url)
-        }
-      })
-      .catch((error) => {
-        console.error('Error saving all system answers: ', error)
-      })
   }
   return (
     <>
@@ -115,13 +97,8 @@ export function CustomFooterSaveComponent(
             ml: 1,
           }}
         >
-          <Tooltip title="Save Selected System Answers">
-            <IconButton sx={{ color: '#004297' }} onClick={saveSelectedSystems}>
-              <SaveIcon />
-            </IconButton>
-          </Tooltip>
-          <Tooltip title="Save all System Answers">
-            <IconButton sx={{ color: '#004297' }} onClick={saveAllSystems}>
+          <Tooltip title="Save System Answers">
+            <IconButton sx={{ color: '#004297' }} onClick={saveSystemAnswers}>
               <FileDownloadSharpIcon />
             </IconButton>
           </Tooltip>
@@ -259,7 +236,7 @@ export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows },
+          footer: { selectedRows, fismaSystems },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
