@@ -40,14 +40,12 @@ export function CustomFooterSaveComponent(
       setOpenSnackbar(true)
     } else {
       let exportUrl = '/datacalls/2/export'
-      let exportFileName = ''
       if (
         props.selectedRows &&
         props.fismaSystems &&
         props.selectedRows.length < props.fismaSystems.length
       ) {
         exportUrl += '?'
-        exportFileName = 'Selected_Systems_Export.xlsx'
         let idString: string = ''
         if (props.selectedRows) {
           props.selectedRows.forEach((id, index) => {
@@ -58,8 +56,6 @@ export function CustomFooterSaveComponent(
           })
         }
         exportUrl += idString
-      } else {
-        exportFileName = 'All_Systems_Export.xlsx'
       }
       return await axiosInstance
         .get(exportUrl, {
@@ -69,12 +65,14 @@ export function CustomFooterSaveComponent(
           if (response.status !== 200) {
             console.log('Error saving systems')
           } else {
+            const [, filename] =
+              response.headers['content-disposition'].split('filename=')
             const contentType = response.headers['content-type']
             const data = new Blob([response.data], { type: contentType })
             const url = window.URL.createObjectURL(data)
             const tempLink = document.createElement('a')
             tempLink.href = url
-            tempLink.setAttribute('download', exportFileName)
+            tempLink.setAttribute('download', filename)
             tempLink.setAttribute('target', '_blank')
             tempLink.click()
             window.URL.revokeObjectURL(url)
