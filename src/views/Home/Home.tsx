@@ -3,9 +3,6 @@ import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
 import { useState, useEffect } from 'react'
 import axiosInstance from '@/axiosConfig'
 import { FismaSystemType } from '@/types'
-import CircularProgress from '@mui/material/CircularProgress'
-import { Box } from '@mui/material'
-
 /**
  * Component that renders the contents of the Home view.
  * @returns {JSX.Element} Component that renders the home contents.
@@ -53,18 +50,7 @@ export default function HomePageContainer() {
     fetchScores()
   }, [])
   if (loading) {
-    return (
-      <Box
-        flex={1}
-        sx={{
-          display: 'flex',
-          justifyContent: 'center',
-          alignItems: 'center',
-        }}
-      >
-        <CircularProgress size={100} />
-      </Box>
-    )
+    return <div>loading...</div>
   }
   return (
     <>

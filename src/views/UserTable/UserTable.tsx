@@ -36,7 +36,8 @@ import { useFismaSystems } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
-
+import { useNavigate } from 'react-router-dom'
+import { Routes } from '@/router/constants'
 const roles = ['ISSO', 'ISSM', 'ADMIN']
 
 interface EditToolbarProps {
@@ -70,6 +71,28 @@ function EditToolbar(props: EditToolbarProps) {
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
+  const navigate = useNavigate()
+  //TODO: add these to a file to be imported and used in multiple places
+  const checkValidResponse = (status: number) => {
+    if (status !== 200 && status.toString()[0] === '4') {
+      navigate(Routes.SIGNIN, {
+        replace: true,
+        state: {
+          message:
+            'Your changes were not saved. Your session may have expired. Please log in again.',
+        },
+      })
+    }
+    return
+  }
+  const routeToSignIn = () => {
+    navigate(Routes.SIGNIN, {
+      replace: true,
+      state: {
+        message: 'Your session has expired. Please log in again.',
+      },
+    })
+  }
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const { fismaSystems } = useFismaSystems()
@@ -157,6 +180,7 @@ export default function UserTable() {
         })
         .then((res) => {
           newUser = res.data.data
+          checkValidResponse(res.status)
           setRows(
             rows.map((row) =>
               row.userid === newRow.userid
@@ -165,6 +189,10 @@ export default function UserTable() {
             )
           )
           setOpen(true)
+        })
+        .catch((error) => {
+          console.error('Error updating score:', error)
+          routeToSignIn()
         })
     } else {
       const updatedRow = { ...newRow } as users
@@ -175,13 +203,12 @@ export default function UserTable() {
           role: updatedRow?.role,
         })
         .then((res) => {
-          if (res.status != 204) {
-            return console.error('Error updating score')
-          }
+          checkValidResponse(res.status)
           setOpen(true)
         })
         .catch((error) => {
           console.error('Error updating score:', error)
+          routeToSignIn()
         })
       setRows(
         rows.map((row) => (row.userid === newRow.userid ? updatedRow : row))

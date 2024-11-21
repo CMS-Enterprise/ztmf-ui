@@ -40,7 +40,7 @@ const ErrorBoundary: React.FC = (): JSX.Element => {
   const title = useErrorTitle(error)
   const message = useErrorMessage(error)
 
-  console.error(error)
+  // console.error(error)
 
   return (
     <Container sx={{ m: 3 }}>

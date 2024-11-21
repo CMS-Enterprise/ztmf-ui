@@ -10,6 +10,7 @@ import Title from '@/views/Title/Title'
 import ErrorBoundary from '@/components/ErrorBoundary'
 import HomePageContainer from '@/views/Home/Home'
 import UserTable from '@/views/UserTable/UserTable'
+import LoginPage from '@/views/LoginPage/LoginPage'
 /**
  * The hash router for the application that defines routes
  *  and specifies the loaders for routes with dynamic data.
@@ -34,6 +35,12 @@ const router = createHashRouter([
         path: Routes.USERS,
         id: RouteIds.USERS,
         element: <UserTable />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
+        path: Routes.SIGNIN,
+        id: RouteIds.SIGNIN,
+        element: <LoginPage />,
         errorElement: <ErrorBoundary />,
       },
     ],

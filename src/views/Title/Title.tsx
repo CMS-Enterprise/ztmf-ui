@@ -1,13 +1,12 @@
 import Typography from '@mui/material/Typography'
 import { Container } from '@mui/material'
-import { useLoaderData } from 'react-router-dom'
+import { useLoaderData, useNavigate } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import logo from '../../assets/icons/logo.svg'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData } from '@/types'
-import { Button as CmsButton } from '@cmsgov/design-system'
 import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
@@ -34,6 +33,7 @@ type PromiseType = {
   response: userData
 }
 export default function Title() {
+  const navigate = useNavigate()
   const loaderData = useLoaderData() as PromiseType
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
@@ -45,7 +45,10 @@ export default function Title() {
       try {
         const fismaSystems = await axiosInstance.get('/fismasystems')
         if (fismaSystems.status !== 200) {
-          return
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: { message: 'Please log in' },
+          })
         }
         setFismaSystems(fismaSystems.data.data)
       } catch (error) {
@@ -55,7 +58,7 @@ export default function Title() {
     if (loaderData.status == 200) {
       fetchFismaSystems()
     }
-  }, [loaderData.status])
+  }, [loaderData.status, navigate])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -157,21 +160,7 @@ export default function Title() {
         <Typography variant="h3" align="center">
           Zero Trust Maturity Score {titlePage}
         </Typography>
-        {loaderData.status !== 200 ? (
-          <Box
-            flex={1}
-            sx={{
-              display: 'flex',
-              justifyContent: 'center',
-              alignItems: 'center',
-              height: '50vh',
-            }}
-          >
-            <CmsButton href="/login">Login</CmsButton>
-          </Box>
-        ) : (
-          <Outlet context={{ fismaSystems }} />
-        )}
+        <Outlet context={{ fismaSystems }} />
       </Container>
     </>
   )
