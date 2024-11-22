@@ -30,6 +30,7 @@ import { Routes } from '@/router/constants'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
+import { ERROR_MESSAGES } from '@/constants'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
     color: 'rgb(13, 36, 153)',
@@ -72,8 +73,7 @@ export default function QuestionnareModal({
       navigate(Routes.SIGNIN, {
         replace: true,
         state: {
-          message:
-            'Your changes were not saved. Your session may have expired. Please log in again.',
+          message: ERROR_MESSAGES.notSaved,
         },
       })
     }
@@ -83,7 +83,7 @@ export default function QuestionnareModal({
     navigate(Routes.SIGNIN, {
       replace: true,
       state: {
-        message: 'Your session has expired. Please log in again.',
+        message: ERROR_MESSAGES.expired,
       },
     })
   }
@@ -114,6 +114,7 @@ export default function QuestionnareModal({
       const response = await axiosInstance.get(
         `scores?datacallid=2&fismasystemid=${systemId}`
       )
+      checkValidResponse(response.status)
       const hashTable: questionScoreMap = Object.assign(
         {},
         ...response.data.data.map((item: QuestionScores) => ({
@@ -123,7 +124,25 @@ export default function QuestionnareModal({
       setQuestionScores(hashTable)
     } catch (error) {
       console.error('Error fetching question scores:', error)
+      routeToSignIn()
     }
+  }
+  async function fetchDataCall(): Promise<number> {
+    let maxDataCallId = -1
+    axiosInstance.get('/datacalls').then((res) => {
+      if (res.status !== 200 && res.status.toString()[0] === '4') {
+        navigate(Routes.SIGNIN, {
+          replace: true,
+          state: {
+            message: ERROR_MESSAGES.expired,
+          },
+        })
+      }
+      for (let i = 0; i < res.data.data.length; i++) {
+        maxDataCallId = Math.max(maxDataCallId, res.data.data[i].datacallid)
+      }
+    })
+    return maxDataCallId
   }
 
   const handleQuestionnareNext = () => {
@@ -250,80 +269,116 @@ export default function QuestionnareModal({
   }
   React.useEffect(() => {
     if (open && system) {
-      axiosInstance
-        .get(`/fismasystems/${system.fismasystemid}/questions`)
-        .then((response) => {
-          if (
-            response.status !== 200 &&
-            response.status.toString()[0] === '4'
-          ) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: 'Your session has expired. Please log in again.',
-              },
-            })
-          }
-          const data = response.data.data
-          const organizedData: Record<string, FismaQuestion[]> = {}
-          const pillarOrder: Record<string, number> = {}
-          data.forEach((question: FismaQuestion) => {
-            if (!organizedData[question.pillar.pillar]) {
-              organizedData[question.pillar.pillar] = []
-              pillarOrder[question.pillar.pillar] = question.pillar.order
+      const fetchData = async () => {
+        try {
+          const datacall = await axiosInstance.get(`/datacalls`).then((res) => {
+            res.status = 401
+            if (res.status !== 200 && res.status.toString()[0] === '4') {
+              navigate(Routes.SIGNIN, {
+                replace: true,
+                state: {
+                  message: ERROR_MESSAGES.expired,
+                },
+              })
             }
-            organizedData[question.pillar.pillar].push(question)
+            return res.data.data
           })
-          const sortedPillars = Object.keys(organizedData).sort(
-            (a, b) => pillarOrder[a] - pillarOrder[b]
-          )
-          const categoriesData: Category[] = sortedPillars.map((pillar) => ({
-            name: pillar,
-            steps: organizedData[pillar],
-          }))
-
-          setCategories(categoriesData)
-          if (data.length > 0) {
-            setQuestionId(categoriesData[0]['steps'][0].function.functionid)
+          let latestDataCallId = -Infinity
+          for (let i = 0; i < datacall.length; i++) {
+            latestDataCallId = Math.max(
+              latestDataCallId,
+              datacall[i].datacallid
+            )
           }
-        })
-        .catch((error) => {
+          await axiosInstance
+            .get(`/fismasystems/${system.fismasystemid}/questions`)
+            .then((response) => {
+              if (
+                response.status !== 200 &&
+                response.status.toString()[0] === '4'
+              ) {
+                navigate(Routes.SIGNIN, {
+                  replace: true,
+                  state: {
+                    message: ERROR_MESSAGES.expired,
+                  },
+                })
+              }
+              const data = response.data.data
+              const organizedData: Record<string, FismaQuestion[]> = {}
+              const pillarOrder: Record<string, number> = {}
+              data.forEach((question: FismaQuestion) => {
+                if (!organizedData[question.pillar.pillar]) {
+                  organizedData[question.pillar.pillar] = []
+                  pillarOrder[question.pillar.pillar] = question.pillar.order
+                }
+                organizedData[question.pillar.pillar].push(question)
+              })
+              const sortedPillars = Object.keys(organizedData).sort(
+                (a, b) => pillarOrder[a] - pillarOrder[b]
+              )
+              const categoriesData: Category[] = sortedPillars.map(
+                (pillar) => ({
+                  name: pillar,
+                  steps: organizedData[pillar],
+                })
+              )
+
+              setCategories(categoriesData)
+              if (data.length > 0) {
+                setQuestionId(categoriesData[0]['steps'][0].function.functionid)
+              }
+            })
+            .catch((error) => {
+              console.error('Error fetching data:', error)
+              navigate(Routes.SIGNIN, {
+                replace: true,
+                state: {
+                  message: ERROR_MESSAGES.error,
+                },
+              })
+            })
+          await axiosInstance
+            .get(
+              `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`
+            )
+            .then((res) => {
+              if (res.status !== 200 && res.status.toString()[0] === '4') {
+                navigate(Routes.SIGNIN, {
+                  replace: true,
+                  state: {
+                    message: ERROR_MESSAGES.expired,
+                  },
+                })
+              }
+              const hashTable: questionScoreMap = Object.assign(
+                {},
+                ...res.data.data.map((item: QuestionScores) => ({
+                  [item.functionoptionid]: item,
+                }))
+              )
+              setQuestionScores(hashTable)
+            })
+            .catch((error) => {
+              console.error('Error fetching ´question scores:', error)
+              navigate(Routes.SIGNIN, {
+                replace: true,
+                state: {
+                  message: ERROR_MESSAGES.error,
+                },
+              })
+            })
+        } catch (error) {
           console.error('Error fetching data:', error)
           navigate(Routes.SIGNIN, {
             replace: true,
             state: {
-              message: 'Your session has expired. Please log in again.',
+              message: ERROR_MESSAGES.expired,
             },
           })
-        })
-      axiosInstance
-        .get(`scores?datacallid=2&fismasystemid=${system.fismasystemid}`)
-        .then((res) => {
-          if (res.status !== 200 && res.status.toString()[0] === '4') {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: 'Your session has expired. Please log in again.',
-              },
-            })
-          }
-          const hashTable: questionScoreMap = Object.assign(
-            {},
-            ...res.data.data.map((item: QuestionScores) => ({
-              [item.functionoptionid]: item,
-            }))
-          )
-          setQuestionScores(hashTable)
-        })
-        .catch((error) => {
-          console.error('Error fetching ´question scores:', error)
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: 'Your session has expired. Please log in again.',
-            },
-          })
-        })
+        }
+      }
+      fetchData()
     }
   }, [open, system, navigate])
   React.useEffect(() => {
@@ -337,7 +392,7 @@ export default function QuestionnareModal({
             navigate(Routes.SIGNIN, {
               replace: true,
               state: {
-                message: 'Your session has expired. Please log in again.',
+                message: ERROR_MESSAGES.expired,
               },
             })
           }
@@ -365,7 +420,7 @@ export default function QuestionnareModal({
         navigate(Routes.SIGNIN, {
           replace: true,
           state: {
-            message: 'Your session has expired. Please log in again.',
+            message: ERROR_MESSAGES.error,
           },
         })
       }
