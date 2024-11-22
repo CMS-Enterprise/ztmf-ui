@@ -38,6 +38,7 @@ import CustomSnackbar from '../Snackbar/Snackbar'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
+import { ERROR_MESSAGES } from '@/constants'
 const roles = ['ISSO', 'ISSM', 'ADMIN']
 
 interface EditToolbarProps {
@@ -78,8 +79,7 @@ export default function UserTable() {
       navigate(Routes.SIGNIN, {
         replace: true,
         state: {
-          message:
-            'Your changes were not saved. Your session may have expired. Please log in again.',
+          message: ERROR_MESSAGES.notSaved,
         },
       })
     }
@@ -89,7 +89,7 @@ export default function UserTable() {
     navigate(Routes.SIGNIN, {
       replace: true,
       state: {
-        message: 'Your session has expired. Please log in again.',
+        message: ERROR_MESSAGES.expired,
       },
     })
   }
