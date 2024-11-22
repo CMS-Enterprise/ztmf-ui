@@ -95,6 +95,7 @@ export default function QuestionnareModal({
   const [questionId, setQuestionId] = React.useState<number | null>(null)
   const [categories, setCategories] = React.useState<Category[]>([])
   const [options, setOptions] = React.useState<QuestionOption[]>([])
+  const [datacallID, setDatacallID] = React.useState<number>(0)
   const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
@@ -112,7 +113,7 @@ export default function QuestionnareModal({
   ) => {
     try {
       const response = await axiosInstance.get(
-        `scores?datacallid=2&fismasystemid=${systemId}`
+        `scores?datacallid=${datacallID}&fismasystemid=${systemId}`
       )
       checkValidResponse(response.status)
       const hashTable: questionScoreMap = Object.assign(
@@ -127,24 +128,6 @@ export default function QuestionnareModal({
       routeToSignIn()
     }
   }
-  async function fetchDataCall(): Promise<number> {
-    let maxDataCallId = -1
-    axiosInstance.get('/datacalls').then((res) => {
-      if (res.status !== 200 && res.status.toString()[0] === '4') {
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.expired,
-          },
-        })
-      }
-      for (let i = 0; i < res.data.data.length; i++) {
-        maxDataCallId = Math.max(maxDataCallId, res.data.data[i].datacallid)
-      }
-    })
-    return maxDataCallId
-  }
-
   const handleQuestionnareNext = () => {
     // TODO: datacallid is hardcoded to 2, need to make it dynamic
     setLoadingQuestion(true)
@@ -272,7 +255,6 @@ export default function QuestionnareModal({
       const fetchData = async () => {
         try {
           const datacall = await axiosInstance.get(`/datacalls`).then((res) => {
-            res.status = 401
             if (res.status !== 200 && res.status.toString()[0] === '4') {
               navigate(Routes.SIGNIN, {
                 replace: true,
@@ -290,6 +272,7 @@ export default function QuestionnareModal({
               datacall[i].datacallid
             )
           }
+          setDatacallID(latestDataCallId)
           await axiosInstance
             .get(`/fismasystems/${system.fismasystemid}/questions`)
             .then((response) => {
