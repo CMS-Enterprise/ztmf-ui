@@ -20,23 +20,46 @@ export default function HomePageContainer() {
     async function fetchFismaSystems() {
       try {
         const fismaSystems = await axiosInstance.get('/fismasystems')
-        if (fismaSystems.status !== 200) {
-          setLoading(true)
+        if (
+          fismaSystems.status !== 200 &&
+          fismaSystems.status.toString()[0] === '4'
+        ) {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.expired,
+            },
+          })
           return
         }
         setFismaSystems(fismaSystems.data.data)
         setLoading(false)
       } catch (error) {
         console.log(error)
+        navigate(Routes.SIGNIN, {
+          replace: true,
+          state: {
+            message: ERROR_MESSAGES.login,
+          },
+        })
       }
     }
     fetchFismaSystems()
-  }, [])
+  }, [navigate])
 
   useEffect(() => {
     async function fetchScores() {
       try {
         const scores = await axiosInstance.get('/scores/aggregate')
+        if (scores.status !== 200 && scores.status.toString()[0] === '4') {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.expired,
+            },
+          })
+          return
+        }
         const scoresMap: Record<number, number> = {}
         for (const obj of scores.data.data) {
           let score = 0
@@ -48,20 +71,18 @@ export default function HomePageContainer() {
         setScoreMap(scoresMap)
         setLoading(false)
       } catch (error) {
-        console.log(error)
+        navigate(Routes.SIGNIN, {
+          replace: true,
+          state: {
+            message: ERROR_MESSAGES.expired,
+          },
+        })
       }
     }
     fetchScores()
-  }, [])
+  }, [navigate])
   if (loading) {
-    {
-      navigate(Routes.SIGNIN, {
-        replace: true,
-        state: {
-          message: ERROR_MESSAGES.login,
-        },
-      })
-    }
+    return <div>Loading...</div>
   }
   return (
     <>
