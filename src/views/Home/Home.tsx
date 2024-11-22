@@ -2,6 +2,9 @@ import FismaTable from '../FismaTable/FismaTable'
 import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
 import { useState, useEffect } from 'react'
 import axiosInstance from '@/axiosConfig'
+import { useNavigate } from 'react-router-dom'
+import { Routes } from '@/router/constants'
+import { ERROR_MESSAGES } from '@/constants'
 import { FismaSystemType } from '@/types'
 /**
  * Component that renders the contents of the Home view.
@@ -10,6 +13,7 @@ import { FismaSystemType } from '@/types'
 
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
+  const navigate = useNavigate()
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [scoreMap, setScoreMap] = useState<Record<number, number>>({})
   useEffect(() => {
@@ -50,7 +54,14 @@ export default function HomePageContainer() {
     fetchScores()
   }, [])
   if (loading) {
-    return <div>loading...</div>
+    {
+      navigate(Routes.SIGNIN, {
+        replace: true,
+        state: {
+          message: ERROR_MESSAGES.login,
+        },
+      })
+    }
   }
   return (
     <>
