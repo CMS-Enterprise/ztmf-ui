@@ -16,6 +16,7 @@ import { useState, useEffect } from 'react'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
 import axiosInstance from '@/axiosConfig'
+import LoginPage from '../LoginPage/LoginPage'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -160,7 +161,11 @@ export default function Title() {
         <Typography variant="h3" align="center">
           Zero Trust Maturity Score {titlePage}
         </Typography>
-        <Outlet context={{ fismaSystems }} />
+        {loaderData.status !== 200 ? (
+          <LoginPage />
+        ) : (
+          <Outlet context={{ fismaSystems }} />
+        )}
       </Container>
     </>
   )
