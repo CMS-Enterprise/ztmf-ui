@@ -32,7 +32,7 @@ import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
 import { users } from '@/types'
-import { useFismaSystems } from '../Title/Context'
+import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
@@ -95,7 +95,7 @@ export default function UserTable() {
   }
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
-  const { fismaSystems } = useFismaSystems()
+  const { fismaSystems } = useContextProp()
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const [open, setOpen] = useState<boolean>(false)
   const [openModal, setOpenModal] = useState<boolean>(false)

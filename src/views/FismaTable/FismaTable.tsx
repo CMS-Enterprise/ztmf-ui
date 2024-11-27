@@ -4,6 +4,8 @@ import {
   GridColDef,
   GridFooterContainer,
   GridSlotsComponentsProps,
+  GridRenderCellParams,
+  GridActionsCellItem,
   GridFooter,
   GridRowId,
 } from '@mui/x-data-grid'
@@ -11,11 +13,13 @@ import Tooltip from '@mui/material/Tooltip'
 import { Box, IconButton } from '@mui/material'
 import { useState } from 'react'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
-import Link from '@mui/material/Link'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
-
+import { useContextProp } from '../Title/Context'
+import { EMPTY_USER } from '../../constants'
+import EditIcon from '@mui/icons-material/Edit'
+import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 type FismaTable2Props = {
   fismaSystems: FismaSystemType[]
   scores: Record<number, number>
@@ -114,6 +118,7 @@ export function CustomFooterSaveComponent(
 }
 export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
   const [open, setOpen] = useState<boolean>(false)
+  const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
   const handleOpenModal = (row: FismaSystemType) => {
@@ -206,18 +211,40 @@ export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
       headerName: 'Actions',
       headerAlign: 'center',
       align: 'center',
-      flex: 1,
+      flex: 0.5,
       hideable: false,
       sortable: false,
       disableColumnMenu: true,
-      renderCell: (params) => (
-        <Link
-          component="button"
-          variant="body2"
-          onClick={() => handleOpenModal(params.row as FismaSystemType)}
-        >
-          View Questionnare
-        </Link>
+      renderCell: (params: GridRenderCellParams) => (
+        <>
+          {/* <Link
+            component="button"
+            variant="body2"
+            onClick={() => handleOpenModal(params.row as FismaSystemType)}
+          >
+            View Questionnare
+          </Link> */}
+          <Tooltip title="View Questionnare">
+            <GridActionsCellItem
+              icon={<QuestionAnswerOutlinedIcon />}
+              key={`question-${params.row.fismasystemid}`}
+              label="View Questionnare"
+              className="textPrimary"
+              onClick={() => handleOpenModal(params.row as FismaSystemType)}
+              color="inherit"
+            />
+          </Tooltip>
+          {userInfo.role === 'ADMIN' && (
+            <GridActionsCellItem
+              icon={<EditIcon />}
+              key={`edit-${params.row.fismasystemid}`}
+              label="Edit"
+              className="textPrimary"
+              // onClick={}
+              color="inherit"
+            />
+          )}
+        </>
       ),
     },
   ]

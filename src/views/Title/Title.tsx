@@ -45,6 +45,7 @@ export default function Title() {
     async function fetchFismaSystems() {
       try {
         const fismaSystems = await axiosInstance.get('/fismasystems')
+        // TODO: use ERROR_MESSAGES to handle errors
         if (fismaSystems.status !== 200) {
           navigate(Routes.SIGNIN, {
             replace: true,
@@ -164,7 +165,7 @@ export default function Title() {
         {loaderData.status !== 200 ? (
           <LoginPage />
         ) : (
-          <Outlet context={{ fismaSystems }} />
+          <Outlet context={{ fismaSystems, userInfo }} />
         )}
       </Container>
     </>

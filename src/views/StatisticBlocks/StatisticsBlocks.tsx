@@ -49,11 +49,17 @@ export default function StatisticsBlocks({
         }
       }
     }
+    if (totalCount === 0) {
+      setAvgSystemScore(0)
+      setMinSystemScore(0)
+    } else {
+      setAvgSystemScore(Number((totalScores / totalCount).toFixed(2)))
+      setMinSystemScore(minScore)
+    }
     setTotalSystems(totalCount)
-    setAvgSystemScore(Number((totalScores / totalCount).toFixed(2)))
     setMaxSystemScore(maxScore)
     setMaxSystemAcronym(maxScoreSystem || '')
-    setMinSystemScore(minScore)
+
     setMinSystemAcronym(minScoreSystem || '')
     setLoading(false)
   }, [fismaSystems, scores])

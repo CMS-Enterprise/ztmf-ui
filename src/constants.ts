@@ -2,6 +2,7 @@
  * Application-wide constants
  * @module constants
  */
+import { userData } from './types'
 
 //* Application Strings
 export const ORG_NAME = 'CMS'
@@ -20,4 +21,11 @@ export const ERROR_MESSAGES = {
     'Your changes were not saved. Your session may have expired. Please log in again.',
   error:
     'An error occurred. Please log in and try again. If the error persists, please contact support.',
+}
+export const EMPTY_USER: userData = {
+  userid: '',
+  email: '',
+  fullname: '',
+  role: '',
+  assignedfismasystems: [],
 }
