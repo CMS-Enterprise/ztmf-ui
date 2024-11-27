@@ -1,8 +1,11 @@
 import { useOutletContext } from 'react-router-dom'
-import { FismaSystemType } from '@/types'
+import { FismaSystemType, userData } from '@/types'
 
-type ContextType = { fismaSystems: FismaSystemType[] | [] }
+type ContextType = {
+  fismaSystems: FismaSystemType[] | []
+  userInfo: userData
+}
 
-export function useFismaSystems() {
+export function useContextProp() {
   return useOutletContext<ContextType>()
 }

@@ -104,6 +104,13 @@ export type users = {
   isNew?: boolean
 }
 
+export type datacall = {
+  datacallid: number
+  datacall: string
+  datecreated: number
+  deadline: number
+}
+
 export type ThemeColor =
   | 'primary'
   | 'secondary'
