@@ -1,0 +1,16 @@
+export const EMPTY_SYSTEM = {
+  fismauid: '',
+  fismaacronym: '',
+  fismaname: '',
+  fismasubsystem: '',
+  fismaimpactlevel: '',
+  mission: '',
+  fismasystemid: 0,
+  component: '',
+  groupacronym: '',
+  groupname: '',
+  divisionname: '',
+  datacenterenvironment: '',
+  datacallcontact: '',
+  issoemail: '',
+}

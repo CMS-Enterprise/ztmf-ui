@@ -265,13 +265,7 @@ export default function QuestionnareModal({
             }
             return res.data.data
           })
-          let latestDataCallId = -Infinity
-          for (let i = 0; i < datacall.length; i++) {
-            latestDataCallId = Math.max(
-              latestDataCallId,
-              datacall[i].datacallid
-            )
-          }
+          const latestDataCallId = datacall[0].datacallid
           setDatacallID(latestDataCallId)
           await axiosInstance
             .get(`/fismasystems/${system.fismasystemid}/questions`)

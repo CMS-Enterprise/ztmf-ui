@@ -17,6 +17,7 @@ import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
 import axiosInstance from '@/axiosConfig'
 import LoginPage from '../LoginPage/LoginPage'
+import { ERROR_MESSAGES } from '@/constants'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -45,11 +46,10 @@ export default function Title() {
     async function fetchFismaSystems() {
       try {
         const fismaSystems = await axiosInstance.get('/fismasystems')
-        // TODO: use ERROR_MESSAGES to handle errors
         if (fismaSystems.status !== 200) {
           navigate(Routes.SIGNIN, {
             replace: true,
-            state: { message: 'Please log in' },
+            state: ERROR_MESSAGES.expired,
           })
         }
         setFismaSystems(fismaSystems.data.data)

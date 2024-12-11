@@ -29,3 +29,5 @@ export const EMPTY_USER: userData = {
   role: '',
   assignedfismasystems: [],
 }
+export const CONFIRMATION_MESSAGE =
+  'Your changes will not be saved! Are you sure you want to close out of editing a Fisma system before saving your changes?'

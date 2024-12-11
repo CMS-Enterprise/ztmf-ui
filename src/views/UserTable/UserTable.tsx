@@ -135,7 +135,7 @@ export default function UserTable() {
       apiRef.current.setEditCellValue({
         id: selectedRow.userid,
         field: 'role',
-        value: selectedRow.role, // Replace with the desired value
+        value: selectedRow.role,
       })
     }
     setOpenAlert(false)

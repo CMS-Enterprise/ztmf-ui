@@ -8,21 +8,27 @@ import {
   GridActionsCellItem,
   GridFooter,
   GridRowId,
+  useGridApiRef,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
 import { Box, IconButton } from '@mui/material'
 import { useState } from 'react'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
+import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { EMPTY_USER } from '../../constants'
+import { useNavigate } from 'react-router-dom'
+import { Routes } from '@/router/constants'
+import { ERROR_MESSAGES } from '../../constants'
 import EditIcon from '@mui/icons-material/Edit'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
-type FismaTable2Props = {
+type FismaTableProps = {
   fismaSystems: FismaSystemType[]
   scores: Record<number, number>
+  latestDataCallId: number
 }
 
 type selectedRowsType = GridRowId[]
@@ -30,12 +36,15 @@ declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
+    latestDataCallId: number
   }
 }
+
 export function CustomFooterSaveComponent(
   props: NonNullable<GridSlotsComponentsProps['footer']>
 ) {
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false)
+  const navigate = useNavigate()
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
   }
@@ -43,7 +52,7 @@ export function CustomFooterSaveComponent(
     if (props.selectedRows && props.selectedRows.length === 0) {
       setOpenSnackbar(true)
     } else {
-      let exportUrl = '/datacalls/2/export'
+      let exportUrl = `/datacalls/${props.latestDataCallId}/export`
       if (
         props.selectedRows &&
         props.fismaSystems &&
@@ -67,23 +76,33 @@ export function CustomFooterSaveComponent(
         })
         .then((response) => {
           if (response.status !== 200) {
-            console.log('Error saving systems')
-          } else {
-            const [, filename] =
-              response.headers['content-disposition'].split('filename=')
-            const contentType = response.headers['content-type']
-            const data = new Blob([response.data], { type: contentType })
-            const url = window.URL.createObjectURL(data)
-            const tempLink = document.createElement('a')
-            tempLink.href = url
-            tempLink.setAttribute('download', filename)
-            tempLink.setAttribute('target', '_blank')
-            tempLink.click()
-            window.URL.revokeObjectURL(url)
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.expired,
+              },
+            })
           }
+          const [, filename] =
+            response.headers['content-disposition'].split('filename=')
+          const contentType = response.headers['content-type']
+          const data = new Blob([response.data], { type: contentType })
+          const url = window.URL.createObjectURL(data)
+          const tempLink = document.createElement('a')
+          tempLink.href = url
+          tempLink.setAttribute('download', filename)
+          tempLink.setAttribute('target', '_blank')
+          tempLink.click()
+          window.URL.revokeObjectURL(url)
         })
         .catch((error) => {
           console.error('Error saving system answers: ', error)
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.error,
+            },
+          })
         })
     }
   }
@@ -116,17 +135,43 @@ export function CustomFooterSaveComponent(
     </>
   )
 }
-export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
+export default function FismaTable({
+  fismaSystems,
+  scores,
+  latestDataCallId,
+}: FismaTableProps) {
+  const apiRef = useGridApiRef()
   const [open, setOpen] = useState<boolean>(false)
   const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
+  const [openEditModal, setOpenEditModal] = useState<boolean>(false)
   const handleOpenModal = (row: FismaSystemType) => {
     setSelectedRow(row)
     setOpen(true)
   }
   const handleCloseModal = () => {
     setOpen(false)
+    setSelectedRow(null)
+  }
+  const handleEditOpenModal = (row: FismaSystemType) => {
+    setSelectedRow(row)
+    setOpenEditModal(true)
+  }
+  const handleCloseEditModal = (newRowData: FismaSystemType) => {
+    if (selectedRow) {
+      const row = apiRef.current.getRow(selectedRow?.fismasystemid)
+      if (row) {
+        // const updatedRow = {
+        //   ...row,
+        //   fismaname: newRowData.fismaname,
+        //   issoemail: newRowData.issoemail,
+        //   datacenterenvironment: newRowData.datacenterenvironment,
+        // }
+        apiRef.current.updateRows([newRowData])
+      }
+    }
+    setOpenEditModal(false)
     setSelectedRow(null)
   }
   const columns: GridColDef[] = [
@@ -217,13 +262,6 @@ export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => (
         <>
-          {/* <Link
-            component="button"
-            variant="body2"
-            onClick={() => handleOpenModal(params.row as FismaSystemType)}
-          >
-            View Questionnare
-          </Link> */}
           <Tooltip title="View Questionnare">
             <GridActionsCellItem
               icon={<QuestionAnswerOutlinedIcon />}
@@ -240,7 +278,7 @@ export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
               key={`edit-${params.row.fismasystemid}`}
               label="Edit"
               className="textPrimary"
-              // onClick={}
+              onClick={() => handleEditOpenModal(params.row as FismaSystemType)}
               color="inherit"
             />
           )}
@@ -255,13 +293,14 @@ export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
         rows={fismaSystems}
         columns={columns}
         checkboxSelection
+        apiRef={apiRef}
         getRowId={(row) => row.fismasystemid}
         onRowSelectionModelChange={(ids) => {
           const selectedIDs = Array.from(ids)
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems },
+          footer: { selectedRows, fismaSystems, latestDataCallId },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
@@ -305,6 +344,11 @@ export default function FismaTable({ fismaSystems, scores }: FismaTable2Props) {
       <QuestionnareModal
         open={open}
         onClose={handleCloseModal}
+        system={selectedRow}
+      />
+      <EditSystemModal
+        open={openEditModal}
+        onClose={handleCloseEditModal}
         system={selectedRow}
       />
     </div>
