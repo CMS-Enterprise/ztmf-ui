@@ -30,7 +30,7 @@ import { Routes } from '@/router/constants'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
-import { ERROR_MESSAGES } from '@/constants'
+import { ERROR_MESSAGES, PILLAR_FUNCTION_MAP } from '@/constants'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
     color: 'rgb(13, 36, 153)',
@@ -294,13 +294,31 @@ export default function QuestionnareModal({
               const sortedPillars = Object.keys(organizedData).sort(
                 (a, b) => pillarOrder[a] - pillarOrder[b]
               )
+              const sortSteps = (
+                steps: FismaQuestion[],
+                order: string[]
+              ): FismaQuestion[] => {
+                return steps.sort(
+                  (a, b) =>
+                    order.indexOf(a.function.function) -
+                    order.indexOf(b.function.function)
+                )
+              }
               const categoriesData: Category[] = sortedPillars.map(
                 (pillar) => ({
                   name: pillar,
-                  steps: organizedData[pillar],
+                  steps: sortSteps(
+                    organizedData[pillar],
+                    PILLAR_FUNCTION_MAP[pillar]
+                  ),
                 })
               )
-
+              // const categoriesData: Category[] = sortedPillars.map(
+              //   (pillar) => ({
+              //     name: pillar,
+              //     steps: organizedData[pillar],
+              //   })
+              // )
               setCategories(categoriesData)
               if (data.length > 0) {
                 setQuestionId(categoriesData[0]['steps'][0].function.functionid)
