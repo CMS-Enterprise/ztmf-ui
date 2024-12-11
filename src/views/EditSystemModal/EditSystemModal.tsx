@@ -19,6 +19,7 @@ import axiosInstance from '@/axiosConfig'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
+import { useSnackbar } from 'notistack'
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -32,6 +33,7 @@ export default function EditSystemModal({
 }: editSystemModalProps) {
   const formValid = React.useRef({ issoemail: false, datacallcontact: false })
   const navigate = useNavigate()
+  const { enqueueSnackbar } = useSnackbar()
   const [loading, setLoading] = React.useState<boolean>(true)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   // const [confirmChanges, setConfirmChanges] = React.useState<boolean>(false)
@@ -82,6 +84,14 @@ export default function EditSystemModal({
             },
           })
         }
+        enqueueSnackbar(`Saved`, {
+          variant: 'success',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 1000,
+        })
       })
       .catch((error) => {
         console.error('Error fetching data:', error)
