@@ -48,7 +48,7 @@
   "dependencies": {
     "@apollo/client": "^3.10.1",
     "@emotion/react": "^11.11.3",
-    "@emotion/styled": "^11.11.0",
+    "@emotion/styled": "^11.14.0",
     "@fortawesome/fontawesome-free": "^6.5.1",
     "@hookform/resolvers": "^3.3.4",
     "@mui/icons-material": "^5.15.10",
