@@ -28,27 +28,6 @@ afterEach(() => {
   jest.clearAllMocks()
 })
 
-// test('renders auth session error and navigate to logout after 5 seconds', () => {
-//   const navigateMock = jest.fn().mockImplementation(() => ({}))
-//   useNavigateMock.mockReturnValue(navigateMock)
-//   isRouteErrorResponseMock.mockReturnValue(true)
-//   routeErrorMock.mockReturnValue({
-//     status: 401,
-//     statusText: 'Unauthorized',
-//     data: 'Unauthorized',
-//   })
-
-//   render(<ErrorBoundary />)
-
-//   expect(
-//     screen.getByText(/Your session has expired. Please login again./i)
-//   ).toBeInTheDocument()
-
-//   jest.advanceTimersByTime(5000)
-
-//   expect(navigateMock).toHaveBeenCalledWith(Routes.AUTH_LOGOUT)
-// })
-
 test('renders generic error message', () => {
   routeErrorMock.mockReturnValue(new Error('Something went wrong'))
   render(<ErrorBoundary />)
