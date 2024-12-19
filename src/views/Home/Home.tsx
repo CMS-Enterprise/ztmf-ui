@@ -6,7 +6,6 @@ import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
 import { FismaSystemType } from '@/types'
-import { set } from 'lodash'
 /**
  * Component that renders the contents of the Home view.
  * @returns {JSX.Element} Component that renders the home contents.
@@ -116,11 +115,7 @@ export default function HomePageContainer() {
     <>
       <div>
         <StatisticsBlocks fismaSystems={fismaSystems} scores={scoreMap} />
-        <FismaTable
-          fismaSystems={fismaSystems}
-          scores={scoreMap}
-          latestDataCallId={latestDataCallId}
-        />
+        <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
       </div>
     </>
   )

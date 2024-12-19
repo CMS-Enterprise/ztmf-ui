@@ -131,6 +131,11 @@ export type FormValidHelperText = {
   [key: string]: string
 }
 
+export type FismaTableProps = {
+  scores: Record<number, number>
+  latestDataCallId: number
+}
+
 export type ThemeColor =
   | 'primary'
   | 'secondary'

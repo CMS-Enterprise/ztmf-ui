@@ -25,6 +25,7 @@ import _ from 'lodash'
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
  */
+
 const emptyUser: userData = {
   userid: '',
   email: '',

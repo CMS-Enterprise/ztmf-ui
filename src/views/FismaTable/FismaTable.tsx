@@ -25,10 +25,7 @@ import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
 import EditIcon from '@mui/icons-material/Edit'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
-type FismaTableProps = {
-  scores: Record<number, number>
-  latestDataCallId: number
-}
+import { FismaTableProps } from '@/types'
 
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
