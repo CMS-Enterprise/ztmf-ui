@@ -114,7 +114,7 @@ export default function HomePageContainer() {
   return (
     <>
       <div>
-        <StatisticsBlocks fismaSystems={fismaSystems} scores={scoreMap} />
+        <StatisticsBlocks scores={scoreMap} />
         <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
       </div>
     </>

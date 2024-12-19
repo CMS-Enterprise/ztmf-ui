@@ -3,7 +3,7 @@ import Box from '@mui/material/Box'
 import Paper from '@mui/material/Paper'
 import { Typography } from '@mui/material'
 import { styled } from '@mui/material/styles'
-import { FismaSystemType } from '@/types'
+import { useContextProp } from '../Title/Context'
 const StatisticsPaper = styled(Paper)(({ theme }) => ({
   width: 120,
   height: 120,
@@ -14,12 +14,11 @@ const StatisticsPaper = styled(Paper)(({ theme }) => ({
   elevation: 3,
 }))
 export default function StatisticsBlocks({
-  fismaSystems,
   scores,
 }: {
-  fismaSystems: FismaSystemType[]
   scores: Record<number, number>
 }) {
+  const { fismaSystems } = useContextProp()
   const [totalSystems, setTotalSystems] = useState<number>(0)
   const [avgSystemScore, setAvgSystemScore] = useState<number>(0)
   const [maxSystemAcronym, setMaxSystemAcronym] = useState<string>('')
