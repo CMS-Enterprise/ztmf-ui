@@ -1530,9 +1530,9 @@ __metadata:
   languageName: node
   linkType: hard
 
-"@cmsgov/design-system@npm:^10.1.2":
-  version: 10.1.2
-  resolution: "@cmsgov/design-system@npm:10.1.2"
+"@cmsgov/design-system@npm:^10.1.3":
+  version: 10.1.3
+  resolution: "@cmsgov/design-system@npm:10.1.3"
   dependencies:
     "@popperjs/core": "npm:^2.4.4"
     "@types/react": "npm:^18.2.6"
@@ -1560,7 +1560,7 @@ __metadata:
     react-dom: ">=17.0.0"
   bin:
     cmsds-migrate: scripts/cmsds-migrate/src/main.mjs
-  checksum: 10/c4ad3e3071d97b4d451100f8f5945f1dd5af4b4538ecdf57478abf482ec7853efa189aecc50a7535d41020a75ea4590b65513cbea0026ea0cadddb976bccc594
+  checksum: 10/20cdf2343c1ad5ae3fb6002ac1c4b375c48bbde59c57fa4e073687257280381b93e9d001264a7d6ceea99d4cd767e0a64ac311f8c523a6c2e514a2befd352807
   languageName: node
   linkType: hard
 
@@ -20444,7 +20444,7 @@ __metadata:
   dependencies:
     "@apollo/client": "npm:^3.10.1"
     "@babel/core": "npm:^7.23.9"
-    "@cmsgov/design-system": "npm:^10.1.2"
+    "@cmsgov/design-system": "npm:^10.1.3"
     "@commitlint/cli": "npm:^18.6.1"
     "@commitlint/config-conventional": "npm:^18.6.2"
     "@emotion/react": "npm:^11.11.3"
