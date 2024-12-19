@@ -26,7 +26,6 @@ import { ERROR_MESSAGES } from '../../constants'
 import EditIcon from '@mui/icons-material/Edit'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 type FismaTableProps = {
-  fismaSystems: FismaSystemType[]
   scores: Record<number, number>
   latestDataCallId: number
 }
@@ -136,11 +135,11 @@ export function CustomFooterSaveComponent(
   )
 }
 export default function FismaTable({
-  fismaSystems,
   scores,
   latestDataCallId,
 }: FismaTableProps) {
   const apiRef = useGridApiRef()
+  const { fismaSystems } = useContextProp()
   const [open, setOpen] = useState<boolean>(false)
   const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
@@ -154,7 +153,11 @@ export default function FismaTable({
     setOpen(false)
     setSelectedRow(null)
   }
-  const handleEditOpenModal = (row: FismaSystemType) => {
+  const handleEditOpenModal = (
+    event: React.MouseEvent<HTMLButtonElement>,
+    row: FismaSystemType
+  ) => {
+    event.stopPropagation()
     setSelectedRow(row)
     setOpenEditModal(true)
   }
@@ -162,12 +165,6 @@ export default function FismaTable({
     if (selectedRow) {
       const row = apiRef.current.getRow(selectedRow?.fismasystemid)
       if (row) {
-        // const updatedRow = {
-        //   ...row,
-        //   fismaname: newRowData.fismaname,
-        //   issoemail: newRowData.issoemail,
-        //   datacenterenvironment: newRowData.datacenterenvironment,
-        // }
         apiRef.current.updateRows([newRowData])
       }
     }
@@ -196,8 +193,12 @@ export default function FismaTable({
       renderCell: (params) => {
         const name = params.row.issoemail.split('@')
         const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        const firstName = fullName[0][0].toUpperCase() + fullName[0].slice(1)
-        const lastName = fullName[1][0].toUpperCase() + fullName[1].slice(1)
+        let firstName = ''
+        let lastName = ''
+        if (fullName.length > 1) {
+          firstName = fullName[0][0].toUpperCase() + fullName[0].slice(1)
+          lastName = fullName[1][0].toUpperCase() + fullName[1].slice(1)
+        }
         return fullName.length > 1 ? `${firstName} ${lastName}` : fullName[0]
       },
     },
@@ -278,7 +279,9 @@ export default function FismaTable({
               key={`edit-${params.row.fismasystemid}`}
               label="Edit"
               className="textPrimary"
-              onClick={() => handleEditOpenModal(params.row as FismaSystemType)}
+              onClick={(event) =>
+                handleEditOpenModal(event, params.row as FismaSystemType)
+              }
               color="inherit"
             />
           )}
@@ -347,9 +350,11 @@ export default function FismaTable({
         system={selectedRow}
       />
       <EditSystemModal
+        title={'Edit'}
         open={openEditModal}
         onClose={handleCloseEditModal}
         system={selectedRow}
+        mode={'edit'}
       />
     </div>
   )

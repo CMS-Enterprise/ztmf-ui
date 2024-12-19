@@ -34,7 +34,7 @@ export type RequestOptions = {
 }
 export type FismaSystemType = {
   fismasystemid: number
-  fismauid: string | number
+  fismauid: string
   fismaacronym: string
   fismaname: string
   fismasubsystem: string
@@ -94,9 +94,11 @@ export type SystemDetailsModalProps = {
   system: FismaSystemType | null
 }
 export type editSystemModalProps = {
+  title: string
   open: boolean
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
+  mode: string
 }
 
 export type ScoreData = {
@@ -119,6 +121,14 @@ export type datacall = {
   datacall: string
   datecreated: number
   deadline: number
+}
+
+export type FormValidType = {
+  [key: string]: boolean
+}
+
+export type FormValidHelperText = {
+  [key: string]: string
 }
 
 export type ThemeColor =

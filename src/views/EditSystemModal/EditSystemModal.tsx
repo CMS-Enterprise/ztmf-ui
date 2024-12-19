@@ -6,7 +6,12 @@ import DialogContent from '@mui/material/DialogContent'
 import CustomDialogTitle from '../../components/DialogTitle/CustomDialogTitle'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { Box, Grid } from '@mui/material'
-import { editSystemModalProps, FismaSystemType } from '@/types'
+import {
+  editSystemModalProps,
+  FismaSystemType,
+  FormValidType,
+  FormValidHelperText,
+} from '@/types'
 import MenuItem from '@mui/material/MenuItem'
 import ValidatedTextField from './ValidatedTextField'
 import { emailValidator } from './validators'
@@ -18,7 +23,11 @@ import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
+import {
+  ERROR_MESSAGES,
+  TEXTFIELD_HELPER_TEXT,
+  INVALID_INPUT_TEXT,
+} from '@/constants'
 import { useSnackbar } from 'notistack'
 /**
  * Component that renders a modal to edit fisma systems.
@@ -27,31 +36,98 @@ import { useSnackbar } from 'notistack'
  */
 
 export default function EditSystemModal({
+  title,
   open,
   onClose,
   system,
+  mode,
 }: editSystemModalProps) {
-  const formValid = React.useRef({ issoemail: false, datacallcontact: false })
+  const [formValid, setFormValid] = React.useState<FormValidType>({
+    issoemail: false,
+    datacallcontact: false,
+    fismaname: false,
+    fismaacronym: false,
+    datacenterenvironment: false,
+    component: false,
+    fismauid: false,
+  })
+  const isFormValid = (): boolean => {
+    return Object.values(formValid).every((value) => value === true)
+  }
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const [loading, setLoading] = React.useState<boolean>(true)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
-  // const [confirmChanges, setConfirmChanges] = React.useState<boolean>(false)
+  const [formValidErrorText, setFormValidErrorText] =
+    React.useState<FormValidHelperText>({
+      issoemail: TEXTFIELD_HELPER_TEXT,
+      datacallcontact: TEXTFIELD_HELPER_TEXT,
+      fismaname: TEXTFIELD_HELPER_TEXT,
+      fismaacronym: TEXTFIELD_HELPER_TEXT,
+      datacenterenvironment: TEXTFIELD_HELPER_TEXT,
+      component: TEXTFIELD_HELPER_TEXT,
+      fismauid: TEXTFIELD_HELPER_TEXT,
+    })
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)
+    }
+  }
+  const handleInputChange = (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
+    key: string
+  ) => {
+    const value = e.target.value
+    const isValid = value.length > 0
+
+    setEditedFismaSystem((prevState) => ({
+      ...prevState,
+      [key]: value,
+    }))
+    setFormValid((prevState) => ({
+      ...prevState,
+      [key]: isValid,
+    }))
+    if (!isValid) {
+      setFormValidErrorText((prevState) => ({
+        ...prevState,
+        [key]: isValid ? '' : TEXTFIELD_HELPER_TEXT,
+      }))
     }
   }
   const [editedFismaSystem, setEditedFismaSystem] =
     React.useState<FismaSystemType>(EMPTY_SYSTEM)
   React.useEffect(() => {
     if (system && open) {
+      setFormValid((prevState) => ({
+        ...prevState,
+        issoemail:
+          system?.issoemail && system?.issoemail.length > 0 ? true : false,
+        datacallcontact:
+          system?.datacallcontact && system?.datacallcontact.length > 0
+            ? true
+            : false,
+        fismaname:
+          system?.fismaname && system?.fismaname.length > 0 ? true : false,
+        fismaacronym:
+          system?.fismaacronym && system?.fismaacronym.length > 0
+            ? true
+            : false,
+        datacenterenvironment:
+          system?.datacenterenvironment &&
+          system?.datacenterenvironment.length > 0
+            ? true
+            : false,
+        component:
+          system?.component && system?.component.length > 0 ? true : false,
+        fismauid:
+          system?.fismauid && system?.fismauid.length > 0 ? true : false,
+      }))
       setEditedFismaSystem(system)
       setLoading(false)
     }
   }, [system, open])
   const handleClose = () => {
-    setEditedFismaSystem(EMPTY_SYSTEM)
     if (_.isEqual(system, editedFismaSystem)) {
       onClose(editedFismaSystem)
     } else {
@@ -60,49 +136,137 @@ export default function EditSystemModal({
     return
   }
   const handleSave = async () => {
-    // TODO: Set this axiosInstance to update into the database with the latest changes
-    await axiosInstance
-      .put(`fismasystems/${editedFismaSystem.fismasystemid}`, {
-        fismauid: editedFismaSystem.fismauid,
-        fismaacronym: editedFismaSystem.fismaacronym,
-        fismaname: editedFismaSystem.fismaname,
-        fismasubsystem: editedFismaSystem.fismasubsystem,
-        component: editedFismaSystem.component,
-        groupacronym: editedFismaSystem.groupacronym,
-        groupname: editedFismaSystem.groupname,
-        divisionname: editedFismaSystem.divisionname,
-        datacenterenvironment: editedFismaSystem.datacenterenvironment,
-        datacallcontact: editedFismaSystem.datacallcontact,
-        issoemail: editedFismaSystem.issoemail,
-      })
-      .then((res) => {
-        if (res.status !== 200 && res.status.toString()[0] === '4') {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
+    if (mode === 'edit') {
+      await axiosInstance
+        .put(`fismasystems/${editedFismaSystem.fismasystemid}`, {
+          fismauid: editedFismaSystem.fismauid,
+          fismaacronym: editedFismaSystem.fismaacronym,
+          fismaname: editedFismaSystem.fismaname,
+          fismasubsystem: editedFismaSystem.fismasubsystem,
+          component: editedFismaSystem.component,
+          groupacronym: editedFismaSystem.groupacronym,
+          groupname: editedFismaSystem.groupname,
+          divisionname: editedFismaSystem.divisionname,
+          datacenterenvironment: editedFismaSystem.datacenterenvironment,
+          datacallcontact: editedFismaSystem.datacallcontact,
+          issoemail: editedFismaSystem.issoemail,
+        })
+        .then((res) => {
+          if (res.status !== 200 && res.status.toString()[0] === '4') {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.expired,
+              },
+            })
+          }
+          enqueueSnackbar(`Saved`, {
+            variant: 'success',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
             },
+            autoHideDuration: 1500,
           })
-        }
-        enqueueSnackbar(`Saved`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
-          autoHideDuration: 1000,
+          onClose(editedFismaSystem)
         })
-      })
-      .catch((error) => {
-        console.error('Error fetching data:', error)
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.error,
-          },
+        .catch((error) => {
+          if (error.response.status === 400) {
+            const data: { [key: string]: string } = error.response.data.data
+            Object.entries(data).forEach(([key]) => {
+              // formValid.current[key] = false
+              setFormValid((prevState) => ({
+                ...prevState,
+                [key]: false,
+              }))
+              setFormValidErrorText((prevState) => ({
+                ...prevState,
+                [key]: INVALID_INPUT_TEXT(key),
+              }))
+            })
+            enqueueSnackbar(`Not Saved`, {
+              variant: 'error',
+              anchorOrigin: {
+                vertical: 'top',
+                horizontal: 'left',
+              },
+              autoHideDuration: 1500,
+            })
+          } else {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.error,
+              },
+            })
+          }
         })
-      })
-    onClose(editedFismaSystem)
+    } else if (mode === 'create') {
+      await axiosInstance
+        .post(`fismasystems`, {
+          fismauid: editedFismaSystem.fismauid,
+          fismaacronym: editedFismaSystem.fismaacronym,
+          fismaname: editedFismaSystem.fismaname,
+          fismasubsystem: editedFismaSystem.fismasubsystem,
+          component: editedFismaSystem.component,
+          groupacronym: editedFismaSystem.groupacronym,
+          groupname: editedFismaSystem.groupname,
+          divisionname: editedFismaSystem.divisionname,
+          datacenterenvironment: editedFismaSystem.datacenterenvironment,
+          datacallcontact: editedFismaSystem.datacallcontact,
+          issoemail: editedFismaSystem.issoemail,
+        })
+        .then((res) => {
+          if (res.status !== 200 && res.status.toString()[0] === '4') {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.expired,
+              },
+            })
+          }
+          enqueueSnackbar(`Created`, {
+            variant: 'success',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 1500,
+          })
+          onClose(editedFismaSystem)
+        })
+        .catch((error) => {
+          if (error.response.status === 400) {
+            const data: { [key: string]: string } = error.response.data.data
+            Object.entries(data).forEach(([key]) => {
+              // formValid.current[key] = false
+              setFormValid((prevState) => ({
+                ...prevState,
+                [key]: false,
+              }))
+              setFormValidErrorText((prevState) => ({
+                ...prevState,
+                [key]: INVALID_INPUT_TEXT(key),
+              }))
+            })
+            enqueueSnackbar(`Not Created`, {
+              variant: 'error',
+              anchorOrigin: {
+                vertical: 'top',
+                horizontal: 'left',
+              },
+              autoHideDuration: 1500,
+            })
+          } else {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.error,
+              },
+            })
+          }
+        })
+    }
   }
   if (open && system) {
     if (loading) {
@@ -122,40 +286,52 @@ export default function EditSystemModal({
     return (
       <>
         <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
-          <CustomDialogTitle title="Edit Fisma System" />
+          <CustomDialogTitle title={`${title} Fisma System`} />
           <DialogContent>
             <Box sx={{ flexGrow: 1 }} component="form">
               <Grid container spacing={2}>
-                <Grid item xs={6}>
+                <Grid item xs={7}>
                   <TextField
                     id="fismaname"
                     label="Fisma Name"
+                    required
                     fullWidth
                     margin="normal"
                     variant="standard"
-                    defaultValue={system?.fismaname}
+                    defaultValue={system?.fismaname || ''}
+                    error={!formValid.fismaname ? true : false}
+                    helperText={
+                      !formValid.fismaname ? formValidErrorText.fismaname : ''
+                    }
                     InputLabelProps={{
                       sx: {
                         marginTop: 0,
                       },
                     }}
                     onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        fismaname: e.target.value,
-                      }))
+                      handleInputChange(e, 'fismaname')
                     }}
                   />
                   <TextField
                     id="fismaacronym"
                     label="Fisma Acronym"
+                    required
                     variant="standard"
                     margin="normal"
-                    defaultValue={system?.fismaacronym}
+                    defaultValue={system?.fismaacronym || ''}
+                    error={!formValid.fismaacronym ? true : false}
+                    helperText={
+                      !formValid.fismaacronym
+                        ? formValidErrorText.fismaacronym
+                        : ''
+                    }
                     InputLabelProps={{
                       sx: {
                         marginTop: 0,
                       },
+                    }}
+                    onChange={(e) => {
+                      handleInputChange(e, 'fismaacronym')
                     }}
                   />
                   <TextField
@@ -163,7 +339,7 @@ export default function EditSystemModal({
                     label="Group Acronym"
                     variant="standard"
                     margin="normal"
-                    defaultValue={system?.groupacronym}
+                    defaultValue={system?.groupacronym || ''}
                     InputLabelProps={{
                       sx: {
                         marginTop: 0,
@@ -181,8 +357,13 @@ export default function EditSystemModal({
                     id="component"
                     label="Component"
                     variant="standard"
+                    required
                     margin="normal"
-                    defaultValue={system?.component}
+                    defaultValue={system?.component || ''}
+                    error={!formValid.component ? true : false}
+                    helperText={
+                      !formValid.component ? formValidErrorText.component : ''
+                    }
                     InputLabelProps={{
                       sx: {
                         marginTop: 0,
@@ -190,10 +371,7 @@ export default function EditSystemModal({
                     }}
                     sx={{ ml: 2 }}
                     onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        component: e.target.value,
-                      }))
+                      handleInputChange(e, 'component')
                     }}
                   />
                   <TextField
@@ -202,7 +380,7 @@ export default function EditSystemModal({
                     variant="standard"
                     margin="normal"
                     fullWidth
-                    defaultValue={system?.groupname}
+                    defaultValue={system?.groupname || ''}
                     InputLabelProps={{
                       sx: {
                         marginTop: 0,
@@ -255,14 +433,17 @@ export default function EditSystemModal({
                     }}
                   />
                 </Grid>
-                <Grid item xs={6}>
+                <Grid item xs={5}>
                   <ValidatedTextField
                     label="Data Call Contact"
                     validator={emailValidator}
-                    dfValue={system?.datacallcontact}
+                    dfValue={system?.datacallcontact || ''}
                     isFullWidth={true}
                     onChange={(isValid, newValue) => {
-                      formValid.current.datacallcontact = isValid
+                      setFormValid((prevState) => ({
+                        ...prevState,
+                        datacallcontact: isValid,
+                      }))
                       if (isValid) {
                         setEditedFismaSystem((prevState) => ({
                           ...prevState,
@@ -274,10 +455,13 @@ export default function EditSystemModal({
                   <ValidatedTextField
                     label="ISSO Email"
                     validator={emailValidator}
-                    dfValue={system?.issoemail}
+                    dfValue={system?.issoemail || ''}
                     isFullWidth={true}
                     onChange={(isValid, newValue) => {
-                      formValid.current.issoemail = isValid
+                      setFormValid((prevState) => ({
+                        ...prevState,
+                        issoemail: isValid,
+                      }))
                       if (isValid) {
                         setEditedFismaSystem((prevState) => ({
                           ...prevState,
@@ -286,12 +470,41 @@ export default function EditSystemModal({
                       }
                     }}
                   />
+
+                  <TextField
+                    id="fismauid"
+                    label="Fisma UID"
+                    variant="standard"
+                    margin="normal"
+                    fullWidth
+                    defaultValue={system?.fismauid || ''}
+                    error={!formValid.fismauid ? true : false}
+                    helperText={
+                      !formValid.fismauid ? formValidErrorText.fismauid : ''
+                    }
+                    InputLabelProps={{
+                      sx: {
+                        marginTop: 0,
+                      },
+                    }}
+                    onChange={(e) => {
+                      handleInputChange(e, 'fismauid')
+                    }}
+                  />
                   <TextField
                     id="outlined-select-datacenterenvironment"
+                    required
                     select
                     label="Datacenter Environment"
-                    defaultValue={system?.datacenterenvironment}
+                    variant="standard"
+                    defaultValue={system?.datacenterenvironment || ''}
                     fullWidth
+                    error={!formValid.datacenterenvironment ? true : false}
+                    helperText={
+                      !formValid.datacenterenvironment
+                        ? formValidErrorText.datacenterenvironment
+                        : ''
+                    }
                     InputLabelProps={{
                       sx: {
                         marginTop: 0,
@@ -299,10 +512,7 @@ export default function EditSystemModal({
                     }}
                     sx={{ mt: 2 }}
                     onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        datacenterenvironment: e.target.value,
-                      }))
+                      handleInputChange(e, 'datacenterenvironment')
                     }}
                   >
                     {datacenterenvironment.map((option) => (
@@ -316,8 +526,12 @@ export default function EditSystemModal({
             </Box>
           </DialogContent>
           <DialogActions>
-            <CmsButton variation="solid" onClick={handleSave}>
-              Save
+            <CmsButton
+              variation="solid"
+              onClick={handleSave}
+              disabled={!isFormValid()}
+            >
+              {mode === 'edit' ? 'Save' : 'Create'}
             </CmsButton>
             <CmsButton onClick={handleClose} color="primary">
               Close

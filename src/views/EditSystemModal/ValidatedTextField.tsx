@@ -1,6 +1,6 @@
 import { useState, ChangeEvent } from 'react'
 import { TextField } from '@mui/material'
-
+import { useEffect, useRef } from 'react'
 type ValidatedTextFieldProps = {
   label: string
   dfValue?: string
@@ -17,7 +17,16 @@ const ValidatedTextField: React.FC<ValidatedTextFieldProps> = ({
 }) => {
   const [value, setValue] = useState<string>(dfValue || '')
   const [error, setError] = useState<string | false>(false)
+  const isInitialMount = useRef(true)
 
+  useEffect(() => {
+    if (isInitialMount.current) {
+      isInitialMount.current = false
+      const errorMessage = validator(dfValue || '')
+      setError(errorMessage)
+      onChange(!errorMessage, dfValue || '')
+    }
+  }, [dfValue, validator, onChange])
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
     const errorMessage = validator(newValue)
@@ -34,6 +43,7 @@ const ValidatedTextField: React.FC<ValidatedTextFieldProps> = ({
       fullWidth={isFullWidth}
       margin="normal"
       onChange={handleChange}
+      required
       InputLabelProps={{
         sx: {
           marginTop: 0,

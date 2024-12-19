@@ -86,3 +86,7 @@ export const PILLAR_FUNCTION_MAP: { [key: string]: string[] } = {
     'Cross-VisibilityAnalytics',
   ],
 }
+export const TEXTFIELD_HELPER_TEXT = 'This field is required'
+
+export const INVALID_INPUT_TEXT = (key: string) =>
+  `Please provide a valid ${key}`
