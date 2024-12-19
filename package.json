@@ -144,7 +144,7 @@
     "pretty-quick": "^3.3.1",
     "prop-types": "^15.8.1",
     "react-docgen-typescript": "^2.2.2",
-    "rimraf": "^5.0.5",
+    "rimraf": "^5.0.10",
     "rollup-plugin-visualizer": "^5.12.0",
     "sass": "^1.70.0",
     "semantic-release": "^23.0.2",
