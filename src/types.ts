@@ -34,7 +34,7 @@ export type RequestOptions = {
 }
 export type FismaSystemType = {
   fismasystemid: number
-  fismauid: string | number
+  fismauid: string
   fismaacronym: string
   fismaname: string
   fismasubsystem: string
@@ -43,6 +43,10 @@ export type FismaSystemType = {
   fismaimpactlevel: string
   issoemail: string
   datacenterenvironment: string
+  datacallcontact?: string
+  groupacronym?: string
+  groupname?: string
+  divisionname?: string
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
@@ -89,6 +93,14 @@ export type SystemDetailsModalProps = {
   onClose: () => void
   system: FismaSystemType | null
 }
+export type editSystemModalProps = {
+  title: string
+  open: boolean
+  onClose: (data: FismaSystemType) => void
+  system: FismaSystemType | null
+  mode: string
+}
+
 export type ScoreData = {
   datacallid: number
   fismasystemid: number
@@ -102,6 +114,26 @@ export type users = {
   role: string
   userid: string
   isNew?: boolean
+}
+
+export type datacall = {
+  datacallid: number
+  datacall: string
+  datecreated: number
+  deadline: number
+}
+
+export type FormValidType = {
+  [key: string]: boolean
+}
+
+export type FormValidHelperText = {
+  [key: string]: string
+}
+
+export type FismaTableProps = {
+  scores: Record<number, number>
+  latestDataCallId: number
 }
 
 export type ThemeColor =

@@ -53,7 +53,7 @@ jobs:
         run: yarn build:${{ inputs.environment }}
 
       - name: Get AWS Creds
-        if: github.actor != 'dependabot[bot]'
+        # if: github.actor != 'dependabot[bot]'
         uses: aws-actions/configure-aws-credentials@v4
         with:
           role-to-assume: ${{ secrets.ROLEARN }}
@@ -61,5 +61,5 @@ jobs:
           aws-region: us-east-1
 
       - name: AWS Sync
-        if: github.actor != 'dependabot[bot]'
+        # if: github.actor != 'dependabot[bot]'
         run: aws s3 sync ./dist s3://${{ secrets.BUCKET_NAME }}/ --delete

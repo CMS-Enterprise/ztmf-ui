@@ -16,6 +16,7 @@ export default function HomePageContainer() {
   const navigate = useNavigate()
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [scoreMap, setScoreMap] = useState<Record<number, number>>({})
+  const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
   useEffect(() => {
     async function fetchFismaSystems() {
       try {
@@ -81,6 +82,32 @@ export default function HomePageContainer() {
     }
     fetchScores()
   }, [navigate])
+  useEffect(() => {
+    async function fetchLatestDatacall() {
+      try {
+        axiosInstance.get('/datacalls').then((res) => {
+          if (res.status !== 200 && res.status.toString()[0] === '4') {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.expired,
+              },
+            })
+          }
+          setLatestDataCallId(res.data.data[0].datacallid)
+        })
+      } catch (error) {
+        console.error(error)
+        navigate(Routes.SIGNIN, {
+          replace: true,
+          state: {
+            message: ERROR_MESSAGES.error,
+          },
+        })
+      }
+    }
+    fetchLatestDatacall()
+  }, [navigate])
   if (loading) {
     return <div>Loading...</div>
   }
@@ -88,7 +115,7 @@ export default function HomePageContainer() {
     <>
       <div>
         <StatisticsBlocks fismaSystems={fismaSystems} scores={scoreMap} />
-        <FismaTable fismaSystems={fismaSystems} scores={scoreMap} />
+        <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
       </div>
     </>
   )

@@ -17,10 +17,15 @@ import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
 import axiosInstance from '@/axiosConfig'
 import LoginPage from '../LoginPage/LoginPage'
+import { ERROR_MESSAGES } from '@/constants'
+import EditSystemModal from '../EditSystemModal/EditSystemModal'
+import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
+import _ from 'lodash'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
  */
+
 const emptyUser: userData = {
   userid: '',
   email: '',
@@ -41,6 +46,7 @@ export default function Title() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [titlePage, setTitlePage] = useState<string>('Dashboard')
+  const [openModal, setOpenModal] = useState<boolean>(false)
   useEffect(() => {
     async function fetchFismaSystems() {
       try {
@@ -48,7 +54,7 @@ export default function Title() {
         if (fismaSystems.status !== 200) {
           navigate(Routes.SIGNIN, {
             replace: true,
-            state: { message: 'Please log in' },
+            state: ERROR_MESSAGES.expired,
           })
         }
         setFismaSystems(fismaSystems.data.data)
@@ -69,6 +75,13 @@ export default function Title() {
   }
   const handleClose = () => {
     setAnchorEl(null)
+  }
+  const handleCloseModal = (newRowData: FismaSystemType) => {
+    if (!_.isEqual(EMPTY_SYSTEM, newRowData)) {
+      setFismaSystems((prevFismSystems) => [...prevFismSystems, newRowData])
+    }
+    setOpenModal(false)
+    handleClose()
   }
   return (
     <>
@@ -143,6 +156,9 @@ export default function Title() {
                               Edit Users
                             </MenuItem>
                           </Link>
+                          <MenuItem onClick={() => setOpenModal(true)}>
+                            Add Fisma System
+                          </MenuItem>
                         </Menu>
                       </>
                     ) : (
@@ -164,8 +180,15 @@ export default function Title() {
         {loaderData.status !== 200 ? (
           <LoginPage />
         ) : (
-          <Outlet context={{ fismaSystems }} />
+          <Outlet context={{ fismaSystems, userInfo }} />
         )}
+        <EditSystemModal
+          title={'Add'}
+          open={openModal}
+          onClose={handleCloseModal}
+          system={EMPTY_SYSTEM}
+          mode={'create'}
+        />
       </Container>
     </>
   )
