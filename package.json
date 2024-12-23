@@ -54,7 +54,7 @@
     "@mui/icons-material": "^5.15.10",
     "@mui/lab": "^5.0.0-alpha.165",
     "@mui/material": "^5.15.10",
-    "@mui/x-data-grid": "^6.19.4",
+    "@mui/x-data-grid": "^6.20.4",
     "@popperjs/core": "^2.11.8",
     "apollo-client": "^2.6.10",
     "axios": "^1.7.7",
