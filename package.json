@@ -95,7 +95,7 @@
     "@storybook/blocks": "^7.6.16",
     "@storybook/client-api": "^7.6.16",
     "@storybook/react": "^7.6.16",
-    "@storybook/react-vite": "^7.6.16",
+    "@storybook/react-vite": "^7.6.20",
     "@storybook/testing-library": "^0.2.2",
     "@swc/core": "^1.7.6",
     "@swc/jest": "^0.2.36",
