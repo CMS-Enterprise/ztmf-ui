@@ -139,6 +139,7 @@ export default function AssignSystemModal({
         open={openSnackBar}
         handleClose={() => setOpenSnackBar(false)}
         severity="success"
+        duration={2000}
         text="Saved"
       />
     </>
