@@ -396,6 +396,7 @@ export default function UserTable() {
       <CustomSnackbar
         open={open}
         handleClose={handleCloseSnackbar}
+        duration={2000}
         severity="success"
         text="Saved"
       />
