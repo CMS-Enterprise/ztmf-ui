@@ -7,6 +7,7 @@ type SnackbarProps = {
   handleClose: () => void
   severity?: 'success' | 'error' | 'warning' | 'info'
   text: string
+  duration: number
 }
 
 export default function CustomSnackbar({
@@ -14,6 +15,7 @@ export default function CustomSnackbar({
   handleClose,
   severity,
   text,
+  duration = 2000,
 }: SnackbarProps) {
   const [localOpen, setLocalOpen] = useState(open)
 
@@ -36,7 +38,7 @@ export default function CustomSnackbar({
       <Snackbar
         anchorOrigin={{ vertical: 'top', horizontal: 'left' }}
         open={localOpen}
-        autoHideDuration={2000}
+        autoHideDuration={duration}
         onClose={handleSnackbarClose}
       >
         <Alert severity={severity} variant="filled" sx={{ width: '100%' }}>

@@ -9,6 +9,7 @@ import {
   GridFooter,
   GridRowId,
   useGridApiRef,
+  useGridApiContext,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
 import { Box, IconButton } from '@mui/material'
@@ -26,13 +27,13 @@ import { ERROR_MESSAGES } from '../../constants'
 import EditIcon from '@mui/icons-material/Edit'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import { FismaTableProps } from '@/types'
-
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
     latestDataCallId: number
+    scores: Record<number, number>
   }
 }
 
@@ -40,6 +41,8 @@ export function CustomFooterSaveComponent(
   props: NonNullable<GridSlotsComponentsProps['footer']>
 ) {
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false)
+  const apiRef = useGridApiContext()
+  const [errorMessage, setErrorMessage] = useState<string>('')
   const navigate = useNavigate()
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
@@ -47,6 +50,7 @@ export function CustomFooterSaveComponent(
   const saveSystemAnswers = async () => {
     if (props.selectedRows && props.selectedRows.length === 0) {
       setOpenSnackbar(true)
+      setErrorMessage('No systems selected')
     } else {
       let exportUrl = `/datacalls/${props.latestDataCallId}/export`
       if (
@@ -71,14 +75,6 @@ export function CustomFooterSaveComponent(
           responseType: 'blob',
         })
         .then((response) => {
-          if (response.status !== 200) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
           const [, filename] =
             response.headers['content-disposition'].split('filename=')
           const contentType = response.headers['content-type']
@@ -92,13 +88,32 @@ export function CustomFooterSaveComponent(
           window.URL.revokeObjectURL(url)
         })
         .catch((error) => {
-          console.error('Error saving system answers: ', error)
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.error,
-            },
-          })
+          if (error.status === 401 || error.status === 500) {
+            setOpenSnackbar(true)
+            const selectedRowsData = props.selectedRows
+              ? props.selectedRows.map((id) => apiRef.current.getRow(id))
+              : []
+            const invalidSystems =
+              selectedRowsData && props.scores
+                ? selectedRowsData
+                    .filter(
+                      (system) =>
+                        (props.scores?.[system.fismasystemid] ?? -1) == 0
+                    )
+                    .map((system) => system.fismaname)
+                : []
+            const systemCount = invalidSystems.length > 1 ? 'systems' : 'system'
+            setErrorMessage(
+              `The following ${systemCount}: ${invalidSystems.join(', ')} does not have any answers to save.`
+            )
+          } else {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.error,
+              },
+            })
+          }
         })
     }
   }
@@ -126,7 +141,8 @@ export function CustomFooterSaveComponent(
         open={openSnackbar}
         handleClose={handleCloseSnackbar}
         severity="error"
-        text="No systems selected"
+        text={errorMessage}
+        duration={4000}
       />
     </>
   )
@@ -300,7 +316,7 @@ export default function FismaTable({
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems, latestDataCallId },
+          footer: { selectedRows, fismaSystems, latestDataCallId, scores },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
