@@ -102,22 +102,38 @@ export default function StatisticsBlocks({
         </Typography>
       </StatisticsPaper>
       <StatisticsPaper variant="outlined">
-        <Typography variant="h4" sx={{ color: '#128172', fontSize: '56px' }}>
+        <Typography
+          variant="h4"
+          sx={{
+            color: '#128172',
+            fontSize: '50px',
+          }}
+        >
           {maxSystemScore}
         </Typography>
         <Typography
           variant="body1"
-          sx={{ fontSize: '16px', overflowWrap: 'break-word' }}
+          sx={{
+            fontSize: '16px',
+          }}
         >
-          Highest System Score: {maxSystemAcronym}
+          Highest System Score:
+          <br /> {maxSystemAcronym}
         </Typography>
       </StatisticsPaper>
       <StatisticsPaper variant="outlined">
-        <Typography variant="h4" sx={{ color: '#960B91', fontSize: '56px' }}>
-          {minSystemScore}
+        <Typography
+          variant="h4"
+          sx={{
+            color: '#960B91',
+            fontSize: '50px',
+            // overflowWrap: 'break-word',
+          }}
+        >
+          {minSystemScore === Number.POSITIVE_INFINITY ? 0 : minSystemScore}
         </Typography>
         <Typography variant="body1" sx={{ fontSize: '16px' }}>
-          Lowest System Score: {minSystemAcronym}
+          Lowest System Score: <br /> {minSystemAcronym}
         </Typography>
       </StatisticsPaper>
     </Box>
