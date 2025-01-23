@@ -5,6 +5,9 @@ import EditIcon from '@mui/icons-material/Edit'
 import ChecklistIcon from '@mui/icons-material/Checklist'
 import SaveIcon from '@mui/icons-material/Save'
 import CancelIcon from '@mui/icons-material/Close'
+import FormControl from '@mui/material/FormControl'
+import Select from '@mui/material/Select'
+import MenuItem from '@mui/material/MenuItem'
 import {
   GridRowsProp,
   GridRowModesModel,
@@ -16,7 +19,7 @@ import {
   GridEventListener,
   GridRowId,
   GridRowModel,
-  GridPreProcessEditCellProps,
+  GridRenderEditCellParams,
   GridRowEditStopReasons,
   useGridApiRef,
 } from '@mui/x-data-grid'
@@ -38,15 +41,15 @@ import CustomSnackbar from '../Snackbar/Snackbar'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
-const roles = ['ISSO', 'ISSM', 'ADMIN']
-
+import { ERROR_MESSAGES, ROLES } from '@/constants'
+import EditInputCell from './EditInputCell'
 interface EditToolbarProps {
   setRows: (newRows: (oldRows: GridRowsProp) => GridRowsProp) => void
   setRowModesModel: (
     newModel: (oldModel: GridRowModesModel) => GridRowModesModel
   ) => void
 }
+
 function EditToolbar(props: EditToolbarProps) {
   const { setRows, setRowModesModel } = props
   const addUserRow = () => {
@@ -64,18 +67,20 @@ function EditToolbar(props: EditToolbarProps) {
   return (
     <GridToolbarContainer>
       <Button color="primary" startIcon={<AddIcon />} onClick={addUserRow}>
-        Add Users
+        Add User
       </Button>
     </GridToolbarContainer>
   )
 }
-
+function validateEmail(email: string) {
+  return /^[a-zA-Z0-9._:$!%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+$/.test(email)
+}
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
   //TODO: add these to a file to be imported and used in multiple places
   const checkValidResponse = (status: number) => {
-    if (status !== 200 && status.toString()[0] === '4') {
+    if (status.toString()[0] === '401') {
       navigate(Routes.SIGNIN, {
         replace: true,
         state: {
@@ -85,19 +90,47 @@ export default function UserTable() {
     }
     return
   }
-  const routeToSignIn = () => {
-    navigate(Routes.SIGNIN, {
-      replace: true,
-      state: {
-        message: ERROR_MESSAGES.expired,
-      },
-    })
+  const renderSingleSelectEditCell = (params: GridRenderEditCellParams) => {
+    const { value } = params
+    return (
+      <FormControl sx={{ minWidth: 120 }} error={!value} fullWidth>
+        <Select
+          sx={{
+            '& .MuiOutlinedInput-input': {
+              py: 1.7,
+            },
+          }}
+          value={value || ''}
+          onChange={(event) => {
+            params.api.setEditCellValue(
+              {
+                id: params.id,
+                field: params.field,
+                value: event.target.value,
+              },
+              event
+            )
+          }}
+          renderValue={(value) => `${value}`}
+        >
+          {ROLES.map((role) => (
+            <MenuItem value={role} key={role}>
+              {role}
+            </MenuItem>
+          ))}
+        </Select>
+      </FormControl>
+    )
   }
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const { fismaSystems } = useContextProp()
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const [open, setOpen] = useState<boolean>(false)
+  const [snackBarText, setSnackBarText] = useState<string>('Saved')
+  const [snackBarSeverity, setSnackBarSeverity] = useState<
+    'success' | 'error' | 'warning' | 'info'
+  >('success')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openAlert, setOpenAlert] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<users | undefined>({
@@ -119,17 +152,6 @@ export default function UserTable() {
       event.defaultMuiPrevented = true
     }
   }
-  const preProcessEditCellProps = (params: GridPreProcessEditCellProps) => {
-    if (params.hasChanged) {
-      const curRow = rows.find((row) => row.userid === params.id)
-      setSelectedRow(curRow)
-      if (params.props.value === 'ADMIN' && curRow?.role !== 'ADMIN') {
-        setUserName(curRow?.fullname)
-        setOpenAlert(true)
-      }
-    }
-    return Promise.resolve()
-  }
   const handleAlertCloseModal = (response: boolean) => {
     if (response == false && selectedRow) {
       apiRef.current.setEditCellValue({
@@ -140,12 +162,41 @@ export default function UserTable() {
     }
     setOpenAlert(false)
   }
+  const handleUnautherized = (errorStatus: number) => {
+    if (errorStatus === 403) {
+      setSnackBarSeverity('error')
+      setSnackBarText('You are not authorized to perform this action')
+      setOpen(true)
+    }
+  }
   const handleEditClick = (id: GridRowId) => () => {
+    const curRow = rows.find((row) => row.userid === id)
+    setSelectedRow(curRow)
     setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } })
   }
 
   const handleSaveClick = (id: GridRowId) => () => {
-    setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
+    const curRow = apiRef.current.getRowWithUpdatedValues(id, '')
+    if (
+      !curRow?.email ||
+      validateEmail(curRow?.email) === false ||
+      !curRow?.fullname ||
+      !curRow?.role
+    ) {
+      let errMessage: string = ''
+      if (!curRow?.email || !curRow?.fullname || !curRow?.role) {
+        errMessage = 'Please fill required fields'
+      } else if (validateEmail(curRow?.email) === false) {
+        errMessage = 'Please enter a valid email'
+      }
+      setSnackBarSeverity('error')
+      setSnackBarText(errMessage)
+      setOpen(true)
+      setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } })
+    } else {
+      setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
+    }
+    // setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
   }
 
   const handleCloseSnackbar = () => {
@@ -170,32 +221,33 @@ export default function UserTable() {
     }
   }
   const processRowUpdate = (newRow: GridRowModel) => {
+    const updatedRow = {
+      ...selectedRow,
+      ...newRow,
+      isNew: false,
+      role: newRow.role !== undefined ? newRow.role : selectedRow?.role ?? '',
+    } as users
     if (newRow.isNew) {
-      let newUser = {} as users
       axiosInstance
         .post('/users', {
-          email: newRow.email,
-          fullname: newRow.fullname,
-          role: newRow.role,
+          email: updatedRow.email,
+          fullname: updatedRow.fullname,
+          role: updatedRow.role,
         })
         .then((res) => {
-          newUser = res.data.data
-          checkValidResponse(res.status)
-          setRows(
-            rows.map((row) =>
-              row.userid === newRow.userid
-                ? { ...updatedRow, userid: newUser.userid }
-                : row
-            )
-          )
+          newRow = res.data.data
+          updatedRow.userid = newRow.userid
+          setSnackBarSeverity('success')
+          setSnackBarText('Saved')
           setOpen(true)
         })
         .catch((error) => {
           console.error('Error updating score:', error)
-          routeToSignIn()
+          checkValidResponse(error.response.status)
+          handleUnautherized(error.response.status)
         })
     } else {
-      const updatedRow = { ...newRow } as users
+      // const updatedRow = { ...newRow } as users
       axiosInstance
         .put(`/users/${updatedRow?.userid}`, {
           email: updatedRow?.email,
@@ -204,31 +256,38 @@ export default function UserTable() {
         })
         .then((res) => {
           checkValidResponse(res.status)
+          setSnackBarSeverity('success')
+          setSnackBarText('Saved')
           setOpen(true)
         })
         .catch((error) => {
-          console.error('Error updating score:', error)
-          routeToSignIn()
+          checkValidResponse(error.response.status)
+          handleUnautherized(error.response.status)
         })
-      setRows(
-        rows.map((row) => (row.userid === newRow.userid ? updatedRow : row))
-      )
     }
-    const updatedRow = { ...newRow, isNew: false } as users
+    setRows(
+      rows.map((row) => (row.userid === newRow.userid ? updatedRow : row))
+    )
     return updatedRow
   }
-
   const handleRowModesModelChange = (newRowModesModel: GridRowModesModel) => {
     setRowModesModel(newRowModesModel)
   }
-  const handleProcessRowUpdateError = (error: unknown) => {
-    console.error('Error updating row:', error)
+  const handleProcessRowUpdateError = () => {
+    setSnackBarSeverity('error')
+    setSnackBarText('An error occurred while saving the row')
+    setOpen(true)
   }
+
   // TODO: Custom hook for fetching data
   useEffect(() => {
     axiosInstance.get('/users').then((res) => {
       if (res.status === 200) {
-        setRows(res.data.data)
+        const data = res.data.data.map((row: users) => ({
+          ...row,
+          role: row.role.trim(),
+        }))
+        setRows(data)
         const map: Record<number, string> = {}
         for (const obj of fismaSystems) {
           map[obj.fismasystemid] = obj.fismasubsystem
@@ -247,6 +306,20 @@ export default function UserTable() {
       headerName: 'Full Name',
       flex: 1,
       hideable: false,
+      renderEditCell: (params: GridRenderEditCellParams) => (
+        <EditInputCell
+          {...params}
+          getErrorValue={() => {
+            if (params?.value) {
+              if (params.value.length === 0) {
+                return true
+              }
+              return false
+            }
+            return true
+          }}
+        />
+      ),
       editable: true,
     },
     {
@@ -254,6 +327,20 @@ export default function UserTable() {
       headerName: 'Email',
       flex: 1,
       hideable: false,
+      renderEditCell: (params: GridRenderEditCellParams) => (
+        <EditInputCell
+          {...params}
+          getErrorValue={() => {
+            if (params?.value) {
+              if (params.value.length === 0) {
+                return true
+              }
+              return validateEmail(params.value) === false
+            }
+            return true
+          }}
+        />
+      ),
       editable: true,
     },
     {
@@ -261,10 +348,7 @@ export default function UserTable() {
       headerName: 'Role',
       flex: 1,
       editable: true,
-      type: 'singleSelect',
-      valueOptions: roles,
-      preProcessEditCellProps,
-      cellClassName: 'single-select-dropdown',
+      renderEditCell: renderSingleSelectEditCell,
     },
     {
       field: 'actions',
@@ -397,8 +481,8 @@ export default function UserTable() {
         open={open}
         handleClose={handleCloseSnackbar}
         duration={2000}
-        severity="success"
-        text="Saved"
+        severity={snackBarSeverity}
+        text={snackBarText}
       />
       <AssignSystemModal
         fismaSystemMap={fismaSystemsMap}
