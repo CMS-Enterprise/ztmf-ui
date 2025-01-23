@@ -2,6 +2,7 @@
  * Application-wide constants
  * @module constants
  */
+import { permission } from 'process'
 import { userData } from './types'
 
 //* Application Strings
@@ -23,6 +24,7 @@ export const ERROR_MESSAGES = {
     'Your changes were not saved. Your session may have expired. Please log in again.',
   error:
     'An error occurred. Please log in and try again. If the error persists, please contact support.',
+  permission: 'You do not have permission to do this action.',
 }
 export const EMPTY_USER: userData = {
   userid: '',

@@ -9,6 +9,7 @@ import {
   GridFooter,
   GridRowId,
   useGridApiRef,
+  GridRowParams,
   useGridApiContext,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
@@ -48,74 +49,54 @@ export function CustomFooterSaveComponent(
     setOpenSnackbar(false)
   }
   const saveSystemAnswers = async () => {
-    if (props.selectedRows && props.selectedRows.length === 0) {
-      setOpenSnackbar(true)
-      setErrorMessage('No systems selected')
-    } else {
-      let exportUrl = `/datacalls/${props.latestDataCallId}/export`
-      if (
-        props.selectedRows &&
-        props.fismaSystems &&
-        props.selectedRows.length < props.fismaSystems.length
-      ) {
-        exportUrl += '?'
-        let idString: string = ''
-        if (props.selectedRows) {
-          props.selectedRows.forEach((id, index) => {
-            idString += 'fsids=' + id
-            if (index < (props.selectedRows ?? []).length - 1) {
-              idString += '&'
-            }
-          })
-        }
-        exportUrl += idString
-      }
-      return await axiosInstance
-        .get(exportUrl, {
-          responseType: 'blob',
-        })
-        .then((response) => {
-          const [, filename] =
-            response.headers['content-disposition'].split('filename=')
-          const contentType = response.headers['content-type']
-          const data = new Blob([response.data], { type: contentType })
-          const url = window.URL.createObjectURL(data)
-          const tempLink = document.createElement('a')
-          tempLink.href = url
-          tempLink.setAttribute('download', filename)
-          tempLink.setAttribute('target', '_blank')
-          tempLink.click()
-          window.URL.revokeObjectURL(url)
-        })
-        .catch((error) => {
-          if (error.status === 401 || error.status === 500) {
-            setOpenSnackbar(true)
-            const selectedRowsData = props.selectedRows
-              ? props.selectedRows.map((id) => apiRef.current.getRow(id))
-              : []
-            const invalidSystems =
-              selectedRowsData && props.scores
-                ? selectedRowsData
-                    .filter(
-                      (system) =>
-                        (props.scores?.[system.fismasystemid] ?? -1) == 0
-                    )
-                    .map((system) => system.fismaname)
-                : []
-            const systemCount = invalidSystems.length > 1 ? 'systems' : 'system'
-            setErrorMessage(
-              `The following ${systemCount}: ${invalidSystems.join(', ')} does not have any answers to save.`
-            )
-          } else {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.error,
-              },
-            })
+    let exportUrl = `/datacalls/${props.latestDataCallId}/export`
+    if (
+      props.selectedRows &&
+      props.fismaSystems &&
+      props.selectedRows.length < props.fismaSystems.length
+    ) {
+      exportUrl += '?'
+      let idString: string = ''
+      if (props.selectedRows) {
+        props.selectedRows.forEach((id, index) => {
+          idString += 'fsids=' + id
+          if (index < (props.selectedRows ?? []).length - 1) {
+            idString += '&'
           }
         })
+      }
+      exportUrl += idString
     }
+    return await axiosInstance
+      .get(exportUrl, {
+        responseType: 'blob',
+      })
+      .then((response) => {
+        const [, filename] =
+          response.headers['content-disposition'].split('filename=')
+        const contentType = response.headers['content-type']
+        const data = new Blob([response.data], { type: contentType })
+        const url = window.URL.createObjectURL(data)
+        const tempLink = document.createElement('a')
+        tempLink.href = url
+        tempLink.setAttribute('download', filename)
+        tempLink.setAttribute('target', '_blank')
+        tempLink.click()
+        window.URL.revokeObjectURL(url)
+      })
+      .catch((error) => {
+        if (error.status === 401 || error.status === 500) {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.error,
+            },
+          })
+        } else if (error.status === 403) {
+          setErrorMessage(ERROR_MESSAGES.permission)
+          setOpenSnackbar(true)
+        }
+      })
   }
   return (
     <>
@@ -130,7 +111,11 @@ export function CustomFooterSaveComponent(
           }}
         >
           <Tooltip title="Save System Answers">
-            <IconButton sx={{ color: '#004297' }} onClick={saveSystemAnswers}>
+            <IconButton
+              sx={{ color: '#004297' }}
+              onClick={saveSystemAnswers}
+              disabled={apiRef.current.getSelectedRows().size === 0}
+            >
               <FileDownloadSharpIcon />
             </IconButton>
           </Tooltip>
@@ -307,6 +292,9 @@ export default function FismaTable({
     <div style={{ height: 600, width: '100%' }}>
       <DataGrid
         rows={fismaSystems}
+        isRowSelectable={(params: GridRowParams) =>
+          params.row.fismasystemid in scores
+        }
         columns={columns}
         checkboxSelection
         apiRef={apiRef}
