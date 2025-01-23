@@ -271,7 +271,10 @@ export default function FismaTable({
               key={`question-${params.row.fismasystemid}`}
               label="View Questionnare"
               className="textPrimary"
-              onClick={() => handleOpenModal(params.row as FismaSystemType)}
+              onClick={(event) => {
+                event.stopPropagation()
+                handleOpenModal(params.row as FismaSystemType)
+              }}
               color="inherit"
             />
           </Tooltip>
@@ -281,9 +284,10 @@ export default function FismaTable({
               key={`edit-${params.row.fismasystemid}`}
               label="Edit"
               className="textPrimary"
-              onClick={(event) =>
+              onClick={(event) => {
+                event.stopPropagation()
                 handleEditOpenModal(event, params.row as FismaSystemType)
-              }
+              }}
               color="inherit"
             />
           )}
