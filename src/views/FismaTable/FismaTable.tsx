@@ -42,6 +42,9 @@ export function CustomFooterSaveComponent(
   props: NonNullable<GridSlotsComponentsProps['footer']>
 ) {
   const [openSnackbar, setOpenSnackbar] = useState<boolean>(false)
+  const [snackBarSeverity, setSnackBarSeverity] = useState<
+    'success' | 'error' | 'warning' | 'info'
+  >('error')
   const apiRef = useGridApiContext()
   const [errorMessage, setErrorMessage] = useState<string>('')
   const navigate = useNavigate()
@@ -94,6 +97,7 @@ export function CustomFooterSaveComponent(
           })
         } else if (error.status === 403) {
           setErrorMessage(ERROR_MESSAGES.permission)
+          setSnackBarSeverity('warning')
           setOpenSnackbar(true)
         }
       })
@@ -125,7 +129,7 @@ export function CustomFooterSaveComponent(
       <CustomSnackbar
         open={openSnackbar}
         handleClose={handleCloseSnackbar}
-        severity="error"
+        severity={snackBarSeverity}
         text={errorMessage}
         duration={4000}
       />
