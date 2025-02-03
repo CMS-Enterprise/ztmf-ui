@@ -1,6 +1,7 @@
 import { FismaSystemType } from '@/types'
 import {
   DataGrid,
+  GridToolbar,
   GridColDef,
   GridFooterContainer,
   GridSlotsComponentsProps,
@@ -181,6 +182,10 @@ export default function FismaTable({
       hideable: false,
     },
     {
+      field: 'fismaacronym',
+      headerName: 'Acronym',
+    },
+    {
       field: 'issoemail',
       headerName: 'ISSO Name',
       flex: 1,
@@ -312,6 +317,12 @@ export default function FismaTable({
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
+          toolbar: {
+            csvOptions: { disableToolbarButton: true },
+            printOptions: { disableToolbarButton: true },
+            showQuickFilter: true,
+            quickFilterProps: { debounceMs: 250 },
+          },
           footer: { selectedRows, fismaSystems, latestDataCallId, scores },
           filterPanel: {
             sx: {
@@ -322,9 +333,12 @@ export default function FismaTable({
           },
         }}
         slots={{
+          toolbar: GridToolbar,
           footer: CustomFooterSaveComponent,
         }}
+        disableColumnFilter
         disableColumnSelector
+        disableDensitySelector
         sx={{
           '& .MuiDataGrid-columnHeaders': {
             backgroundColor: '#004297',
