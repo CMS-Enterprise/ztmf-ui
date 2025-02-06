@@ -7,6 +7,7 @@ import {
   GridSlotsComponentsProps,
   GridRenderCellParams,
   GridActionsCellItem,
+  GridToolbarQuickFilter,
   GridFooter,
   GridRowId,
   useGridApiRef,
@@ -135,6 +136,37 @@ export function CustomFooterSaveComponent(
         duration={4000}
       />
     </>
+  )
+}
+
+function QuickSearchToolbar() {
+  return (
+    <Box
+      sx={{
+        py: 0.5,
+        pl: 1,
+      }}
+    >
+      <GridToolbarQuickFilter
+        debounceMs={250}
+        sx={{
+          // '& .MuiInputBase-root:before': {
+          //   borderBottomColor: '#5666b8',
+          //   borderBottomWidth: 2,
+          // },
+          '& .MuiInputBase-input::placeholder': {
+            color: '#404040', // Change placeholder color to red
+            opacity: 0.8, // Ensure it is fully visible (MUI reduces opacity by default)
+          },
+          '& .MuiInputBase-root:after': {
+            borderBottomColor: '#5666b8', // Changes the underline color when active
+          },
+          '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
+            borderBottomColor: '#5666b8', // Changes the underline color on hover
+          },
+        }}
+      />
+    </Box>
   )
 }
 export default function FismaTable({
@@ -317,12 +349,16 @@ export default function FismaTable({
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          toolbar: {
-            csvOptions: { disableToolbarButton: true },
-            printOptions: { disableToolbarButton: true },
-            showQuickFilter: true,
-            quickFilterProps: { debounceMs: 250 },
-          },
+          // toolbar: {
+          //   csvOptions: { disableToolbarButton: true },
+          //   printOptions: { disableToolbarButton: true },
+          //   showQuickFilter: true,
+          //   quickFilterProps: {
+          //     debounceMs: 250,
+          //     variant: 'outlined',
+          //     size: 'small',
+          //   },
+          // },
           footer: { selectedRows, fismaSystems, latestDataCallId, scores },
           filterPanel: {
             sx: {
@@ -333,7 +369,7 @@ export default function FismaTable({
           },
         }}
         slots={{
-          toolbar: GridToolbar,
+          toolbar: QuickSearchToolbar,
           footer: CustomFooterSaveComponent,
         }}
         disableColumnFilter

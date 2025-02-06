@@ -80,7 +80,7 @@ theme = createTheme(theme, {
   palette: {
     primary: {
       light: '#5B70AD',
-      main: '#051094',
+      main: '#5666b8',
       dark: '#5A5FE0',
       contrastText: theme.palette.common.white,
     },

@@ -21,6 +21,7 @@ import {
   GridRowModel,
   GridRenderEditCellParams,
   GridRowEditStopReasons,
+  GridToolbarQuickFilter,
   useGridApiRef,
 } from '@mui/x-data-grid'
 import {
@@ -65,8 +66,32 @@ function EditToolbar(props: EditToolbarProps) {
   }
 
   return (
-    <GridToolbarContainer>
-      <Button color="primary" startIcon={<AddIcon />} onClick={addUserRow}>
+    <GridToolbarContainer sx={{ justifyContent: 'space-between' }}>
+      <GridToolbarQuickFilter
+        debounceMs={250}
+        sx={{
+          // '& .MuiInputBase-root:before': {
+          //   borderBottomColor: '#5666b8',
+          //   borderBottomWidth: 2,
+          // },
+          '& .MuiInputBase-input::placeholder': {
+            color: '#404040', // Change placeholder color to red
+            opacity: 0.8, // Ensure it is fully visible (MUI reduces opacity by default)
+          },
+          '& .MuiInputBase-root:after': {
+            borderBottomColor: '#5666b8', // Changes the underline color when active
+          },
+          '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
+            borderBottomColor: '#5666b8', // Changes the underline color on hover
+          },
+        }}
+      />
+      <Button
+        color="primary"
+        startIcon={<AddIcon />}
+        onClick={addUserRow}
+        sx={{ color: '#5666b8' }}
+      >
         Add User
       </Button>
     </GridToolbarContainer>
