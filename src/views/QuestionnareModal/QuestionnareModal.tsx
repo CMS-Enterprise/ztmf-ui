@@ -319,8 +319,10 @@ export default function QuestionnareModal({
               //     steps: organizedData[pillar],
               //   })
               // )
+              // console.log(categoriesData)
               setCategories(categoriesData)
               if (data.length > 0) {
+                // console.log(categoriesData)
                 setQuestionId(categoriesData[0]['steps'][0].function.functionid)
               }
             })
@@ -397,6 +399,7 @@ export default function QuestionnareModal({
               funcOptId = item.functionoptionid
             }
           })
+          console.log(questionScores)
           if (!isValidOption) {
             setSelectQuestionOption(0)
             setScoreId(0)

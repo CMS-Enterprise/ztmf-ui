@@ -1,4 +1,3 @@
-import Typography from '@mui/material/Typography'
 import { Container } from '@mui/material'
 import { useLoaderData, useNavigate } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
@@ -45,7 +44,7 @@ export default function Title() {
     loaderData.status != 200 ? emptyUser : loaderData.response
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
-  const [titlePage, setTitlePage] = useState<string>('Dashboard')
+  // const [titlePage, setTitlePage] = useState<string>('Dashboard')
   const [openModal, setOpenModal] = useState<boolean>(false)
   useEffect(() => {
     async function fetchFismaSystems() {
@@ -69,8 +68,8 @@ export default function Title() {
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
-  const handleOption = (option: string) => {
-    setTitlePage(option)
+  const handleOption = () => {
+    // setTitlePage(option)
     setAnchorEl(null)
   }
   const handleClose = () => {
@@ -144,7 +143,7 @@ export default function Title() {
                             to={Routes.ROOT}
                             style={{ textDecoration: 'none', color: 'black' }}
                           >
-                            <MenuItem onClick={() => handleOption('Dashboard')}>
+                            <MenuItem onClick={() => handleOption()}>
                               Dashboard
                             </MenuItem>
                           </Link>
@@ -152,7 +151,7 @@ export default function Title() {
                             to={Routes.USERS}
                             style={{ textDecoration: 'none', color: 'black' }}
                           >
-                            <MenuItem onClick={() => handleOption('Users')}>
+                            <MenuItem onClick={() => handleOption()}>
                               Edit Users
                             </MenuItem>
                           </Link>
@@ -174,9 +173,9 @@ export default function Title() {
         </div>
       </div>
       <Container>
-        <Typography variant="h3" align="center">
+        {/* <Typography variant="h3" align="center">
           Zero Trust Maturity Score {titlePage}
-        </Typography>
+        </Typography> */}
         {loaderData.status !== 200 ? (
           <LoginPage />
         ) : (

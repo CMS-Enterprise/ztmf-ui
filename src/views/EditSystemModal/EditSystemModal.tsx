@@ -13,6 +13,8 @@ import {
   FormValidHelperText,
 } from '@/types'
 import MenuItem from '@mui/material/MenuItem'
+import { CONFIRMATION_MESSAGE } from '@/constants'
+
 import ValidatedTextField from './ValidatedTextField'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
@@ -539,6 +541,7 @@ export default function EditSystemModal({
           </DialogActions>
         </Dialog>
         <ConfirmDialog
+          confirmationText={CONFIRMATION_MESSAGE}
           open={openAlert}
           onClose={() => setOpenAlert(false)}
           confirmClick={handleConfirmReturn}

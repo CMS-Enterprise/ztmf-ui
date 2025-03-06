@@ -88,6 +88,13 @@ export type QuestionScores = {
   functionoptionid: number
   datacallid: number
 }
+
+export type Question = {
+  question: string
+  notesprompt: string
+  description: string
+}
+
 export type SystemDetailsModalProps = {
   open: boolean
   onClose: () => void
@@ -107,6 +114,11 @@ export type ScoreData = {
   systemscore: number
 }
 
+export type QuestionChoice = {
+  label: string
+  value: number
+  defaultChecked?: boolean
+}
 export type users = {
   assignedfismasystems: number[]
   email: string

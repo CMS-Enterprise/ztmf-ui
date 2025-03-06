@@ -11,9 +11,15 @@ type ConfirmDialogTypes = {
   open: boolean
   onClose: () => void
   confirmClick: (confirm: boolean) => void
+  confirmationText: string
 }
 
-const ConfirmDialog = ({ open, onClose, confirmClick }: ConfirmDialogTypes) => {
+const ConfirmDialog = ({
+  open,
+  onClose,
+  confirmClick,
+  confirmationText,
+}: ConfirmDialogTypes) => {
   const handleConfirm = () => {
     confirmClick(true)
     onClose()
@@ -31,7 +37,7 @@ const ConfirmDialog = ({ open, onClose, confirmClick }: ConfirmDialogTypes) => {
         </IconButton>
       </Box>
       <DialogContent>
-        <Typography>{CONFIRMATION_MESSAGE}</Typography>
+        <Typography>{confirmationText}</Typography>
       </DialogContent>
       <DialogActions>
         <CmsButton variation="solid" onClick={handleConfirm}>

@@ -7,6 +7,7 @@ import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
 import { FismaSystemType } from '@/types'
 import { Box } from '@mui/material'
+import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 /**
  * Component that renders the contents of the Home view.
  * @returns {JSX.Element} Component that renders the home contents.
@@ -116,6 +117,7 @@ export default function HomePageContainer() {
     <>
       <Box>
         <StatisticsBlocks scores={scoreMap} />
+        <BreadCrumbs />
         <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
       </Box>
     </>

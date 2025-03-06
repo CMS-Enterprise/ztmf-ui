@@ -2,7 +2,6 @@
  * Application-wide constants
  * @module constants
  */
-import { permission } from 'process'
 import { userData } from './types'
 
 //* Application Strings
@@ -35,6 +34,9 @@ export const EMPTY_USER: userData = {
 }
 export const CONFIRMATION_MESSAGE =
   'Your changes will not be saved! Are you sure you want to close out of editing a Fisma system before saving your changes?'
+
+export const CONFIRMATION_MESSAGE_QUESTION =
+  'Your changes will not be saved! Are you sure you want to leave question without saving your changes?'
 
 export const PILLAR_FUNCTION_MAP: { [key: string]: string[] } = {
   Identity: [

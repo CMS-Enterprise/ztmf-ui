@@ -1,0 +1,13 @@
+.breadcumbs > * {
+  display: inline-block;
+  margin-right: 5px;
+}
+.breadcumbs .crumb:after {
+  content: '>';
+  margin-left: 5px;
+}
+
+.breadcumbs .crumb:last-child:after {
+  display: none
+}
+

@@ -44,6 +44,7 @@ import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, ROLES } from '@/constants'
 import EditInputCell from './EditInputCell'
+import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
   setRows: (newRows: (oldRows: GridRowsProp) => GridRowsProp) => void
   setRowModesModel: (
@@ -221,7 +222,6 @@ export default function UserTable() {
     } else {
       setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
     }
-    // setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
   }
 
   const handleCloseSnackbar = () => {
@@ -434,6 +434,7 @@ export default function UserTable() {
 
   return (
     <>
+      <BreadCrumbs />
       <Box
         sx={{
           height: 600,
