@@ -10,7 +10,6 @@ interface LinkRouterProps extends LinkProps {
 function LinkRouter(props: LinkRouterProps) {
   return <Link {...props} component={RouterLink as any} />
 }
-
 export default function BreadCrumbs() {
   const location = useLocation()
   // let currentLink: string = ''
@@ -22,9 +21,10 @@ export default function BreadCrumbs() {
   const homeText = [<Typography key={'homeText'}>Dashboard</Typography>]
   const crumbs = location.pathname.split('/').filter((x) => x)
   const path = crumbs.map((value) => {
+    const text = value.replace('_', ' ')
     return (
       <Typography sx={{ display: 'inline', whiteSpace: 'nowrap' }} key={value}>
-        {capitalize(value)}
+        {capitalize(text)}
       </Typography>
     )
   })

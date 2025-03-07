@@ -21,7 +21,7 @@ import { styled } from '@mui/system'
 import axiosInstance from '@/axiosConfig'
 import { useSnackbar } from 'notistack'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Routes } from '@/router/constants'
+import { Routes, RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
@@ -29,7 +29,6 @@ import {
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
-import { capitalize } from 'lodash'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -74,6 +73,7 @@ export default function QuestionnarePage() {
   const [questions, setQuestions] = React.useState<Record<number, Question>>([])
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
+  const [dataCall, setDataCall] = React.useState<string>('')
   const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
   const [categories, setCategories] = React.useState<Category[]>([])
   const [stepFunctionId, setStepFunctionId] = React.useState<number[]>([])
@@ -139,7 +139,6 @@ export default function QuestionnarePage() {
   const location = useLocation()
   const { fismaacronym } = useParams()
   const system = location.state.fismasystemid
-  console.log(system, fismaacronym)
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -231,6 +230,7 @@ export default function QuestionnarePage() {
     if (system) {
       const fetchData = async () => {
         try {
+          let datacall = ''
           const latestDataCallId = await axiosInstance
             .get(`/datacalls`)
             .then((res) => {
@@ -242,8 +242,10 @@ export default function QuestionnarePage() {
                   },
                 })
               }
-              console.log(res.data.data[0].datacallid)
+              console.log(res.data.data[0].datacall)
               setDatacallID(res.data.data[0].datacallid)
+              datacall = res.data.data[0].datacall.replace(' ', '_')
+              setDataCall(res.data.data[0].datacall.replace(' ', '_'))
               return res.data.data[0].datacallid
             })
           await axiosInstance
@@ -322,7 +324,7 @@ export default function QuestionnarePage() {
               setCategories(categoriesData)
               // console.log(categoriesData)
               navigate(
-                `/questionnare/${fismaacronym?.toLowerCase()}/${latestDataCallId}/${categoriesData[0].name.toLowerCase()}/${categoriesData[0].steps[0].function.function.toLowerCase()}`,
+                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${categoriesData[0].name.toLowerCase()}/${categoriesData[0].steps[0].function.function.toLowerCase()}`,
                 {
                   state: { fismasystemid: system },
                   replace: true,
@@ -489,7 +491,7 @@ export default function QuestionnarePage() {
                               setOpenAlert(true)
                             } else {
                               navigate(
-                                `/questionnare/${fismaacronym?.toLowerCase()}/${datacallID}/${pillar.name === 'CrossCutting' ? 'cross-cutting' : pillar.name.toLowerCase()}/${func.function.function.toLowerCase()}`,
+                                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${dataCall}/${pillar.name === 'CrossCutting' ? 'cross-cutting' : pillar.name.toLowerCase()}/${func.function.function.toLowerCase()}`,
                                 {
                                   state: { fismasystemid: system },
                                   replace: true,

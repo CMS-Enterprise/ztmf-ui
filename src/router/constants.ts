@@ -2,7 +2,7 @@ export enum RouteIds {
   ROOT = 'root',
   PROTECTED = 'app',
   DASHBOARD = 'dashboard',
-  QUESTIONNARE = 'questionnare',
+  QUESTIONNAIRE = 'questionnaire',
   AUTH = 'auth',
   LOGIN = 'login',
   LOGOUT = 'logout',
@@ -14,6 +14,7 @@ export enum RouteIds {
 
 export enum RouteNames {
   DASHBOARD = 'Dashboard',
+  QUESTIONNAIRE = 'questionnaire',
   LOGIN = 'Login',
   LOGOUT = 'Logout',
   SIGNIN = 'Sign In',
@@ -24,7 +25,7 @@ export enum Routes {
   DASHBOARD = `/${RouteIds.PROTECTED}`,
   HOME = `/${RouteIds.HOME}`,
   USERS = `/${RouteIds.USERS}`,
-  QUESTIONNARE = `/${RouteIds.QUESTIONNARE}/:fismaacronym/:datacallid?/:pillar?/:function?`,
+  QUESTIONNAIRE = `/${RouteIds.QUESTIONNAIRE}/:fismaacronym/:datacallid?/:pillar?/:function?`,
   AUTH = `/${RouteIds.AUTH}/*`,
   AUTH_LOGIN = `/${RouteIds.AUTH}/${RouteIds.LOGIN}`,
   AUTH_LOGOUT = `/${RouteIds.AUTH}/${RouteIds.LOGOUT}`,

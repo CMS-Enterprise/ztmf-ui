@@ -24,7 +24,7 @@ import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { EMPTY_USER } from '../../constants'
 import { useNavigate } from 'react-router-dom'
-import { Routes } from '@/router/constants'
+import { RouteNames, Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
 import EditIcon from '@mui/icons-material/Edit'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
@@ -309,7 +309,7 @@ export default function FismaTable({
                 onClick={(event) => {
                   event.stopPropagation()
                   navigate(
-                    `/questionnare/${params.row.fismaacronym.toLowerCase()}`,
+                    `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
                     {
                       state: { fismasystemid: params.row.fismasystemid },
                     }
