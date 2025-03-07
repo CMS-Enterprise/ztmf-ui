@@ -3,7 +3,7 @@ import { useLocation, Link as RouterLink } from 'react-router-dom'
 import Link, { LinkProps } from '@mui/material/Link'
 import { Typography, Box } from '@mui/material'
 import { capitalize } from 'lodash'
-import { red } from '@mui/material/colors'
+import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 interface LinkRouterProps extends LinkProps {
   to: string
   replace?: boolean
@@ -19,7 +19,7 @@ export default function BreadCrumbs() {
       <Typography
         sx={{
           ml: 2,
-          color: 'white',
+          color: 'black',
         }}
       >
         Dashboard
@@ -27,7 +27,7 @@ export default function BreadCrumbs() {
     </LinkRouter>,
   ]
   const homeText = [
-    <Typography key={'homeText'} sx={{ ml: 2, color: '#a6a6a6' }}>
+    <Typography key={'homeText'} sx={{ ml: 2 }}>
       Dashboard
     </Typography>,
   ]
@@ -36,7 +36,7 @@ export default function BreadCrumbs() {
     const text = value.replace('_', ' ')
     return (
       <Typography
-        sx={{ display: 'inline', whiteSpace: 'nowrap', color: '#a6a6a6' }}
+        sx={{ display: 'inline', whiteSpace: 'nowrap', color: '#5a5a5a' }}
         key={value}
       >
         {capitalize(text)}
@@ -51,18 +51,17 @@ export default function BreadCrumbs() {
       <Breadcrumbs
         aria-label="breadcrumb"
         sx={{
-          // display: 'flex',
-          // flexWrap: 'nowrap',
-          // flexDirection: 'row',
           '& .MuiBreadcrumbs-ol': {
             flexDirection: 'row',
           },
-          backgroundColor: '#0d2499',
           borderRadius: 1,
-          // color: 'white',
+          backgroundColor: 'rgb(242,242,242)',
+          p: 1,
           mb: 1,
         }}
-        separator="›"
+        separator={
+          <NavigateNextIcon fontSize="small" sx={{ color: '#5a5a5a' }} />
+        }
       >
         {breadcrumbs}
       </Breadcrumbs>
