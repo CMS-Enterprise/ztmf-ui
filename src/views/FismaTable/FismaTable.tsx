@@ -300,18 +300,25 @@ export default function FismaTable({
       renderCell: (params: GridRenderCellParams) => (
         <>
           <Tooltip title="View Questionnare">
-            <GridActionsCellItem
-              icon={<QuestionAnswerOutlinedIcon />}
-              key={`question-${params.row.fismasystemid}`}
-              label="View Questionnare"
-              className="textPrimary"
-              onClick={(event) => {
-                event.stopPropagation()
-                navigate(`/questionnare/${params.row.fismasystemid}`)
-                // handleOpenModal(params.row as FismaSystemType)
-              }}
-              color="inherit"
-            />
+            <span>
+              <GridActionsCellItem
+                icon={<QuestionAnswerOutlinedIcon />}
+                key={`question-${params.row.fismasystemid}`}
+                label="View Questionnare"
+                className="textPrimary"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  navigate(
+                    `/questionnare/${params.row.fismaacronym.toLowerCase()}`,
+                    {
+                      state: { fismasystemid: params.row.fismasystemid },
+                    }
+                  )
+                  // handleOpenModal(params.row as FismaSystemType)
+                }}
+                color="inherit"
+              />
+            </span>
           </Tooltip>
           {userInfo.role === 'ADMIN' && (
             <GridActionsCellItem

@@ -20,7 +20,7 @@ import {
 import { styled } from '@mui/system'
 import axiosInstance from '@/axiosConfig'
 import { useSnackbar } from 'notistack'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, useLocation } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
@@ -29,6 +29,7 @@ import {
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import { capitalize } from 'lodash'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -135,7 +136,10 @@ export default function QuestionnarePage() {
   }
   const { enqueueSnackbar } = useSnackbar()
   const navigate = useNavigate()
-  const { system } = useParams()
+  const location = useLocation()
+  const { fismaacronym } = useParams()
+  const system = location.state.fismasystemid
+  console.log(system, fismaacronym)
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -154,7 +158,7 @@ export default function QuestionnarePage() {
     if (scoreid) {
       axiosInstance
         .put(`scores/${scoreid}`, {
-          fismasystemid: Number(system),
+          fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
@@ -169,7 +173,7 @@ export default function QuestionnarePage() {
             },
             autoHideDuration: 1500,
           })
-          fetchQuestionScores(Number(system), setQuestionScores)
+          fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
           console.error('Error updating score:', error)
@@ -189,7 +193,7 @@ export default function QuestionnarePage() {
     } else {
       axiosInstance
         .post(`scores`, {
-          fismasystemid: Number(system),
+          fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
@@ -203,7 +207,7 @@ export default function QuestionnarePage() {
             },
             autoHideDuration: 1500,
           })
-          fetchQuestionScores(Number(system), setQuestionScores)
+          fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
           console.error('Error posting score:', error)
@@ -227,19 +231,21 @@ export default function QuestionnarePage() {
     if (system) {
       const fetchData = async () => {
         try {
-          const datacall = await axiosInstance.get(`/datacalls`).then((res) => {
-            if (res.status !== 200 && res.status.toString()[0] === '4') {
-              navigate(Routes.SIGNIN, {
-                replace: true,
-                state: {
-                  message: ERROR_MESSAGES.expired,
-                },
-              })
-            }
-            return res.data.data
-          })
-          const latestDataCallId = datacall[0].datacallid
-          setDatacallID(latestDataCallId)
+          const latestDataCallId = await axiosInstance
+            .get(`/datacalls`)
+            .then((res) => {
+              if (res.status !== 200 && res.status.toString()[0] === '4') {
+                navigate(Routes.SIGNIN, {
+                  replace: true,
+                  state: {
+                    message: ERROR_MESSAGES.expired,
+                  },
+                })
+              }
+              console.log(res.data.data[0].datacallid)
+              setDatacallID(res.data.data[0].datacallid)
+              return res.data.data[0].datacallid
+            })
           await axiosInstance
             .get(`/fismasystems/${system}/questions`)
             .then((response) => {
@@ -316,8 +322,9 @@ export default function QuestionnarePage() {
               setCategories(categoriesData)
               // console.log(categoriesData)
               navigate(
-                `/questionnare/${system}/${categoriesData[0].name.toUpperCase()}/${categoriesData[0].steps[0].function.function}`,
+                `/questionnare/${fismaacronym?.toLowerCase()}/${latestDataCallId}/${categoriesData[0].name.toLowerCase()}/${categoriesData[0].steps[0].function.function.toLowerCase()}`,
                 {
+                  state: { fismasystemid: system },
                   replace: true,
                 }
               )
@@ -377,7 +384,7 @@ export default function QuestionnarePage() {
       }
       fetchData()
     }
-  }, [system, navigate])
+  }, [system, navigate, fismaacronym])
   React.useEffect(() => {
     if (questionId) {
       const choices: QuestionChoice[] = []
@@ -482,8 +489,9 @@ export default function QuestionnarePage() {
                               setOpenAlert(true)
                             } else {
                               navigate(
-                                `/questionnare/${system}/${pillar.name === 'CrossCutting' ? 'CROSS CUTTING' : pillar.name.toUpperCase()}/${func.function.function}`,
+                                `/questionnare/${fismaacronym?.toLowerCase()}/${datacallID}/${pillar.name === 'CrossCutting' ? 'cross-cutting' : pillar.name.toLowerCase()}/${func.function.function.toLowerCase()}`,
                                 {
+                                  state: { fismasystemid: system },
                                   replace: true,
                                 }
                               )

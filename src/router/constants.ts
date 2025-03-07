@@ -24,7 +24,7 @@ export enum Routes {
   DASHBOARD = `/${RouteIds.PROTECTED}`,
   HOME = `/${RouteIds.HOME}`,
   USERS = `/${RouteIds.USERS}`,
-  QUESTIONNARE = `/${RouteIds.QUESTIONNARE}/:system/:pillar?/:function?`,
+  QUESTIONNARE = `/${RouteIds.QUESTIONNARE}/:fismaacronym/:datacallid?/:pillar?/:function?`,
   AUTH = `/${RouteIds.AUTH}/*`,
   AUTH_LOGIN = `/${RouteIds.AUTH}/${RouteIds.LOGIN}`,
   AUTH_LOGOUT = `/${RouteIds.AUTH}/${RouteIds.LOGOUT}`,
