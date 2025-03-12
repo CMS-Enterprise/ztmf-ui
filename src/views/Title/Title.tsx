@@ -169,9 +169,12 @@ export default function Title() {
         {loaderData.status !== 200 ? (
           <LoginPage />
         ) : (
-          <Outlet context={{ fismaSystems, userInfo }} />
+          <>
+            <Outlet context={{ fismaSystems, userInfo }} />
+            <Footer />
+          </>
         )}
-        <Footer />
+
         <EditSystemModal
           title={'Add'}
           open={openModal}
