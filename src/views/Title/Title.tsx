@@ -20,6 +20,7 @@ import { ERROR_MESSAGES } from '@/constants'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
+import Footer from '@/components/Footer/Footer'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -89,22 +90,14 @@ export default function Title() {
         <div className="header-top-wrapper ds-l-md-col--12">
           <div className="region region-cms-header-primary">
             <div className="ds-l-row">
-              <div className="ds-l-col--1"></div>
-              <div className="ds-l-col--1 ds-u-lg-display--block ds-u-margin-top--4 ds-u-padding-right--0">
-                <img
-                  // className="ds-u-float--left"
-                  // className="ds-u-padding-right--0"
-                  src={logo}
-                  alt="CMS.gov"
-                  width={175}
-                  height={75}
-                ></img>
-              </div>
-              <div className="ds-l-col--6 ds-u-padding-left--7 ds-u-margin-left--2 ds-u-margin-top--5 ds-u-padding-top--2 ds-u-font-weight--semibold">
-                Centers for Medicare &amp; Medicaid Services
-              </div>
               {loaderData.status == 200 ? (
-                <div className="ds-l-col--3 ds-u-lg-display--block ds-u-display--none ds-u-padding-left--0  ds-u-padding-right--6 ds-u-padding-right--5 ds-u-margin-top--5 ds-u-font-weight--semibold">
+                <Container
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'flex-end',
+                  }}
+                >
                   <Box
                     sx={{
                       display: 'flex',
@@ -165,7 +158,7 @@ export default function Title() {
                       <></>
                     )}
                   </Box>
-                </div>
+                </Container>
               ) : (
                 <div></div>
               )}
@@ -248,6 +241,7 @@ export default function Title() {
             </div>
           </section> */}
         {/* </footer> */}
+        <Footer />
         <EditSystemModal
           title={'Add'}
           open={openModal}
