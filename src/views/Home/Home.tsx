@@ -114,12 +114,10 @@ export default function HomePageContainer() {
     return <div>Loading...</div>
   }
   return (
-    <>
-      <Box>
-        <StatisticsBlocks scores={scoreMap} />
-        <BreadCrumbs />
-        <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
-      </Box>
-    </>
+    <Box>
+      <StatisticsBlocks scores={scoreMap} />
+      <BreadCrumbs />
+      <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
+    </Box>
   )
 }

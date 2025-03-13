@@ -85,93 +85,89 @@ export default function Title() {
   return (
     <>
       <UsaBanner />
-      <div className="ds-l-row ds-u-margin--0 ds-u-padding-x--1 ds-u-padding-y--0 ds-u-padding-left--6">
-        <div className="header-top-wrapper ds-l-md-col--12">
-          <div className="region region-cms-header-primary">
-            <div className="ds-l-row">
-              {loaderData.status == 200 ? (
-                <Container
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'flex-end',
-                  }}
+      <Container>
+        {loaderData.status == 200 ? (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+            }}
+          >
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+              }}
+            >
+              <AccountCircleIcon fontSize={'large'} />
+              {userInfo.fullname ? (
+                <span
+                  style={{ verticalAlign: '13px' }}
+                  className="ds-text-body--md"
                 >
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'flex-end',
-                    }}
-                  >
-                    <AccountCircleIcon fontSize={'large'} />
-                    {userInfo.fullname ? (
-                      <span
-                        style={{ verticalAlign: '13px' }}
-                        className="ds-text-body--md"
-                      >
-                        {userInfo.fullname}
-                      </span>
-                    ) : (
-                      ''
-                    )}
-                    {userInfo.role === 'ADMIN' ? (
-                      <>
-                        <IconButton
-                          aria-label="more"
-                          aria-controls="long-menu"
-                          aria-haspopup="true"
-                          onClick={handleClick}
-                        >
-                          <MoreVertIcon />
-                        </IconButton>
-                        <Menu
-                          id="long-menu"
-                          anchorEl={anchorEl}
-                          keepMounted
-                          open={Boolean(anchorEl)}
-                          onClose={handleClose}
-                        >
-                          <Link
-                            to={Routes.ROOT}
-                            style={{ textDecoration: 'none', color: 'black' }}
-                          >
-                            <MenuItem onClick={() => handleOption()}>
-                              Dashboard
-                            </MenuItem>
-                          </Link>
-                          <Link
-                            to={Routes.USERS}
-                            style={{ textDecoration: 'none', color: 'black' }}
-                          >
-                            <MenuItem onClick={() => handleOption()}>
-                              Edit Users
-                            </MenuItem>
-                          </Link>
-                          <MenuItem onClick={() => setOpenModal(true)}>
-                            Add Fisma System
-                          </MenuItem>
-                        </Menu>
-                      </>
-                    ) : (
-                      <></>
-                    )}
-                  </Box>
-                </Container>
+                  {userInfo.fullname}
+                </span>
               ) : (
-                <div></div>
+                ''
               )}
-            </div>
-          </div>
-        </div>
-      </div>
+              {userInfo.role === 'ADMIN' ? (
+                <>
+                  <IconButton
+                    aria-label="more"
+                    aria-controls="long-menu"
+                    aria-haspopup="true"
+                    onClick={handleClick}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                  <Menu
+                    id="long-menu"
+                    anchorEl={anchorEl}
+                    keepMounted
+                    open={Boolean(anchorEl)}
+                    onClose={handleClose}
+                  >
+                    <Link
+                      to={Routes.ROOT}
+                      style={{ textDecoration: 'none', color: 'black' }}
+                    >
+                      <MenuItem onClick={() => handleOption()}>
+                        Dashboard
+                      </MenuItem>
+                    </Link>
+                    <Link
+                      to={Routes.USERS}
+                      style={{ textDecoration: 'none', color: 'black' }}
+                    >
+                      <MenuItem onClick={() => handleOption()}>
+                        Edit Users
+                      </MenuItem>
+                    </Link>
+                    <MenuItem onClick={() => setOpenModal(true)}>
+                      Add Fisma System
+                    </MenuItem>
+                  </Menu>
+                </>
+              ) : (
+                <></>
+              )}
+            </Box>
+          </Box>
+        ) : (
+          <div></div>
+        )}
+      </Container>
+      {/* <Footer /> */}
       <Container>
         {loaderData.status !== 200 ? (
           <LoginPage />
         ) : (
           <>
-            <Outlet context={{ fismaSystems, userInfo }} />
-            <Footer />
+            <Box>
+              <Outlet context={{ fismaSystems, userInfo }} />
+            </Box>
           </>
         )}
 
@@ -183,6 +179,7 @@ export default function Title() {
           mode={'create'}
         />
       </Container>
+      <Footer />
     </>
   )
 }

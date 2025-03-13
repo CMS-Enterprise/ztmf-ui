@@ -1,9 +1,22 @@
+html,
 body {
-  height: 100%;
-  width: 100%;
+  margin: 0;              // remove default margin/padding
   padding: 0;
-  margin: 0;
-  min-height: 100vh;
-  min-height: --webkit-fill-available;
-  min-width: 100vw;
+  min-height: 100%;       // allow for full-page layouts
+}
+
+#root {
+  display: flex;
+  flex-direction: column; 
+  min-height: 100vh;      // ensures the root container fills the screen
+}
+
+// The main content area can stretch
+main {
+  flex: 1;                // "take up the leftover space"
+}
+
+// The footer is then pushed to the bottom
+footer {
+  margin-top: auto;
 }
