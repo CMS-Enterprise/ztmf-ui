@@ -93,6 +93,8 @@ export type Question = {
   question: string
   notesprompt: string
   description: string
+  pillar: string
+  function: string
 }
 
 export type SystemDetailsModalProps = {

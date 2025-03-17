@@ -339,7 +339,7 @@ export default function FismaTable({
   ]
 
   return (
-    <div style={{ height: 600, width: '100%' }}>
+    <Box sx={{ height: 600, width: '100%', mb: 2 }}>
       <DataGrid
         rows={fismaSystems}
         isRowSelectable={(params: GridRowParams) =>
@@ -410,6 +410,6 @@ export default function FismaTable({
         system={selectedRow}
         mode={'edit'}
       />
-    </div>
+    </Box>
   )
 }

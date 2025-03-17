@@ -39,7 +39,7 @@ export default function BreadCrumbs() {
         sx={{ display: 'inline', whiteSpace: 'nowrap', color: '#5a5a5a' }}
         key={value}
       >
-        {capitalize(text)}
+        {text[0] === text[0].toUpperCase() ? text : capitalize(text)}
       </Typography>
     )
   })

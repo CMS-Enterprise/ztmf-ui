@@ -125,9 +125,23 @@ export default function UserTable() {
             '& .MuiOutlinedInput-input': {
               py: 1.7,
             },
+            '& .MuiOutlinedInput-notchedOutline': {
+              mt: 0,
+              '@supports (-moz-appearance:none)': {
+                mt: -3, // Only applied in Firefox
+              },
+            },
           }}
           value={value || ''}
           onChange={(event) => {
+            const fullname: string = params.api.getCellValue(
+              params.id,
+              'fullname'
+            )
+            if (event.target.value === 'ADMIN') {
+              setUserName(fullname)
+              setOpenAlert(true)
+            }
             params.api.setEditCellValue(
               {
                 id: params.id,
@@ -252,6 +266,7 @@ export default function UserTable() {
       isNew: false,
       role: newRow.role !== undefined ? newRow.role : selectedRow?.role ?? '',
     } as users
+
     if (newRow.isNew) {
       axiosInstance
         .post('/users', {
@@ -439,6 +454,7 @@ export default function UserTable() {
         sx={{
           height: 600,
           width: '100%',
+          mb: 2,
           '& .actions': {
             color: 'text.secondary',
           },
@@ -491,9 +507,9 @@ export default function UserTable() {
             '& .MuiDataGrid-sortIcon': {
               color: '#fff',
             },
-            '& .MuiFormControl-root.MuiTextField-root': {
-              mt: 0,
-            },
+            // '& .MuiFormControl-root.MuiTextField-root': {
+            //   mt: 0,
+            // },
             '& .MuiTablePagination-selectLabel': {
               mb: 2,
             },

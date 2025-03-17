@@ -1,7 +1,6 @@
 import * as React from 'react'
 import { GridRenderEditCellParams, useGridApiContext } from '@mui/x-data-grid'
 import { TextField } from '@mui/material'
-
 interface CustomEditComponentProps extends GridRenderEditCellParams {
   getErrorValue: () => boolean
 }
@@ -23,25 +22,30 @@ export default function EditInputCell(props: CustomEditComponentProps) {
     // console.log(apiRef.current.getRowWithUpdatedValues(id, field))
   }
   return (
-    <TextField
-      fullWidth
-      inputRef={ref}
-      error={getErrorValue()}
-      label=""
-      id="fullWidth"
-      value={value}
-      onChange={handleValueChange}
-      sx={{
-        // '& .MuiOutlinedInput-root': {
-        //   '& fieldset': {
-        //     border: 'none',
-        //   },
-        // },
-        '& .MuiOutlinedInput-input': {
-          py: 1.5,
-          // pt: 2,
-        },
-      }}
-    />
+    <>
+      <TextField
+        fullWidth
+        inputRef={ref}
+        error={getErrorValue()}
+        label=""
+        id="fullWidth"
+        value={value}
+        onChange={handleValueChange}
+        sx={{
+          '& .MuiInputBase-root': {
+            height: '100% !important',
+          },
+          '& .MuiOutlinedInput-input': {
+            py: 1.5,
+          },
+          '& .MuiOutlinedInput-notchedOutline': {
+            mt: 0,
+            '@supports (-moz-appearance:none)': {
+              mt: -3,
+            },
+          },
+        }}
+      />
+    </>
   )
 }

@@ -17,7 +17,7 @@ import {
   QuestionChoice,
   QuestionScores,
 } from '@/types'
-import { styled } from '@mui/system'
+import { Container, styled } from '@mui/system'
 import axiosInstance from '@/axiosConfig'
 import { useSnackbar } from 'notistack'
 import { useNavigate, useLocation } from 'react-router-dom'
@@ -39,13 +39,26 @@ type questionScoreMap = {
 const CssTextField = styled(TextField)({
   '& .MuiOutlinedInput-root': {
     '& fieldset': {
-      borderColor: '#000000', // Default border color
+      borderColor: '#000000',
       borderWidth: '2px',
     },
     '&.Mui-focused fieldset': {
-      borderColor: '#000000', // Border color when focused
+      borderColor: '#000000',
       borderWidth: '2px',
-      boxShadow: '0px 0px 0px 3px #FFFFFF, 0px 0px 3px 6px #bd13b8', // Focused shadow
+      boxShadow: '0px 0px 0px 3px #FFFFFF, 0px 0px 3px 6px #bd13b8',
+    },
+    '@supports (-moz-appearance:none)': {
+      paddingTop: '30px',
+      '& .MuiInputBase-inputMultiline': {
+        // paddingTop: '-15px',
+        height: '100%',
+        width: '100%',
+        scrollbarWidth: 'none',
+      },
+    },
+    '& .MuiInputBase-inputMultiline': {
+      msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
+      '&::-webkit-scrollbar': { display: 'none' },
     },
   },
 })
@@ -242,7 +255,6 @@ export default function QuestionnarePage() {
                   },
                 })
               }
-              console.log(res.data.data[0].datacall)
               setDatacallID(res.data.data[0].datacallid)
               datacall = res.data.data[0].datacall.replace(' ', '_')
               setDataCall(res.data.data[0].datacall.replace(' ', '_'))
@@ -275,6 +287,8 @@ export default function QuestionnarePage() {
                   question: question.question,
                   notesprompt: question.notesprompt,
                   description: question.function.description,
+                  pillar: question.pillar.pillar,
+                  function: question.function.function,
                 }
                 organizedData[question.pillar.pillar].push(question)
               })
@@ -322,7 +336,6 @@ export default function QuestionnarePage() {
               setQuestionId(sortedFuncId[0]) // sets the questionid(functionid) to the first value in the array
               setStepFunctionId(sortedFuncId) // contains an array of all functionid in order of render
               setCategories(categoriesData)
-              // console.log(categoriesData)
               navigate(
                 `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${categoriesData[0].name.toLowerCase()}/${categoriesData[0].steps[0].function.function.toLowerCase()}`,
                 {
@@ -442,184 +455,213 @@ export default function QuestionnarePage() {
   return (
     <>
       <BreadCrumbs />
-      <Grid container columnSpacing={2} sx={{ mt: 2 }}>
-        <Grid xs={3}>
-          <List
-            sx={{
-              width: '100%',
-              // maxWidth: 500,
-              bgcolor: 'background.paper',
-              position: 'relative',
-              overflow: 'auto',
-              overflowX: 'hidden',
-              maxHeight: 600,
-              '& ul': { padding: 0 },
-            }}
-            subheader={<li />}
-          >
-            {categories.map((pillar) => (
-              <li key={`${pillar.name}-section`}>
-                <ul>
-                  <ListSubheader
-                    sx={{
-                      backgroundColor: '#07124d',
-                      color: 'white',
-                      textAlign: 'center',
-                    }}
-                  >
-                    {pillar.name === 'CrossCutting'
-                      ? 'CROSS CUTTING'
-                      : pillar.name.toUpperCase()}
-                  </ListSubheader>
-                  {pillar.steps.map((func) => {
-                    const text = addSpace(func.function.function)
-                    const customFontSize = text.length > 33 ? '0.9rem' : '1rem'
-                    // TODO: refactor this code such that it's going to be a single component instead of being rerendered everytime
-                    return (
-                      <ListItemButton
-                        key={`item-${pillar.name}-${func.function.functionid}`}
-                        selected={selectedIndex === func.function.functionid}
-                        onClick={() => {
-                          // prevent clicking on the same question to break list
-                          if (selectedIndex !== func.function.functionid) {
-                            setStepId(func.function.functionid)
-                            if (
-                              (selectQuestionOption !== -1 &&
-                                initQuestionChoice !== selectQuestionOption) ||
-                              initNotes !== notes
-                            ) {
-                              setOpenAlert(true)
-                            } else {
-                              navigate(
-                                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${dataCall}/${pillar.name === 'CrossCutting' ? 'cross-cutting' : pillar.name.toLowerCase()}/${func.function.function.toLowerCase()}`,
-                                {
-                                  state: { fismasystemid: system },
-                                  replace: true,
-                                }
-                              )
-                              handleListItemClick(func.function.functionid)
-                            }
-                          }
-                        }}
-                      >
-                        <ListItemText
-                          primary={`${text}`}
-                          sx={{ fontSize: customFontSize }}
-                        />
-                      </ListItemButton>
-                    )
-                  })}
-                </ul>
-              </li>
-            ))}
-          </List>
-        </Grid>
-        <Grid xs={9}>
-          <Box component="main" sx={{ maxHeight: 600 }}>
-            <Box
+      <Container>
+        <Grid container columnSpacing={2} sx={{ mt: 2 }}>
+          <Grid xs={3}>
+            <List
               sx={{
-                color: '#5a5a5a',
-                mb: 0,
-                borderRadius: 1,
-                // backgroundColor: 'rgb(217, 217, 217)',
+                width: '100%',
+                // maxWidth: 500,
+                bgcolor: 'background.paper',
+                position: 'relative',
+                overflow: 'auto',
+                overflowX: 'hidden',
+                maxHeight: 600,
+                '& ul': { padding: 0 },
+                msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
+                '&::-webkit-scrollbar': { display: 'none' },
+                '@supports (-moz-appearance:none)': {
+                  scrollbarWidth: 'none',
+                },
               }}
+              subheader={<li />}
             >
-              {description}
-            </Box>
-            <Typography variant="h6" sx={{ mt: 1, mb: 0 }}>
-              {question}
-            </Typography>
-            {loadingQuestion ? (
+              {categories.map((pillar) => (
+                <li key={`${pillar.name}-section`}>
+                  <ul>
+                    <ListSubheader
+                      sx={{
+                        backgroundColor: '#07124d',
+                        color: 'white',
+                        textAlign: 'center',
+                      }}
+                    >
+                      {pillar.name === 'CrossCutting'
+                        ? 'CROSS CUTTING'
+                        : pillar.name.toUpperCase()}
+                    </ListSubheader>
+                    {pillar.steps.map((func) => {
+                      const text = addSpace(func.function.function)
+                      const customFontSize =
+                        text.length > 33 ? '0.9rem' : '1rem'
+                      // TODO: refactor this code such that it's going to be a single component instead of being rerendered everytime
+                      return (
+                        <ListItemButton
+                          key={`item-${pillar.name}-${func.function.functionid}`}
+                          selected={selectedIndex === func.function.functionid}
+                          onClick={() => {
+                            // prevent clicking on the same question to break list
+                            if (selectedIndex !== func.function.functionid) {
+                              setStepId(func.function.functionid)
+                              if (
+                                (selectQuestionOption !== -1 &&
+                                  initQuestionChoice !==
+                                    selectQuestionOption) ||
+                                initNotes !== notes
+                              ) {
+                                setOpenAlert(true)
+                              } else {
+                                navigate(
+                                  `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${dataCall}/${pillar.name === 'CrossCutting' ? 'cross-cutting' : pillar.name.toLowerCase()}/${func.function.function.toLowerCase()}`,
+                                  {
+                                    state: { fismasystemid: system },
+                                    replace: true,
+                                  }
+                                )
+                                handleListItemClick(func.function.functionid)
+                              }
+                            }
+                          }}
+                        >
+                          <ListItemText
+                            primary={`${text}`}
+                            sx={{ fontSize: customFontSize }}
+                          />
+                        </ListItemButton>
+                      )
+                    })}
+                  </ul>
+                </li>
+              ))}
+            </List>
+          </Grid>
+          <Grid xs={9}>
+            <Box>
               <Box
                 sx={{
-                  display: 'flex',
-                  justifyContent: 'center',
-                  alignItems: 'center',
-                  maxHeight: '100%',
+                  color: '#5a5a5a',
+                  mb: 0,
+                  borderRadius: 1,
+                  // backgroundColor: 'rgb(217, 217, 217)',
                 }}
               >
-                <Spinner size="big" />
+                {description}
               </Box>
-            ) : (
-              <>
-                <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
-                <Typography variant="h6" sx={{ mb: 1 }}>
-                  {notePrompt || ''}
-                </Typography>
-                <CssTextField
-                  multiline
-                  rows={4}
-                  fullWidth
-                  value={notes}
-                  onChange={(e) => {
-                    setNotes(e.target.value)
-                  }}
-                />
+              <Typography variant="h6" sx={{ mt: 1, mb: 0 }}>
+                {question}
+              </Typography>
+              {loadingQuestion ? (
                 <Box
-                  position="relative"
-                  display="flex"
-                  width="100%"
-                  justifyContent={'space-between'}
-                  sx={{ mt: 1 }}
+                  sx={{
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    maxHeight: '100%',
+                  }}
                 >
-                  <CmsButton
-                    onClick={() => {
-                      if (
-                        (selectQuestionOption !== -1 &&
-                          initQuestionChoice !== selectQuestionOption) ||
-                        initNotes !== notes
-                      ) {
-                        setStepId(
-                          stepFunctionId[functionIdIdx[selectedIndex] - 1]
-                        )
-                        setOpenAlert(true)
-                      } else {
+                  <Spinner size="big" />
+                </Box>
+              ) : (
+                <Box>
+                  <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    {notePrompt || ''}
+                  </Typography>
+                  <CssTextField
+                    multiline
+                    rows={4}
+                    fullWidth
+                    value={notes}
+                    onChange={(e) => {
+                      setNotes(e.target.value)
+                    }}
+                  />
+                  <Box
+                    position="relative"
+                    display="flex"
+                    width="100%"
+                    justifyContent={'space-between'}
+                    sx={{ mt: 1 }}
+                  >
+                    <CmsButton
+                      onClick={() => {
+                        if (
+                          (selectQuestionOption !== -1 &&
+                            initQuestionChoice !== selectQuestionOption) ||
+                          initNotes !== notes
+                        ) {
+                          setStepId(
+                            stepFunctionId[functionIdIdx[selectedIndex] - 1]
+                          )
+                          setOpenAlert(true)
+                        } else {
+                          const id =
+                            stepFunctionId[functionIdIdx[selectedIndex] - 1]
+                          if (questions[id]) {
+                            const q = questions[id]
+                            navigate(
+                              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${dataCall}/${q.pillar === 'CrossCutting' ? 'cross-cutting' : q.pillar.toLowerCase()}/${q.function.toLowerCase()}`,
+                              {
+                                state: { fismasystemid: system },
+                                replace: true,
+                              }
+                            )
+                          }
+                          setLoadingQuestion(true)
+                          setQuestionId(id)
+                          setSelectedIndex(id)
+                        }
+                      }}
+                      color="primary"
+                      disabled={selectedIndex === stepFunctionId[0]}
+                      style={{ marginBottom: '8px', marginTop: '8px' }}
+                    >
+                      <ArrowIcon direction="left" />
+                      {` Back`}
+                    </CmsButton>
+                    <CmsButton
+                      onClick={() => {
                         const id =
-                          stepFunctionId[functionIdIdx[selectedIndex] - 1]
+                          stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                        if (questions[id]) {
+                          const q = questions[id]
+                          navigate(
+                            `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${dataCall}/${q.pillar === 'CrossCutting' ? 'cross-cutting' : q.pillar.toLowerCase()}/${q.function.toLowerCase()}`,
+                            {
+                              state: { fismasystemid: system },
+                              replace: true,
+                            }
+                          )
+                        }
                         setLoadingQuestion(true)
                         setQuestionId(id)
                         setSelectedIndex(id)
+                        saveResponse()
+                        setLoadingQuestion(false)
+                      }}
+                      disabled={
+                        selectedIndex ===
+                        stepFunctionId[stepFunctionId.length - 1]
                       }
-                    }}
-                    color="primary"
-                    disabled={selectedIndex === stepFunctionId[0]}
-                    style={{ marginBottom: '8px', marginTop: '8px' }}
-                  >
-                    <ArrowIcon direction="left" />
-                    {` Back`}
-                  </CmsButton>
-                  <CmsButton
-                    onClick={() => {
-                      const id =
-                        stepFunctionId[functionIdIdx[selectedIndex] + 1]
-                      setLoadingQuestion(true)
-                      setQuestionId(id)
-                      setSelectedIndex(id)
-                      saveResponse()
-                      setLoadingQuestion(false)
-                    }}
-                    disabled={
-                      selectedIndex ===
-                      stepFunctionId[stepFunctionId.length - 1]
-                    }
-                    style={{ marginBottom: '8px', marginTop: '8px' }}
-                  >
-                    {'Next '}
-                    {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
-                    <ArrowIcon direction="right" />
-                  </CmsButton>
+                      style={{ marginBottom: '8px', marginTop: '8px' }}
+                    >
+                      {'Next '}
+                      {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
+                      <ArrowIcon direction="right" />
+                    </CmsButton>
+                  </Box>
                 </Box>
-              </>
-            )}
-          </Box>
+              )}
+            </Box>
+          </Grid>
+          <ConfirmDialog
+            confirmationText={CONFIRMATION_MESSAGE_QUESTION}
+            open={openAlert}
+            onClose={() => setOpenAlert(false)}
+            confirmClick={handleConfirmReturn}
+          />
         </Grid>
-        <ConfirmDialog
-          confirmationText={CONFIRMATION_MESSAGE_QUESTION}
-          open={openAlert}
-          onClose={() => setOpenAlert(false)}
-          confirmClick={handleConfirmReturn}
-        />
-      </Grid>
+      </Container>
     </>
   )
 }
