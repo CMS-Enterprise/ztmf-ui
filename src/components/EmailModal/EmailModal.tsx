@@ -65,6 +65,12 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const [subject, setSubject] = React.useState<string>('')
   const [body, setBody] = React.useState<string>('')
   const [sentGroup, setSentGroup] = React.useState<string>('')
+  const resetEmailInputs = () => {
+    setBody('')
+    setGroupValue('')
+    setSubject('')
+    setSentToEmails([])
+  }
   const submitEmail = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
@@ -75,7 +81,6 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
         body: formData.get('email_body'),
       })
       .then((res) => {
-        console.log(res.data.data)
         setSentGroup(groupValue)
         enqueueSnackbar(`Emails have successfully been sent`, {
           variant: 'success',
@@ -123,12 +128,16 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const handleBodyChange = (value: string) => {
     setBody(value)
   }
-  console.log(subject.length)
   return (
     <>
       <Dialog
         open={openModal}
-        onClose={closeModal}
+        onClose={() => {
+          setTimeout(() => {
+            resetEmailInputs()
+          }, 200)
+          closeModal()
+        }}
         maxWidth="md"
         fullWidth
         sx={{
@@ -156,7 +165,12 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
                   backgroundColor: 'white',
                 },
               }}
-              onClick={closeModal}
+              onClick={() => {
+                setTimeout(() => {
+                  resetEmailInputs()
+                }, 200)
+                closeModal()
+              }}
             >
               <CloseRoundedIcon
                 fontSize="large"
@@ -209,11 +223,12 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               name="email_subject"
               onChange={(e) => handleSubjectChange(e.target.value)}
               className="subject-label-text"
+              labelClassName="label"
               errorMessage={
                 subject.length === 0 ? 'This field is required' : ''
               }
             />
-            <Label>Body</Label>
+            <Label className="label">Body</Label>
             {!body && <InlineError>This field is required</InlineError>}
             <CssTextField
               multiline
