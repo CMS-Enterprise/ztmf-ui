@@ -6,7 +6,12 @@
 
 .subject-label-text {
   margin-top: 0;
-  margin-bottom: 24px; /* Default for all browsers */
+  margin-bottom: 16px; /* Default for all browsers */
+}
+
+.label {
+  margin-top: 16px;
+  margin-bottom: 0px
 }
 
 @-moz-document url-prefix() {
@@ -19,4 +24,8 @@
     margin-bottom: 0;
     padding-bottom: 0;
   }
+  .label {
+  margin-top: 16px;
+  margin-bottom: 0px;
+}
 }
