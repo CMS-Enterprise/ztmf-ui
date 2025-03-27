@@ -1,0 +1,22 @@
+.group-label {
+  margin-top: 0;
+  margin-bottom: 0;
+}
+
+
+.subject-label-text {
+  margin-top: 0;
+  margin-bottom: 24px; /* Default for all browsers */
+}
+
+@-moz-document url-prefix() {
+  .subject-label-text {
+    margin-top: 0;
+    margin-bottom: 0px; /* Default for all browsers */
+  }
+  .required-label-text {
+    /* margin-top: 24px; */
+    margin-bottom: 0;
+    padding-bottom: 0;
+  }
+}

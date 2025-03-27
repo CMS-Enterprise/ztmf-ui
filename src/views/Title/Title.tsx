@@ -13,6 +13,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { useState, useEffect } from 'react'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
+import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import LoginPage from '../LoginPage/LoginPage'
 import { ERROR_MESSAGES } from '@/constants'
@@ -46,6 +47,7 @@ export default function Title() {
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   // const [titlePage, setTitlePage] = useState<string>('Dashboard')
   const [openModal, setOpenModal] = useState<boolean>(false)
+  const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   useEffect(() => {
     async function fetchFismaSystems() {
       try {
@@ -81,6 +83,9 @@ export default function Title() {
     }
     setOpenModal(false)
     handleClose()
+  }
+  const handleCloseEmailModal = () => {
+    setOpenEmailModal(false)
   }
   return (
     <>
@@ -145,8 +150,21 @@ export default function Title() {
                         Edit Users
                       </MenuItem>
                     </Link>
-                    <MenuItem onClick={() => setOpenModal(true)}>
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenModal(true)
+                      }}
+                    >
                       Add Fisma System
+                    </MenuItem>
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenEmailModal(true)
+                      }}
+                    >
+                      {'Email Users'}
                     </MenuItem>
                   </Menu>
                 </>
@@ -177,6 +195,10 @@ export default function Title() {
           onClose={handleCloseModal}
           system={EMPTY_SYSTEM}
           mode={'create'}
+        />
+        <EmailModal
+          openModal={openEmailModal}
+          closeModal={handleCloseEmailModal}
         />
       </Container>
       <Footer />

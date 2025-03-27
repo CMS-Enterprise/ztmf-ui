@@ -102,6 +102,19 @@ export type SystemDetailsModalProps = {
   onClose: () => void
   system: FismaSystemType | null
 }
+
+export type EmailModalProps = {
+  openModal: boolean
+  closeModal: () => void
+}
+
+export type SentEmailDialogProps = {
+  openModal: boolean
+  closeModal: () => void
+  emails: string[]
+  group: string
+}
+
 export type editSystemModalProps = {
   title: string
   open: boolean
