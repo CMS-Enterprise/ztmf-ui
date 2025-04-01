@@ -19,6 +19,7 @@ import { ERROR_MESSAGES } from '@/constants'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
+import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
 /**
  * Component that renders the contents of the Dashboard view.
@@ -40,11 +41,11 @@ type PromiseType = {
 export default function Title() {
   const navigate = useNavigate()
   const loaderData = useLoaderData() as PromiseType
+  const [openDataCallModal, setOpenDataCallModal] = useState<boolean>(false)
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
-  // const [titlePage, setTitlePage] = useState<string>('Dashboard')
   const [openModal, setOpenModal] = useState<boolean>(false)
   useEffect(() => {
     async function fetchFismaSystems() {
@@ -81,6 +82,9 @@ export default function Title() {
     }
     setOpenModal(false)
     handleClose()
+  }
+  const handleDataCallClose = () => {
+    setOpenDataCallModal(false)
   }
   return (
     <>
@@ -148,6 +152,15 @@ export default function Title() {
                     <MenuItem onClick={() => setOpenModal(true)}>
                       Add Fisma System
                     </MenuItem>
+
+                    <MenuItem
+                      onClick={() => {
+                        handleClose()
+                        setOpenDataCallModal(true)
+                      }}
+                    >
+                      Create datacall
+                    </MenuItem>
                   </Menu>
                 </>
               ) : (
@@ -178,6 +191,7 @@ export default function Title() {
           system={EMPTY_SYSTEM}
           mode={'create'}
         />
+        <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
       </Container>
       <Footer />
     </>
