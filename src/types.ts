@@ -123,6 +123,11 @@ export type editSystemModalProps = {
   mode: string
 }
 
+export type datacallModalProps = {
+  open: boolean
+  onClose: () => void
+}
+
 export type ScoreData = {
   datacallid: number
   fismasystemid: number
