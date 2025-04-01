@@ -242,8 +242,8 @@ export default function UserTable() {
     setOpen(false)
   }
   const handleOpenModal = (id: GridRowId) => {
-    setOpenModal(true)
     setUserId(id)
+    setOpenModal(true)
   }
   const handleCloseModal = () => {
     setOpenModal(false)
@@ -266,7 +266,7 @@ export default function UserTable() {
       isNew: false,
       role: newRow.role !== undefined ? newRow.role : selectedRow?.role ?? '',
     } as users
-
+    const curRowUserId = updatedRow.userid
     if (newRow.isNew) {
       axiosInstance
         .post('/users', {
@@ -276,7 +276,13 @@ export default function UserTable() {
         })
         .then((res) => {
           newRow = res.data.data
+          console.log(newRow)
+          // apiRef.current.getRow
           updatedRow.userid = newRow.userid
+          apiRef.current.updateRows([
+            { userid: curRowUserId, _action: 'delete' },
+          ])
+          apiRef.current.updateRows([updatedRow])
           setSnackBarSeverity('success')
           setSnackBarText('Saved')
           setOpen(true)
@@ -305,9 +311,7 @@ export default function UserTable() {
           handleUnautherized(error.response.status)
         })
     }
-    setRows(
-      rows.map((row) => (row.userid === newRow.userid ? updatedRow : row))
-    )
+    setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
     return updatedRow
   }
   const handleRowModesModelChange = (newRowModesModel: GridRowModesModel) => {

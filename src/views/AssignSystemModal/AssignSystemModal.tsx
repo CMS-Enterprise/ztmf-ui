@@ -39,6 +39,7 @@ export default function AssignSystemModal({
   const { enqueueSnackbar } = useSnackbar()
   React.useEffect(() => {
     if (open && userid) {
+      console.log(userid)
       axiosInstance.get(`/users/${userid}/assignedfismasystems`).then((res) => {
         const assignedSys = res.data.data || []
         setAssignedSystems(assignedSys)
