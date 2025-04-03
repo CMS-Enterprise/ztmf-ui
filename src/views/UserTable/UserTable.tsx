@@ -106,7 +106,7 @@ export default function UserTable() {
   const navigate = useNavigate()
   //TODO: add these to a file to be imported and used in multiple places
   const checkValidResponse = (status: number) => {
-    if (status.toString()[0] === '401') {
+    if (status == 401) {
       navigate(Routes.SIGNIN, {
         replace: true,
         state: {
@@ -276,8 +276,6 @@ export default function UserTable() {
         })
         .then((res) => {
           newRow = res.data.data
-          console.log(newRow)
-          // apiRef.current.getRow
           updatedRow.userid = newRow.userid
           apiRef.current.updateRows([
             { userid: curRowUserId, _action: 'delete' },
@@ -325,25 +323,37 @@ export default function UserTable() {
 
   // TODO: Custom hook for fetching data
   useEffect(() => {
-    axiosInstance.get('/users').then((res) => {
-      if (res.status === 200) {
-        const data = res.data.data.map((row: users) => ({
-          ...row,
-          role: row.role.trim(),
-        }))
-        setRows(data)
-        const map: Record<number, string> = {}
-        for (const obj of fismaSystems) {
-          map[obj.fismasystemid] = obj.fismasubsystem
-            ? obj.fismaname + ' - ' + obj.fismasubsystem
-            : obj.fismaname
+    axiosInstance
+      .get('/users')
+      .then((res) => {
+        if (res.status === 200) {
+          const data = res.data.data.map((row: users) => ({
+            ...row,
+            role: row.role.trim(),
+          }))
+          setRows(data)
+          const map: Record<number, string> = {}
+          for (const obj of fismaSystems) {
+            map[obj.fismasystemid] = obj.fismasubsystem
+              ? obj.fismaname + ' - ' + obj.fismasubsystem
+              : obj.fismaname
+          }
+          setFismaSystemsMap(map)
+        } else {
+          return
         }
-        setFismaSystemsMap(map)
-      } else {
-        return
-      }
-    })
-  }, [fismaSystems])
+      })
+      .catch((error) => {
+        if (error.response.status === 401 || error.response.status === 500) {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.error,
+            },
+          })
+        }
+      })
+  }, [fismaSystems, navigate])
   const columns: GridColDef[] = [
     {
       field: 'fullname',

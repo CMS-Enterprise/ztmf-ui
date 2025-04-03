@@ -16,7 +16,9 @@ import Autocomplete from '@mui/material/Autocomplete'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import { useSnackbar } from 'notistack'
-
+import { useNavigate } from 'react-router-dom'
+import { Routes } from '@/router/constants'
+import { ERROR_MESSAGES } from '@/constants'
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
 
@@ -37,9 +39,9 @@ export default function AssignSystemModal({
   const [fismaSystems, setFismaSystems] = React.useState<number[]>([])
   const [openSnackBar, setOpenSnackBar] = React.useState<boolean>(false)
   const { enqueueSnackbar } = useSnackbar()
+  const navigate = useNavigate()
   React.useEffect(() => {
     if (open && userid) {
-      console.log(userid)
       axiosInstance.get(`/users/${userid}/assignedfismasystems`).then((res) => {
         const assignedSys = res.data.data || []
         setAssignedSystems(assignedSys)
@@ -90,31 +92,84 @@ export default function AssignSystemModal({
               const removed = assignedSystems.filter(
                 (item) => !newValue.includes(item)
               )
-              let isAssign = ''
               if (added.length) {
-                isAssign = 'assign'
                 axiosInstance
                   .post(`/users/${userid}/assignedfismasystems`, {
                     fismasystemid: added[0],
                   })
-                  .then((res) => {
-                    console.log(res)
+                  .then(() => {
+                    enqueueSnackbar(`Saved - assign system`, {
+                      variant: 'success',
+                      anchorOrigin: {
+                        vertical: 'top',
+                        horizontal: 'left',
+                      },
+                    })
+                  })
+                  .catch((error) => {
+                    if (
+                      error.response.status === 401 ||
+                      error.response.status === 500
+                    ) {
+                      navigate(Routes.SIGNIN, {
+                        replace: true,
+                        state: {
+                          message: ERROR_MESSAGES.error,
+                        },
+                      })
+                    } else {
+                      enqueueSnackbar(
+                        `You don't have permission to assign systems`,
+                        {
+                          variant: 'error',
+                          anchorOrigin: {
+                            vertical: 'top',
+                            horizontal: 'left',
+                          },
+                          autoHideDuration: 1500,
+                        }
+                      )
+                    }
                   })
               } else if (removed.length) {
-                isAssign = 'unassign'
                 axiosInstance
                   .delete(`/users/${userid}/assignedfismasystems/${removed[0]}`)
-                  .then((res) => {
-                    console.log(res)
+                  .then(() => {
+                    enqueueSnackbar(`Saved - unassigned system`, {
+                      variant: 'success',
+                      anchorOrigin: {
+                        vertical: 'top',
+                        horizontal: 'left',
+                      },
+                    })
+                  })
+                  .catch((error) => {
+                    if (
+                      error.response.status === 401 ||
+                      error.response.status === 500
+                    ) {
+                      navigate(Routes.SIGNIN, {
+                        replace: true,
+                        state: {
+                          message: ERROR_MESSAGES.error,
+                        },
+                      })
+                    } else {
+                      enqueueSnackbar(
+                        `You don't have permission to unassign systems`,
+                        {
+                          variant: 'error',
+                          anchorOrigin: {
+                            vertical: 'top',
+                            horizontal: 'left',
+                          },
+                          autoHideDuration: 1500,
+                        }
+                      )
+                    }
                   })
               }
-              enqueueSnackbar(`Saved - ${isAssign} system`, {
-                variant: 'success',
-                anchorOrigin: {
-                  vertical: 'top',
-                  horizontal: 'left',
-                },
-              })
+
               setAssignedSystems(newValue)
             }}
             renderInput={(params) => (
