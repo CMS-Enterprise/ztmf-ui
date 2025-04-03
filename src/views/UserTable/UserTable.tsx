@@ -8,6 +8,7 @@ import CancelIcon from '@mui/icons-material/Close'
 import FormControl from '@mui/material/FormControl'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
+import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import {
   GridRowsProp,
   GridRowModesModel,
@@ -334,7 +335,10 @@ export default function UserTable() {
     setSnackBarText('An error occurred while saving the row')
     setOpen(true)
   }
-
+  const handleDeleteClick = (id: GridRowId) => () => {
+    console.log(apiRef.current.getAllRowIds())
+    setRows(rows.filter((row) => row.userid !== id))
+  }
   // TODO: Custom hook for fetching data
   useEffect(() => {
     axiosInstance
@@ -425,8 +429,9 @@ export default function UserTable() {
       headerName: 'Actions',
       width: 100,
       cellClassName: 'actions',
-      getActions: ({ id }) => {
-        const isInEditMode = rowModesModel[id]?.mode === GridRowModes.Edit
+      getActions: (params) => {
+        const isInEditMode =
+          rowModesModel[params.id]?.mode === GridRowModes.Edit
         if (isInEditMode) {
           return [
             <GridActionsCellItem
@@ -435,15 +440,15 @@ export default function UserTable() {
               sx={{
                 color: 'primary.main',
               }}
-              key={`save-${id}`}
-              onClick={handleSaveClick(id)}
+              key={`save-${params.id}`}
+              onClick={handleSaveClick(params.id)}
             />,
             <GridActionsCellItem
               icon={<CancelIcon />}
-              key={`cancel-${id}`}
+              key={`cancel-${params.id}`}
               label="Cancel"
               className="textPrimary"
-              onClick={handleCancelClick(id)}
+              onClick={handleCancelClick(params.id)}
               color="inherit"
             />,
           ]
@@ -452,25 +457,32 @@ export default function UserTable() {
         return [
           <GridActionsCellItem
             icon={<EditIcon />}
-            key={`edit-${id}`}
+            key={`edit-${params.id}`}
             label="Edit"
             className="textPrimary"
-            onClick={handleEditClick(id)}
+            onClick={handleEditClick(params.id)}
             color="inherit"
           />,
           <Tooltip
             title={`Assign Fisma Systems`}
-            key={`tooltip-${id}`}
+            key={`tooltip-${params.id}`}
             placement="right-start"
           >
             <GridActionsCellItem
               icon={<ChecklistIcon />}
-              key={id}
+              key={`assignsystem-${params.id}`}
               label="assignedSystems"
-              onClick={() => handleOpenModal(id)}
+              onClick={() => handleOpenModal(params.id)}
               color="inherit"
             />
           </Tooltip>,
+          <GridActionsCellItem
+            key={`delete-${params.id}`}
+            icon={<DeleteIcon />}
+            label="Delete"
+            onClick={handleDeleteClick(params.id)}
+            color="inherit"
+          />,
         ]
       },
     },
