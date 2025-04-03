@@ -107,19 +107,28 @@ export default function AssignSystemModal({
                     })
                   })
                   .catch((error) => {
-                    if (
-                      error.response.status === 401 ||
-                      error.response.status === 500
-                    ) {
+                    if (error.response.status === 401) {
                       navigate(Routes.SIGNIN, {
                         replace: true,
                         state: {
                           message: ERROR_MESSAGES.error,
                         },
                       })
-                    } else {
+                    } else if (error.response.status === 403) {
                       enqueueSnackbar(
                         `You don't have permission to assign systems`,
+                        {
+                          variant: 'error',
+                          anchorOrigin: {
+                            vertical: 'top',
+                            horizontal: 'left',
+                          },
+                          autoHideDuration: 1500,
+                        }
+                      )
+                    } else {
+                      enqueueSnackbar(
+                        `An error occurred, please try again later`,
                         {
                           variant: 'error',
                           anchorOrigin: {
@@ -144,19 +153,28 @@ export default function AssignSystemModal({
                     })
                   })
                   .catch((error) => {
-                    if (
-                      error.response.status === 401 ||
-                      error.response.status === 500
-                    ) {
+                    if (error.response.status === 401) {
                       navigate(Routes.SIGNIN, {
                         replace: true,
                         state: {
                           message: ERROR_MESSAGES.error,
                         },
                       })
+                    } else if (error.response.status === 403) {
+                      enqueueSnackbar(
+                        `You don't have permission to assign systems`,
+                        {
+                          variant: 'error',
+                          anchorOrigin: {
+                            vertical: 'top',
+                            horizontal: 'left',
+                          },
+                          autoHideDuration: 1500,
+                        }
+                      )
                     } else {
                       enqueueSnackbar(
-                        `You don't have permission to unassign systems`,
+                        `An error occurred, please try again later`,
                         {
                           variant: 'error',
                           anchorOrigin: {

@@ -305,8 +305,15 @@ export default function UserTable() {
           setOpen(true)
         })
         .catch((error) => {
-          checkValidResponse(error.response.status)
-          handleUnautherized(error.response.status)
+          if (error.response.status === 401) {
+            checkValidResponse(error.response.status)
+          } else if (error.response.status === 403) {
+            handleUnautherized(error.response.status)
+          } else {
+            setSnackBarSeverity('error')
+            setSnackBarText('An error occurred, please try again later')
+            setOpen(true)
+          }
         })
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
@@ -344,7 +351,7 @@ export default function UserTable() {
         }
       })
       .catch((error) => {
-        if (error.response.status === 401 || error.response.status === 500) {
+        if (error.response.status === 401) {
           navigate(Routes.SIGNIN, {
             replace: true,
             state: {
