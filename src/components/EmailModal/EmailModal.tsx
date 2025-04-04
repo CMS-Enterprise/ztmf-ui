@@ -105,8 +105,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               message: ERROR_MESSAGES.expired,
             },
           })
-        }
-        else if (error.response.status === 403) {
+        } else if (error.response.status === 403) {
           enqueueSnackbar(ERROR_MESSAGES.permission, {
             variant: 'error',
             anchorOrigin: {
@@ -116,17 +115,14 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             autoHideDuration: 2500,
           })
         } else {
-          enqueueSnackbar(
-            ERROR_MESSAGES.tryAgain,
-            {
-              variant: 'error',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-              autoHideDuration: 2500,
-            }
-          )
+          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2500,
+          })
         }
       })
   }
