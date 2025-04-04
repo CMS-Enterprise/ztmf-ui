@@ -22,6 +22,9 @@ import { EmailModalProps } from '@/types'
 import './EmailModal.css'
 import { styled } from '@mui/material'
 import axiosInstance from '@/axiosConfig'
+import { ERROR_MESSAGES } from '@/constants'
+import { useNavigate } from 'react-router-dom'
+import { Routes } from '@/router/constants'
 const CssTextField = styled(TextField)({
   '& .MuiOutlinedInput-root': {
     '& fieldset': {
@@ -55,6 +58,7 @@ const CssTextField = styled(TextField)({
 
 export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const { enqueueSnackbar } = useSnackbar()
+  const navigate = useNavigate()
   const [sentToEmails, setSentToEmails] = React.useState<string[]>([])
   const [openSentEmailsDialog, setOpenSentEmailsDialog] =
     React.useState<boolean>(false)
@@ -93,29 +97,36 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
         setSentToEmails(res.data.data)
       })
       .catch((error) => {
-        if (error.response.status === 403) {
-          enqueueSnackbar(`You don't have permission to send emails`, {
+        if (error.response.status === 401) {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.expired,
+            },
+          })
+        }
+        else if (error.response.status === 403) {
+          enqueueSnackbar(ERROR_MESSAGES.permission, {
             variant: 'error',
             anchorOrigin: {
               vertical: 'top',
               horizontal: 'left',
             },
-            autoHideDuration: 1500,
+            autoHideDuration: 2500,
           })
         } else {
           enqueueSnackbar(
-            `You there has been a problem sending the emails to ${groupValue}`,
+            ERROR_MESSAGES.tryAgain,
             {
               variant: 'error',
               anchorOrigin: {
                 vertical: 'top',
                 horizontal: 'left',
               },
-              autoHideDuration: 1500,
+              autoHideDuration: 2500,
             }
           )
         }
-        console.log(error)
       })
   }
 
