@@ -64,10 +64,9 @@ function EditToolbar(props: EditToolbarProps) {
     ])
     setRowModesModel((oldModel) => ({
       ...oldModel,
-      [userid]: { mode: GridRowModes.Edit, fieldToFocus: 'name' },
+      [userid]: { mode: GridRowModes.Edit, fieldToFocus: 'fullname' },
     }))
   }
-
   return (
     <GridToolbarContainer sx={{ justifyContent: 'space-between' }}>
       <GridToolbarQuickFilter
@@ -396,17 +395,33 @@ export default function UserTable() {
         }
       })
       .catch((error) => {
+        console.log(error)
         if (error.response.status === 401) {
-          checkValidResponse(error.response.status)
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.notSaved,
+            },
+          })
         } else if (error.response.status === 403) {
-          handleUnautherized(error.response.status)
+          enqueueSnackbar(ERROR_MESSAGES.permission, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+          })
         } else {
-          setSnackBarSeverity('error')
-          setSnackBarText(ERROR_MESSAGES.tryAgain)
-          setOpen(true)
+          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+          })
         }
       })
-  }, [fismaSystems, navigate, checkValidResponse])
+  }, [fismaSystems, navigate, enqueueSnackbar])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
