@@ -40,6 +40,7 @@ import { users } from '@/types'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
+import { useSnackbar } from 'notistack'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
@@ -105,6 +106,7 @@ function validateEmail(email: string) {
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
+  const { enqueueSnackbar } = useSnackbar()
   //TODO: add these to a file to be imported and used in multiple places
   const checkValidResponse = (status: number) => {
     if (status == 401) {
@@ -205,9 +207,13 @@ export default function UserTable() {
   }
   const handleUnautherized = (errorStatus: number) => {
     if (errorStatus === 403) {
-      setSnackBarSeverity('error')
-      setSnackBarText('You are not authorized to perform this action')
-      setOpen(true)
+      enqueueSnackbar(ERROR_MESSAGES.permission, {
+        variant: 'error',
+        anchorOrigin: {
+          vertical: 'top',
+          horizontal: 'left',
+        },
+      })
     }
   }
   const handleEditClick = (id: GridRowId) => () => {
@@ -336,8 +342,36 @@ export default function UserTable() {
     setOpen(true)
   }
   const handleDeleteClick = (id: GridRowId) => () => {
-    console.log(apiRef.current.getAllRowIds())
+    const curRow = apiRef.current.getRow(id)
     setRows(rows.filter((row) => row.userid !== id))
+    axiosInstance
+      .delete(`/users/${id}`)
+      .then(() => {
+        enqueueSnackbar(`Saved - Delete User ${curRow.fullname}`, {
+          variant: 'success',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2000,
+        })
+      })
+      .catch((error) => {
+        if (error.response.status === 401) {
+          checkValidResponse(error.response.status)
+        } else if (error.response.status === 403) {
+          handleUnautherized(error.response.status)
+        } else {
+          enqueueSnackbar(`An error occurred, please try again later`, {
+            variant: 'success',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+        }
+      })
   }
   // TODO: Custom hook for fetching data
   useEffect(() => {
@@ -469,7 +503,7 @@ export default function UserTable() {
             placement="right-start"
           >
             <GridActionsCellItem
-              icon={<ChecklistIcon />}
+              icon={<ChecklistIcon sx={{ color: 'black' }} />}
               key={`assignsystem-${params.id}`}
               label="assignedSystems"
               onClick={() => handleOpenModal(params.id)}
@@ -478,7 +512,7 @@ export default function UserTable() {
           </Tooltip>,
           <GridActionsCellItem
             key={`delete-${params.id}`}
-            icon={<DeleteIcon />}
+            icon={<DeleteIcon sx={{ color: 'black' }} />}
             label="Delete"
             onClick={handleDeleteClick(params.id)}
             color="inherit"
