@@ -115,29 +115,23 @@ export default function AssignSystemModal({
                         },
                       })
                     } else if (error.response.status === 403) {
-                      enqueueSnackbar(
-                        `You don't have permission to assign systems`,
-                        {
-                          variant: 'error',
-                          anchorOrigin: {
-                            vertical: 'top',
-                            horizontal: 'left',
-                          },
-                          autoHideDuration: 1500,
-                        }
-                      )
+                      enqueueSnackbar(ERROR_MESSAGES.permission, {
+                        variant: 'error',
+                        anchorOrigin: {
+                          vertical: 'top',
+                          horizontal: 'left',
+                        },
+                        autoHideDuration: 1500,
+                      })
                     } else {
-                      enqueueSnackbar(
-                        `An error occurred, please try again later`,
-                        {
-                          variant: 'error',
-                          anchorOrigin: {
-                            vertical: 'top',
-                            horizontal: 'left',
-                          },
-                          autoHideDuration: 1500,
-                        }
-                      )
+                      enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                        variant: 'error',
+                        anchorOrigin: {
+                          vertical: 'top',
+                          horizontal: 'left',
+                        },
+                        autoHideDuration: 1500,
+                      })
                     }
                   })
               } else if (removed.length) {
@@ -161,29 +155,23 @@ export default function AssignSystemModal({
                         },
                       })
                     } else if (error.response.status === 403) {
-                      enqueueSnackbar(
-                        `You don't have permission to assign systems`,
-                        {
-                          variant: 'error',
-                          anchorOrigin: {
-                            vertical: 'top',
-                            horizontal: 'left',
-                          },
-                          autoHideDuration: 1500,
-                        }
-                      )
+                      enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                        variant: 'error',
+                        anchorOrigin: {
+                          vertical: 'top',
+                          horizontal: 'left',
+                        },
+                        autoHideDuration: 1500,
+                      })
                     } else {
-                      enqueueSnackbar(
-                        `An error occurred, please try again later`,
-                        {
-                          variant: 'error',
-                          anchorOrigin: {
-                            vertical: 'top',
-                            horizontal: 'left',
-                          },
-                          autoHideDuration: 1500,
-                        }
-                      )
+                      enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                        variant: 'error',
+                        anchorOrigin: {
+                          vertical: 'top',
+                          horizontal: 'left',
+                        },
+                        autoHideDuration: 1500,
+                      })
                     }
                   })
               }

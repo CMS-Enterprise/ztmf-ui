@@ -24,6 +24,7 @@ export const ERROR_MESSAGES = {
   error:
     'An error occurred. Please log in and try again. If the error persists, please contact support.',
   permission: 'You do not have permission to do this action.',
+  tryAgain: 'An error occurred, please try again later',
 }
 export const EMPTY_USER: userData = {
   userid: '',

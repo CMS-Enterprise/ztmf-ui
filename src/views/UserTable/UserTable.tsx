@@ -287,8 +287,15 @@ export default function UserTable() {
         })
         .catch((error) => {
           console.error('Error updating score:', error)
-          checkValidResponse(error.response.status)
-          handleUnautherized(error.response.status)
+          if (error.response.status === 401) {
+            checkValidResponse(error.response.status)
+          } else if (error.response.status === 403) {
+            handleUnautherized(error.response.status)
+          } else {
+            setSnackBarSeverity('error')
+            setSnackBarText(ERROR_MESSAGES.tryAgain)
+            setOpen(true)
+          }
         })
     } else {
       // const updatedRow = { ...newRow } as users
@@ -311,7 +318,7 @@ export default function UserTable() {
             handleUnautherized(error.response.status)
           } else {
             setSnackBarSeverity('error')
-            setSnackBarText('An error occurred, please try again later')
+            setSnackBarText(ERROR_MESSAGES.tryAgain)
             setOpen(true)
           }
         })
@@ -352,15 +359,16 @@ export default function UserTable() {
       })
       .catch((error) => {
         if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.error,
-            },
-          })
+          checkValidResponse(error.response.status)
+        } else if (error.response.status === 403) {
+          handleUnautherized(error.response.status)
+        } else {
+          setSnackBarSeverity('error')
+          setSnackBarText(ERROR_MESSAGES.tryAgain)
+          setOpen(true)
         }
       })
-  }, [fismaSystems, navigate])
+  }, [fismaSystems, navigate, checkValidResponse])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
