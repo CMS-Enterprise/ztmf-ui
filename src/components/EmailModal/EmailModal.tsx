@@ -10,9 +10,9 @@ import {
 import {
   TextField as CMSTextField,
   Dropdown,
-  InlineError,
   Button as CMSButton,
   Label,
+  Hint,
 } from '@cmsgov/design-system'
 import SentEmailsModal from './SentEmailsModal'
 import { useSnackbar } from 'notistack'
@@ -27,7 +27,12 @@ import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 
 const CssTextField = styled(TextField)({
+  '& .MuiInputBase-root': {
+    paddingTop: 0,
+    marginTop: 0,
+  },
   '& .MuiOutlinedInput-root': {
+    // paddingTop: 0,
     '& fieldset': {
       borderColor: '#000000',
       borderWidth: '2px',
@@ -37,14 +42,9 @@ const CssTextField = styled(TextField)({
       borderWidth: '2px',
       boxShadow: '0px 0px 0px 3px #FFFFFF, 0px 0px 3px 6px #bd13b8',
     },
-
-    '&.Mui-error fieldset': {
-      borderColor: 'rgb(227, 28, 61)',
-      borderWidth: '3px',
-    },
     '@supports (-moz-appearance:none)': {
       '& .MuiInputBase-inputMultiline': {
-        paddingTop: '15px',
+        paddingTop: '2rem',
         height: '100%',
         width: '100%',
         scrollbarWidth: 'none',
@@ -192,10 +192,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             <Dropdown
               label="Select the group to email"
               name="email_group"
-              errorMessage={
-                groupValue.length === 0 ? 'This field is required' : ''
-              }
-              // errorMessage={'This field is required'}
+              hint={'Required'}
               labelClassName="group-label"
               onChange={(e) => handleChange(e.target.value)}
               options={[
@@ -229,15 +226,17 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               label="Subject"
               maxLength={100}
               name="email_subject"
+              hint={'Required'}
               onChange={(e) => handleSubjectChange(e.target.value)}
               className="subject-label-text"
               labelClassName="label"
-              errorMessage={
-                subject.length === 0 ? 'This field is required' : ''
-              }
             />
             <Label className="label">Body</Label>
-            {!body && <InlineError>This field is required</InlineError>}
+            <Hint
+              requirementLabel={'Required'}
+              id={'body-requirement'}
+              className="required-label"
+            />
             <CssTextField
               multiline
               rows={13}
@@ -245,7 +244,6 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               name="email_body"
               margin="none"
               inputProps={{ maxLength: 2000 }}
-              error={!body}
               onChange={(e) => handleBodyChange(e.target.value)}
             />
           </DialogContent>
