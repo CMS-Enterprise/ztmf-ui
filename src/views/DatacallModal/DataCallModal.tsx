@@ -189,7 +189,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
             variation="solid"
             type="submit"
             disabled={
-              datacall.length === 9  &&
+              datacall.length === 9 &&
               deadline.length === 10 &&
               datacallError.length === 0 &&
               deadlineError.length === 0
