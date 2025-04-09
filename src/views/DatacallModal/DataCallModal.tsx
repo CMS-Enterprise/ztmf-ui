@@ -13,16 +13,20 @@ import {
   IconButton,
   DialogActions,
   Typography,
-  FormControlLabel,
-  FormControl,
+  // FormControlLabel,
+  // FormControl,
 } from '@mui/material'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import { useSnackbar } from 'notistack'
 import { datacallModalProps } from '@/types'
 import './DatacallModal.css'
+import axiosInstance from '@/axiosConfig'
+import { Routes } from '@/router/constants'
+import { ERROR_MESSAGES } from '@/constants'
 
 export default function DataCallModal({ open, onClose }: datacallModalProps) {
   const { enqueueSnackbar } = useSnackbar()
+  const navigate = useNavigate()
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
@@ -62,7 +66,52 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
     } else {
       setDeadlineError('Invalid Deadline')
     }
-    console.log(deadline.length, datacall.length, deadlineError.length, datacallError.length)
+  }
+  const submitDatacall = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault()
+    await axiosInstance
+      .post(`/datacalls`, {
+        datacall: datacall.toUpperCase(),
+        deadline: new Date(deadline).toISOString(),
+      })
+      .then(() => {
+        enqueueSnackbar(`Datacall has successfully been created`, {
+          variant: 'success',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2500,
+        })
+      })
+      .catch((error) => {
+        if (error.response.status === 401) {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.expired,
+            },
+          })
+        } else if (error.response.status === 403) {
+          enqueueSnackbar(ERROR_MESSAGES.permission, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2500,
+          })
+        } else {
+          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2500,
+          })
+        }
+      })
   }
   return (
     <Dialog
@@ -106,48 +155,53 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
           </IconButton>
         </Box>
       </DialogTitle>
-      <DialogContent>
-        <Box display="flex" flexDirection="row" sx={{ height: '50vh' }}>
-          <form>
-            <CMSTextField
-              label="Please enter a datacall name"
-              maxLength={9}
-              hint={datacallHint()}
-              name="datacall"
-              onChange={handleDatacallChange}
-              labelClassName="datacall-label"
-              errorMessage={datacallError}
-            />
-            <SingleInputDateField
-              label="Please enter a deadline date for this datacall"
-              name="deadline-date"
-              errorMessage={deadlineError}
-              numeric
-              maxLength={8}
-              onBlur={validateDeadline}
-              onChange={(e) => {
-                setDeadline(e)
-              }}
-              value=""
-            />
-          </form>
-        </Box>
-      </DialogContent>
-      <DialogActions
-        sx={{
-          justifyContent: 'flex-start',
-          ml: 3,
-          mb: 1,
-        }}
-      >
-        <CmsButton
-          variation="solid"
-          type="submit"
-          disabled={datacall.length !== 0 && deadline.length !== 0 && datacallError.length === 0 && deadlineError.length === 0 ? false : true}
+      <form onSubmit={submitDatacall}>
+        <DialogContent sx={{pt: 0}}>
+          <CMSTextField
+            label="Please enter a datacall name"
+            maxLength={9}
+            hint={datacallHint()}
+            name="datacall"
+            onChange={handleDatacallChange}
+            labelClassName="datacall-label"
+            errorMessage={datacallError}
+          />
+          <SingleInputDateField
+            label="Please enter a deadline date for this datacall"
+            hint={"Please include the '/'"}
+            name="deadline-date"
+            errorMessage={deadlineError}
+            maxLength={10}
+            onBlur={validateDeadline}
+            onChange={(e) => {
+              setDeadline(e)
+            }}
+            value=""
+          />
+        </DialogContent>
+        <DialogActions
+          sx={{
+            justifyContent: 'flex-start',
+            ml: 3,
+            mb: 1,
+          }}
         >
-          Create
-        </CmsButton>
-      </DialogActions>
+          <CmsButton
+            variation="solid"
+            type="submit"
+            disabled={
+              datacall.length === 9  &&
+              deadline.length === 10 &&
+              datacallError.length === 0 &&
+              deadlineError.length === 0
+                ? false
+                : true
+            }
+          >
+            Create
+          </CmsButton>
+        </DialogActions>
+      </form>
     </Dialog>
   )
 }
