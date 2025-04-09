@@ -176,7 +176,7 @@ export default function Title() {
                         setOpenDataCallModal(true)
                       }}
                     >
-                      Create datacall
+                      Create Datacall
                     </MenuItem>
                   </Menu>
                 </>
