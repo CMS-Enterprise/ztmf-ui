@@ -87,7 +87,7 @@ export default function HomePageContainer() {
   useEffect(() => {
     async function fetchLatestDatacall() {
       try {
-        axiosInstance.get('/datacalls').then((res) => {
+        axiosInstance.get('/datacalls/latest').then((res) => {
           if (res.status !== 200 && res.status.toString()[0] === '4') {
             navigate(Routes.SIGNIN, {
               replace: true,
