@@ -44,12 +44,12 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
   function isValidFormat(input: string) {
     const pattern = /^FY\d{4} Q\d$/
     if (input.length != 9) {
-      setDatacallError("")
+      setDatacallError('')
     } else {
       if (input.length === 9 && pattern.test(input)) {
-        setDatacallError("")
+        setDatacallError('')
       } else {
-        setDatacallError("Invalid datacall format")
+        setDatacallError('Invalid datacall format')
       }
     }
   }
@@ -59,7 +59,6 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
     isValidFormat(value.toUpperCase())
   }
   const validateDeadline = (e: React.FocusEvent<HTMLInputElement>) => {
-    
     if (e.target.value.length === 10 && !isNaN(Date.parse(e.target.value))) {
       setDeadline(e.target.value)
       setDeadlineError('')
@@ -156,7 +155,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
         </Box>
       </DialogTitle>
       <form onSubmit={submitDatacall}>
-        <DialogContent sx={{pt: 0}}>
+        <DialogContent sx={{ pt: 0 }}>
           <CMSTextField
             label="Please enter a datacall name"
             maxLength={9}
