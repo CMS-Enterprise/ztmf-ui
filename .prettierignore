@@ -1,7 +1,6 @@
 .yarn/
 .yarnrc.yml
 .github/
-.README.md
 build/
 dist/
 **/node_modules/
