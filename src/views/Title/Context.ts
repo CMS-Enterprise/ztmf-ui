@@ -4,6 +4,8 @@ import { FismaSystemType, userData } from '@/types'
 type ContextType = {
   fismaSystems: FismaSystemType[] | []
   userInfo: userData
+  latestDatacallId: number
+  latestDatacall: string
 }
 
 export function useContextProp() {
