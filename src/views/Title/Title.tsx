@@ -1,4 +1,4 @@
-import { Container } from '@mui/material'
+import { Container, Typography } from '@mui/material'
 import { useLoaderData, useNavigate } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
@@ -47,27 +47,54 @@ export default function Title() {
     loaderData.status != 200 ? emptyUser : loaderData.response
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
+  const [latestDatacallId, setLatestDatacallId] = useState<number>(0)
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
+  const [latestDatacall, setLatestDatacall] = useState<string>('')
+  // let latestDataCallId: number = 0
   useEffect(() => {
     async function fetchFismaSystems() {
-      try {
-        const fismaSystems = await axiosInstance.get('/fismasystems')
-        if (fismaSystems.status !== 200) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: ERROR_MESSAGES.expired,
-          })
-        }
-        setFismaSystems(fismaSystems.data.data)
-      } catch (error) {
-        console.log(error)
-      }
+      await axiosInstance
+        .get('/fismasystems')
+        .then((res) => {
+          setFismaSystems(res.data.data)
+        })
+        .catch((error) => {
+          if (error.response.status === 401) {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.login,
+              },
+            })
+          }
+        })
     }
-    if (loaderData.status == 200) {
-      fetchFismaSystems()
+    async function fetchLatestDatacall() {
+      await axiosInstance
+        .get('/datacalls/latest')
+        .then((res) => {
+          console.log(res.data.data)
+          setLatestDatacallId(res.data.data.datacallid)
+          setLatestDatacall(res.data.data.datacall)
+        })
+        .catch((error) => {
+          if (error.response.status == 401) {
+            navigate(Routes.SIGNIN, {
+              replace: true,
+              state: {
+                message: ERROR_MESSAGES.expired,
+              },
+            })
+          }
+        })
     }
-  }, [loaderData.status, navigate])
+    const fetchData = async () => {
+      await fetchFismaSystems()
+      await fetchLatestDatacall()
+    }
+    fetchData()
+  }, [navigate])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -100,9 +127,13 @@ export default function Title() {
             sx={{
               display: 'flex',
               alignItems: 'center',
-              justifyContent: 'flex-end',
+              justifyContent: 'space-between',
             }}
           >
+            <Typography variant="subtitle1" sx={{ mt: 1 }}>
+              <span className="ds-u-font-weight--semibold">Datacall:</span>{' '}
+              {latestDatacall}
+            </Typography>
             <Box
               sx={{
                 display: 'flex',
@@ -195,7 +226,14 @@ export default function Title() {
         ) : (
           <>
             <Box>
-              <Outlet context={{ fismaSystems, userInfo }} />
+              <Outlet
+                context={{
+                  fismaSystems,
+                  userInfo,
+                  latestDatacallId,
+                  latestDatacall,
+                }}
+              />
             </Box>
           </>
         )}

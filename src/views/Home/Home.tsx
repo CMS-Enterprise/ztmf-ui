@@ -117,7 +117,7 @@ export default function HomePageContainer() {
     <Box>
       <StatisticsBlocks scores={scoreMap} />
       <BreadCrumbs />
-      <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
+      <FismaTable scores={scoreMap} />
     </Box>
   )
 }

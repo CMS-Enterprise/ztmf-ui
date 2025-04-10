@@ -245,35 +245,47 @@ export default function QuestionnarePage() {
         try {
           let datacall = ''
           const latestDataCallId = await axiosInstance
-            .get(`/datacalls`)
+            .get(`/datacalls/latest`)
             .then((res) => {
-              if (res.status !== 200 && res.status.toString()[0] === '4') {
+              setDatacallID(res.data.data.datacallid)
+              datacall = res.data.data.datacall.replace(' ', '_')
+              setDataCall(res.data.data.datacall.replace(' ', '_'))
+              return res.data.data.datacallid
+            })
+            .catch((error) => {
+              if (error.status === 401) {
                 navigate(Routes.SIGNIN, {
                   replace: true,
                   state: {
                     message: ERROR_MESSAGES.expired,
                   },
                 })
+              } else if (error.status === 403) {
+                enqueueSnackbar(
+                  `You don't have permission to get the datacall`,
+                  {
+                    variant: 'error',
+                    anchorOrigin: {
+                      vertical: 'top',
+                      horizontal: 'left',
+                    },
+                    autoHideDuration: 2500,
+                  }
+                )
+              } else {
+                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                  variant: 'error',
+                  anchorOrigin: {
+                    vertical: 'top',
+                    horizontal: 'left',
+                  },
+                  autoHideDuration: 2500,
+                })
               }
-              setDatacallID(res.data.data[0].datacallid)
-              datacall = res.data.data[0].datacall.replace(' ', '_')
-              setDataCall(res.data.data[0].datacall.replace(' ', '_'))
-              return res.data.data[0].datacallid
             })
           await axiosInstance
             .get(`/fismasystems/${system}/questions`)
             .then((response) => {
-              if (
-                response.status !== 200 &&
-                response.status.toString()[0] === '4'
-              ) {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              }
               const data = response.data.data
               const organizedData: Record<string, FismaQuestion[]> = {}
               const questionData: Record<number, Question> = {}
@@ -349,27 +361,41 @@ export default function QuestionnarePage() {
               setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
             })
             .catch((error) => {
-              console.error('Error fetching data:', error)
-              navigate(Routes.SIGNIN, {
-                replace: true,
-                state: {
-                  message: ERROR_MESSAGES.error,
-                },
-              })
-            })
-          await axiosInstance
-            .get(
-              `scores?datacallid=${latestDataCallId}&fismasystemid=${system}`
-            )
-            .then((res) => {
-              if (res.status !== 200 && res.status.toString()[0] === '4') {
+              if (error.status === 401) {
                 navigate(Routes.SIGNIN, {
                   replace: true,
                   state: {
                     message: ERROR_MESSAGES.expired,
                   },
                 })
+              } else if (error.response.status === 403) {
+                enqueueSnackbar(
+                  `You don't have permission to get the questions`,
+                  {
+                    variant: 'error',
+                    anchorOrigin: {
+                      vertical: 'top',
+                      horizontal: 'left',
+                    },
+                    autoHideDuration: 2500,
+                  }
+                )
+              } else {
+                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                  variant: 'error',
+                  anchorOrigin: {
+                    vertical: 'top',
+                    horizontal: 'left',
+                  },
+                  autoHideDuration: 2500,
+                })
               }
+            })
+          await axiosInstance
+            .get(
+              `scores?datacallid=${latestDataCallId}&fismasystemid=${system}`
+            )
+            .then((res) => {
               const hashTable: questionScoreMap = Object.assign(
                 {},
                 ...res.data.data.map((item: QuestionScores) => ({
@@ -379,13 +405,32 @@ export default function QuestionnarePage() {
               setQuestionScores(hashTable)
             })
             .catch((error) => {
-              console.error('Error fetching ´question scores:', error)
-              navigate(Routes.SIGNIN, {
-                replace: true,
-                state: {
-                  message: ERROR_MESSAGES.error,
-                },
-              })
+              if (error.status === 401) {
+                navigate(Routes.SIGNIN, {
+                  replace: true,
+                  state: {
+                    message: ERROR_MESSAGES.expired,
+                  },
+                })
+              } else if (error.response.status === 403) {
+                enqueueSnackbar(`You don't have permission to get the scores`, {
+                  variant: 'error',
+                  anchorOrigin: {
+                    vertical: 'top',
+                    horizontal: 'left',
+                  },
+                  autoHideDuration: 1500,
+                })
+              } else {
+                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                  variant: 'error',
+                  anchorOrigin: {
+                    vertical: 'top',
+                    horizontal: 'left',
+                  },
+                  autoHideDuration: 1500,
+                })
+              }
             })
         } catch (error) {
           console.error('Error fetching data:', error)
@@ -399,7 +444,7 @@ export default function QuestionnarePage() {
       }
       fetchData()
     }
-  }, [system, navigate, fismaacronym])
+  }, [system, navigate, fismaacronym, enqueueSnackbar])
   React.useEffect(() => {
     if (questionId) {
       const choices: QuestionChoice[] = []
