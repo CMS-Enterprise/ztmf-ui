@@ -52,6 +52,10 @@ export type FismaSystems = {
   fismaSystems: FismaSystemType[]
 }
 
+export type functionScores = {
+  [key: number]: number
+}
+
 export type FismaFunction = {
   functionid: number
   function: string

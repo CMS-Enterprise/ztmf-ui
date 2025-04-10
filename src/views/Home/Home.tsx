@@ -17,29 +17,8 @@ export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const navigate = useNavigate()
   const [scoreMap, setScoreMap] = useState<Record<number, number>>({})
-  // const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
-  const { fismaSystems, latestDatacallId } = useContextProp()
-  console.log(fismaSystems, latestDatacallId)
+  const { latestDatacallId } = useContextProp()
   useEffect(() => {
-    // let latestDataCall: number = 0
-    // async function fetchLatestDatacall() {
-    //   await axiosInstance
-    //     .get('/datacalls/latest')
-    //     .then((res) => {
-    //       latestDataCall = res.data.data.datacallid
-    //       setLatestDataCallId(res.data.data.datacallid)
-    //     })
-    //     .catch((error) => {
-    //       if (error.response.status == 401) {
-    //         navigate(Routes.SIGNIN, {
-    //           replace: true,
-    //           state: {
-    //             message: ERROR_MESSAGES.expired,
-    //           },
-    //         })
-    //       }
-    //     })
-    // }
     async function fetchScores() {
       if (latestDatacallId !== 0) {
         await axiosInstance
