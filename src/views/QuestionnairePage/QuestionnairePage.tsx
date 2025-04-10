@@ -268,7 +268,7 @@ export default function QuestionnarePage() {
                 navigate(Routes.SIGNIN, {
                   replace: true,
                   state: {
-                    message: ERROR_MESSAGES.error,
+                    message: ERROR_MESSAGES.expired,
                   },
                 })
               } else if (error.status === 403) {
