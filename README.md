@@ -3,7 +3,6 @@
 The ZTMF Scoring Application allows ADOs to view their Zero Trust Maturity score online. An upcoming release will allow new ADOs to answer the questionnaire from scratch, and existing ADOs to update their answers, all within a web-based interface. The interface and the API are protected by AWS Verified Access which requires authentication via IDM (Okta).
 
 This monorepo contains the following major components:
-
 - `.src/components/` contains reusable components shared within views
 - `.src/views/` contains all pages and dialogs that are used throughout the application
 - `.github/workflows/` contains workflows for Github Actions to test, build, and deploy to AWS
@@ -18,33 +17,33 @@ This project contains the application's UI built with React, Vite, TypeScript, a
 - [Yarn](https://yarnpkg.com/getting-started/install)
 - [GitLeaks](https://github.com/gitleaks/gitleaks/tree/master#installing)
 
+
 ## CI/CD Workflows
 
-The project uses GitHub Actions for continuous integration and deployment. The workflows are organized into modular components that are orchestrated differently for development and production environments. GitHub Secrets secures sensitive values, and authentication to AWS is provided via OIDC to an IAM IDP.
+The project uses GitHub Actions for continuous integration and deployment. The workflows are organized into modular components that are orchestrated differently for development and production environments.
 
 ### Workflow Components
 
 1. **Analysis (`analysis.yml`)**
-
    - Performs code quality and security checks
    - Lints Go code using staticcheck
    - Lints Terraform code using tflint
-   - Runs Snyk security scans for vulnerabilities within dependencies and frontend code
+   - Runs Snyk security scans for Go code, source code, and infrastructure as code
 
 2. **ui (`ui.yml`)**
    - DEBUG - node, npm, yarn versions
    - Get the cache dependencies. Install new dependencies if the last build is different than the latest build
    - Install dependencies
-   - Perform linting
+   - Perform linting 
    - Get AWS creds
    - Sync build to to AWS S3
+
 
 ### Orchestration
 
 The workflows are orchestrated differently based on the environment:
 
 **Development Environment (`orchestration-dev.yml`)**
-
 - Triggered on pull requests to the main branch
 - Runs analysis on all PRs
 - For non-draft PRs, checks for changes in the backend code
@@ -52,7 +51,6 @@ The workflows are orchestrated differently based on the environment:
 - Finally runs the infrastructure workflow for DEV
 
 **Production Environment (`orchestration-prod.yml`)**
-
 - Triggered when a pull request to main is merged (closed with merge)
 - Runs analysis, backend, and infrastructure workflows sequentially for PROD
 - Only executes if the PR was actually merged
