@@ -5,8 +5,8 @@ import axiosInstance from '@/axiosConfig'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
-import { FismaSystemType } from '@/types'
-import { Box } from '@mui/material'
+import { useContextProp } from '../Title/Context'
+import { Box, CircularProgress } from '@mui/material'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 /**
  * Component that renders the contents of the Home view.
@@ -16,108 +16,82 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const navigate = useNavigate()
-  const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [scoreMap, setScoreMap] = useState<Record<number, number>>({})
-  const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
+  // const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
+  const { fismaSystems, latestDatacallId } = useContextProp()
+  console.log(fismaSystems, latestDatacallId)
   useEffect(() => {
-    async function fetchFismaSystems() {
-      try {
-        const fismaSystems = await axiosInstance.get('/fismasystems')
-        if (
-          fismaSystems.status !== 200 &&
-          fismaSystems.status.toString()[0] === '4'
-        ) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
-          })
-          return
-        }
-        setFismaSystems(fismaSystems.data.data)
-        setLoading(false)
-      } catch (error) {
-        console.log(error)
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.login,
-          },
-        })
-      }
-    }
-    fetchFismaSystems()
-  }, [navigate])
-
-  useEffect(() => {
+    // let latestDataCall: number = 0
+    // async function fetchLatestDatacall() {
+    //   await axiosInstance
+    //     .get('/datacalls/latest')
+    //     .then((res) => {
+    //       latestDataCall = res.data.data.datacallid
+    //       setLatestDataCallId(res.data.data.datacallid)
+    //     })
+    //     .catch((error) => {
+    //       if (error.response.status == 401) {
+    //         navigate(Routes.SIGNIN, {
+    //           replace: true,
+    //           state: {
+    //             message: ERROR_MESSAGES.expired,
+    //           },
+    //         })
+    //       }
+    //     })
+    // }
     async function fetchScores() {
-      try {
-        const scores = await axiosInstance.get('/scores/aggregate')
-        if (scores.status !== 200 && scores.status.toString()[0] === '4') {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
+      if (latestDatacallId !== 0) {
+        await axiosInstance
+          .get(`/scores/aggregate?datacallid=${latestDatacallId}`)
+          .then((res) => {
+            const scoresMap: Record<number, number> = {}
+            for (const obj of res.data.data) {
+              let score = 0
+              if (obj.systemscore) {
+                score = obj.systemscore
+              }
+              scoresMap[obj.fismasystemid] = score
+            }
+            setScoreMap(scoresMap)
+            setLoading(false)
           })
-          return
-        }
-        const scoresMap: Record<number, number> = {}
-        for (const obj of scores.data.data) {
-          let score = 0
-          if (obj.systemscore) {
-            score = obj.systemscore
-          }
-          scoresMap[obj.fismasystemid] = score
-        }
-        setScoreMap(scoresMap)
-        setLoading(false)
-      } catch (error) {
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.expired,
-          },
-        })
+          .catch((error) => {
+            if (error.response.status == 401) {
+              if (error.response.status == 401) {
+                navigate(Routes.SIGNIN, {
+                  replace: true,
+                  state: {
+                    message: ERROR_MESSAGES.expired,
+                  },
+                })
+              }
+            }
+          })
       }
     }
     fetchScores()
-  }, [navigate])
-  useEffect(() => {
-    async function fetchLatestDatacall() {
-      try {
-        axiosInstance.get('/datacalls/latest').then((res) => {
-          if (res.status !== 200 && res.status.toString()[0] === '4') {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
-          setLatestDataCallId(res.data.data[0].datacallid)
-        })
-      } catch (error) {
-        console.error(error)
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.error,
-          },
-        })
-      }
-    }
-    fetchLatestDatacall()
-  }, [navigate])
+  }, [navigate, latestDatacallId])
+
   if (loading) {
-    return <div>Loading...</div>
+    return (
+      <Box
+        sx={{
+          height: '100vh', // or any specific height
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    )
   }
   return (
     <Box>
       <StatisticsBlocks scores={scoreMap} />
       <BreadCrumbs />
-      <FismaTable scores={scoreMap} />
+      <FismaTable scores={scoreMap} latestDataCallId={latestDatacallId} />
     </Box>
   )
 }

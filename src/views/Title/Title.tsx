@@ -94,7 +94,7 @@ export default function Title() {
       await fetchLatestDatacall()
     }
     fetchData()
-  }, [navigate])
+  }, [])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
