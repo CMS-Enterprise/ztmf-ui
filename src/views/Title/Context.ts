@@ -6,6 +6,7 @@ type ContextType = {
   userInfo: userData
   latestDatacallId: number
   latestDatacall: string
+  datacallDeadline: string
 }
 
 export function useContextProp() {

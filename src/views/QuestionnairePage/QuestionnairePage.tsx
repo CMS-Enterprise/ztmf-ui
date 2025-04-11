@@ -7,6 +7,7 @@ import ListItemText from '@mui/material/ListItemText'
 import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
 import { Button as CmsButton, ChoiceList, Spinner } from '@cmsgov/design-system'
+import WarningIcon from '@mui/icons-material/Warning'
 import Grid from '@mui/material/Unstable_Grid2/Grid2'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import TextField from '@mui/material/TextField'
@@ -80,6 +81,10 @@ export default function QuestionnarePage() {
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
   )
+  const today = new Date().toISOString()
+  const [datacallDeadline, setDatacallDeadline] = React.useState(
+    new Date().toISOString()
+  )
   const [questionId, setQuestionId] = React.useState<number | null>(null)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
@@ -119,13 +124,19 @@ export default function QuestionnarePage() {
       setQuestionScores(hashTable)
     } catch (error) {
       console.error('Error fetching question scores:', error)
-      routeToSignIn()
+      navigate(Routes.SIGNIN, {
+        replace: true,
+        state: {
+          message: ERROR_MESSAGES.expired,
+        },
+      })
     }
   }
   const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSelectQuestionOption(Number(event.target.value))
   }
-  const renderRadioGroup = (options: QuestionChoice[]) => {
+  const renderRadioGroup = (options: QuestionChoice[], deadline: string) => {
+    const today = new Date().toISOString()
     return (
       <ChoiceList
         choices={options}
@@ -134,19 +145,20 @@ export default function QuestionnarePage() {
         label={undefined}
         className="ds-u-margin-top--05"
         size="small"
+        disabled={new Date(deadline).toISOString() < today}
         onChange={handleChoiceChange}
       />
     )
   }
 
-  const routeToSignIn = () => {
-    navigate(Routes.SIGNIN, {
-      replace: true,
-      state: {
-        message: ERROR_MESSAGES.expired,
-      },
-    })
-  }
+  // const routeToSignIn = () => {
+  //   navigate(Routes.SIGNIN, {
+  //     replace: true,
+  //     state: {
+  //       message: ERROR_MESSAGES.expired,
+  //     },
+  //   })
+  // }
   const { enqueueSnackbar } = useSnackbar()
   const navigate = useNavigate()
   const location = useLocation()
@@ -167,78 +179,107 @@ export default function QuestionnarePage() {
   }
 
   const saveResponse = () => {
-    if (scoreid) {
-      axiosInstance
-        .put(`scores/${scoreid}`, {
-          fismasystemid: system,
-          notes: notes,
-          functionoptionid: selectQuestionOption,
-          datacallid: datacallID,
-        })
-        .then(() => {
-          // checkValidResponse(res.status)
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
+    if (datacallDeadline > today) {
+      if (scoreid) {
+        axiosInstance
+          .put(`scores/${scoreid}`, {
+            fismasystemid: system,
+            notes: notes,
+            functionoptionid: selectQuestionOption,
+            datacallid: datacallID,
           })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          console.error('Error updating score:', error)
-          if (error.response.status === 403) {
-            enqueueSnackbar(`You don't have permission to be save`, {
-              variant: 'error',
+          .then(() => {
+            // checkValidResponse(res.status)
+            enqueueSnackbar(`Saved`, {
+              variant: 'success',
               anchorOrigin: {
                 vertical: 'top',
                 horizontal: 'left',
               },
               autoHideDuration: 1500,
             })
-          } else {
-            routeToSignIn()
-          }
-        })
-    } else {
-      axiosInstance
-        .post(`scores`, {
-          fismasystemid: system,
-          notes: notes,
-          functionoptionid: selectQuestionOption,
-          datacallid: datacallID,
-        })
-        .then(() => {
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
+            fetchQuestionScores(system, setQuestionScores)
           })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          console.error('Error posting score:', error)
-          if (error.response.status === 403) {
-            enqueueSnackbar(`You don't have permission to be save`, {
-              variant: 'error',
+          .catch((error) => {
+            console.error('Error updating score:', error)
+            if (error.status === 401) {
+              navigate(Routes.SIGNIN, {
+                replace: true,
+                state: {
+                  message: ERROR_MESSAGES.expired,
+                },
+              })
+            } else if (error.status === 403) {
+              enqueueSnackbar(`You don't have permission to be save`, {
+                variant: 'error',
+                anchorOrigin: {
+                  vertical: 'top',
+                  horizontal: 'left',
+                },
+                autoHideDuration: 2500,
+              })
+            } else {
+              enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                variant: 'error',
+                anchorOrigin: {
+                  vertical: 'top',
+                  horizontal: 'left',
+                },
+                autoHideDuration: 2500,
+              })
+            }
+          })
+      } else {
+        axiosInstance
+          .post(`scores`, {
+            fismasystemid: system,
+            notes: notes,
+            functionoptionid: selectQuestionOption,
+            datacallid: datacallID,
+          })
+          .then(() => {
+            enqueueSnackbar(`Saved`, {
+              variant: 'success',
               anchorOrigin: {
                 vertical: 'top',
                 horizontal: 'left',
               },
               autoHideDuration: 1500,
             })
-          } else {
-            routeToSignIn()
-          }
-        })
+            fetchQuestionScores(system, setQuestionScores)
+          })
+          .catch((error) => {
+            console.error('Error posting score:', error)
+            if (error.status === 401) {
+              navigate(Routes.SIGNIN, {
+                replace: true,
+                state: {
+                  message: ERROR_MESSAGES.expired,
+                },
+              })
+            } else if (error.status === 403) {
+              enqueueSnackbar(`You don't have permission to be save`, {
+                variant: 'error',
+                anchorOrigin: {
+                  vertical: 'top',
+                  horizontal: 'left',
+                },
+                autoHideDuration: 2500,
+              })
+            } else {
+              enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                variant: 'error',
+                anchorOrigin: {
+                  vertical: 'top',
+                  horizontal: 'left',
+                },
+                autoHideDuration: 2500,
+              })
+            }
+          })
+      }
     }
   }
-
   React.useEffect(() => {
     if (system) {
       const fetchData = async () => {
@@ -249,7 +290,10 @@ export default function QuestionnarePage() {
             .then((res) => {
               setDatacallID(res.data.data.datacallid)
               datacall = res.data.data.datacall.replace(' ', '_')
-              setDataCall(res.data.data.datacall.replace(' ', '_'))
+              setDataCall(datacall)
+              setDatacallDeadline(
+                new Date(res.data.data.deadline).toISOString()
+              )
               return res.data.data.datacallid
             })
             .catch((error) => {
@@ -413,14 +457,17 @@ export default function QuestionnarePage() {
                   },
                 })
               } else if (error.response.status === 403) {
-                enqueueSnackbar(`You don't have permission to get the scores`, {
-                  variant: 'error',
-                  anchorOrigin: {
-                    vertical: 'top',
-                    horizontal: 'left',
-                  },
-                  autoHideDuration: 1500,
-                })
+                enqueueSnackbar(
+                  `You don't have permission to get the scores of the system`,
+                  {
+                    variant: 'error',
+                    anchorOrigin: {
+                      vertical: 'top',
+                      horizontal: 'left',
+                    },
+                    autoHideDuration: 1500,
+                  }
+                )
               } else {
                 enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
                   variant: 'error',
@@ -450,42 +497,67 @@ export default function QuestionnarePage() {
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
       try {
-        axiosInstance.get(`functions/${questionId}/options`).then((res) => {
-          if (res.status !== 200 && res.status === 401) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
+        axiosInstance
+          .get(`functions/${questionId}/options`)
+          .then((res) => {
+            res.data.data.forEach((item: QuestionOption) => {
+              const choiceOpt: QuestionChoice = {
+                label: item.description,
+                value: item.functionoptionid,
+              }
+              if (item.functionoptionid in questionScores) {
+                funcOptId = item.functionoptionid
+                choiceOpt.defaultChecked = true
+              }
+              choices.push(choiceOpt)
             })
-          }
-          res.data.data.forEach((item: QuestionOption) => {
-            const choiceOpt: QuestionChoice = {
-              label: item.description,
-              value: item.functionoptionid,
-            }
-            if (item.functionoptionid in questionScores) {
-              funcOptId = item.functionoptionid
-              choiceOpt.defaultChecked = true
-            }
-            choices.push(choiceOpt)
+            // Foundation of question
+            setDescription(questionId ? questions[questionId].description : '')
+            setQuestion(questionId ? questions[questionId].question : '')
+            setNotePrompt(questionId ? questions[questionId].notesprompt : '')
+
+            // Notes
+            setNotes(funcOptId ? questionScores[funcOptId].notes : '')
+            setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
+
+            // Question options
+            setSelectQuestionOption(funcOptId ? funcOptId : -1)
+            setInitQuestionChoice(funcOptId ? funcOptId : -1)
+            setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
+            setOptions(choices ? choices : [])
+            setLoadingQuestion(false)
           })
-          // Foundation of question
-          setDescription(questionId ? questions[questionId].description : '')
-          setQuestion(questionId ? questions[questionId].question : '')
-          setNotePrompt(questionId ? questions[questionId].notesprompt : '')
-
-          // Notes
-          setNotes(funcOptId ? questionScores[funcOptId].notes : '')
-          setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
-
-          // Question options
-          setSelectQuestionOption(funcOptId ? funcOptId : -1)
-          setInitQuestionChoice(funcOptId ? funcOptId : -1)
-          setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
-          setOptions(choices ? choices : [])
-          setLoadingQuestion(false)
-        })
+          .catch((error) => {
+            if (error.status === 401) {
+              navigate(Routes.SIGNIN, {
+                replace: true,
+                state: {
+                  message: ERROR_MESSAGES.expired,
+                },
+              })
+            } else if (error.status === 403) {
+              enqueueSnackbar(
+                `You don't have permission to get the question options`,
+                {
+                  variant: 'error',
+                  anchorOrigin: {
+                    vertical: 'top',
+                    horizontal: 'left',
+                  },
+                  autoHideDuration: 2500,
+                }
+              )
+            } else {
+              enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                variant: 'error',
+                anchorOrigin: {
+                  vertical: 'top',
+                  horizontal: 'left',
+                },
+                autoHideDuration: 2500,
+              })
+            }
+          })
       } catch (error) {
         console.error('Error fetching data:', error)
         navigate(Routes.SIGNIN, {
@@ -496,23 +568,23 @@ export default function QuestionnarePage() {
         })
       }
     }
-  }, [questionId, questionScores, questions, navigate])
+  }, [questionId, questionScores, questions, navigate, enqueueSnackbar])
   return (
     <>
       <BreadCrumbs />
       <Container>
         <Grid container columnSpacing={2} sx={{ mt: 2 }}>
-          <Grid xs={3}>
+          <Grid xs={3} sx={{ pb: 0, mb: 0, pt: 0 }}>
             <List
               sx={{
                 width: '100%',
-                // maxWidth: 500,
                 bgcolor: 'background.paper',
                 position: 'relative',
                 overflow: 'auto',
                 overflowX: 'hidden',
                 maxHeight: 600,
-                '& ul': { padding: 0 },
+                display: 'inline-block',
+                '& ul': { padding: 0, mt: 0 },
                 msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
                 '&::-webkit-scrollbar': { display: 'none' },
                 '@supports (-moz-appearance:none)': {
@@ -529,6 +601,8 @@ export default function QuestionnarePage() {
                         backgroundColor: '#07124d',
                         color: 'white',
                         textAlign: 'center',
+                        mt: 0,
+                        pt: 0,
                       }}
                     >
                       {pillar.name === 'CrossCutting'
@@ -582,6 +656,25 @@ export default function QuestionnarePage() {
           </Grid>
           <Grid xs={9}>
             <Box>
+              {datacallDeadline < today && (
+                <>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      border: 1,
+                      // backgroundColor: 'rgb(242,242,242)',
+                      p: 1,
+                      mb: 1,
+                    }}
+                  >
+                    <WarningIcon color="warning" />
+                    <Typography>
+                      Updates have been disabled because the deadline for this
+                      data call call has passed.
+                    </Typography>
+                  </Box>
+                </>
+              )}
               <Box
                 sx={{
                   color: '#5a5a5a',
@@ -608,7 +701,9 @@ export default function QuestionnarePage() {
                 </Box>
               ) : (
                 <Box>
-                  <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
+                  <Box sx={{ mb: 2 }}>
+                    {renderRadioGroup(options, datacallDeadline)}
+                  </Box>
                   <Typography variant="h6" sx={{ mb: 1 }}>
                     {notePrompt || ''}
                   </Typography>
@@ -617,6 +712,7 @@ export default function QuestionnarePage() {
                     rows={4}
                     fullWidth
                     value={notes}
+                    disabled={datacallDeadline < today ? true : false}
                     onChange={(e) => {
                       setNotes(e.target.value)
                     }}
