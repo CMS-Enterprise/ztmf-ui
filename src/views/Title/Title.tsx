@@ -48,6 +48,7 @@ export default function Title() {
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [latestDatacallId, setLatestDatacallId] = useState<number>(0)
+  const [datacallDeadline, setDatacallDeadline] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -74,9 +75,9 @@ export default function Title() {
       await axiosInstance
         .get('/datacalls/latest')
         .then((res) => {
-          console.log(res.data.data)
           setLatestDatacallId(res.data.data.datacallid)
           setLatestDatacall(res.data.data.datacall)
+          setDatacallDeadline(res.data.data.deadline)
         })
         .catch((error) => {
           if (error.response.status == 401) {
@@ -232,6 +233,7 @@ export default function Title() {
                   userInfo,
                   latestDatacallId,
                   latestDatacall,
+                  datacallDeadline,
                 }}
               />
             </Box>

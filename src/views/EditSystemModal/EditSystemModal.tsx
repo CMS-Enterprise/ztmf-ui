@@ -194,6 +194,15 @@ export default function EditSystemModal({
               },
               autoHideDuration: 1500,
             })
+          } else if (error.status === 403) {
+            enqueueSnackbar(`Not Saved`, {
+              variant: 'error',
+              anchorOrigin: {
+                vertical: 'top',
+                horizontal: 'left',
+              },
+              autoHideDuration: 1500,
+            })
           } else {
             navigate(Routes.SIGNIN, {
               replace: true,

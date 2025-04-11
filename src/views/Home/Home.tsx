@@ -5,8 +5,7 @@ import axiosInstance from '@/axiosConfig'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
-import { FismaSystemType } from '@/types'
-import { Box } from '@mui/material'
+import { Box, CircularProgress } from '@mui/material'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 /**
  * Component that renders the contents of the Home view.
@@ -16,40 +15,7 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const navigate = useNavigate()
-  const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [scoreMap, setScoreMap] = useState<Record<number, number>>({})
-  const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
-  useEffect(() => {
-    async function fetchFismaSystems() {
-      try {
-        const fismaSystems = await axiosInstance.get('/fismasystems')
-        if (
-          fismaSystems.status !== 200 &&
-          fismaSystems.status.toString()[0] === '4'
-        ) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
-          })
-          return
-        }
-        setFismaSystems(fismaSystems.data.data)
-        setLoading(false)
-      } catch (error) {
-        console.log(error)
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.login,
-          },
-        })
-      }
-    }
-    fetchFismaSystems()
-  }, [navigate])
-
   useEffect(() => {
     async function fetchScores() {
       try {
@@ -84,34 +50,20 @@ export default function HomePageContainer() {
     }
     fetchScores()
   }, [navigate])
-  useEffect(() => {
-    async function fetchLatestDatacall() {
-      try {
-        axiosInstance.get('/datacalls/latest').then((res) => {
-          if (res.status !== 200 && res.status.toString()[0] === '4') {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
-          setLatestDataCallId(res.data.data[0].datacallid)
-        })
-      } catch (error) {
-        console.error(error)
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.error,
-          },
-        })
-      }
-    }
-    fetchLatestDatacall()
-  }, [navigate])
+
   if (loading) {
-    return <div>Loading...</div>
+    return (
+      <Box
+        sx={{
+          height: '100vh', // or any specific height
+          display: 'flex',
+          justifyContent: 'center',
+          alignItems: 'center',
+        }}
+      >
+        <CircularProgress />
+      </Box>
+    )
   }
   return (
     <Box>
