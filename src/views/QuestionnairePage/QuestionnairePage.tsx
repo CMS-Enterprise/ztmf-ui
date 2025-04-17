@@ -190,7 +190,7 @@ export default function QuestionnarePage() {
         .catch((error) => {
           console.error('Error updating score:', error)
           if (error.response.status === 403) {
-            enqueueSnackbar(`You don't have permission to be save`, {
+            enqueueSnackbar(`Unauthorized`, {
               variant: 'error',
               anchorOrigin: {
                 vertical: 'top',
@@ -224,7 +224,7 @@ export default function QuestionnarePage() {
         .catch((error) => {
           console.error('Error posting score:', error)
           if (error.response.status === 403) {
-            enqueueSnackbar(`You don't have permission to be save`, {
+            enqueueSnackbar(`Unauthorized`, {
               variant: 'error',
               anchorOrigin: {
                 vertical: 'top',
@@ -551,7 +551,7 @@ export default function QuestionnarePage() {
                               if (
                                 (selectQuestionOption !== -1 &&
                                   initQuestionChoice !==
-                                    selectQuestionOption) ||
+                                  selectQuestionOption) ||
                                 initNotes !== notes
                               ) {
                                 setOpenAlert(true)
@@ -666,8 +666,8 @@ export default function QuestionnarePage() {
                     </CmsButton>
                     <CmsButton
                       onClick={() => {
-                        const id =
-                          stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                        const id = selectedIndex === stepFunctionId[stepFunctionId.length - 1] ? stepFunctionId[0] : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+
                         if (questions[id]) {
                           const q = questions[id]
                           navigate(
@@ -684,15 +684,11 @@ export default function QuestionnarePage() {
                         saveResponse()
                         setLoadingQuestion(false)
                       }}
-                      disabled={
-                        selectedIndex ===
-                        stepFunctionId[stepFunctionId.length - 1]
-                      }
                       style={{ marginBottom: '8px', marginTop: '8px' }}
                     >
-                      {'Next '}
+                      {selectedIndex === stepFunctionId[stepFunctionId.length - 1] ? <Typography>'Complete '</Typography> : <Typography>'Next '<ArrowIcon direction="right" /></Typography>}
                       {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
-                      <ArrowIcon direction="right" />
+
                     </CmsButton>
                   </Box>
                 </Box>
