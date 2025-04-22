@@ -551,7 +551,7 @@ export default function QuestionnarePage() {
                               if (
                                 (selectQuestionOption !== -1 &&
                                   initQuestionChoice !==
-                                  selectQuestionOption) ||
+                                    selectQuestionOption) ||
                                 initNotes !== notes
                               ) {
                                 setOpenAlert(true)
@@ -666,7 +666,11 @@ export default function QuestionnarePage() {
                     </CmsButton>
                     <CmsButton
                       onClick={() => {
-                        const id = selectedIndex === stepFunctionId[stepFunctionId.length - 1] ? stepFunctionId[0] : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                        const id =
+                          selectedIndex ===
+                          stepFunctionId[stepFunctionId.length - 1]
+                            ? stepFunctionId[0]
+                            : stepFunctionId[functionIdIdx[selectedIndex] + 1]
 
                         if (questions[id]) {
                           const q = questions[id]
@@ -686,9 +690,15 @@ export default function QuestionnarePage() {
                       }}
                       style={{ marginBottom: '8px', marginTop: '8px' }}
                     >
-                      {selectedIndex === stepFunctionId[stepFunctionId.length - 1] ? <Typography>'Complete '</Typography> : <Typography>'Next '<ArrowIcon direction="right" /></Typography>}
+                      {selectedIndex ===
+                      stepFunctionId[stepFunctionId.length - 1] ? (
+                        <Typography>'Complete '</Typography>
+                      ) : (
+                        <Typography>
+                          'Next '<ArrowIcon direction="right" />
+                        </Typography>
+                      )}
                       {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
-
                     </CmsButton>
                   </Box>
                 </Box>
