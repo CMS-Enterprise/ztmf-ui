@@ -586,7 +586,7 @@ export default function QuestionnarePage() {
                               if (
                                 (selectQuestionOption !== -1 &&
                                   initQuestionChoice !==
-                                  selectQuestionOption) ||
+                                    selectQuestionOption) ||
                                 initNotes !== notes
                               ) {
                                 setOpenAlert(true)
@@ -702,7 +702,7 @@ export default function QuestionnarePage() {
                       onClick={() => {
                         const id =
                           selectedIndex ===
-                            stepFunctionId[stepFunctionId.length - 1]
+                          stepFunctionId[stepFunctionId.length - 1]
                             ? stepFunctionId[0]
                             : stepFunctionId[functionIdIdx[selectedIndex] + 1]
 
@@ -725,7 +725,7 @@ export default function QuestionnarePage() {
                       style={{ marginBottom: '8px', marginTop: '8px' }}
                     >
                       {selectedIndex ===
-                        stepFunctionId[stepFunctionId.length - 1] ? (
+                      stepFunctionId[stepFunctionId.length - 1] ? (
                         <Typography>Complete</Typography>
                       ) : (
                         <Typography>
