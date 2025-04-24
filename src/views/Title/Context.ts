@@ -4,7 +4,7 @@ import { FismaSystemType, userData } from '@/types'
 type ContextType = {
   fismaSystems: FismaSystemType[] | []
   userInfo: userData
-  latestDatacallId: number
+  latestDataCallId: number
   latestDatacall: string
 }
 
