@@ -52,7 +52,7 @@
     "@fortawesome/fontawesome-free": "^6.5.1",
     "@hookform/resolvers": "^3.3.4",
     "@mui/icons-material": "^5.15.10",
-    "@mui/lab": "^5.0.0-alpha.165",
+    "@mui/lab": "^5.0.0-alpha.176",
     "@mui/material": "^5.15.10",
     "@mui/x-data-grid": "^6.19.4",
     "@popperjs/core": "^2.11.8",
