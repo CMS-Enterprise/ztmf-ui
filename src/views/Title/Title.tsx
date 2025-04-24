@@ -47,7 +47,7 @@ export default function Title() {
     loaderData.status != 200 ? emptyUser : loaderData.response
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
-  const [latestDatacallId, setLatestDatacallId] = useState<number>(0)
+  const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -74,8 +74,7 @@ export default function Title() {
       await axiosInstance
         .get('/datacalls/latest')
         .then((res) => {
-          console.log(res.data.data)
-          setLatestDatacallId(res.data.data.datacallid)
+          setLatestDataCallId(res.data.data.datacallid)
           setLatestDatacall(res.data.data.datacall)
         })
         .catch((error) => {
@@ -230,7 +229,7 @@ export default function Title() {
                 context={{
                   fismaSystems,
                   userInfo,
-                  latestDatacallId,
+                  latestDataCallId,
                   latestDatacall,
                 }}
               />
