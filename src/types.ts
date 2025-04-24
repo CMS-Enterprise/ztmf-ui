@@ -169,7 +169,7 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, number>
-  // latestDataCallId: number
+  latestDataCallId: number
 }
 
 export type ThemeColor =

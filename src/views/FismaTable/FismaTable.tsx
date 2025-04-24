@@ -35,7 +35,7 @@ declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
-    latestDatacallId: number
+    latestDataCallId: number
     scores: Record<number, number>
   }
 }
@@ -54,7 +54,7 @@ export function CustomFooterSaveComponent(
     setOpenSnackbar(false)
   }
   const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${props.latestDatacallId}/export`
+    let exportUrl = `/datacalls/${props.latestDataCallId}/export`
     if (
       props.selectedRows &&
       props.fismaSystems &&
@@ -175,7 +175,7 @@ function QuickSearchToolbar() {
 }
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDatacallId } = useContextProp()
+  const { fismaSystems, latestDataCallId } = useContextProp()
   const [open, setOpen] = useState<boolean>(false)
   const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
@@ -355,7 +355,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems, latestDatacallId, scores },
+          footer: { selectedRows, fismaSystems, latestDataCallId, scores },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
