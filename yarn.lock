@@ -17224,13 +17224,13 @@ __metadata:
   languageName: node
   linkType: hard
 
-"react-virtuoso@npm:^4.10.1":
-  version: 4.10.1
-  resolution: "react-virtuoso@npm:4.10.1"
+"react-virtuoso@npm:^4.12.6":
+  version: 4.12.6
+  resolution: "react-virtuoso@npm:4.12.6"
   peerDependencies:
-    react: ">=16 || >=17 || >= 18"
-    react-dom: ">=16 || >=17 || >= 18"
-  checksum: 10/63d77e85c84ce1ecb014ba65e0f353bf1fc108df9f2d071431a088a4964b616f2ceb8dac9458db8bcd7015e93817254a587ccaa5f3a0ebf59606cce526c3adf8
+    react: ">=16 || >=17 || >= 18 || >= 19"
+    react-dom: ">=16 || >=17 || >= 18 || >=19"
+  checksum: 10/97e388f0a5df90a8e5410e6c9e37458bec322a9b3b84a4bdf08154584b47e8ef72699aca40cb45568cf7243958dd00e8687b755eadb1f7989fd1899c6dc2d823
   languageName: node
   linkType: hard
 
@@ -20534,7 +20534,7 @@ __metadata:
     react-hook-form: "npm:^7.50.1"
     react-popper: "npm:^2.3.0"
     react-router-dom: "npm:^6.22.0"
-    react-virtuoso: "npm:^4.10.1"
+    react-virtuoso: "npm:^4.12.6"
     rimraf: "npm:^5.0.5"
     rollup-plugin-visualizer: "npm:^5.12.0"
     sass: "npm:^1.70.0"
