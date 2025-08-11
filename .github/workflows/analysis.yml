@@ -13,6 +13,16 @@ jobs:
       - name: Check out repo
         uses: actions/checkout@v4
 
+      - name: Debug Snyk Token  
+        run: |
+          if [ -z "$SNYK_TOKEN" ]; then
+            echo "❌ SNYK_TOKEN is not available"
+          else 
+            echo "✅ SNYK_TOKEN is available (first 8 chars: ${SNYK_TOKEN:0:8}...)"
+          fi
+        env:
+          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
+
       - name: test
         uses: snyk/actions/node@master
         env:
