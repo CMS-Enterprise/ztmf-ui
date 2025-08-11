@@ -13,7 +13,8 @@ jobs:
   analysis:
     name: Analysis
     uses: ./.github/workflows/analysis.yml
-    secrets: inherit
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
 
   ui:
     name: ui

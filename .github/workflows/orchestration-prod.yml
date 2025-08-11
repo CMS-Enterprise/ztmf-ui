@@ -12,7 +12,8 @@ jobs:
     name: Analysis
     if: ${{ github.event.pull_request.merged }}
     uses: ./.github/workflows/analysis.yml
-    secrets: inherit     
+    secrets:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}     
   ui:
     if: ${{ github.event.pull_request.merged }}
     name: ui
