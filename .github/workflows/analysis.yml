@@ -9,31 +9,29 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
 
-      - name: test
+      - name: Run Snyk to check for vulnerabilities
         uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          command: test
-          args: --severity-threshold=high --show-vulnerable-paths=all ./
+          args: test --severity-threshold=high --show-vulnerable-paths=all ./
 
   Snyk-Code-Test:
     name: snyk code test
     runs-on: ubuntu-latest
     permissions:
       contents: read
+    env:
+      SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
     steps:
       - name: Check out repo
         uses: actions/checkout@v4
       
-      - name: code test
+      - name: Run Snyk Code test
         uses: snyk/actions/node@master
-        env:
-          SNYK_TOKEN: ${{ secrets.SNYK_TOKEN }}
         with:
-          command: code test
-          args: --severity-threshold=high --show-vulnerable-paths=all ./
+          args: code test --severity-threshold=high --show-vulnerable-paths=all ./
