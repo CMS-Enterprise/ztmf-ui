@@ -28,6 +28,8 @@ import { RouteNames, Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
 import EditIcon from '@mui/icons-material/Edit'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
+import BarChartIcon from '@mui/icons-material/BarChart'
+import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresModal'
 // import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { FismaTableProps } from '@/types'
 type selectedRowsType = GridRowId[]
@@ -121,13 +123,15 @@ export function CustomFooterSaveComponent(
           }}
         >
           <Tooltip title="Save System Answers">
-            <IconButton
-              sx={{ color: '#004297' }}
-              onClick={saveSystemAnswers}
-              disabled={apiRef.current.getSelectedRows().size === 0}
-            >
-              <FileDownloadSharpIcon />
-            </IconButton>
+            <span>
+              <IconButton
+                sx={{ color: '#004297' }}
+                onClick={saveSystemAnswers}
+                disabled={apiRef.current.getSelectedRows().size === 0}
+              >
+                <FileDownloadSharpIcon />
+              </IconButton>
+            </span>
           </Tooltip>
         </Box>
         <GridFooter />
@@ -173,6 +177,24 @@ function QuickSearchToolbar() {
     </Box>
   )
 }
+// Cache for pillar scores to avoid repeated API calls
+interface SystemScore {
+  datacallid: number
+  fismasystemid: number
+  systemscore: number
+  pillarscores: Array<{
+    pillarid: number
+    pillar: string
+    score: number
+  }>
+}
+
+interface CachedScore {
+  data: SystemScore[]
+  timestamp: number
+}
+const pillarScoresCache = new Map<number, CachedScore>()
+
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const { fismaSystems, latestDataCallId } = useContextProp()
@@ -182,9 +204,63 @@ export default function FismaTable({ scores }: FismaTableProps) {
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
   const navigate = useNavigate()
   const [openEditModal, setOpenEditModal] = useState<boolean>(false)
+  const [pillarScoresModal, setPillarScoresModal] = useState<{
+    open: boolean
+    systemName: string
+    systemAcronym: string
+    fismasystemid: number
+    scores: SystemScore[]
+  }>({
+    open: false,
+    systemName: '',
+    systemAcronym: '',
+    fismasystemid: 0,
+    scores: [],
+  })
   const handleCloseModal = () => {
     setOpen(false)
     setSelectedRow(null)
+  }
+
+  const handleOpenPillarScores = async (row: FismaSystemType) => {
+    try {
+      // Check cache first
+      const cached = pillarScoresCache.get(row.fismasystemid)
+      const now = Date.now()
+      const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
+
+      let scoresData
+      if (cached && now - cached.timestamp < CACHE_DURATION) {
+        // Use cached data
+        scoresData = cached.data
+      } else {
+        // Fetch fresh data
+        const response = await axiosInstance.get(
+          `/scores/aggregate?fismasystemid=${row.fismasystemid}&include_pillars=true`
+        )
+        scoresData = response.data.data
+
+        // Store in cache
+        pillarScoresCache.set(row.fismasystemid, {
+          data: scoresData,
+          timestamp: now,
+        })
+      }
+
+      setPillarScoresModal({
+        open: true,
+        systemName: row.fismaname,
+        systemAcronym: row.fismaacronym,
+        fismasystemid: row.fismasystemid,
+        scores: scoresData,
+      })
+    } catch (error) {
+      console.error('Error fetching pillar scores:', error)
+    }
+  }
+
+  const handleClosePillarScores = () => {
+    setPillarScoresModal((prev) => ({ ...prev, open: false }))
   }
   const handleEditOpenModal = (
     event: React.MouseEvent<HTMLButtonElement>,
@@ -321,6 +397,21 @@ export default function FismaTable({ scores }: FismaTableProps) {
               />
             </span>
           </Tooltip>
+          <Tooltip title="View Pillar Scores">
+            <span>
+              <GridActionsCellItem
+                icon={<BarChartIcon />}
+                key={`chart-${params.row.fismasystemid}`}
+                label="View Pillar Scores"
+                className="textPrimary"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  handleOpenPillarScores(params.row as FismaSystemType)
+                }}
+                color="inherit"
+              />
+            </span>
+          </Tooltip>
           {userInfo.role === 'ADMIN' && (
             <GridActionsCellItem
               icon={<EditIcon />}
@@ -403,6 +494,13 @@ export default function FismaTable({ scores }: FismaTableProps) {
         open={open}
         onClose={handleCloseModal}
         system={selectedRow}
+      />
+      <PillarScoresModal
+        open={pillarScoresModal.open}
+        onClose={handleClosePillarScores}
+        systemName={pillarScoresModal.systemName}
+        systemAcronym={pillarScoresModal.systemAcronym}
+        scores={pillarScoresModal.scores}
       />
       <EditSystemModal
         title={'Edit'}

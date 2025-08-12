@@ -7,7 +7,7 @@ import ListItemText from '@mui/material/ListItemText'
 import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
 import { Button as CmsButton, ChoiceList, Spinner } from '@cmsgov/design-system'
-import Grid from '@mui/material/Unstable_Grid2/Grid2'
+import Grid from '@mui/material/Unstable_Grid2'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import TextField from '@mui/material/TextField'
 import {
@@ -18,7 +18,8 @@ import {
   QuestionScores,
   functionScores,
 } from '@/types'
-import { Container, styled } from '@mui/system'
+import { Container } from '@mui/system'
+import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { useSnackbar } from 'notistack'
 import { useNavigate, useLocation } from 'react-router-dom'
