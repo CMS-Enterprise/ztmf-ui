@@ -6,7 +6,6 @@ import {
   DialogActions,
   Box,
   Typography,
-  Chip,
   IconButton,
 } from '@mui/material'
 import Grid from '@mui/material/Grid'
@@ -167,19 +166,112 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               <Typography variant="h4" gutterBottom>
                 Overall Score
               </Typography>
-              <Chip
-                label={latestScore.systemscore?.toFixed(2) || 'N/A'}
+              <Box
                 sx={{
+                  p: 3,
+                  border: 1,
+                  borderColor: 'darkgray',
+                  borderRadius: 3,
                   backgroundColor: latestScore.systemscore
                     ? getPillarColor(latestScore.systemscore)
                     : '#f5f5f5',
-                  fontSize: '1.5rem',
-                  height: '60px',
-                  width: '120px',
-                  borderRadius: '12px',
-                  fontWeight: 'bold',
+                  maxWidth: '400px',
+                  margin: '0 auto',
                 }}
-              />
+              >
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  gap={2}
+                  mb={1}
+                >
+                  <Typography variant="h3" fontWeight="bold">
+                    {latestScore.systemscore?.toFixed(2) || 'N/A'}
+                  </Typography>
+                  {(() => {
+                    // Find previous system score for trend calculation
+                    const previousSystemScore = scores
+                      .filter((s) => s.datacallid !== latestScore.datacallid)
+                      .sort(
+                        (a, b) => b.datacallid - a.datacallid
+                      )[0]?.systemscore
+
+                    if (latestScore.systemscore && previousSystemScore) {
+                      const trendInfo = getTrendInfo(
+                        latestScore.systemscore,
+                        previousSystemScore
+                      )
+                      return (
+                        <Typography
+                          variant="h5"
+                          sx={{
+                            color: trendInfo.color,
+                            fontWeight: 'bold',
+                            fontSize: '1.5rem',
+                          }}
+                        >
+                          {trendInfo.trend}
+                        </Typography>
+                      )
+                    }
+                    return null
+                  })()}
+                </Box>
+
+                {(() => {
+                  // Show previous score and change information
+                  const previousSystemScore = scores
+                    .filter((s) => s.datacallid !== latestScore.datacallid)
+                    .sort((a, b) => b.datacallid - a.datacallid)[0]?.systemscore
+
+                  if (latestScore.systemscore && previousSystemScore) {
+                    const trendInfo = getTrendInfo(
+                      latestScore.systemscore,
+                      previousSystemScore
+                    )
+                    return (
+                      <>
+                        <Typography
+                          variant="body1"
+                          sx={{
+                            color: 'text.secondary',
+                            fontSize: '1rem',
+                            mb: 0.5,
+                          }}
+                        >
+                          Previous: {previousSystemScore.toFixed(2)}
+                        </Typography>
+                        <Typography
+                          variant="body2"
+                          sx={{
+                            color: trendInfo.color,
+                            fontSize: '0.9rem',
+                            fontWeight: '500',
+                          }}
+                        >
+                          {trendInfo.text
+                            .replace('Improved by ', '+')
+                            .replace('Decreased by ', '-')}
+                        </Typography>
+                      </>
+                    )
+                  } else if (latestScore.systemscore && !previousSystemScore) {
+                    return (
+                      <Typography
+                        variant="body1"
+                        sx={{
+                          color: 'text.secondary',
+                          fontSize: '1rem',
+                        }}
+                      >
+                        No previous data
+                      </Typography>
+                    )
+                  }
+                  return null
+                })()}
+              </Box>
             </Box>
 
             {/* Pillar Scores */}
@@ -293,98 +385,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                 )
               })}
             </Grid>
-
-            {/* Historical Data if multiple datacalls */}
-            {scores.length > 1 && (
-              <Box mt={4}>
-                <Typography variant="h6" gutterBottom>
-                  Historical Scores
-                </Typography>
-                {scores
-                  .sort((a, b) => b.datacallid - a.datacallid)
-                  .map((score, index, sortedScores) => {
-                    const previousScore =
-                      index < sortedScores.length - 1
-                        ? sortedScores[index + 1].systemscore
-                        : null
-                    const currentSystemScore = score.systemscore ?? 0
-                    const trendInfo = getTrendInfo(
-                      currentSystemScore,
-                      previousScore
-                    )
-
-                    return (
-                      <Box
-                        key={score.datacallid}
-                        mb={3}
-                        sx={{
-                          p: 2,
-                          border: 1,
-                          borderColor: 'grey.300',
-                          borderRadius: 1,
-                        }}
-                      >
-                        <Box display="flex" alignItems="center" gap={2} mb={1}>
-                          <Typography
-                            variant="subtitle1"
-                            sx={{ minWidth: '140px', fontSize: '1.1rem' }}
-                          >
-                            {getQuarterName(score.datacallid)}:
-                          </Typography>
-                          <Typography
-                            variant="subtitle1"
-                            sx={{ fontWeight: 'bold', fontSize: '1.1rem' }}
-                          >
-                            Overall Score{' '}
-                            {currentSystemScore > 0
-                              ? currentSystemScore.toFixed(2)
-                              : 'N/A'}
-                          </Typography>
-                          {trendInfo.trend && currentSystemScore > 0 && (
-                            <Typography
-                              variant="h6"
-                              sx={{
-                                color: trendInfo.color,
-                                fontWeight: 'bold',
-                                fontSize: '1.5rem',
-                              }}
-                              aria-label={`Trend: ${trendInfo.text}`}
-                            >
-                              {trendInfo.trend}
-                            </Typography>
-                          )}
-                        </Box>
-                        {trendInfo.text && currentSystemScore > 0 && (
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: trendInfo.color,
-                              ml: 2,
-                              fontSize: '1rem',
-                              fontWeight: '500',
-                            }}
-                          >
-                            {trendInfo.text}
-                          </Typography>
-                        )}
-                        {currentSystemScore === 0 && (
-                          <Typography
-                            variant="body2"
-                            sx={{
-                              color: 'text.secondary',
-                              ml: 2,
-                              fontSize: '1rem',
-                              fontStyle: 'italic',
-                            }}
-                          >
-                            No score data available for this period
-                          </Typography>
-                        )}
-                      </Box>
-                    )
-                  })}
-              </Box>
-            )}
           </Box>
         ) : (
           <Box textAlign="center" py={4}>
