@@ -8,6 +8,5 @@
 }
 
 .breadcumbs .crumb:last-child:after {
-  display: none
+  display: none;
 }
-

@@ -1,5 +1,9 @@
-// eslint-disable-next-line prettier/prettier
-import { defineConfig, transformWithEsbuild, loadEnv, type PluginOption } from 'vite'
+import {
+  defineConfig,
+  transformWithEsbuild,
+  loadEnv,
+  type PluginOption,
+} from 'vite'
 import react from '@vitejs/plugin-react-swc'
 import EnvironmentPlugin from 'vite-plugin-environment'
 import { visualizer } from 'rollup-plugin-visualizer'

@@ -1,19 +1,19 @@
 html,
 body {
-  margin: 0;              // remove default margin/padding
+  margin: 0; // remove default margin/padding
   padding: 0;
-  min-height: 100%;       // allow for full-page layouts
+  min-height: 100%; // allow for full-page layouts
 }
 
 #root {
   display: flex;
-  flex-direction: column; 
-  min-height: 100vh;      // ensures the root container fills the screen
+  flex-direction: column;
+  min-height: 100vh; // ensures the root container fills the screen
 }
 
 // The main content area can stretch
 main {
-  flex: 1;                // "take up the leftover space"
+  flex: 1; // "take up the leftover space"
 }
 
 // The footer is then pushed to the bottom

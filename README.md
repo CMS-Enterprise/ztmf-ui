@@ -130,6 +130,28 @@ To start the local development server, run the following from the root directory
 yarn dev
 ```
 
+### Development Commands (Makefile)
+
+For convenience, common development tasks are available via Makefile:
+
+```shell
+# Quick development commands
+make dev          # Start development server
+make pre-commit   # Format code and run linting (recommended before commits)
+make check        # Run all checks (format, lint, build)
+
+# Individual tasks
+make lint         # Run linting checks
+make format       # Format code with Prettier
+make build        # Build for production
+make build-dev    # Build for development
+make test         # Run tests
+
+# Setup
+make setup        # Install dependencies
+make help         # Show all available commands
+```
+
 ## Backend
 
 ZTMF (backend) has its own [repository](https://github.com/cms-enterprise/ztmf).

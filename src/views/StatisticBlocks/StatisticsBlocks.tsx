@@ -39,7 +39,8 @@ export default function StatisticsBlocks({
         if (scores[system.fismasystemid] > maxScore) {
           maxScore = scores[system.fismasystemid]
           maxScoreSystem = system.fismaacronym
-        } else if (scores[system.fismasystemid] < minScore) {
+        }
+        if (scores[system.fismasystemid] < minScore) {
           minScore = scores[system.fismasystemid]
           minScoreSystem = system.fismaacronym
         }
@@ -109,7 +110,7 @@ export default function StatisticsBlocks({
             fontSize: '50px',
           }}
         >
-          {maxSystemScore}
+          {maxSystemScore.toFixed(2)}
         </Typography>
         <Typography
           variant="body1"
@@ -130,7 +131,9 @@ export default function StatisticsBlocks({
             // overflowWrap: 'break-word',
           }}
         >
-          {minSystemScore === Number.POSITIVE_INFINITY ? 0 : minSystemScore}
+          {minSystemScore === Number.POSITIVE_INFINITY
+            ? '0.00'
+            : minSystemScore.toFixed(2)}
         </Typography>
         <Typography variant="body1" sx={{ fontSize: '16px' }}>
           Lowest System Score: <br /> {minSystemAcronym}
