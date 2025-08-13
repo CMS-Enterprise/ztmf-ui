@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo, useRef } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -7,15 +7,6 @@ import {
   Box,
   Typography,
   IconButton,
-  Table,
-  TableBody,
-  TableCell,
-  TableContainer,
-  TableHead,
-  TableRow,
-  Paper,
-  Collapse,
-  Button,
 } from '@mui/material'
 import Grid from '@mui/material/Grid'
 import CloseIcon from '@mui/icons-material/Close'
@@ -67,7 +58,6 @@ interface PillarScoresModalProps {
 }
 
 const getPillarColor = (score: number) => {
-  // Match the existing FismaTable color scheme
   if (score >= 1 && score <= 1.74) return '#DAA9EC'
   if (score >= 1.75 && score <= 2.74) return '#FFD5A5'
   if (score >= 2.75 && score <= 3.65) return '#F2FBC4'
@@ -83,9 +73,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   scores,
 }) => {
   const [datacalls, setDatacalls] = useState<DataCall[]>([])
-  const [showDataTable, setShowDataTable] = useState(false)
-  const dialogRef = useRef<HTMLDivElement>(null)
-  const initialFocusRef = useRef<HTMLButtonElement>(null)
 
   // Get the latest datacall (highest datacallid)
   const latestScore =
@@ -155,17 +142,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     }
   }, [open])
 
-  // Focus management for accessibility
-  useEffect(() => {
-    if (open && initialFocusRef.current) {
-      // Small delay to ensure modal is fully rendered
-      const timer = setTimeout(() => {
-        initialFocusRef.current?.focus()
-      }, 100)
-      return () => clearTimeout(timer)
-    }
-  }, [open])
-
   // Helper function to get quarter name by datacallid
   const getQuarterName = (datacallid: number) => {
     const datacall = datacalls.find((dc) => dc.datacallid === datacallid)
@@ -181,19 +157,19 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 
     if (Math.abs(difference) < 0.05) {
       return {
-        color: '#8B4513',
+        color: '#B8860B',
         trend: '→',
         text: `No significant change (${Number(percentChange) >= 0 ? '+' : ''}${percentChange}%)`,
       }
     } else if (difference > 0) {
       return {
-        color: '#0F4A0F',
+        color: '#66BB6A',
         trend: '↗',
         text: `Improved by ${difference.toFixed(2)} (+${percentChange}%)`,
       }
     } else {
       return {
-        color: '#8B0000',
+        color: '#EF5350',
         trend: '↘',
         text: `Decreased by ${Math.abs(difference).toFixed(2)} (${percentChange}%)`,
       }
@@ -201,15 +177,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   }
 
   return (
-    <Dialog
-      open={open}
-      onClose={onClose}
-      maxWidth="lg"
-      fullWidth
-      ref={dialogRef}
-      aria-labelledby="pillar-scores-modal-title"
-      aria-describedby="pillar-scores-modal-description"
-    >
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
         <Box
           display="flex"
@@ -217,19 +185,14 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
           alignItems="center"
           position="relative"
         >
-          <Typography
-            variant="h6"
-            sx={{ textAlign: 'center', flex: 1 }}
-            id="pillar-scores-modal-title"
-          >
-            {systemName} ({systemAcronym}) - Pillar Scores
+          <Typography variant="h6" sx={{ textAlign: 'center', flex: 1 }}>
+            {systemName} ({systemAcronym})
           </Typography>
           <IconButton
-            ref={initialFocusRef}
             onClick={onClose}
             size="small"
             sx={{ position: 'absolute', right: 0 }}
-            aria-label="Close pillar scores dialog"
+            aria-label="Close dialog"
           >
             <CloseIcon />
           </IconButton>
@@ -237,23 +200,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
       </DialogTitle>
 
       <DialogContent>
-        <Box
-          id="pillar-scores-modal-description"
-          sx={{
-            position: 'absolute',
-            left: '-10000px',
-            width: '1px',
-            height: '1px',
-            overflow: 'hidden',
-          }}
-        >
-          <Typography component="p">
-            This dialog displays detailed pillar scores for {systemName}{' '}
-            including overall system score, individual pillar breakdowns,
-            historical trends, and an interactive radar chart visualization. A
-            data table alternative is available for screen readers.
-          </Typography>
-        </Box>
         {hasValidData ? (
           <Box>
             {/* Overall System Score */}
@@ -285,16 +231,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                 >
                   <Typography variant="h4" fontWeight="bold">
                     {latestScore.systemscore?.toFixed(2) || 'N/A'}
-                    {latestScore.systemscore && (
-                      <Typography
-                        component="span"
-                        variant="h6"
-                        color="text.secondary"
-                        sx={{ fontWeight: 'normal' }}
-                      >
-                        {' / 4'}
-                      </Typography>
-                    )}
                   </Typography>
                   {(() => {
                     // Find previous system score for trend calculation
@@ -440,16 +376,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       >
                         <Typography variant="h5" fontWeight="bold">
                           {currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}
-                          {currentScore > 0 && (
-                            <Typography
-                              component="span"
-                              variant="body2"
-                              color="text.secondary"
-                              sx={{ fontWeight: 'normal' }}
-                            >
-                              {' / 4'}
-                            </Typography>
-                          )}
                         </Typography>
                         {trendInfo.trend && currentScore > 0 && (
                           <Typography
@@ -521,24 +447,18 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               >
                 Pillar Scores Radar Chart
               </Typography>
-              <Box
-                role="img"
-                aria-label={`Radar chart showing pillar scores. Current scores: ${radarData.map((d) => `${d.pillar}: ${d.current.toFixed(2)}`).join(', ')}`}
+              <Box 
+                role="img" 
+                aria-label={`Radar chart showing pillar scores. Current scores: ${radarData.map(d => `${d.pillar}: ${d.current.toFixed(2)}`).join(', ')}`}
               >
                 <ResponsiveContainer width="100%" height={400}>
-                  <RadarChart
-                    data={radarData}
-                    cx="50%"
-                    cy="50%"
-                    outerRadius="75%"
-                  >
+                  <RadarChart data={radarData}>
                     <PolarGrid />
                     <PolarAngleAxis dataKey="pillar" />
                     <PolarRadiusAxis
                       angle={90}
                       domain={[0, 4]}
                       tick={{ fontSize: 12 }}
-                      tickCount={5}
                     />
                     <Radar
                       name="Current"
@@ -610,128 +530,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   </RadarChart>
                 </ResponsiveContainer>
               </Box>
-
-              {/* Accessible Data Table Alternative */}
-              <Box mt={3}>
-                <Box
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  gap={2}
-                  mb={2}
-                >
-                  <Typography variant="h6">Pillar Scores Data Table</Typography>
-                  <Button
-                    onClick={() => setShowDataTable(!showDataTable)}
-                    variant="outlined"
-                    size="small"
-                    aria-expanded={showDataTable}
-                    aria-controls="pillar-data-table"
-                    aria-label={`${showDataTable ? 'Hide' : 'Show'} detailed pillar scores data table`}
-                  >
-                    {showDataTable ? 'Hide' : 'Show'} Data Table
-                  </Button>
-                </Box>
-
-                <Collapse in={showDataTable}>
-                  <TableContainer
-                    component={Paper}
-                    id="pillar-data-table"
-                    aria-label="Detailed pillar scores comparison table"
-                  >
-                    <Table aria-label="Pillar scores data">
-                      <TableHead>
-                        <TableRow>
-                          <TableCell>
-                            <strong>Pillar Name</strong>
-                          </TableCell>
-                          <TableCell align="right">
-                            <strong>Current Score</strong>
-                          </TableCell>
-                          {scores.length > 1 && (
-                            <TableCell align="right">
-                              <strong>Previous Score</strong>
-                            </TableCell>
-                          )}
-                          <TableCell align="right">
-                            <strong>Change</strong>
-                          </TableCell>
-                          <TableCell>
-                            <strong>Trend</strong>
-                          </TableCell>
-                        </TableRow>
-                      </TableHead>
-                      <TableBody>
-                        {latestScore?.pillarscores?.map((pillar) => {
-                          const previousDatacall = scores
-                            .filter(
-                              (s) => s.datacallid !== latestScore.datacallid
-                            )
-                            .sort((a, b) => b.datacallid - a.datacallid)[0]
-
-                          const previousPillarScore =
-                            previousDatacall?.pillarscores?.find(
-                              (p) => p.pillarid === pillar.pillarid
-                            )?.score
-
-                          const currentScore = pillar.score ?? 0
-                          const prevScore = previousPillarScore ?? 0
-                          const change = prevScore
-                            ? currentScore - prevScore
-                            : null
-
-                          const trendInfo =
-                            currentScore > 0 && prevScore
-                              ? getTrendInfo(currentScore, prevScore)
-                              : {
-                                  trend: '',
-                                  text: 'No comparison data',
-                                  color: '#666',
-                                }
-
-                          return (
-                            <TableRow key={pillar.pillarid}>
-                              <TableCell component="th" scope="row">
-                                {pillar.pillar}
-                              </TableCell>
-                              <TableCell align="right">
-                                {currentScore > 0
-                                  ? currentScore.toFixed(2)
-                                  : 'N/A'}
-                              </TableCell>
-                              {scores.length > 1 && (
-                                <TableCell align="right">
-                                  {prevScore > 0 ? prevScore.toFixed(2) : 'N/A'}
-                                </TableCell>
-                              )}
-                              <TableCell align="right">
-                                {change !== null ? (
-                                  <span style={{ color: trendInfo.color }}>
-                                    {change >= 0 ? '+' : ''}
-                                    {change.toFixed(2)}
-                                  </span>
-                                ) : (
-                                  'N/A'
-                                )}
-                              </TableCell>
-                              <TableCell>
-                                <span
-                                  style={{ color: trendInfo.color }}
-                                  aria-label={trendInfo.text}
-                                >
-                                  {trendInfo.trend}{' '}
-                                  {trendInfo.text.split('(')[0].trim()}
-                                </span>
-                              </TableCell>
-                            </TableRow>
-                          )
-                        })}
-                      </TableBody>
-                    </Table>
-                  </TableContainer>
-                </Collapse>
-              </Box>
-            </Box>
           </Box>
         ) : (
           <Box textAlign="center" py={4}>
