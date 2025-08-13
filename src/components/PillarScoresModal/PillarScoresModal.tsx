@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react'
+import React, { useState, useEffect, useMemo } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -11,6 +11,16 @@ import {
 import Grid from '@mui/material/Grid'
 import CloseIcon from '@mui/icons-material/Close'
 import { Button as CmsButton } from '@cmsgov/design-system'
+import {
+  RadarChart,
+  PolarGrid,
+  PolarAngleAxis,
+  PolarRadiusAxis,
+  Radar,
+  ResponsiveContainer,
+  Legend,
+  Tooltip,
+} from 'recharts'
 import axiosInstance from '@/axiosConfig'
 
 // Static cache for datacalls that persists across component instances
@@ -77,6 +87,27 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     latestScore &&
     latestScore.pillarscores &&
     latestScore.pillarscores.length > 0
+
+  // Prepare radar chart data
+  const radarData = useMemo(() => {
+    if (!hasValidData) return []
+
+    const previousDatacall = scores
+      .filter((s) => s.datacallid !== latestScore.datacallid)
+      .sort((a, b) => b.datacallid - a.datacallid)[0]
+
+    return latestScore.pillarscores.map((pillar) => {
+      const previousPillarScore = previousDatacall?.pillarscores?.find(
+        (p) => p.pillarid === pillar.pillarid
+      )?.score
+
+      return {
+        pillar: pillar.pillar,
+        current: pillar.score ?? 0,
+        previous: previousPillarScore ?? 0,
+      }
+    })
+  }, [scores, latestScore, hasValidData])
 
   // Fetch datacalls when modal opens (with caching)
   useEffect(() => {
@@ -146,13 +177,22 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   }
 
   return (
-    <Dialog open={open} onClose={onClose} maxWidth="md" fullWidth>
+    <Dialog open={open} onClose={onClose} maxWidth="lg" fullWidth>
       <DialogTitle>
-        <Box display="flex" justifyContent="space-between" alignItems="center">
-          <Typography variant="h6">
+        <Box
+          display="flex"
+          justifyContent="center"
+          alignItems="center"
+          position="relative"
+        >
+          <Typography variant="h6" sx={{ textAlign: 'center', flex: 1 }}>
             {systemName} ({systemAcronym})
           </Typography>
-          <IconButton onClick={onClose} size="small">
+          <IconButton
+            onClick={onClose}
+            size="small"
+            sx={{ position: 'absolute', right: 0 }}
+          >
             <CloseIcon />
           </IconButton>
         </Box>
@@ -162,20 +202,20 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
         {hasValidData ? (
           <Box>
             {/* Overall System Score */}
-            <Box mb={3} textAlign="center">
-              <Typography variant="h4" gutterBottom>
+            <Box mb={2} textAlign="center">
+              <Typography variant="h5" gutterBottom>
                 Overall Score
               </Typography>
               <Box
                 sx={{
-                  p: 3,
+                  p: 2,
                   border: 1,
                   borderColor: 'darkgray',
-                  borderRadius: 3,
+                  borderRadius: 2,
                   backgroundColor: latestScore.systemscore
                     ? getPillarColor(latestScore.systemscore)
                     : '#f5f5f5',
-                  maxWidth: '400px',
+                  maxWidth: '320px',
                   margin: '0 auto',
                 }}
               >
@@ -183,10 +223,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   display="flex"
                   alignItems="center"
                   justifyContent="center"
-                  gap={2}
-                  mb={1}
+                  gap={1.5}
+                  mb={0.5}
                 >
-                  <Typography variant="h3" fontWeight="bold">
+                  <Typography variant="h4" fontWeight="bold">
                     {latestScore.systemscore?.toFixed(2) || 'N/A'}
                   </Typography>
                   {(() => {
@@ -208,7 +248,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                           sx={{
                             color: trendInfo.color,
                             fontWeight: 'bold',
-                            fontSize: '1.5rem',
+                            fontSize: '1.2rem',
                           }}
                         >
                           {trendInfo.trend}
@@ -233,20 +273,20 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                     return (
                       <>
                         <Typography
-                          variant="body1"
+                          variant="body2"
                           sx={{
                             color: 'text.secondary',
-                            fontSize: '1rem',
-                            mb: 0.5,
+                            fontSize: '0.85rem',
+                            mb: 0.3,
                           }}
                         >
                           Previous: {previousSystemScore.toFixed(2)}
                         </Typography>
                         <Typography
-                          variant="body2"
+                          variant="caption"
                           sx={{
                             color: trendInfo.color,
-                            fontSize: '0.9rem',
+                            fontSize: '0.75rem',
                             fontWeight: '500',
                           }}
                         >
@@ -259,10 +299,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   } else if (latestScore.systemscore && !previousSystemScore) {
                     return (
                       <Typography
-                        variant="body1"
+                        variant="body2"
                         sx={{
                           color: 'text.secondary',
-                          fontSize: '1rem',
+                          fontSize: '0.85rem',
                         }}
                       >
                         No previous data
@@ -275,7 +315,11 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
             </Box>
 
             {/* Pillar Scores */}
-            <Typography variant="h5" gutterBottom sx={{ mt: 4, mb: 2 }}>
+            <Typography
+              variant="h6"
+              gutterBottom
+              sx={{ mt: 3, mb: 1.5, textAlign: 'center' }}
+            >
               Pillar Scores - {getQuarterName(latestScore.datacallid)} (Latest)
             </Typography>
             <Grid container spacing={2}>
@@ -297,21 +341,22 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                 )
 
                 return (
-                  <Grid item xs={12} sm={6} md={4} key={pillar.pillarid}>
+                  <Grid item xs={6} sm={4} md={2} key={pillar.pillarid}>
                     <Box
                       sx={{
-                        p: 2,
+                        p: 1.5,
                         border: 1,
                         borderColor: 'darkgray',
-                        borderRadius: 2,
+                        borderRadius: 1.5,
                         textAlign: 'center',
                         backgroundColor: getPillarColor(currentScore),
                       }}
                     >
                       <Typography
-                        variant="subtitle1"
+                        variant="subtitle2"
                         fontWeight="bold"
                         gutterBottom
+                        sx={{ fontSize: '0.9rem' }}
                       >
                         {pillar.pillar}
                       </Typography>
@@ -320,10 +365,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         display="flex"
                         alignItems="center"
                         justifyContent="center"
-                        gap={1}
-                        mb={1}
+                        gap={0.8}
+                        mb={0.8}
                       >
-                        <Typography variant="h4" fontWeight="bold">
+                        <Typography variant="h5" fontWeight="bold">
                           {currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}
                         </Typography>
                         {trendInfo.trend && currentScore > 0 && (
@@ -332,7 +377,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             sx={{
                               color: trendInfo.color,
                               fontWeight: 'bold',
-                              fontSize: '1.2rem',
+                              fontSize: '1rem',
                             }}
                           >
                             {trendInfo.trend}
@@ -345,7 +390,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                           variant="caption"
                           sx={{
                             color: 'text.secondary',
-                            fontSize: '0.9rem',
+                            fontSize: '0.75rem',
                           }}
                         >
                           Previous: {previousPillarScore.toFixed(2)}
@@ -357,7 +402,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                           variant="caption"
                           sx={{
                             color: 'text.secondary',
-                            fontSize: '0.9rem',
+                            fontSize: '0.75rem',
                           }}
                         >
                           No previous data
@@ -370,9 +415,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                           sx={{
                             display: 'block',
                             color: trendInfo.color,
-                            fontSize: '0.8rem',
+                            fontSize: '0.65rem',
                             fontWeight: '500',
-                            mt: 0.5,
+                            mt: 0.3,
                           }}
                         >
                           {trendInfo.text
@@ -385,6 +430,95 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                 )
               })}
             </Grid>
+
+            {/* Radar Chart */}
+            <Box mt={2}>
+              <Typography
+                variant="h6"
+                gutterBottom
+                sx={{ textAlign: 'center', mb: 2 }}
+              >
+                Pillar Scores Radar Chart
+              </Typography>
+              <ResponsiveContainer width="100%" height={400}>
+                <RadarChart data={radarData}>
+                  <PolarGrid />
+                  <PolarAngleAxis dataKey="pillar" />
+                  <PolarRadiusAxis
+                    angle={90}
+                    domain={[0, 4]}
+                    tick={{ fontSize: 12 }}
+                  />
+                  <Radar
+                    name="Current"
+                    dataKey="current"
+                    stroke="#8884d8"
+                    fill="#8884d8"
+                    fillOpacity={0.3}
+                    strokeWidth={2}
+                  />
+                  {scores.length > 1 && (
+                    <Radar
+                      name="Previous"
+                      dataKey="previous"
+                      stroke="#82ca9d"
+                      fill="#82ca9d"
+                      fillOpacity={0.2}
+                      strokeWidth={2}
+                      strokeDasharray="5 5"
+                    />
+                  )}
+                  <Legend
+                    content={(props) => {
+                      const { payload } = props
+                      return (
+                        <Box
+                          display="flex"
+                          justifyContent="center"
+                          gap={3}
+                          mt={2}
+                        >
+                          {payload?.map((entry, index) => (
+                            <Box
+                              key={index}
+                              display="flex"
+                              alignItems="center"
+                              gap={1}
+                            >
+                              <Box
+                                sx={{
+                                  width: 12,
+                                  height: 12,
+                                  backgroundColor: entry.color,
+                                  border:
+                                    entry.value === 'Previous'
+                                      ? '1px dashed'
+                                      : 'none',
+                                  opacity:
+                                    entry.value === 'Previous' ? 0.7 : 0.8,
+                                }}
+                              />
+                              <Typography
+                                variant="caption"
+                                sx={{ fontSize: '0.875rem' }}
+                              >
+                                {entry.value}
+                              </Typography>
+                            </Box>
+                          ))}
+                        </Box>
+                      )
+                    }}
+                  />
+                  <Tooltip
+                    formatter={(value: number, name: string) => [
+                      value.toFixed(2),
+                      name === 'current' ? 'Current Score' : 'Previous Score',
+                    ]}
+                  />
+                </RadarChart>
+              </ResponsiveContainer>
+            </Box>
           </Box>
         ) : (
           <Box textAlign="center" py={4}>
