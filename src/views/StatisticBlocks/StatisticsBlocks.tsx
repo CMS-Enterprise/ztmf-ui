@@ -131,7 +131,9 @@ export default function StatisticsBlocks({
             // overflowWrap: 'break-word',
           }}
         >
-          {minSystemScore === Number.POSITIVE_INFINITY ? '0.00' : minSystemScore.toFixed(2)}
+          {minSystemScore === Number.POSITIVE_INFINITY
+            ? '0.00'
+            : minSystemScore.toFixed(2)}
         </Typography>
         <Typography variant="body1" sx={{ fontSize: '16px' }}>
           Lowest System Score: <br /> {minSystemAcronym}
