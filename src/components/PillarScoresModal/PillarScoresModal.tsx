@@ -67,11 +67,35 @@ interface PillarScoresModalProps {
 }
 
 const getMaturityLevel = (score: number) => {
-  if (score >= 3.66) return { name: 'Optimal', color: '#0F5C4C' } // Dark teal
-  if (score >= 2.75) return { name: 'Advanced', color: '#8B8000' } // Dark yellow/gold
-  if (score >= 1.75) return { name: 'Initial', color: '#CC5500' } // Dark orange
-  if (score >= 1) return { name: 'Traditional', color: '#663399' } // Dark purple
-  return { name: 'No Score', color: '#666666' } // Gray
+  if (score >= 3.66)
+    return {
+      name: 'Optimal',
+      color: '#0F5C4C', // Dark teal text
+      backgroundColor: '#E8F8F6', // Very light teal background
+    }
+  if (score >= 2.75)
+    return {
+      name: 'Advanced',
+      color: '#8B8000', // Dark yellow/gold text
+      backgroundColor: '#FEFEF0', // Very light yellow background
+    }
+  if (score >= 1.75)
+    return {
+      name: 'Initial',
+      color: '#CC5500', // Dark orange text
+      backgroundColor: '#FFF4E6', // Very light orange background
+    }
+  if (score >= 1)
+    return {
+      name: 'Traditional',
+      color: '#663399', // Dark purple text
+      backgroundColor: '#F3F0FF', // Very light purple background
+    }
+  return {
+    name: 'No Score',
+    color: '#666666', // Gray text
+    backgroundColor: '#F8F8F8', // Light gray background
+  }
 }
 
 const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
@@ -266,7 +290,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   border: 1,
                   borderColor: 'darkgray',
                   borderRadius: 2,
-                  backgroundColor: '#ffffff',
+                  backgroundColor: latestScore.systemscore
+                    ? getMaturityLevel(latestScore.systemscore).backgroundColor
+                    : '#F8F8F8',
                   maxWidth: '320px',
                   margin: '0 auto',
                 }}
@@ -431,7 +457,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         borderColor: 'darkgray',
                         borderRadius: 1.5,
                         textAlign: 'center',
-                        backgroundColor: '#ffffff',
+                        backgroundColor:
+                          currentScore > 0
+                            ? getMaturityLevel(currentScore).backgroundColor
+                            : '#F8F8F8',
                       }}
                       role="region"
                       aria-label={`${pillar.pillar} pillar score: ${currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}`}
