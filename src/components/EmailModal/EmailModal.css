@@ -3,7 +3,6 @@
   margin-bottom: 0;
 }
 
-
 .subject-label-text {
   margin-top: 0;
   margin-bottom: 16px; /* Default for all browsers */
@@ -11,7 +10,7 @@
 
 .label {
   margin-top: 16px;
-  margin-bottom: 0px
+  margin-bottom: 0px;
 }
 
 .required-label {
@@ -29,7 +28,7 @@
     padding-bottom: 0;
   }
   .label {
-  margin-top: 16px;
-  margin-bottom: 0px;
-}
+    margin-top: 16px;
+    margin-bottom: 0px;
+  }
 }
