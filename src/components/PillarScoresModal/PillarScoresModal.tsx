@@ -66,13 +66,12 @@ interface PillarScoresModalProps {
   scores: SystemScore[]
 }
 
-const getPillarColor = (score: number) => {
-  // Match the existing FismaTable color scheme
-  if (score >= 1 && score <= 1.74) return '#DAA9EC'
-  if (score >= 1.75 && score <= 2.74) return '#FFD5A5'
-  if (score >= 2.75 && score <= 3.65) return '#F2FBC4'
-  if (score >= 3.66) return '#93F0ED'
-  return '#f5f5f5'
+const getMaturityLevel = (score: number) => {
+  if (score >= 3.66) return { name: 'Optimal', color: '#0F5C4C' } // Dark teal
+  if (score >= 2.75) return { name: 'Advanced', color: '#8B8000' } // Dark yellow/gold
+  if (score >= 1.75) return { name: 'Initial', color: '#CC5500' } // Dark orange
+  if (score >= 1) return { name: 'Traditional', color: '#663399' } // Dark purple
+  return { name: 'No Score', color: '#666666' } // Gray
 }
 
 const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
@@ -267,23 +266,15 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   border: 1,
                   borderColor: 'darkgray',
                   borderRadius: 2,
-                  backgroundColor: latestScore.systemscore
-                    ? getPillarColor(latestScore.systemscore)
-                    : '#f5f5f5',
+                  backgroundColor: '#ffffff',
                   maxWidth: '320px',
                   margin: '0 auto',
                 }}
                 role="region"
                 aria-label={`Overall system score: ${latestScore.systemscore?.toFixed(2) || 'N/A'}`}
               >
-                <Box
-                  display="flex"
-                  alignItems="center"
-                  justifyContent="center"
-                  gap={1.5}
-                  mb={0.5}
-                >
-                  <Typography variant="h4" fontWeight="bold">
+                <Box textAlign="center">
+                  <Typography variant="h4" fontWeight="bold" mb={0.5}>
                     {latestScore.systemscore?.toFixed(2) || 'N/A'}
                     {latestScore.systemscore && (
                       <Typography
@@ -296,6 +287,29 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       </Typography>
                     )}
                   </Typography>
+
+                  {/* Maturity Level Display */}
+                  {latestScore.systemscore && (
+                    <Typography
+                      variant="body1"
+                      sx={{
+                        color: getMaturityLevel(latestScore.systemscore).color,
+                        fontWeight: 'bold',
+                        fontSize: '1rem',
+                        mb: 1,
+                      }}
+                    >
+                      {getMaturityLevel(latestScore.systemscore).name}
+                    </Typography>
+                  )}
+                </Box>
+
+                <Box
+                  display="flex"
+                  alignItems="center"
+                  justifyContent="center"
+                  gap={1.5}
+                >
                   {(() => {
                     // Find previous system score for trend calculation
                     const previousSystemScore = scores
@@ -417,7 +431,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         borderColor: 'darkgray',
                         borderRadius: 1.5,
                         textAlign: 'center',
-                        backgroundColor: getPillarColor(currentScore),
+                        backgroundColor: '#ffffff',
                       }}
                       role="region"
                       aria-label={`${pillar.pillar} pillar score: ${currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}`}
@@ -465,6 +479,22 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                           </Typography>
                         )}
                       </Box>
+
+                      {/* Maturity Level for Pillar */}
+                      {currentScore > 0 && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            color: getMaturityLevel(currentScore).color,
+                            fontWeight: 'bold',
+                            fontSize: '0.8rem',
+                            display: 'block',
+                            mb: 0.5,
+                          }}
+                        >
+                          {getMaturityLevel(currentScore).name}
+                        </Typography>
+                      )}
 
                       {previousPillarScore && currentScore > 0 && (
                         <Typography
