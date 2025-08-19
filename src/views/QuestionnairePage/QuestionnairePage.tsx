@@ -18,7 +18,8 @@ import {
   QuestionScores,
   functionScores,
 } from '@/types'
-import { Container, styled } from '@mui/system'
+import { Container } from '@mui/system'
+import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { useSnackbar } from 'notistack'
 import { useNavigate, useLocation } from 'react-router-dom'

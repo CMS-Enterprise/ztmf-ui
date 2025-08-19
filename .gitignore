@@ -1,6 +1,7 @@
 # environments
 .env*
 !.env.example
+!.env.development.example
 
 # logs
 **/*.log
