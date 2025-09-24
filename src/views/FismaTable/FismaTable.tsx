@@ -284,17 +284,22 @@ export default function FismaTable({ scores }: FismaTableProps) {
     {
       field: 'fismaname',
       headerName: 'System Name',
-      width: 430,
+      flex: 2,
+      minWidth: 300,
+      maxWidth: 450,
       hideable: false,
     },
     {
       field: 'fismaacronym',
       headerName: 'Acronym',
+      flex: 0.8,
+      minWidth: 100,
     },
     {
       field: 'issoemail',
       headerName: 'ISSO Name',
-      flex: 1,
+      flex: 1.2,
+      minWidth: 120,
       hideable: false,
       valueGetter: (value) => {
         const name = value.row.issoemail.split('@')
@@ -320,6 +325,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
       headerName: 'Zero Trust Score',
       type: 'number',
       flex: 1,
+      minWidth: 140,
       align: 'center',
       hideable: false,
       valueGetter: (value) => {
@@ -362,7 +368,8 @@ export default function FismaTable({ scores }: FismaTableProps) {
     {
       field: 'datacenterenvironment',
       headerName: 'Data Center Environment',
-      flex: 1,
+      flex: 1.5,
+      minWidth: 180,
       hideable: false,
     },
     {
@@ -370,7 +377,8 @@ export default function FismaTable({ scores }: FismaTableProps) {
       headerName: 'Actions',
       headerAlign: 'center',
       align: 'center',
-      flex: 0.5,
+      width: 140,
+      minWidth: 140,
       hideable: false,
       sortable: false,
       disableColumnMenu: true,
