@@ -86,7 +86,9 @@ export default function QuestionnarePage() {
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
   const [questions, setQuestions] = React.useState<Record<number, Question>>([])
-  const [functionScores, setFunctionScores] = React.useState<functionScores>({})
+  const [_functionScores, _setFunctionScores] = React.useState<functionScores>(
+    {}
+  )
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
@@ -420,8 +422,8 @@ export default function QuestionnarePage() {
               `scores?datacallid=${latestDataCallId}&fismasystemid=${system}&include=functionoption`
             )
             .then((res) => {
-              const funcScoreTable = {}
-              const questionScoreMap: questionScoreMap = {}
+              const _funcScoreTable = {}
+              const _questionScoreMap: questionScoreMap = {}
               const hashTable: questionScoreMap = Object.assign(
                 {},
                 ...res.data.data.map((item: QuestionScores) => ({

@@ -1,21 +1,12 @@
 import { render, screen } from '@testing-library/react'
-import {
-  useNavigate,
-  useRouteError,
-  isRouteErrorResponse,
-} from 'react-router-dom'
+import { useRouteError } from 'react-router-dom'
 import ErrorBoundary from '@/components/ErrorBoundary'
-import { Routes } from '@/router/constants'
 
 jest.mock('react-router-dom', () => ({
   useNavigate: jest.fn(),
   useRouteError: jest.fn(),
   isRouteErrorResponse: jest.fn(),
 }))
-
-// @ts-ignore
-const isRouteErrorResponseMock = isRouteErrorResponse as jest.Mock
-const useNavigateMock = useNavigate as jest.Mock
 const routeErrorMock = useRouteError as jest.Mock
 
 beforeEach(() => {
