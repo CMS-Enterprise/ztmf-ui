@@ -184,7 +184,7 @@ export default function UserTable() {
   })
   const [userName, setUserName] = useState<string | undefined>(undefined)
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
-    Record<number, string>
+    Record<number, { name: string; acronym: string }>
   >({})
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
@@ -383,11 +383,14 @@ export default function UserTable() {
             role: row.role.trim(),
           }))
           setRows(data)
-          const map: Record<number, string> = {}
+          const map: Record<number, { name: string; acronym: string }> = {}
           for (const obj of fismaSystems) {
-            map[obj.fismasystemid] = obj.fismasubsystem
-              ? obj.fismaname + ' - ' + obj.fismasubsystem
-              : obj.fismaname
+            map[obj.fismasystemid] = {
+              name: obj.fismasubsystem
+                ? obj.fismaname + ' - ' + obj.fismasubsystem
+                : obj.fismaname,
+              acronym: obj.fismaacronym,
+            }
           }
           setFismaSystemsMap(map)
         } else {

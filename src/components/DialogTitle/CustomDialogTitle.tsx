@@ -1,4 +1,3 @@
-import * as React from 'react'
 import DialogTitle from '@mui/material/DialogTitle'
 import Typography from '@mui/material/Typography'
 /**

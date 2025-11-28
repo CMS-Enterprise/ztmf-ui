@@ -23,7 +23,7 @@ const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
 
 type Props = {
-  fismaSystemMap: Record<number, string>
+  fismaSystemMap: Record<number, { name: string; acronym: string }>
   open: boolean
   handleClose: () => void
   userid: GridRowId
@@ -65,9 +65,16 @@ export default function AssignSystemModal({
             multiple
             disableCloseOnSelect
             limitTags={2}
-            options={fismaSystems}
+            options={fismaSystems.slice().sort((a: number, b: number) => {
+              const acrA = fismaSystemMap[a]?.acronym || ''
+              const acrB = fismaSystemMap[b]?.acronym || ''
+              return acrA.localeCompare(acrB)
+            })}
             disableClearable
-            getOptionLabel={(option) => fismaSystemMap[option] || ''}
+            getOptionLabel={(option: number) => {
+              const system = fismaSystemMap[option]
+              return system ? `${system.acronym} - ${system.name}` : ''
+            }}
             renderOption={(props, option, { selected }) => {
               const isAssigned = assignedSystems.includes(option)
               return (
@@ -80,7 +87,9 @@ export default function AssignSystemModal({
                     checked={selected || isAssigned}
                     disabled={isAssigned}
                   />
-                  {fismaSystemMap[option]}
+                  {fismaSystemMap[option]?.acronym}
+                  {' - '}
+                  {fismaSystemMap[option]?.name}
                 </li>
               )
             }}
