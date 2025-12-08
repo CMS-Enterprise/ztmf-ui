@@ -2,7 +2,7 @@
  * Generic React error boundary component.
  * @module components/ErrorBoundary
  */
-import { useNavigate, useRouteError } from 'react-router-dom'
+import { useRouteError } from 'react-router-dom'
 import { ErrorResponse } from '@remix-run/router'
 import Container from '@mui/material/Container'
 import {
