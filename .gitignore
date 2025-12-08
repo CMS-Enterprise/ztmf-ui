@@ -29,6 +29,12 @@ dist-ssr
 *.sln
 *.sw?
 
+# IDE and development files
+.vscode/
+CLAUDE.md
+AGENTS.md
+.claude/
+
 # temporary
 tmp/
 **/temp/
