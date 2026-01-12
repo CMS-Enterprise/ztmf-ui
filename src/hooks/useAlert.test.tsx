@@ -1,5 +1,6 @@
+import { act } from 'react'
 import { Root, createRoot } from 'react-dom/client'
-import { act, renderHook, waitFor } from '@testing-library/react'
+import { renderHook, waitFor } from '@testing-library/react'
 import { AlertColor } from '@mui/material/Alert'
 import { AlertProvider, AlertState, useAlert } from '@/hooks/useAlert'
 
