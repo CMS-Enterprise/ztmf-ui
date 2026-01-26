@@ -16,6 +16,8 @@ import {
 import Tooltip from '@mui/material/Tooltip'
 import { Box, IconButton } from '@mui/material'
 import { useState } from 'react'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Switch from '@mui/material/Switch'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
@@ -148,11 +150,16 @@ export function CustomFooterSaveComponent(
 }
 
 function QuickSearchToolbar() {
+  const { showDecommissioned, setShowDecommissioned } = useContextProp()
+
   return (
     <Box
       sx={{
         py: 0.5,
         pl: 1,
+        display: 'flex',
+        justifyContent: 'space-between',
+        alignItems: 'center',
       }}
     >
       <GridToolbarQuickFilter
@@ -173,6 +180,24 @@ function QuickSearchToolbar() {
             borderBottomColor: '#5666b8', // Changes the underline color on hover
           },
         }}
+      />
+      <FormControlLabel
+        control={
+          <Switch
+            checked={showDecommissioned}
+            onChange={(e) => setShowDecommissioned(e.target.checked)}
+            sx={{
+              '& .MuiSwitch-switchBase.Mui-checked': {
+                color: '#004297',
+              },
+              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                backgroundColor: '#004297',
+              },
+            }}
+          />
+        }
+        label="Show Decommissioned"
+        sx={{ mr: 2 }}
       />
     </Box>
   )

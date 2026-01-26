@@ -6,6 +6,9 @@ import DialogContent from '@mui/material/DialogContent'
 import CustomDialogTitle from '../../components/DialogTitle/CustomDialogTitle'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { Box, Grid } from '@mui/material'
+import FormControlLabel from '@mui/material/FormControlLabel'
+import Checkbox from '@mui/material/Checkbox'
+import Typography from '@mui/material/Typography'
 import {
   editSystemModalProps,
   FismaSystemType,
@@ -60,6 +63,8 @@ export default function EditSystemModal({
   const { enqueueSnackbar } = useSnackbar()
   const [loading, setLoading] = React.useState<boolean>(true)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
+  const [openDecommissionAlert, setOpenDecommissionAlert] =
+    React.useState<boolean>(false)
   const [formValidErrorText, setFormValidErrorText] =
     React.useState<FormValidHelperText>({
       issoemail: TEXTFIELD_HELPER_TEXT,
@@ -269,6 +274,52 @@ export default function EditSystemModal({
           }
         })
     }
+  }
+  const handleDecommission = async () => {
+    setOpenDecommissionAlert(false)
+    await axiosInstance
+      .delete(`fismasystems/${editedFismaSystem.fismasystemid}`)
+      .then((res) => {
+        if (res.status === 204) {
+          enqueueSnackbar(`System decommissioned successfully`, {
+            variant: 'success',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+          onClose(editedFismaSystem)
+        }
+      })
+      .catch((error) => {
+        if (error.response?.status === 403) {
+          enqueueSnackbar(`Permission denied. Admin access required.`, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+        } else if (error.response?.status === 404) {
+          enqueueSnackbar(`System not found`, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+        } else {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.error,
+            },
+          })
+        }
+      })
   }
   if (open && system) {
     if (loading) {
@@ -523,6 +574,70 @@ export default function EditSystemModal({
                       </MenuItem>
                     ))}
                   </TextField>
+                  {mode === 'edit' && (
+                    <Box
+                      sx={{
+                        mt: 3,
+                        p: 2,
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={system?.decommissioned || false}
+                            disabled={system?.decommissioned || false}
+                            onChange={(e) => {
+                              if (e.target.checked) {
+                                setOpenDecommissionAlert(true)
+                              }
+                            }}
+                            sx={{
+                              color: '#d32f2f',
+                              '&.Mui-checked': {
+                                color: '#d32f2f',
+                              },
+                            }}
+                          />
+                        }
+                        label={
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            Decommission System
+                          </Typography>
+                        }
+                      />
+                      {system?.decommissioned &&
+                        system?.decommissioned_date && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              display: 'block',
+                              ml: 4,
+                              color: 'text.secondary',
+                            }}
+                          >
+                            Decommissioned on:{' '}
+                            {new Date(
+                              system.decommissioned_date
+                            ).toLocaleDateString()}
+                          </Typography>
+                        )}
+                      {!system?.decommissioned && (
+                        <Typography
+                          variant="caption"
+                          sx={{
+                            display: 'block',
+                            ml: 4,
+                            color: 'text.secondary',
+                          }}
+                        >
+                          Mark this system as decommissioned (current date)
+                        </Typography>
+                      )}
+                    </Box>
+                  )}
                 </Grid>
               </Grid>
             </Box>
@@ -545,6 +660,18 @@ export default function EditSystemModal({
           open={openAlert}
           onClose={() => setOpenAlert(false)}
           confirmClick={handleConfirmReturn}
+        />
+        <ConfirmDialog
+          confirmationText={`Are you sure you want to decommission "${system?.fismaname}"? This will mark the system as decommissioned with today's date and hide it from the active systems list. This action cannot be undone through the UI.`}
+          open={openDecommissionAlert}
+          onClose={() => setOpenDecommissionAlert(false)}
+          confirmClick={(confirm: boolean) => {
+            if (confirm) {
+              handleDecommission()
+            } else {
+              setOpenDecommissionAlert(false)
+            }
+          }}
         />
       </>
     )

@@ -10,7 +10,7 @@ import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
-import { useState, useEffect } from 'react'
+import { useState, useEffect, useCallback } from 'react'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
 import EmailModal from '@/components/EmailModal/EmailModal'
@@ -51,11 +51,15 @@ export default function Title() {
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
-  // let latestDataCallId: number = 0
-  useEffect(() => {
-    async function fetchFismaSystems() {
+  const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
+
+  const fetchFismaSystems = useCallback(
+    async (decommissioned: boolean = false) => {
+      const url = decommissioned
+        ? '/fismasystems?decommissioned=true'
+        : '/fismasystems'
       await axiosInstance
-        .get('/fismasystems')
+        .get(url)
         .then((res) => {
           setFismaSystems(res.data.data)
         })
@@ -69,7 +73,15 @@ export default function Title() {
             })
           }
         })
-    }
+    },
+    [navigate]
+  )
+
+  useEffect(() => {
+    fetchFismaSystems(showDecommissioned)
+  }, [showDecommissioned, fetchFismaSystems])
+
+  useEffect(() => {
     async function fetchLatestDatacall() {
       await axiosInstance
         .get('/datacalls/latest')
@@ -88,11 +100,7 @@ export default function Title() {
           }
         })
     }
-    const fetchData = async () => {
-      await fetchFismaSystems()
-      await fetchLatestDatacall()
-    }
-    fetchData()
+    fetchLatestDatacall()
   }, [navigate])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
@@ -231,6 +239,8 @@ export default function Title() {
                   userInfo,
                   latestDataCallId,
                   latestDatacall,
+                  showDecommissioned,
+                  setShowDecommissioned,
                 }}
               />
             </Box>

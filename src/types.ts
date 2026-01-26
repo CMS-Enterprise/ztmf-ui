@@ -47,6 +47,8 @@ export type FismaSystemType = {
   groupacronym?: string
   groupname?: string
   divisionname?: string
+  decommissioned: boolean
+  decommissioned_date: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
