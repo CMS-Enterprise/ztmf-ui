@@ -281,7 +281,7 @@ export default function EditSystemModal({
       .delete(`fismasystems/${editedFismaSystem.fismasystemid}`)
       .then((res) => {
         if (res.status === 204) {
-          enqueueSnackbar(`System decommissioned successfully`, {
+          enqueueSnackbar('System decommissioned successfully', {
             variant: 'success',
             anchorOrigin: {
               vertical: 'top',
@@ -294,7 +294,7 @@ export default function EditSystemModal({
       })
       .catch((error) => {
         if (error.response?.status === 403) {
-          enqueueSnackbar(`Permission denied. Admin access required.`, {
+          enqueueSnackbar('Permission denied. Admin access required.', {
             variant: 'error',
             anchorOrigin: {
               vertical: 'top',
@@ -303,7 +303,7 @@ export default function EditSystemModal({
             autoHideDuration: 2000,
           })
         } else if (error.response?.status === 404) {
-          enqueueSnackbar(`System not found`, {
+          enqueueSnackbar('System not found', {
             variant: 'error',
             anchorOrigin: {
               vertical: 'top',
