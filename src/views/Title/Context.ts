@@ -6,6 +6,8 @@ type ContextType = {
   userInfo: userData
   latestDataCallId: number
   latestDatacall: string
+  showDecommissioned: boolean
+  setShowDecommissioned: (show: boolean) => void
 }
 
 export function useContextProp() {
