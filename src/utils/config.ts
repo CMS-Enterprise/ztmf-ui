@@ -7,7 +7,7 @@ import type { AppConfig } from '@/types'
 
 const CONFIG = {
   //* Feature flags
-  IDP_ENABLED: import.meta.env.VITE_IDP_ENABLED === 'true',
+  IDP_ENABLED: String(import.meta.env.VITE_IDP_ENABLED) === 'true',
 } satisfies AppConfig
 
 export default CONFIG
