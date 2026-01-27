@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+. "$(dirname -- "$0")/_/husky.sh"
+
+echo "🔍 Running pre-push checks..."
+echo "  1. TypeScript type checking"
+echo "  2. Auto-fixing code style (prettier + eslint)"
+echo "  3. Linting verification"
+echo ""
+
+yarn pre-push
