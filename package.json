@@ -16,7 +16,7 @@
   "type": "module",
   "packageManager": "yarn@4.4.0",
   "engines": {
-    "node": "20",
+    "node": ">=20.0.0",
     "npm": "please-use-yarn",
     "yarn": "4.4.0"
   },
@@ -57,7 +57,7 @@
     "@mui/x-data-grid": "^6.19.4",
     "@popperjs/core": "^2.11.8",
     "apollo-client": "^2.6.10",
-    "axios": "^1.7.7",
+    "axios": "1.12.0",
     "classnames": "^2.5.1",
     "clipboard-copy": "^4.0.1",
     "core-js": "^3.37.1",
@@ -73,7 +73,8 @@
     "react-hook-form": "^7.50.1",
     "react-is": "^19.1.1",
     "react-popper": "^2.3.0",
-    "react-router-dom": "^6.30.3",
+    "react-router": "7.12.0",
+    "react-router-dom": "7.12.0",
     "react-virtuoso": "^4.10.1",
     "recharts": "^3.1.2",
     "uswds": "^2.14.0",

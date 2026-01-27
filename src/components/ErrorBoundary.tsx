@@ -2,8 +2,7 @@
  * Generic React error boundary component.
  * @module components/ErrorBoundary
  */
-import { useRouteError } from 'react-router-dom'
-import { ErrorResponse } from '@remix-run/router'
+import { useRouteError, type ErrorResponse } from 'react-router'
 import Container from '@mui/material/Container'
 import {
   GENERIC_ERROR_MESSAGE,
