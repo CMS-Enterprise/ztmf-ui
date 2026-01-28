@@ -15694,6 +15694,13 @@ __metadata:
   languageName: node
   linkType: hard
 
+"lodash@npm:^4.17.23":
+  version: 4.17.23
+  resolution: "lodash@npm:4.17.23"
+  checksum: 10/82504c88250f58da7a5a4289f57a4f759c44946c005dd232821c7688b5fcfbf4a6268f6a6cdde4b792c91edd2f3b5398c1d2a0998274432cff76def48735e233
+  languageName: node
+  linkType: hard
+
 "log-symbols@npm:^4.1.0":
   version: 4.1.0
   resolution: "log-symbols@npm:4.1.0"
@@ -22282,7 +22289,7 @@ __metadata:
     jest-watch-typeahead: "npm:^2.2.2"
     jwt-decode: "npm:^4.0.0"
     lint-staged: "npm:^14.0.1"
-    lodash: "npm:^4.17.21"
+    lodash: "npm:^4.17.23"
     notistack: "npm:^3.0.1"
     npm-run-all: "npm:^4.1.5"
     prettier: "npm:^3.2.5"
