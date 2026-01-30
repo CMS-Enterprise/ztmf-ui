@@ -340,9 +340,7 @@ export default function EditSystemModal({
     if (!validateDecommissionDate(decommissionDate)) {
       return
     }
-    const isoDate = new Date(
-      decommissionDate + 'T00:00:00'
-    ).toISOString()
+    const isoDate = new Date(decommissionDate + 'T00:00:00').toISOString()
     const body: { decommissioned_date: string; notes?: string } = {
       decommissioned_date: isoDate,
     }
@@ -732,9 +730,7 @@ export default function EditSystemModal({
                                       2,
                                       '0'
                                     )
-                                    setDecommissionDate(
-                                      `${yyyy}-${mm}-${dd}`
-                                    )
+                                    setDecommissionDate(`${yyyy}-${mm}-${dd}`)
                                   }
                                   setDecommissionNotes(
                                     system?.decommissioned_notes || ''
@@ -832,9 +828,7 @@ export default function EditSystemModal({
                                   size="small"
                                   onClick={() => {
                                     if (
-                                      validateDecommissionDate(
-                                        decommissionDate
-                                      )
+                                      validateDecommissionDate(decommissionDate)
                                     ) {
                                       setOpenDecommissionAlert(true)
                                     }
@@ -844,9 +838,7 @@ export default function EditSystemModal({
                                 </CmsButton>
                                 <CmsButton
                                   size="small"
-                                  onClick={() =>
-                                    setShowDecommissionForm(false)
-                                  }
+                                  onClick={() => setShowDecommissionForm(false)}
                                 >
                                   Cancel
                                 </CmsButton>
@@ -915,7 +907,11 @@ export default function EditSystemModal({
                               {decommissionDateError && (
                                 <Typography
                                   variant="caption"
-                                  sx={{ color: '#d32f2f', mt: 0.5, display: 'block' }}
+                                  sx={{
+                                    color: '#d32f2f',
+                                    mt: 0.5,
+                                    display: 'block',
+                                  }}
                                 >
                                   {decommissionDateError}
                                 </Typography>
@@ -947,7 +943,11 @@ export default function EditSystemModal({
                               />
                               <Typography
                                 variant="caption"
-                                sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+                                sx={{
+                                  color: 'text.secondary',
+                                  display: 'block',
+                                  mb: 1,
+                                }}
                               >
                                 {decommissionNotes.length}/500
                               </Typography>
@@ -997,10 +997,16 @@ export default function EditSystemModal({
           confirmClick={handleConfirmReturn}
         />
         <ConfirmDialog
-          title={system?.decommissioned ? 'Update Decommission Details' : 'Confirm Decommission'}
-          confirmationText={system?.decommissioned
-            ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
-            : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. This action cannot be undone through the UI.`}
+          title={
+            system?.decommissioned
+              ? 'Update Decommission Details'
+              : 'Confirm Decommission'
+          }
+          confirmationText={
+            system?.decommissioned
+              ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
+              : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. This action cannot be undone through the UI.`
+          }
           open={openDecommissionAlert}
           onClose={() => setOpenDecommissionAlert(false)}
           confirmClick={(confirm: boolean) => {

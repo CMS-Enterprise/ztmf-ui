@@ -222,7 +222,12 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId, showDecommissioned, fetchFismaSystems } = useContextProp()
+  const {
+    fismaSystems,
+    latestDataCallId,
+    showDecommissioned,
+    fetchFismaSystems,
+  } = useContextProp()
   const [open, setOpen] = useState<boolean>(false)
   const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
