@@ -771,9 +771,11 @@ export default function EditSystemModal({
                                     validateDecommissionDate(e.target.value)
                                   }
                                 }}
-                                onBlur={(e) =>
-                                  validateDecommissionDate(e.currentTarget.value)
-                                }
+                                onBlur={(e) => {
+                                  validateDecommissionDate(
+                                    e.currentTarget.value
+                                  )
+                                }}
                                 style={{
                                   width: '100%',
                                   padding: '8px',
@@ -900,9 +902,11 @@ export default function EditSystemModal({
                                     validateDecommissionDate(e.target.value)
                                   }
                                 }}
-                                onBlur={(e) =>
-                                  validateDecommissionDate(e.currentTarget.value)
-                                }
+                                onBlur={(e) => {
+                                  validateDecommissionDate(
+                                    e.currentTarget.value
+                                  )
+                                }}
                                 style={{
                                   width: '100%',
                                   padding: '8px',
