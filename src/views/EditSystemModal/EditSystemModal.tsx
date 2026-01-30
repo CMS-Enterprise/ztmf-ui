@@ -314,7 +314,7 @@ export default function EditSystemModal({
       setDecommissionDateError('Date is required')
       return false
     }
-    const parsed = new Date(dateStr + 'T00:00:00')
+    const parsed = new Date(dateStr + 'T00:00:00.000Z')
     if (isNaN(parsed.getTime())) {
       setDecommissionDateError('Invalid date')
       return false
@@ -340,7 +340,7 @@ export default function EditSystemModal({
     if (!validateDecommissionDate(decommissionDate)) {
       return
     }
-    const isoDate = new Date(decommissionDate + 'T00:00:00').toISOString()
+    const isoDate = new Date(decommissionDate + 'T00:00:00.000Z').toISOString()
     const body: { decommissioned_date: string; notes?: string } = {
       decommissioned_date: isoDate,
     }
@@ -1004,8 +1004,8 @@ export default function EditSystemModal({
           }
           confirmationText={
             system?.decommissioned
-              ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
-              : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. This action cannot be undone through the UI.`
+              ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
+              : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. This action cannot be undone through the UI.`
           }
           open={openDecommissionAlert}
           onClose={() => setOpenDecommissionAlert(false)}
