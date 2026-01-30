@@ -151,21 +151,30 @@ export default function EditSystemModal({
     }
   }, [system, open])
   React.useEffect(() => {
+    let cancelled = false
     if (open && system?.decommissioned && system?.decommissioned_by) {
+      const userId = system.decommissioned_by
       axiosInstance
-        .get(`users/${system.decommissioned_by}`)
+        .get(`users/${userId}`)
         .then((res) => {
-          if (res.data?.fullname) {
-            setDecommissionedByName(res.data.fullname)
-          } else {
-            setDecommissionedByName(system.decommissioned_by || '')
+          if (!cancelled && system?.decommissioned_by === userId) {
+            if (res.data?.fullname) {
+              setDecommissionedByName(res.data.fullname)
+            } else {
+              setDecommissionedByName(userId)
+            }
           }
         })
         .catch(() => {
-          setDecommissionedByName(system.decommissioned_by || '')
+          if (!cancelled && system?.decommissioned_by === userId) {
+            setDecommissionedByName(userId)
+          }
         })
     } else {
       setDecommissionedByName('')
+    }
+    return () => {
+      cancelled = true
     }
   }, [system, open])
   const handleClose = () => {
@@ -341,12 +350,13 @@ export default function EditSystemModal({
       return
     }
     const isoDate = new Date(decommissionDate + 'T00:00:00.000Z').toISOString()
-    const body: { decommissioned_date: string; notes?: string } = {
-      decommissioned_date: isoDate,
-    }
     const trimmedNotes = decommissionNotes.trim()
-    if (trimmedNotes) {
-      body.notes = trimmedNotes
+    const body: {
+      decommissioned_date: string
+      notes?: string | null
+    } = {
+      decommissioned_date: isoDate,
+      notes: trimmedNotes || null,
     }
     await axiosInstance
       .delete(`fismasystems/${editedFismaSystem.fismasystemid}`, {
@@ -761,8 +771,8 @@ export default function EditSystemModal({
                                     validateDecommissionDate(e.target.value)
                                   }
                                 }}
-                                onBlur={() =>
-                                  validateDecommissionDate(decommissionDate)
+                                onBlur={(e) =>
+                                  validateDecommissionDate(e.currentTarget.value)
                                 }
                                 style={{
                                   width: '100%',
@@ -890,8 +900,8 @@ export default function EditSystemModal({
                                     validateDecommissionDate(e.target.value)
                                   }
                                 }}
-                                onBlur={() =>
-                                  validateDecommissionDate(decommissionDate)
+                                onBlur={(e) =>
+                                  validateDecommissionDate(e.currentTarget.value)
                                 }
                                 style={{
                                   width: '100%',
