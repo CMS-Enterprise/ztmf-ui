@@ -222,7 +222,7 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId } = useContextProp()
+  const { fismaSystems, latestDataCallId, showDecommissioned, fetchFismaSystems } = useContextProp()
   const [open, setOpen] = useState<boolean>(false)
   const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
@@ -297,9 +297,13 @@ export default function FismaTable({ scores }: FismaTableProps) {
   }
   const handleCloseEditModal = (newRowData: FismaSystemType) => {
     if (selectedRow) {
-      const row = apiRef.current.getRow(selectedRow?.fismasystemid)
-      if (row) {
-        apiRef.current.updateRows([newRowData])
+      if (newRowData.decommissioned && !selectedRow.decommissioned) {
+        fetchFismaSystems(showDecommissioned)
+      } else {
+        const row = apiRef.current.getRow(selectedRow?.fismasystemid)
+        if (row) {
+          apiRef.current.updateRows([newRowData])
+        }
       }
     }
     setOpenEditModal(false)

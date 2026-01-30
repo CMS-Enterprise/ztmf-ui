@@ -65,6 +65,14 @@ export default function EditSystemModal({
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [openDecommissionAlert, setOpenDecommissionAlert] =
     React.useState<boolean>(false)
+  const [decommissionDate, setDecommissionDate] = React.useState<string>('')
+  const [decommissionDateError, setDecommissionDateError] =
+    React.useState<string>('')
+  const [decommissionNotes, setDecommissionNotes] = React.useState<string>('')
+  const [showDecommissionForm, setShowDecommissionForm] =
+    React.useState<boolean>(false)
+  const [decommissionedByName, setDecommissionedByName] =
+    React.useState<string>('')
   const [formValidErrorText, setFormValidErrorText] =
     React.useState<FormValidHelperText>({
       issoemail: TEXTFIELD_HELPER_TEXT,
@@ -131,7 +139,33 @@ export default function EditSystemModal({
           system?.fismauid && system?.fismauid.length > 0 ? true : false,
       }))
       setEditedFismaSystem(system)
+      const today = new Date()
+      const yyyy = today.getFullYear()
+      const mm = String(today.getMonth() + 1).padStart(2, '0')
+      const dd = String(today.getDate()).padStart(2, '0')
+      setDecommissionDate(`${yyyy}-${mm}-${dd}`)
+      setDecommissionDateError('')
+      setDecommissionNotes('')
+      setShowDecommissionForm(false)
       setLoading(false)
+    }
+  }, [system, open])
+  React.useEffect(() => {
+    if (open && system?.decommissioned && system?.decommissioned_by) {
+      axiosInstance
+        .get(`users/${system.decommissioned_by}`)
+        .then((res) => {
+          if (res.data?.fullname) {
+            setDecommissionedByName(res.data.fullname)
+          } else {
+            setDecommissionedByName(system.decommissioned_by || '')
+          }
+        })
+        .catch(() => {
+          setDecommissionedByName(system.decommissioned_by || '')
+        })
+    } else {
+      setDecommissionedByName('')
     }
   }, [system, open])
   const handleClose = () => {
@@ -275,12 +309,53 @@ export default function EditSystemModal({
         })
     }
   }
+  const validateDecommissionDate = (dateStr: string): boolean => {
+    if (!dateStr) {
+      setDecommissionDateError('Date is required')
+      return false
+    }
+    const parsed = new Date(dateStr + 'T00:00:00')
+    if (isNaN(parsed.getTime())) {
+      setDecommissionDateError('Invalid date')
+      return false
+    }
+    const today = new Date()
+    today.setHours(0, 0, 0, 0)
+    if (parsed > today) {
+      setDecommissionDateError('Date cannot be in the future')
+      return false
+    }
+    setDecommissionDateError('')
+    return true
+  }
+  const getTodayISO = (): string => {
+    const today = new Date()
+    const yyyy = today.getFullYear()
+    const mm = String(today.getMonth() + 1).padStart(2, '0')
+    const dd = String(today.getDate()).padStart(2, '0')
+    return `${yyyy}-${mm}-${dd}`
+  }
   const handleDecommission = async () => {
     setOpenDecommissionAlert(false)
+    if (!validateDecommissionDate(decommissionDate)) {
+      return
+    }
+    const isoDate = new Date(
+      decommissionDate + 'T00:00:00'
+    ).toISOString()
+    const body: { decommissioned_date: string; notes?: string } = {
+      decommissioned_date: isoDate,
+    }
+    const trimmedNotes = decommissionNotes.trim()
+    if (trimmedNotes) {
+      body.notes = trimmedNotes
+    }
     await axiosInstance
-      .delete(`fismasystems/${editedFismaSystem.fismasystemid}`)
+      .delete(`fismasystems/${editedFismaSystem.fismasystemid}`, {
+        data: body,
+      })
       .then((res) => {
-        if (res.status === 204) {
+        if (res.status === 200 || res.status === 204) {
           enqueueSnackbar('System decommissioned successfully', {
             variant: 'success',
             anchorOrigin: {
@@ -289,7 +364,13 @@ export default function EditSystemModal({
             },
             autoHideDuration: 2000,
           })
-          onClose(editedFismaSystem)
+          const updatedSystem: FismaSystemType = res.data || {
+            ...editedFismaSystem,
+            decommissioned: true,
+            decommissioned_date: isoDate,
+            decommissioned_notes: trimmedNotes || null,
+          }
+          onClose(updatedSystem)
         }
       })
       .catch((error) => {
@@ -584,57 +665,311 @@ export default function EditSystemModal({
                         borderRadius: 1,
                       }}
                     >
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={system?.decommissioned || false}
-                            disabled={system?.decommissioned || false}
-                            onChange={(e) => {
-                              if (e.target.checked) {
-                                setOpenDecommissionAlert(true)
-                              }
-                            }}
-                            sx={{
-                              color: '#d32f2f',
-                              '&.Mui-checked': {
-                                color: '#d32f2f',
-                              },
-                            }}
-                          />
-                        }
-                        label={
-                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                            Decommission System
-                          </Typography>
-                        }
-                      />
-                      {system?.decommissioned &&
-                        system?.decommissioned_date && (
+                      {system?.decommissioned ? (
+                        <>
                           <Typography
-                            variant="caption"
-                            sx={{
-                              display: 'block',
-                              ml: 4,
-                              color: 'text.secondary',
-                            }}
+                            variant="body2"
+                            sx={{ fontWeight: 500, mb: 1 }}
                           >
-                            Decommissioned on:{' '}
-                            {new Date(
-                              system.decommissioned_date
-                            ).toLocaleDateString()}
+                            System Decommissioned
                           </Typography>
-                        )}
-                      {!system?.decommissioned && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            display: 'block',
-                            ml: 4,
-                            color: 'text.secondary',
-                          }}
-                        >
-                          Mark this system as decommissioned (current date)
-                        </Typography>
+                          {!showDecommissionForm && (
+                            <>
+                              {system?.decommissioned_date && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    display: 'block',
+                                    ml: 2,
+                                    color: 'text.secondary',
+                                  }}
+                                >
+                                  Date:{' '}
+                                  {new Date(
+                                    system.decommissioned_date
+                                  ).toLocaleDateString()}
+                                </Typography>
+                              )}
+                              {system?.decommissioned_by && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    display: 'block',
+                                    ml: 2,
+                                    color: 'text.secondary',
+                                  }}
+                                >
+                                  By:{' '}
+                                  {decommissionedByName ||
+                                    system.decommissioned_by}
+                                </Typography>
+                              )}
+                              {system?.decommissioned_notes && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    display: 'block',
+                                    ml: 2,
+                                    mt: 0.5,
+                                    color: 'text.secondary',
+                                  }}
+                                >
+                                  Notes: {system.decommissioned_notes}
+                                </Typography>
+                              )}
+                              <CmsButton
+                                size="small"
+                                onClick={() => {
+                                  if (system?.decommissioned_date) {
+                                    const d = new Date(
+                                      system.decommissioned_date
+                                    )
+                                    const yyyy = d.getFullYear()
+                                    const mm = String(
+                                      d.getMonth() + 1
+                                    ).padStart(2, '0')
+                                    const dd = String(d.getDate()).padStart(
+                                      2,
+                                      '0'
+                                    )
+                                    setDecommissionDate(
+                                      `${yyyy}-${mm}-${dd}`
+                                    )
+                                  }
+                                  setDecommissionNotes(
+                                    system?.decommissioned_notes || ''
+                                  )
+                                  setShowDecommissionForm(true)
+                                }}
+                                style={{ marginTop: '8px' }}
+                              >
+                                Edit Decommission Details
+                              </CmsButton>
+                            </>
+                          )}
+                          {showDecommissionForm && (
+                            <Box sx={{ ml: 2, mt: 1 }}>
+                              <Typography
+                                variant="body2"
+                                sx={{ mb: 0.5, fontWeight: 500 }}
+                              >
+                                Decommission Date
+                              </Typography>
+                              <input
+                                type="date"
+                                value={decommissionDate}
+                                max={getTodayISO()}
+                                onChange={(e) => {
+                                  setDecommissionDate(e.target.value)
+                                  if (decommissionDateError) {
+                                    validateDecommissionDate(e.target.value)
+                                  }
+                                }}
+                                onBlur={() =>
+                                  validateDecommissionDate(decommissionDate)
+                                }
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  fontSize: '14px',
+                                  border: decommissionDateError
+                                    ? '1px solid #d32f2f'
+                                    : '1px solid #ccc',
+                                  borderRadius: '4px',
+                                  boxSizing: 'border-box',
+                                }}
+                              />
+                              {decommissionDateError && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{
+                                    color: '#d32f2f',
+                                    mt: 0.5,
+                                    display: 'block',
+                                  }}
+                                >
+                                  {decommissionDateError}
+                                </Typography>
+                              )}
+                              <Typography
+                                variant="body2"
+                                sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
+                              >
+                                Notes (optional)
+                              </Typography>
+                              <textarea
+                                value={decommissionNotes}
+                                maxLength={500}
+                                rows={3}
+                                onChange={(e) =>
+                                  setDecommissionNotes(e.target.value)
+                                }
+                                placeholder="Reason for decommission..."
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  fontSize: '14px',
+                                  border: '1px solid #ccc',
+                                  borderRadius: '4px',
+                                  boxSizing: 'border-box',
+                                  fontFamily: 'inherit',
+                                  resize: 'vertical',
+                                }}
+                              />
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: 'text.secondary',
+                                  display: 'block',
+                                  mb: 1,
+                                }}
+                              >
+                                {decommissionNotes.length}/500
+                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <CmsButton
+                                  variation="solid"
+                                  size="small"
+                                  onClick={() => {
+                                    if (
+                                      validateDecommissionDate(
+                                        decommissionDate
+                                      )
+                                    ) {
+                                      setOpenDecommissionAlert(true)
+                                    }
+                                  }}
+                                >
+                                  Update
+                                </CmsButton>
+                                <CmsButton
+                                  size="small"
+                                  onClick={() =>
+                                    setShowDecommissionForm(false)
+                                  }
+                                >
+                                  Cancel
+                                </CmsButton>
+                              </Box>
+                            </Box>
+                          )}
+                        </>
+                      ) : (
+                        <>
+                          <FormControlLabel
+                            control={
+                              <Checkbox
+                                checked={showDecommissionForm}
+                                onChange={(e) => {
+                                  setShowDecommissionForm(e.target.checked)
+                                }}
+                                sx={{
+                                  color: '#d32f2f',
+                                  '&.Mui-checked': {
+                                    color: '#d32f2f',
+                                  },
+                                }}
+                              />
+                            }
+                            label={
+                              <Typography
+                                variant="body2"
+                                sx={{ fontWeight: 500 }}
+                              >
+                                Decommission System
+                              </Typography>
+                            }
+                          />
+                          {showDecommissionForm && (
+                            <Box sx={{ ml: 4, mt: 1 }}>
+                              <Typography
+                                variant="body2"
+                                sx={{ mb: 0.5, fontWeight: 500 }}
+                              >
+                                Decommission Date
+                              </Typography>
+                              <input
+                                type="date"
+                                value={decommissionDate}
+                                max={getTodayISO()}
+                                onChange={(e) => {
+                                  setDecommissionDate(e.target.value)
+                                  if (decommissionDateError) {
+                                    validateDecommissionDate(e.target.value)
+                                  }
+                                }}
+                                onBlur={() =>
+                                  validateDecommissionDate(decommissionDate)
+                                }
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  fontSize: '14px',
+                                  border: decommissionDateError
+                                    ? '1px solid #d32f2f'
+                                    : '1px solid #ccc',
+                                  borderRadius: '4px',
+                                  boxSizing: 'border-box',
+                                }}
+                              />
+                              {decommissionDateError && (
+                                <Typography
+                                  variant="caption"
+                                  sx={{ color: '#d32f2f', mt: 0.5, display: 'block' }}
+                                >
+                                  {decommissionDateError}
+                                </Typography>
+                              )}
+                              <Typography
+                                variant="body2"
+                                sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
+                              >
+                                Notes (optional)
+                              </Typography>
+                              <textarea
+                                value={decommissionNotes}
+                                maxLength={500}
+                                rows={3}
+                                onChange={(e) =>
+                                  setDecommissionNotes(e.target.value)
+                                }
+                                placeholder="Reason for decommission..."
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  fontSize: '14px',
+                                  border: '1px solid #ccc',
+                                  borderRadius: '4px',
+                                  boxSizing: 'border-box',
+                                  fontFamily: 'inherit',
+                                  resize: 'vertical',
+                                }}
+                              />
+                              <Typography
+                                variant="caption"
+                                sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+                              >
+                                {decommissionNotes.length}/500
+                              </Typography>
+                              <CmsButton
+                                variation="solid"
+                                onClick={() => {
+                                  if (
+                                    validateDecommissionDate(decommissionDate)
+                                  ) {
+                                    setOpenDecommissionAlert(true)
+                                  }
+                                }}
+                                style={{
+                                  marginTop: '12px',
+                                  backgroundColor: '#d32f2f',
+                                }}
+                              >
+                                Decommission
+                              </CmsButton>
+                            </Box>
+                          )}
+                        </>
                       )}
                     </Box>
                   )}
@@ -662,7 +997,10 @@ export default function EditSystemModal({
           confirmClick={handleConfirmReturn}
         />
         <ConfirmDialog
-          confirmationText={`Are you sure you want to decommission "${system?.fismaname}"? This will mark the system as decommissioned with today's date and hide it from the active systems list. This action cannot be undone through the UI.`}
+          title={system?.decommissioned ? 'Update Decommission Details' : 'Confirm Decommission'}
+          confirmationText={system?.decommissioned
+            ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
+            : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. This action cannot be undone through the UI.`}
           open={openDecommissionAlert}
           onClose={() => setOpenDecommissionAlert(false)}
           confirmClick={(confirm: boolean) => {

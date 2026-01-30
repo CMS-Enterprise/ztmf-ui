@@ -241,6 +241,7 @@ export default function Title() {
                   latestDatacall,
                   showDecommissioned,
                   setShowDecommissioned,
+                  fetchFismaSystems,
                 }}
               />
             </Box>
