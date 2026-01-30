@@ -353,10 +353,12 @@ export default function EditSystemModal({
     const trimmedNotes = decommissionNotes.trim()
     const body: {
       decommissioned_date: string
-      notes?: string | null
+      notes?: string
     } = {
       decommissioned_date: isoDate,
-      notes: trimmedNotes || null,
+    }
+    if (trimmedNotes) {
+      body.notes = trimmedNotes
     }
     await axiosInstance
       .delete(`fismasystems/${editedFismaSystem.fismasystemid}`, {
@@ -382,6 +384,11 @@ export default function EditSystemModal({
         }
       })
       .catch((error) => {
+        console.error(
+          'Decommission error:',
+          error.response?.status,
+          error.response?.data
+        )
         if (error.response?.status === 403) {
           enqueueSnackbar('Permission denied. Admin access required.', {
             variant: 'error',
@@ -399,6 +406,16 @@ export default function EditSystemModal({
               horizontal: 'left',
             },
             autoHideDuration: 2000,
+          })
+        } else if (error.response?.status === 400) {
+          const errorMsg = error.response?.data?.error || 'Invalid request'
+          enqueueSnackbar(`Error: ${errorMsg}`, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 3000,
           })
         } else {
           navigate(Routes.SIGNIN, {
