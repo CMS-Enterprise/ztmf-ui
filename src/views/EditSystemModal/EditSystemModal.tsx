@@ -374,7 +374,7 @@ export default function EditSystemModal({
             },
             autoHideDuration: 2000,
           })
-          const updatedSystem: FismaSystemType = res.data || {
+          const updatedSystem: FismaSystemType = res.data?.data || {
             ...editedFismaSystem,
             decommissioned: true,
             decommissioned_date: isoDate,
