@@ -11,6 +11,7 @@ type ConfirmDialogTypes = {
   onClose: () => void
   confirmClick: (confirm: boolean) => void
   confirmationText: string
+  title?: string
 }
 
 const ConfirmDialog = ({
@@ -18,6 +19,7 @@ const ConfirmDialog = ({
   onClose,
   confirmClick,
   confirmationText,
+  title,
 }: ConfirmDialogTypes) => {
   const handleConfirm = () => {
     confirmClick(true)
@@ -29,7 +31,7 @@ const ConfirmDialog = ({
   }
   return (
     <Dialog open={open} maxWidth="sm" fullWidth>
-      <DialogTitle>Unsaved Changes</DialogTitle>
+      <DialogTitle>{title || 'Unsaved Changes'}</DialogTitle>
       <Box position="absolute" top={0} right={0}>
         <IconButton onClick={handleClose}>
           <CloseIcon />

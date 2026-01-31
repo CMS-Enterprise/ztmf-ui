@@ -15,4 +15,6 @@ export const EMPTY_SYSTEM = {
   issoemail: '',
   decommissioned: false,
   decommissioned_date: null,
+  decommissioned_by: null,
+  decommissioned_notes: null,
 }
