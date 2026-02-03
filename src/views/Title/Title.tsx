@@ -64,7 +64,12 @@ export default function Title() {
           setFismaSystems(res.data.data)
         })
         .catch((error) => {
-          if (error.response.status === 401) {
+          console.error(
+            'Fetch systems error:',
+            error.response?.status,
+            error.response?.data
+          )
+          if (error.response?.status === 401) {
             navigate(Routes.SIGNIN, {
               replace: true,
               state: {
@@ -241,6 +246,7 @@ export default function Title() {
                   latestDatacall,
                   showDecommissioned,
                   setShowDecommissioned,
+                  fetchFismaSystems,
                 }}
               />
             </Box>

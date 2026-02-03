@@ -8,6 +8,7 @@ type ContextType = {
   latestDatacall: string
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
+  fetchFismaSystems: (decommissioned?: boolean) => Promise<void>
 }
 
 export function useContextProp() {

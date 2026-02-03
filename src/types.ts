@@ -49,6 +49,8 @@ export type FismaSystemType = {
   divisionname?: string
   decommissioned: boolean
   decommissioned_date: string | null
+  decommissioned_by: string | null
+  decommissioned_notes: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
