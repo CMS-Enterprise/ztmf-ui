@@ -36,7 +36,10 @@ export default function SystemDetailHeader({
       }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <IconButton onClick={() => navigate('/')} aria-label="Back to dashboard">
+        <IconButton
+          onClick={() => navigate('/')}
+          aria-label="Back to dashboard"
+        >
           <ArrowBackIcon />
         </IconButton>
         <Typography variant="h5">{systemName}</Typography>

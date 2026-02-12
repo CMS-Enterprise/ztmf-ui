@@ -75,7 +75,10 @@ export default function SystemDetailReadView({
       <Grid item xs={12} md={5}>
         <Card
           variant="outlined"
-          sx={{ mb: 3, borderColor: system.decommissioned ? 'error.main' : undefined }}
+          sx={{
+            mb: 3,
+            borderColor: system.decommissioned ? 'error.main' : undefined,
+          }}
         >
           <CardHeader
             title="System Status"

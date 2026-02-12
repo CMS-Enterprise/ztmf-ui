@@ -42,10 +42,7 @@ interface SystemDetailEditViewProps {
   validateDecommissionDate: (dateStr: string) => boolean
 }
 
-function renderEditField(
-  field: FieldConfig,
-  props: SystemDetailEditViewProps
-) {
+function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
   const {
     editedSystem,
     formValid,
@@ -239,10 +236,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
       {/* Right column: Decommission + Organization */}
       <Grid item xs={12} md={5}>
         {system.decommissioned ? (
-          <Card
-            variant="outlined"
-            sx={{ mb: 3, borderColor: 'error.main' }}
-          >
+          <Card variant="outlined" sx={{ mb: 3, borderColor: 'error.main' }}>
             <CardHeader
               title="System Status"
               titleTypographyProps={{ variant: 'h6' }}
@@ -319,10 +313,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             </CardContent>
           </Card>
         ) : (
-          <Card
-            variant="outlined"
-            sx={{ mb: 3 }}
-          >
+          <Card variant="outlined" sx={{ mb: 3 }}>
             <CardHeader
               title="System Status"
               titleTypographyProps={{ variant: 'h6' }}
@@ -333,9 +324,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                 control={
                   <Checkbox
                     checked={showDecommissionForm}
-                    onChange={(e) =>
-                      onShowDecommissionForm(e.target.checked)
-                    }
+                    onChange={(e) => onShowDecommissionForm(e.target.checked)}
                     sx={{
                       color: '#d32f2f',
                       '&.Mui-checked': { color: '#d32f2f' },
@@ -343,10 +332,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                   />
                 }
                 label={
-                  <Typography
-                    variant="body2"
-                    sx={{ fontWeight: 500 }}
-                  >
+                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
                     Decommission System
                   </Typography>
                 }
