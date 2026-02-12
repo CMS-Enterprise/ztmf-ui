@@ -9,6 +9,7 @@ import {
   FormControlLabel,
   Checkbox,
   Typography,
+  Chip,
 } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
@@ -221,6 +222,13 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           <CardHeader
             title="System Identity"
             titleTypographyProps={{ variant: 'h6' }}
+            action={
+              system.decommissioned ? (
+                <Chip label="Decommissioned" color="error" size="small" />
+              ) : (
+                <Chip label="Active" color="success" size="small" />
+              )
+            }
             sx={{ pb: 0 }}
           />
           <CardContent>
@@ -229,8 +237,143 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
         </Card>
       </Grid>
 
-      {/* Organization */}
+      {/* Right column: Decommission + Organization */}
       <Grid item xs={12} md={5}>
+        {system.decommissioned ? (
+          <Card
+            variant="outlined"
+            sx={{ mb: 3, borderColor: 'error.main' }}
+          >
+            <CardHeader
+              title="System Status"
+              titleTypographyProps={{ variant: 'h6' }}
+              sx={{ pb: 0 }}
+            />
+            <CardContent>
+              {!showDecommissionForm && (
+                <>
+                  {system.decommissioned_date && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Decommissioned On
+                      </Typography>
+                      <Typography variant="body1">
+                        {new Date(
+                          system.decommissioned_date
+                        ).toLocaleDateString()}
+                      </Typography>
+                    </Box>
+                  )}
+                  {system.decommissioned_by && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Decommissioned By
+                      </Typography>
+                      <Typography variant="body1">
+                        {decommissionedByName || system.decommissioned_by}
+                      </Typography>
+                    </Box>
+                  )}
+                  {system.decommissioned_notes && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography variant="caption" color="text.secondary">
+                        Notes
+                      </Typography>
+                      <Typography variant="body1">
+                        {system.decommissioned_notes}
+                      </Typography>
+                    </Box>
+                  )}
+                  <CmsButton
+                    size="small"
+                    onClick={() => onShowDecommissionForm(true)}
+                    style={{ marginTop: '4px' }}
+                  >
+                    Edit Decommission Details
+                  </CmsButton>
+                </>
+              )}
+              {showDecommissionForm && (
+                <Box sx={{ mt: 1 }}>
+                  <DecommissionDateNotesForm {...props} />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <CmsButton
+                      variation="solid"
+                      size="small"
+                      onClick={() => {
+                        if (validateDecommissionDate(decommissionDate)) {
+                          onDecommissionRequest()
+                        }
+                      }}
+                    >
+                      Update
+                    </CmsButton>
+                    <CmsButton
+                      size="small"
+                      onClick={() => onShowDecommissionForm(false)}
+                    >
+                      Cancel
+                    </CmsButton>
+                  </Box>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        ) : (
+          <Card
+            variant="outlined"
+            sx={{ mb: 3 }}
+          >
+            <CardHeader
+              title="System Status"
+              titleTypographyProps={{ variant: 'h6' }}
+              sx={{ pb: 0 }}
+            />
+            <CardContent>
+              <FormControlLabel
+                control={
+                  <Checkbox
+                    checked={showDecommissionForm}
+                    onChange={(e) =>
+                      onShowDecommissionForm(e.target.checked)
+                    }
+                    sx={{
+                      color: '#d32f2f',
+                      '&.Mui-checked': { color: '#d32f2f' },
+                    }}
+                  />
+                }
+                label={
+                  <Typography
+                    variant="body2"
+                    sx={{ fontWeight: 500 }}
+                  >
+                    Decommission System
+                  </Typography>
+                }
+              />
+              {showDecommissionForm && (
+                <Box sx={{ ml: 4, mt: 1 }}>
+                  <DecommissionDateNotesForm {...props} />
+                  <CmsButton
+                    variation="solid"
+                    onClick={() => {
+                      if (validateDecommissionDate(decommissionDate)) {
+                        onDecommissionRequest()
+                      }
+                    }}
+                    style={{
+                      marginTop: '12px',
+                      backgroundColor: '#d32f2f',
+                    }}
+                  >
+                    Decommission
+                  </CmsButton>
+                </Box>
+              )}
+            </CardContent>
+          </Card>
+        )}
         <Card variant="outlined">
           <CardHeader
             title="Organization"
@@ -243,11 +386,11 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
         </Card>
       </Grid>
 
-      {/* Contacts & Status */}
+      {/* Contacts */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
-            title="Contacts & Status"
+            title="Contacts"
             titleTypographyProps={{ variant: 'h6' }}
             sx={{ pb: 0 }}
           />
@@ -255,152 +398,6 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 {contactFields.map((field) => renderEditField(field, props))}
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Box
-                  sx={{
-                    mt: 2,
-                    p: 2,
-                    border: 1,
-                    borderColor: 'divider',
-                    borderRadius: 1,
-                  }}
-                >
-                  {system.decommissioned ? (
-                    <>
-                      <Typography
-                        variant="body2"
-                        sx={{ fontWeight: 500, mb: 1 }}
-                      >
-                        System Decommissioned
-                      </Typography>
-                      {!showDecommissionForm && (
-                        <>
-                          {system.decommissioned_date && (
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                display: 'block',
-                                ml: 2,
-                                color: 'text.secondary',
-                              }}
-                            >
-                              Date:{' '}
-                              {new Date(
-                                system.decommissioned_date
-                              ).toLocaleDateString()}
-                            </Typography>
-                          )}
-                          {system.decommissioned_by && (
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                display: 'block',
-                                ml: 2,
-                                color: 'text.secondary',
-                              }}
-                            >
-                              By:{' '}
-                              {decommissionedByName || system.decommissioned_by}
-                            </Typography>
-                          )}
-                          {system.decommissioned_notes && (
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                display: 'block',
-                                ml: 2,
-                                mt: 0.5,
-                                color: 'text.secondary',
-                              }}
-                            >
-                              Notes: {system.decommissioned_notes}
-                            </Typography>
-                          )}
-                          <CmsButton
-                            size="small"
-                            onClick={() => onShowDecommissionForm(true)}
-                            style={{ marginTop: '8px' }}
-                          >
-                            Edit Decommission Details
-                          </CmsButton>
-                        </>
-                      )}
-                      {showDecommissionForm && (
-                        <Box sx={{ ml: 2, mt: 1 }}>
-                          <DecommissionDateNotesForm {...props} />
-                          <Box sx={{ display: 'flex', gap: 1 }}>
-                            <CmsButton
-                              variation="solid"
-                              size="small"
-                              onClick={() => {
-                                if (
-                                  validateDecommissionDate(decommissionDate)
-                                ) {
-                                  onDecommissionRequest()
-                                }
-                              }}
-                            >
-                              Update
-                            </CmsButton>
-                            <CmsButton
-                              size="small"
-                              onClick={() => onShowDecommissionForm(false)}
-                            >
-                              Cancel
-                            </CmsButton>
-                          </Box>
-                        </Box>
-                      )}
-                    </>
-                  ) : (
-                    <>
-                      <FormControlLabel
-                        control={
-                          <Checkbox
-                            checked={showDecommissionForm}
-                            onChange={(e) =>
-                              onShowDecommissionForm(e.target.checked)
-                            }
-                            sx={{
-                              color: '#d32f2f',
-                              '&.Mui-checked': { color: '#d32f2f' },
-                            }}
-                          />
-                        }
-                        label={
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 500 }}
-                          >
-                            Decommission System
-                          </Typography>
-                        }
-                      />
-                      {showDecommissionForm && (
-                        <Box sx={{ ml: 4, mt: 1 }}>
-                          <DecommissionDateNotesForm {...props} />
-                          <CmsButton
-                            variation="solid"
-                            onClick={() => {
-                              if (
-                                validateDecommissionDate(decommissionDate)
-                              ) {
-                                onDecommissionRequest()
-                              }
-                            }}
-                            style={{
-                              marginTop: '12px',
-                              backgroundColor: '#d32f2f',
-                            }}
-                          >
-                            Decommission
-                          </CmsButton>
-                        </Box>
-                      )}
-                    </>
-                  )}
-                </Box>
               </Grid>
             </Grid>
           </CardContent>

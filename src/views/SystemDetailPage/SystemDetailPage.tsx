@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
 import { Box, CircularProgress, Typography } from '@mui/material'
 import { useSnackbar } from 'notistack'
@@ -35,6 +35,30 @@ export default function SystemDetailPage() {
     () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
     [fismaSystems, systemId]
   )
+
+  // If system not in context (e.g. decommissioned and not in active-only fetch),
+  // try fetching it individually so the page works on refresh
+  const triedFetch = useRef(false)
+  const [retryingFetch, setRetryingFetch] = useState(false)
+
+  useEffect(() => {
+    if (fismaSystems.length > 0 && !system && !triedFetch.current) {
+      triedFetch.current = true
+      setRetryingFetch(true)
+      axiosInstance
+        .get(`fismasystems/${systemId}`)
+        .then((res) => {
+          const data = res.data?.data
+          if (data) {
+            setFismaSystems((prev) => [...prev, data])
+          }
+        })
+        .catch(() => {
+          // System truly doesn't exist
+        })
+        .finally(() => setRetryingFetch(false))
+    }
+  }, [fismaSystems, system, systemId, setFismaSystems])
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
@@ -99,20 +123,21 @@ export default function SystemDetailPage() {
     }
   }, [isEditing, system])
 
-  // Fetch decommissioned_by user name
+  // Resolve decommissioned_by UUID to a human-readable name
   useEffect(() => {
     let cancelled = false
-    if (isEditing && system?.decommissioned && system?.decommissioned_by) {
+    if (system?.decommissioned && system?.decommissioned_by) {
       const userId = system.decommissioned_by
       axiosInstance
         .get(`users/${userId}`)
         .then((res) => {
           if (!cancelled && system?.decommissioned_by === userId) {
-            setDecommissionedByName(res.data?.fullname || userId)
+            setDecommissionedByName(res.data?.data?.fullname || userId)
           }
         })
         .catch(() => {
           if (!cancelled && system?.decommissioned_by === userId) {
+            // User may have been removed — fall back to UUID
             setDecommissionedByName(userId)
           }
         })
@@ -122,7 +147,7 @@ export default function SystemDetailPage() {
     return () => {
       cancelled = true
     }
-  }, [system, isEditing])
+  }, [system])
 
   const getTodayISO = (): string => {
     const today = new Date()
@@ -302,6 +327,7 @@ export default function SystemDetailPage() {
             ...editedSystem,
             decommissioned: true,
             decommissioned_date: isoDate,
+            decommissioned_by: userInfo.userid,
             decommissioned_notes: trimmedNotes || null,
           }
           setFismaSystems((prev) =>
@@ -311,6 +337,7 @@ export default function SystemDetailPage() {
                 : s
             )
           )
+          setDecommissionedByName(userInfo.fullname || userInfo.userid)
           setIsEditing(false)
           setEditedSystem(null)
         }
@@ -364,8 +391,8 @@ export default function SystemDetailPage() {
     return `Are you sure you want to decommission "${system?.fismaname}" on ${dateDisplay}?${notesSuffix} This will hide the system from the active systems list. This action cannot be undone through the UI.`
   }
 
-  // Loading state: context hasn't populated yet
-  if (fismaSystems.length === 0) {
+  // Loading state: context hasn't populated yet, or retrying fetch for individual system
+  if (fismaSystems.length === 0 || retryingFetch) {
     return (
       <Box
         sx={{
@@ -396,7 +423,7 @@ export default function SystemDetailPage() {
   }
 
   return (
-    <Box sx={{ mt: 1 }}>
+    <Box sx={{ mt: 1, mb: 4 }}>
       <BreadCrumbs
         segmentLabels={{ [fismasystemid!]: system.fismaname }}
       />
@@ -434,7 +461,7 @@ export default function SystemDetailPage() {
           getTodayISO={getTodayISO}
         />
       ) : (
-        <SystemDetailReadView system={system} />
+        <SystemDetailReadView system={system} decommissionedByName={decommissionedByName} />
       )}
 
       <ConfirmDialog

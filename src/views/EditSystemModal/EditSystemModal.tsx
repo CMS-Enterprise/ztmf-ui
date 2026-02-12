@@ -158,8 +158,8 @@ export default function EditSystemModal({
         .get(`users/${userId}`)
         .then((res) => {
           if (!cancelled && system?.decommissioned_by === userId) {
-            if (res.data?.fullname) {
-              setDecommissionedByName(res.data.fullname)
+            if (res.data?.data?.fullname) {
+              setDecommissionedByName(res.data.data.fullname)
             } else {
               setDecommissionedByName(userId)
             }

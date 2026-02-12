@@ -5,7 +5,6 @@ import {
   Grid,
   Typography,
   Box,
-  Alert,
   Chip,
 } from '@mui/material'
 import { FismaSystemType } from '@/types'
@@ -13,6 +12,7 @@ import { getFieldsBySection, FieldConfig } from './fieldConfig'
 
 interface SystemDetailReadViewProps {
   system: FismaSystemType
+  decommissionedByName: string
 }
 
 function FieldDisplay({
@@ -44,6 +44,7 @@ function renderFields(fields: FieldConfig[], system: FismaSystemType) {
 
 export default function SystemDetailReadView({
   system,
+  decommissionedByName,
 }: SystemDetailReadViewProps) {
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
@@ -57,14 +58,61 @@ export default function SystemDetailReadView({
           <CardHeader
             title="System Identity"
             titleTypographyProps={{ variant: 'h6' }}
+            action={
+              system.decommissioned ? (
+                <Chip label="Decommissioned" color="error" size="small" />
+              ) : (
+                <Chip label="Active" color="success" size="small" />
+              )
+            }
             sx={{ pb: 0 }}
           />
           <CardContent>{renderFields(identityFields, system)}</CardContent>
         </Card>
       </Grid>
 
-      {/* Organization */}
+      {/* Right column: Status + Organization */}
       <Grid item xs={12} md={5}>
+        <Card
+          variant="outlined"
+          sx={{ mb: 3, borderColor: system.decommissioned ? 'error.main' : undefined }}
+        >
+          <CardHeader
+            title="System Status"
+            titleTypographyProps={{ variant: 'h6' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            {system.decommissioned ? (
+              <>
+                {system.decommissioned_date && (
+                  <FieldDisplay
+                    label="Decommissioned On"
+                    value={new Date(
+                      system.decommissioned_date
+                    ).toLocaleDateString()}
+                  />
+                )}
+                {system.decommissioned_by && (
+                  <FieldDisplay
+                    label="Decommissioned By"
+                    value={decommissionedByName || system.decommissioned_by}
+                  />
+                )}
+                {system.decommissioned_notes && (
+                  <FieldDisplay
+                    label="Notes"
+                    value={system.decommissioned_notes}
+                  />
+                )}
+              </>
+            ) : (
+              <Typography variant="body1" sx={{ color: 'success.main' }}>
+                This system is active.
+              </Typography>
+            )}
+          </CardContent>
+        </Card>
         <Card variant="outlined">
           <CardHeader
             title="Organization"
@@ -75,11 +123,11 @@ export default function SystemDetailReadView({
         </Card>
       </Grid>
 
-      {/* Contacts & Status */}
+      {/* Contacts */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
-            title="Contacts & Status"
+            title="Contacts"
             titleTypographyProps={{ variant: 'h6' }}
             sx={{ pb: 0 }}
           />
@@ -87,34 +135,6 @@ export default function SystemDetailReadView({
             <Grid container spacing={3}>
               <Grid item xs={12} md={6}>
                 {renderFields(contactFields, system)}
-              </Grid>
-              <Grid item xs={12} md={6}>
-                <Box sx={{ mb: 2 }}>
-                  <Typography variant="caption" color="text.secondary">
-                    System Status
-                  </Typography>
-                  {system.decommissioned ? (
-                    <Alert severity="warning" sx={{ mt: 1 }}>
-                      Decommissioned
-                      {system.decommissioned_date &&
-                        ` on ${new Date(system.decommissioned_date).toLocaleDateString()}`}
-                      {system.decommissioned_by && (
-                        <Typography variant="caption" sx={{ display: 'block' }}>
-                          By: {system.decommissioned_by}
-                        </Typography>
-                      )}
-                      {system.decommissioned_notes && (
-                        <Typography variant="caption" sx={{ display: 'block' }}>
-                          Notes: {system.decommissioned_notes}
-                        </Typography>
-                      )}
-                    </Alert>
-                  ) : (
-                    <Box sx={{ mt: 1 }}>
-                      <Chip label="Active" color="success" size="small" />
-                    </Box>
-                  )}
-                </Box>
               </Grid>
             </Grid>
           </CardContent>
