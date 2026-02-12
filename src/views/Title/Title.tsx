@@ -241,6 +241,7 @@ export default function Title() {
               <Outlet
                 context={{
                   fismaSystems,
+                  setFismaSystems,
                   userInfo,
                   latestDataCallId,
                   latestDatacall,
