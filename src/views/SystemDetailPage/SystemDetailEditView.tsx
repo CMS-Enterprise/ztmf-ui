@@ -17,6 +17,7 @@ import { getFieldsBySection, FieldConfig } from './fieldConfig'
 import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
 import { emailValidator } from '@/views/EditSystemModal/validators'
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
+import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 
 interface SystemDetailEditViewProps {
   system: FismaSystemType
@@ -39,7 +40,6 @@ interface SystemDetailEditViewProps {
   onShowDecommissionForm: (show: boolean) => void
   onDecommissionRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
-  getTodayISO: () => string
 }
 
 function renderEditField(
@@ -132,7 +132,6 @@ function DecommissionDateNotesForm(props: SystemDetailEditViewProps) {
     onDecommissionDateChange,
     onDecommissionNotesChange,
     validateDecommissionDate,
-    getTodayISO,
   } = props
 
   return (
@@ -175,7 +174,7 @@ function DecommissionDateNotesForm(props: SystemDetailEditViewProps) {
       </Typography>
       <textarea
         value={decommissionNotes}
-        maxLength={500}
+        maxLength={MAX_NOTES_LENGTH}
         rows={3}
         onChange={(e) => onDecommissionNotesChange(e.target.value)}
         placeholder="Reason for decommission..."
@@ -194,7 +193,7 @@ function DecommissionDateNotesForm(props: SystemDetailEditViewProps) {
         variant="caption"
         sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
       >
-        {decommissionNotes.length}/500
+        {decommissionNotes.length}/{MAX_NOTES_LENGTH}
       </Typography>
     </>
   )

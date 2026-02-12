@@ -16,6 +16,7 @@ import {
 } from '@/constants'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import { getTodayISO, truncateNotes } from '@/utils/decommission'
 
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
@@ -29,7 +30,7 @@ export default function SystemDetailPage() {
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
 
   const isAdmin = userInfo.role === 'ADMIN'
-  const systemId = Number(fismasystemid)
+  const systemId = fismasystemid ? Number(fismasystemid) : NaN
 
   const system = useMemo(
     () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
@@ -42,21 +43,29 @@ export default function SystemDetailPage() {
   const [retryingFetch, setRetryingFetch] = useState(false)
 
   useEffect(() => {
+    let cancelled = false
     if (fismaSystems.length > 0 && !system && !triedFetch.current) {
       triedFetch.current = true
       setRetryingFetch(true)
       axiosInstance
         .get(`fismasystems/${systemId}`)
         .then((res) => {
-          const data = res.data?.data
-          if (data) {
-            setFismaSystems((prev) => [...prev, data])
+          if (!cancelled) {
+            const data = res.data?.data
+            if (data) {
+              setFismaSystems((prev) => [...prev, data])
+            }
           }
         })
         .catch(() => {
           // System truly doesn't exist
         })
-        .finally(() => setRetryingFetch(false))
+        .finally(() => {
+          if (!cancelled) setRetryingFetch(false)
+        })
+    }
+    return () => {
+      cancelled = true
     }
   }, [fismaSystems, system, systemId, setFismaSystems])
 
@@ -111,8 +120,7 @@ export default function SystemDetailPage() {
         datacallcontact: (system.datacallcontact?.length ?? 0) > 0,
         fismaname: (system.fismaname?.length ?? 0) > 0,
         fismaacronym: (system.fismaacronym?.length ?? 0) > 0,
-        datacenterenvironment:
-          (system.datacenterenvironment?.length ?? 0) > 0,
+        datacenterenvironment: (system.datacenterenvironment?.length ?? 0) > 0,
         component: (system.component?.length ?? 0) > 0,
         fismauid: (system.fismauid?.length ?? 0) > 0,
       })
@@ -131,12 +139,12 @@ export default function SystemDetailPage() {
       axiosInstance
         .get(`users/${userId}`)
         .then((res) => {
-          if (!cancelled && system?.decommissioned_by === userId) {
+          if (!cancelled) {
             setDecommissionedByName(res.data?.data?.fullname || userId)
           }
         })
         .catch(() => {
-          if (!cancelled && system?.decommissioned_by === userId) {
+          if (!cancelled) {
             // User may have been removed — fall back to UUID
             setDecommissionedByName(userId)
           }
@@ -149,14 +157,6 @@ export default function SystemDetailPage() {
     }
   }, [system])
 
-  const getTodayISO = (): string => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    return `${yyyy}-${mm}-${dd}`
-  }
-
   const validateDecommissionDate = (dateStr: string): boolean => {
     if (!dateStr) {
       setDecommissionDateError('Date is required')
@@ -168,7 +168,7 @@ export default function SystemDetailPage() {
       return false
     }
     const today = new Date()
-    today.setHours(0, 0, 0, 0)
+    today.setUTCHours(0, 0, 0, 0)
     if (parsed > today) {
       setDecommissionDateError('Date cannot be in the future')
       return false
@@ -263,9 +263,7 @@ export default function SystemDetailPage() {
         })
         setFismaSystems((prev) =>
           prev.map((s) =>
-            s.fismasystemid === editedSystem.fismasystemid
-              ? editedSystem
-              : s
+            s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
           )
         )
       })
@@ -283,6 +281,18 @@ export default function SystemDetailPage() {
             variant: 'error',
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 1500,
+          })
+        } else if (error.response?.status === 403) {
+          enqueueSnackbar('Permission denied. Admin access required.', {
+            variant: 'error',
+            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+            autoHideDuration: 2000,
+          })
+        } else if (error.response?.status === 404) {
+          enqueueSnackbar('System not found', {
+            variant: 'error',
+            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+            autoHideDuration: 2000,
           })
         } else {
           navigate(Routes.SIGNIN, {
@@ -303,9 +313,7 @@ export default function SystemDetailPage() {
     if (!validateDecommissionDate(decommissionDate)) {
       return
     }
-    const isoDate = new Date(
-      decommissionDate + 'T00:00:00.000Z'
-    ).toISOString()
+    const isoDate = new Date(decommissionDate + 'T00:00:00.000Z').toISOString()
     const trimmedNotes = decommissionNotes.trim()
     const body: { decommissioned_date: string; notes?: string } = {
       decommissioned_date: isoDate,
@@ -381,14 +389,28 @@ export default function SystemDetailPage() {
     const dateDisplay = new Date(
       decommissionDate + 'T00:00:00.000Z'
     ).toLocaleDateString()
-    const notesSuffix = decommissionNotes.trim()
-      ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"`
-      : ''
+    const truncated = truncateNotes(decommissionNotes)
+    const notesSuffix = truncated ? ` Notes: "${truncated}"` : ''
 
     if (system?.decommissioned) {
       return `Update decommission details for "${system?.fismaname}" to ${dateDisplay}?${notesSuffix}`
     }
     return `Are you sure you want to decommission "${system?.fismaname}" on ${dateDisplay}?${notesSuffix} This will hide the system from the active systems list. This action cannot be undone through the UI.`
+  }
+
+  // Invalid system ID in URL
+  if (isNaN(systemId)) {
+    return (
+      <Box sx={{ mt: 4 }}>
+        <BreadCrumbs segmentLabels={{ [fismasystemid ?? '']: 'Invalid' }} />
+        <Typography variant="h5" color="error" sx={{ mt: 2 }}>
+          Invalid system ID
+        </Typography>
+        <Typography color="text.secondary" sx={{ mt: 1 }}>
+          &ldquo;{fismasystemid}&rdquo; is not a valid system ID.
+        </Typography>
+      </Box>
+    )
   }
 
   // Loading state: context hasn't populated yet, or retrying fetch for individual system
@@ -424,9 +446,7 @@ export default function SystemDetailPage() {
 
   return (
     <Box sx={{ mt: 1, mb: 4 }}>
-      <BreadCrumbs
-        segmentLabels={{ [fismasystemid!]: system.fismaname }}
-      />
+      <BreadCrumbs segmentLabels={{ [fismasystemid!]: system.fismaname }} />
 
       <SystemDetailHeader
         systemName={system.fismaname}
@@ -458,10 +478,12 @@ export default function SystemDetailPage() {
           onShowDecommissionForm={setShowDecommissionForm}
           onDecommissionRequest={() => setOpenDecommissionDialog(true)}
           validateDecommissionDate={validateDecommissionDate}
-          getTodayISO={getTodayISO}
         />
       ) : (
-        <SystemDetailReadView system={system} decommissionedByName={decommissionedByName} />
+        <SystemDetailReadView
+          system={system}
+          decommissionedByName={decommissionedByName}
+        />
       )}
 
       <ConfirmDialog
