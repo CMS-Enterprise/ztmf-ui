@@ -10,6 +10,7 @@ export enum RouteIds {
   DATA = 'data',
   USERS = 'users',
   SIGNIN = 'signin',
+  SYSTEM_DETAIL = 'system-detail',
 }
 
 export enum RouteNames {
@@ -30,4 +31,5 @@ export enum Routes {
   AUTH_LOGIN = `/${RouteIds.AUTH}/${RouteIds.LOGIN}`,
   AUTH_LOGOUT = `/${RouteIds.AUTH}/${RouteIds.LOGOUT}`,
   SIGNIN = `/${RouteIds.SIGNIN}`,
+  SYSTEM_DETAIL = '/systems/:fismasystemid',
 }

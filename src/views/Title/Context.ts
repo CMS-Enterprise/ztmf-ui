@@ -1,8 +1,10 @@
+import React from 'react'
 import { useOutletContext } from 'react-router-dom'
 import { FismaSystemType, userData } from '@/types'
 
 type ContextType = {
   fismaSystems: FismaSystemType[] | []
+  setFismaSystems: React.Dispatch<React.SetStateAction<FismaSystemType[]>>
   userInfo: userData
   latestDataCallId: number
   latestDatacall: string

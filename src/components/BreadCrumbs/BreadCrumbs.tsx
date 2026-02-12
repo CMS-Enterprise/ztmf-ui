@@ -11,7 +11,11 @@ interface LinkRouterProps extends LinkProps {
 function LinkRouter(props: LinkRouterProps) {
   return <Link {...props} component={RouterLink as any} />
 }
-export default function BreadCrumbs() {
+interface BreadCrumbsProps {
+  segmentLabels?: Record<string, string>
+}
+
+export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
   const location = useLocation()
   // let currentLink: string = ''
   const homeLink = [
@@ -33,13 +37,19 @@ export default function BreadCrumbs() {
   ]
   const crumbs = location.pathname.split('/').filter((x) => x)
   const path = crumbs.map((value) => {
-    const text = value.replace('_', ' ')
+    const displayText =
+      segmentLabels && segmentLabels[value]
+        ? segmentLabels[value]
+        : (() => {
+            const text = value.replace(/_/g, ' ')
+            return /^[A-Z]/.test(text) ? text : capitalize(text)
+          })()
     return (
       <Typography
         sx={{ display: 'inline', whiteSpace: 'nowrap', color: '#5a5a5a' }}
         key={value}
       >
-        {text[0] === text[0].toUpperCase() ? text : capitalize(text)}
+        {displayText}
       </Typography>
     )
   })

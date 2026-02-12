@@ -20,12 +20,11 @@ import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
-import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { EMPTY_USER } from '../../constants'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link } from 'react-router-dom'
 import { RouteNames, Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
 import EditIcon from '@mui/icons-material/Edit'
@@ -222,18 +221,12 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const {
-    fismaSystems,
-    latestDataCallId,
-    showDecommissioned,
-    fetchFismaSystems,
-  } = useContextProp()
+  const { fismaSystems, latestDataCallId } = useContextProp()
   const [open, setOpen] = useState<boolean>(false)
   const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
   const navigate = useNavigate()
-  const [openEditModal, setOpenEditModal] = useState<boolean>(false)
   const [pillarScoresModal, setPillarScoresModal] = useState<{
     open: boolean
     systemName: string
@@ -292,28 +285,6 @@ export default function FismaTable({ scores }: FismaTableProps) {
   const handleClosePillarScores = () => {
     setPillarScoresModal((prev) => ({ ...prev, open: false }))
   }
-  const handleEditOpenModal = (
-    event: React.MouseEvent<HTMLButtonElement>,
-    row: FismaSystemType
-  ) => {
-    event.stopPropagation()
-    setSelectedRow(row)
-    setOpenEditModal(true)
-  }
-  const handleCloseEditModal = (newRowData: FismaSystemType) => {
-    if (selectedRow) {
-      if (newRowData.decommissioned && !selectedRow.decommissioned) {
-        fetchFismaSystems(showDecommissioned)
-      } else {
-        const row = apiRef.current.getRow(selectedRow?.fismasystemid)
-        if (row) {
-          apiRef.current.updateRows([newRowData])
-        }
-      }
-    }
-    setOpenEditModal(false)
-    setSelectedRow(null)
-  }
   const columns: GridColDef[] = [
     {
       field: 'fismaname',
@@ -322,6 +293,15 @@ export default function FismaTable({ scores }: FismaTableProps) {
       minWidth: 300,
       maxWidth: 450,
       hideable: false,
+      renderCell: (params: GridRenderCellParams) => (
+        <Link
+          to={`/systems/${params.row.fismasystemid}`}
+          style={{ color: '#004297', textDecoration: 'none' }}
+          onClick={(e) => e.stopPropagation()}
+        >
+          {params.value}
+        </Link>
+      ),
     },
     {
       field: 'fismaacronym',
@@ -462,7 +442,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
               className="textPrimary"
               onClick={(event) => {
                 event.stopPropagation()
-                handleEditOpenModal(event, params.row as FismaSystemType)
+                navigate(`/systems/${params.row.fismasystemid}?edit=true`)
               }}
               color="inherit"
             />
@@ -543,13 +523,6 @@ export default function FismaTable({ scores }: FismaTableProps) {
         systemName={pillarScoresModal.systemName}
         systemAcronym={pillarScoresModal.systemAcronym}
         scores={pillarScoresModal.scores}
-      />
-      <EditSystemModal
-        title={'Edit'}
-        open={openEditModal}
-        onClose={handleCloseEditModal}
-        system={selectedRow}
-        mode={'edit'}
       />
     </Box>
   )
