@@ -494,7 +494,7 @@ export default function UserTable() {
       field: 'actions',
       type: 'actions',
       headerName: 'Actions',
-      width: 100,
+      width: 140,
       cellClassName: 'actions',
       getActions: (params) => {
         const isInEditMode =
