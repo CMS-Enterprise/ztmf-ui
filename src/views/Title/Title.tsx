@@ -130,6 +130,9 @@ export default function Title() {
   const handleDataCallClose = () => {
     setOpenDataCallModal(false)
   }
+  const isAdmin = userInfo.role === 'ADMIN'
+  const hasAdminRead =
+    userInfo.role === 'ADMIN' || userInfo.role === 'READONLY_ADMIN'
   return (
     <>
       <UsaBanner />
@@ -164,7 +167,7 @@ export default function Title() {
               ) : (
                 ''
               )}
-              {userInfo.role === 'ADMIN' ? (
+              {hasAdminRead ? (
                 <>
                   <IconButton
                     aria-label="more"
@@ -189,38 +192,46 @@ export default function Title() {
                         Dashboard
                       </MenuItem>
                     </Link>
-                    <Link
-                      to={Routes.USERS}
-                      style={{ textDecoration: 'none', color: 'black' }}
-                    >
-                      <MenuItem onClick={() => handleOption()}>
-                        Edit Users
+                    {isAdmin && (
+                      <Link
+                        to={Routes.USERS}
+                        style={{ textDecoration: 'none', color: 'black' }}
+                      >
+                        <MenuItem onClick={() => handleOption()}>
+                          Edit Users
+                        </MenuItem>
+                      </Link>
+                    )}
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => {
+                          setAnchorEl(null)
+                          setOpenModal(true)
+                        }}
+                      >
+                        Add Fisma System
                       </MenuItem>
-                    </Link>
-                    <MenuItem
-                      onClick={() => {
-                        setAnchorEl(null)
-                        setOpenModal(true)
-                      }}
-                    >
-                      Add Fisma System
-                    </MenuItem>
-                    <MenuItem
-                      onClick={() => {
-                        setAnchorEl(null)
-                        setOpenEmailModal(true)
-                      }}
-                    >
-                      {'Email Users'}
-                    </MenuItem>
-                    <MenuItem
-                      onClick={() => {
-                        handleClose()
-                        setOpenDataCallModal(true)
-                      }}
-                    >
-                      Create Datacall
-                    </MenuItem>
+                    )}
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => {
+                          setAnchorEl(null)
+                          setOpenEmailModal(true)
+                        }}
+                      >
+                        {'Email Users'}
+                      </MenuItem>
+                    )}
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => {
+                          handleClose()
+                          setOpenDataCallModal(true)
+                        }}
+                      >
+                        Create Datacall
+                      </MenuItem>
+                    )}
                   </Menu>
                 </>
               ) : (

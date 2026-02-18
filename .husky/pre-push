@@ -3,7 +3,7 @@
 
 echo "🔍 Running pre-push checks..."
 echo "  1. TypeScript type checking"
-echo "  2. Auto-fixing code style (prettier + eslint)"
+echo "  2. Formatting verification"
 echo "  3. Linting verification"
 echo ""
 

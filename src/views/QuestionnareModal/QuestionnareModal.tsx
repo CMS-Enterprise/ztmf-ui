@@ -31,6 +31,7 @@ import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import { ERROR_MESSAGES, PILLAR_FUNCTION_MAP } from '@/constants'
+import { useContextProp } from '../Title/Context'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
     color: 'rgb(13, 36, 153)',
@@ -68,6 +69,8 @@ export default function QuestionnareModal({
   onClose,
   system,
 }: SystemDetailsModalProps) {
+  const { userInfo } = useContextProp()
+  const isReadOnly = userInfo.role === 'READONLY_ADMIN'
   const checkValidResponse = (status: number) => {
     if (status !== 200 && status.toString()[0] === '4') {
       navigate(Routes.SIGNIN, {
@@ -131,47 +134,55 @@ export default function QuestionnareModal({
   const handleQuestionnareNext = () => {
     // TODO: datacallid is hardcoded to 2, need to make it dynamic
     setLoadingQuestion(true)
-    if (scoreid) {
-      axiosInstance
-        .put(`scores/${scoreid}`, {
-          fismasystemid: system?.fismasystemid,
-          notes: notes,
-          functionoptionid: selectQuestionOption,
-          datacallid: 2,
-        })
-        .then((res) => {
-          checkValidResponse(res.status)
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
+    if (!isReadOnly) {
+      if (scoreid) {
+        axiosInstance
+          .put(`scores/${scoreid}`, {
+            fismasystemid: system?.fismasystemid,
+            notes: notes,
+            functionoptionid: selectQuestionOption,
+            datacallid: 2,
           })
-          fetchQuestionScores(Number(system?.fismasystemid), setQuestionScores)
-          setLoadingQuestion(false)
-        })
-        .catch((error) => {
-          console.error('Error updating score:', error)
-          routeToSignIn()
-        })
-    } else {
-      axiosInstance
-        .post(`scores`, {
-          fismasystemid: system?.fismasystemid,
-          notes: notes,
-          functionoptionid: selectQuestionOption,
-          datacallid: 2,
-        })
-        .then((res) => {
-          checkValidResponse(res.status)
-          fetchQuestionScores(Number(system?.fismasystemid), setQuestionScores)
-          setLoadingQuestion(false)
-        })
-        .catch((error) => {
-          console.error('Error posting score:', error)
-          routeToSignIn()
-        })
+          .then((res) => {
+            checkValidResponse(res.status)
+            enqueueSnackbar(`Saved`, {
+              variant: 'success',
+              anchorOrigin: {
+                vertical: 'top',
+                horizontal: 'left',
+              },
+            })
+            fetchQuestionScores(
+              Number(system?.fismasystemid),
+              setQuestionScores
+            )
+            setLoadingQuestion(false)
+          })
+          .catch((error) => {
+            console.error('Error updating score:', error)
+            routeToSignIn()
+          })
+      } else {
+        axiosInstance
+          .post(`scores`, {
+            fismasystemid: system?.fismasystemid,
+            notes: notes,
+            functionoptionid: selectQuestionOption,
+            datacallid: 2,
+          })
+          .then((res) => {
+            checkValidResponse(res.status)
+            fetchQuestionScores(
+              Number(system?.fismasystemid),
+              setQuestionScores
+            )
+            setLoadingQuestion(false)
+          })
+          .catch((error) => {
+            console.error('Error posting score:', error)
+            routeToSignIn()
+          })
+      }
     }
     let nextCategoryIndex = activeCategoryIndex
     let nextStepIndex = activeStepIndex + 1
@@ -435,7 +446,7 @@ export default function QuestionnareModal({
             <FormControlLabel
               key={option.functionoptionid}
               value={option.functionoptionid}
-              control={<Radio />}
+              control={<Radio disabled={isReadOnly} />}
               label={option.description}
               sx={{
                 m: '3px',
@@ -586,6 +597,7 @@ export default function QuestionnareModal({
                     rows={4}
                     fullWidth
                     value={notes}
+                    disabled={isReadOnly}
                     onChange={(e) => setNotes(e.target.value)}
                   />
                   <Box
