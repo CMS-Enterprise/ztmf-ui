@@ -14,7 +14,7 @@ export const COPYRIGHT_LABEL = `Copyright © ${new Date()
 // * Configuration Constants
 export const DEFAULT_ALERT_TIMEOUT = 3000
 
-export const ROLES = ['ISSO', 'ISSM', 'ADMIN']
+export const ROLES = ['ISSO', 'ISSM', 'ADMIN', 'READONLY_ADMIN']
 
 export const ERROR_MESSAGES = {
   login: 'Please log in to continue.',

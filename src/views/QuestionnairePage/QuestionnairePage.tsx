@@ -30,6 +30,7 @@ import {
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import { useContextProp } from '../Title/Context'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -78,6 +79,8 @@ const addSpace = (str: string) => {
   return str
 }
 export default function QuestionnarePage() {
+  const { userInfo } = useContextProp()
+  const isReadOnly = userInfo.role === 'READONLY_ADMIN'
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
   )
@@ -137,6 +140,7 @@ export default function QuestionnarePage() {
         className="ds-u-margin-top--05"
         size="small"
         onChange={handleChoiceChange}
+        disabled={isReadOnly}
       />
     )
   }
@@ -581,10 +585,11 @@ export default function QuestionnarePage() {
                             if (selectedIndex !== func.function.functionid) {
                               setStepId(func.function.functionid)
                               if (
-                                (selectQuestionOption !== -1 &&
+                                !isReadOnly &&
+                                ((selectQuestionOption !== -1 &&
                                   initQuestionChoice !==
                                     selectQuestionOption) ||
-                                initNotes !== notes
+                                  initNotes !== notes)
                               ) {
                                 setOpenAlert(true)
                               } else {
@@ -648,6 +653,7 @@ export default function QuestionnarePage() {
                     rows={4}
                     fullWidth
                     value={notes}
+                    disabled={isReadOnly}
                     onChange={(e) => {
                       setNotes(e.target.value)
                     }}
@@ -662,9 +668,10 @@ export default function QuestionnarePage() {
                     <CmsButton
                       onClick={() => {
                         if (
-                          (selectQuestionOption !== -1 &&
+                          !isReadOnly &&
+                          ((selectQuestionOption !== -1 &&
                             initQuestionChoice !== selectQuestionOption) ||
-                          initNotes !== notes
+                            initNotes !== notes)
                         ) {
                           setStepId(
                             stepFunctionId[functionIdIdx[selectedIndex] - 1]
@@ -716,7 +723,9 @@ export default function QuestionnarePage() {
                         setLoadingQuestion(true)
                         setQuestionId(id)
                         setSelectedIndex(id)
-                        saveResponse()
+                        if (!isReadOnly) {
+                          saveResponse()
+                        }
                         setLoadingQuestion(false)
                       }}
                       style={{ marginBottom: '8px', marginTop: '8px' }}

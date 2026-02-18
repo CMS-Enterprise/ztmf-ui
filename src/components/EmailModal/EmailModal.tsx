@@ -213,6 +213,10 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
                   value: 'ADMIN',
                 },
                 {
+                  label: 'READONLY_ADMIN',
+                  value: 'READONLY_ADMIN',
+                },
+                {
                   label: 'DCC',
                   value: 'DCC',
                 },

@@ -23,7 +23,6 @@ import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
-import { EMPTY_USER } from '../../constants'
 import { useNavigate, Link } from 'react-router-dom'
 import { RouteNames, Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
@@ -221,9 +220,9 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId } = useContextProp()
+  const { fismaSystems, latestDataCallId, userInfo } = useContextProp()
+  const isAdmin = userInfo.role === 'ADMIN'
   const [open, setOpen] = useState<boolean>(false)
-  const { userInfo } = useContextProp() || EMPTY_USER
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
   const navigate = useNavigate()
@@ -434,7 +433,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
               />
             </span>
           </Tooltip>
-          {userInfo.role === 'ADMIN' && (
+          {isAdmin && (
             <GridActionsCellItem
               icon={<EditIcon />}
               key={`edit-${params.row.fismasystemid}`}

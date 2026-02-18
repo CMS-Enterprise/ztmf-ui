@@ -52,10 +52,11 @@ interface EditToolbarProps {
   setRowModesModel: (
     newModel: (oldModel: GridRowModesModel) => GridRowModesModel
   ) => void
+  isAdmin?: boolean
 }
 
 function EditToolbar(props: EditToolbarProps) {
-  const { setRows, setRowModesModel } = props
+  const { setRows, setRowModesModel, isAdmin } = props
   const addUserRow = () => {
     const userid = Math.floor(Math.random() * 1000) + 1
     setRows((oldRows) => [
@@ -88,14 +89,16 @@ function EditToolbar(props: EditToolbarProps) {
           },
         }}
       />
-      <Button
-        color="primary"
-        startIcon={<AddIcon />}
-        onClick={addUserRow}
-        sx={{ color: '#5666b8' }}
-      >
-        Add User
-      </Button>
+      {isAdmin && (
+        <Button
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={addUserRow}
+          sx={{ color: '#5666b8' }}
+        >
+          Add User
+        </Button>
+      )}
     </GridToolbarContainer>
   )
 }
@@ -106,6 +109,13 @@ export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
+  const { userInfo, fismaSystems } = useContextProp()
+  const isAdmin = userInfo.role === 'ADMIN'
+  useEffect(() => {
+    if (userInfo.role && !isAdmin) {
+      navigate(Routes.ROOT, { replace: true })
+    }
+  }, [userInfo.role, isAdmin, navigate])
   //TODO: add these to a file to be imported and used in multiple places
   const checkValidResponse = (status: number) => {
     if (status == 401) {
@@ -140,8 +150,12 @@ export default function UserTable() {
               params.id,
               'fullname'
             )
-            if (event.target.value === 'ADMIN') {
+            if (
+              event.target.value === 'ADMIN' ||
+              event.target.value === 'READONLY_ADMIN'
+            ) {
               setUserName(fullname)
+              setSelectedRole(event.target.value)
               setOpenAlert(true)
             }
             params.api.setEditCellValue(
@@ -166,7 +180,6 @@ export default function UserTable() {
   }
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
-  const { fismaSystems } = useContextProp()
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const [open, setOpen] = useState<boolean>(false)
   const [snackBarText, setSnackBarText] = useState<string>('Saved')
@@ -183,6 +196,7 @@ export default function UserTable() {
     assignedfismasystems: [],
   })
   const [userName, setUserName] = useState<string | undefined>(undefined)
+  const [selectedRole, setSelectedRole] = useState<string>('')
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
     Record<number, { name: string; acronym: string }>
   >({})
@@ -374,6 +388,7 @@ export default function UserTable() {
   }
   // TODO: Custom hook for fetching data
   useEffect(() => {
+    if (!isAdmin) return
     axiosInstance
       .get('/users')
       .then((res) => {
@@ -424,7 +439,7 @@ export default function UserTable() {
           })
         }
       })
-  }, [fismaSystems, navigate, enqueueSnackbar])
+  }, [isAdmin, fismaSystems, navigate, enqueueSnackbar])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
@@ -576,7 +591,7 @@ export default function UserTable() {
             toolbar: EditToolbar,
           }}
           slotProps={{
-            toolbar: { setRows, setRowModesModel },
+            toolbar: { setRows, setRowModesModel, isAdmin },
             filterPanel: {
               sx: {
                 '& .MuiFormLabel-root': {
@@ -639,7 +654,7 @@ export default function UserTable() {
         <DialogContent>
           <Box>
             <Typography variant="h6">
-              Are you sure you want to change {userName} as an ADMIN?
+              Are you sure you want to change {userName} as a {selectedRole}?
             </Typography>
           </Box>
         </DialogContent>
