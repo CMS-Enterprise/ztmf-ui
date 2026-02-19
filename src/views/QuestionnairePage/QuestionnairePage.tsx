@@ -7,7 +7,7 @@ import ListItemText from '@mui/material/ListItemText'
 import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
 import { Button as CmsButton, ChoiceList, Spinner } from '@cmsgov/design-system'
-import Grid from '@mui/material/Unstable_Grid2/Grid2'
+import Grid from '@mui/material/Grid'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import TextField from '@mui/material/TextField'
 import {
@@ -537,7 +537,7 @@ export default function QuestionnarePage() {
       <BreadCrumbs />
       <Container>
         <Grid container columnSpacing={2} sx={{ mt: 2 }}>
-          <Grid xs={3}>
+          <Grid item xs={3}>
             <List
               sx={{
                 width: '100%',
@@ -617,7 +617,7 @@ export default function QuestionnarePage() {
               ))}
             </List>
           </Grid>
-          <Grid xs={9}>
+          <Grid item xs={9}>
             <Box>
               <Box
                 sx={{
