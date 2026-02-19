@@ -18,6 +18,7 @@ import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
 import { emailValidator } from '@/views/EditSystemModal/validators'
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
+import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 
 interface SystemDetailEditViewProps {
   system: FismaSystemType
@@ -40,6 +41,7 @@ interface SystemDetailEditViewProps {
   onShowDecommissionForm: (show: boolean) => void
   onDecommissionRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
+  onSdlSyncToggle: (checked: boolean) => void
 }
 
 function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
@@ -199,12 +201,14 @@ function DecommissionDateNotesForm(props: SystemDetailEditViewProps) {
 export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
   const {
     system,
+    editedSystem,
     showDecommissionForm,
     decommissionedByName,
     decommissionDate,
     onShowDecommissionForm,
     onDecommissionRequest,
     validateDecommissionDate,
+    onSdlSyncToggle,
   } = props
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
@@ -359,6 +363,19 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             </CardContent>
           </Card>
         )}
+        <Card variant="outlined" sx={{ mb: 3 }}>
+          <CardHeader
+            title="Data Lake Export"
+            titleTypographyProps={{ variant: 'h6' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            <SdlSyncToggle
+              checked={editedSystem.sdl_sync_enabled ?? false}
+              onChange={onSdlSyncToggle}
+            />
+          </CardContent>
+        </Card>
         <Card variant="outlined">
           <CardHeader
             title="Organization"

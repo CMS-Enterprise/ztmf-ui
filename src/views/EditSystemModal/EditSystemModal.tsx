@@ -17,6 +17,7 @@ import {
 } from '@/types'
 import MenuItem from '@mui/material/MenuItem'
 import { CONFIRMATION_MESSAGE } from '@/constants'
+import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 
 import ValidatedTextField from './ValidatedTextField'
 import { emailValidator } from './validators'
@@ -200,6 +201,7 @@ export default function EditSystemModal({
           datacenterenvironment: editedFismaSystem.datacenterenvironment,
           datacallcontact: editedFismaSystem.datacallcontact,
           issoemail: editedFismaSystem.issoemail,
+          sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
         })
         .then((res) => {
           if (res.status !== 200 && res.status.toString()[0] === '4') {
@@ -265,6 +267,7 @@ export default function EditSystemModal({
           datacenterenvironment: editedFismaSystem.datacenterenvironment,
           datacallcontact: editedFismaSystem.datacallcontact,
           issoemail: editedFismaSystem.issoemail,
+          sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
         })
         .then((res) => {
           if (res.status !== 200 && res.status.toString()[0] === '4') {
@@ -680,6 +683,25 @@ export default function EditSystemModal({
                       </MenuItem>
                     ))}
                   </TextField>
+                  <Box
+                    sx={{
+                      mt: 3,
+                      p: 2,
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                    }}
+                  >
+                    <SdlSyncToggle
+                      checked={editedFismaSystem.sdl_sync_enabled ?? false}
+                      onChange={(checked) =>
+                        setEditedFismaSystem((prev) => ({
+                          ...prev,
+                          sdl_sync_enabled: checked,
+                        }))
+                      }
+                    />
+                  </Box>
                   {mode === 'edit' && (
                     <Box
                       sx={{
