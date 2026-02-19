@@ -73,7 +73,12 @@ export default function SystemDetailReadView({
       </Grid>
 
       {/* Right column: Status + Organization */}
-      <Grid item xs={12} md={5}>
+      <Grid
+        item
+        xs={12}
+        md={5}
+        sx={{ display: 'flex', flexDirection: 'column' }}
+      >
         <Card
           variant="outlined"
           sx={{
@@ -163,7 +168,7 @@ export default function SystemDetailReadView({
             </Typography>
           </CardContent>
         </Card>
-        <Card variant="outlined">
+        <Card variant="outlined" sx={{ flex: 1 }}>
           <CardHeader
             title="Organization"
             titleTypographyProps={{ variant: 'h6' }}
@@ -173,7 +178,7 @@ export default function SystemDetailReadView({
         </Card>
       </Grid>
 
-      {/* Contacts */}
+      {/* Contacts — full width, fields horizontal */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
@@ -183,9 +188,14 @@ export default function SystemDetailReadView({
           />
           <CardContent>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                {renderFields(contactFields, system)}
-              </Grid>
+              {contactFields.map((field) => (
+                <Grid item xs={12} sm={6} key={field.key}>
+                  <FieldDisplay
+                    label={field.label}
+                    value={String(system[field.key] ?? '')}
+                  />
+                </Grid>
+              ))}
             </Grid>
           </CardContent>
         </Card>

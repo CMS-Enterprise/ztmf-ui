@@ -186,3 +186,22 @@ export type ThemeColor =
   | 'success'
 
 export type ThemeSkin = 'filled' | 'light' | 'light-static'
+
+export type CfactsSystemType = {
+  fisma_uuid: string
+  fisma_acronym: string
+  authorization_package_name: string | null
+  primary_isso_name: string | null
+  primary_isso_email: string | null
+  is_active: boolean | null
+  is_retired: boolean | null
+  is_decommissioned: boolean | null
+  lifecycle_phase: string | null
+  component_acronym: string | null
+  division_name: string | null
+  group_name: string | null
+  ato_expiration_date: string | null
+  decommission_date: string | null
+  last_modified_date: string | null
+  synced_at: string
+}

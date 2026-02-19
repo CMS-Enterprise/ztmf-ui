@@ -238,7 +238,12 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
       </Grid>
 
       {/* Right column: Decommission + Organization */}
-      <Grid item xs={12} md={5}>
+      <Grid
+        item
+        xs={12}
+        md={5}
+        sx={{ display: 'flex', flexDirection: 'column' }}
+      >
         {system.decommissioned ? (
           <Card variant="outlined" sx={{ mb: 3, borderColor: 'error.main' }}>
             <CardHeader
@@ -376,7 +381,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             />
           </CardContent>
         </Card>
-        <Card variant="outlined">
+        <Card variant="outlined" sx={{ flex: 1 }}>
           <CardHeader
             title="Organization"
             titleTypographyProps={{ variant: 'h6' }}
@@ -388,7 +393,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
         </Card>
       </Grid>
 
-      {/* Contacts */}
+      {/* Contacts — full width, fields horizontal */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
@@ -398,9 +403,11 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           />
           <CardContent>
             <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                {contactFields.map((field) => renderEditField(field, props))}
-              </Grid>
+              {contactFields.map((field) => (
+                <Grid item xs={12} sm={6} key={field.key}>
+                  {renderEditField(field, props)}
+                </Grid>
+              ))}
             </Grid>
           </CardContent>
         </Card>

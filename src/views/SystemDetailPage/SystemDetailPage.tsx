@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
-import { Box, CircularProgress, Typography } from '@mui/material'
+import { Box, CircularProgress, Divider, Typography } from '@mui/material'
 import { useSnackbar } from 'notistack'
 import _ from 'lodash'
 
@@ -21,6 +21,7 @@ import { getTodayISO, truncateNotes } from '@/utils/decommission'
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
+import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
@@ -29,6 +30,8 @@ export default function SystemDetailPage() {
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
 
   const isAdmin = userInfo.role === 'ADMIN'
+  const hasAdminRead =
+    userInfo.role === 'ADMIN' || userInfo.role === 'READONLY_ADMIN'
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
 
   const system = useMemo(
@@ -484,6 +487,16 @@ export default function SystemDetailPage() {
           system={system}
           decommissionedByName={decommissionedByName}
         />
+      )}
+
+      {hasAdminRead && system.fismauid && (
+        <>
+          <Divider sx={{ my: 4 }} />
+          <Typography variant="h6" sx={{ mb: 2 }}>
+            CFACTS Record
+          </Typography>
+          <CfactsRecordCard fismaUid={system.fismauid} />
+        </>
       )}
 
       <ConfirmDialog
