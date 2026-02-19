@@ -13,6 +13,7 @@ export const EMPTY_SYSTEM = {
   datacenterenvironment: '',
   datacallcontact: '',
   issoemail: '',
+  sdl_sync_enabled: false,
   decommissioned: false,
   decommissioned_date: null,
   decommissioned_by: null,

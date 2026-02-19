@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams, useSearchParams, useNavigate } from 'react-router-dom'
+import { useParams, useNavigate } from 'react-router-dom'
 import { Box, CircularProgress, Typography } from '@mui/material'
 import { useSnackbar } from 'notistack'
 import _ from 'lodash'
@@ -24,7 +24,6 @@ import SystemDetailEditView from './SystemDetailEditView'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const [searchParams, setSearchParams] = useSearchParams()
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
@@ -103,18 +102,13 @@ export default function SystemDetailPage() {
       fismauid: TEXTFIELD_HELPER_TEXT,
     })
 
-  // Auto-enter edit mode from ?edit=true query param
-  useEffect(() => {
-    if (searchParams.get('edit') === 'true' && isAdmin && system) {
-      setIsEditing(true)
-      setSearchParams({}, { replace: true })
-    }
-  }, [searchParams, isAdmin, system, setSearchParams])
-
   // Initialize editedSystem, form validity, and decommission defaults when entering edit mode
   useEffect(() => {
     if (isEditing && system) {
-      setEditedSystem({ ...system })
+      setEditedSystem({
+        ...system,
+        sdl_sync_enabled: system.sdl_sync_enabled ?? false,
+      })
       setFormValid({
         issoemail: (system.issoemail?.length ?? 0) > 0,
         datacallcontact: (system.datacallcontact?.length ?? 0) > 0,
@@ -254,6 +248,7 @@ export default function SystemDetailPage() {
         datacenterenvironment: editedSystem.datacenterenvironment,
         datacallcontact: editedSystem.datacallcontact,
         issoemail: editedSystem.issoemail,
+        sdl_sync_enabled: editedSystem.sdl_sync_enabled,
       })
       .then(() => {
         enqueueSnackbar('Saved', {
@@ -478,6 +473,11 @@ export default function SystemDetailPage() {
           onShowDecommissionForm={setShowDecommissionForm}
           onDecommissionRequest={() => setOpenDecommissionDialog(true)}
           validateDecommissionDate={validateDecommissionDate}
+          onSdlSyncToggle={(checked) =>
+            setEditedSystem((prev) =>
+              prev ? { ...prev, sdl_sync_enabled: checked } : prev
+            )
+          }
         />
       ) : (
         <SystemDetailReadView

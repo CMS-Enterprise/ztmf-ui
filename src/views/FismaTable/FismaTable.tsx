@@ -26,7 +26,7 @@ import { useContextProp } from '../Title/Context'
 import { useNavigate, Link } from 'react-router-dom'
 import { RouteNames, Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
-import EditIcon from '@mui/icons-material/Edit'
+import VisibilityIcon from '@mui/icons-material/Visibility'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresModal'
@@ -435,13 +435,13 @@ export default function FismaTable({ scores }: FismaTableProps) {
           </Tooltip>
           {isAdmin && (
             <GridActionsCellItem
-              icon={<EditIcon />}
-              key={`edit-${params.row.fismasystemid}`}
-              label="Edit"
+              icon={<VisibilityIcon />}
+              key={`view-${params.row.fismasystemid}`}
+              label="View"
               className="textPrimary"
               onClick={(event) => {
                 event.stopPropagation()
-                navigate(`/systems/${params.row.fismasystemid}?edit=true`)
+                navigate(`/systems/${params.row.fismasystemid}`)
               }}
               color="inherit"
             />

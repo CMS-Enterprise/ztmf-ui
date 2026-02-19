@@ -8,6 +8,7 @@ import {
   Chip,
 } from '@mui/material'
 import { FismaSystemType } from '@/types'
+import { SDL_SYNC_DESCRIPTION_ON, SDL_SYNC_DESCRIPTION_OFF } from '@/constants'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
 
 interface SystemDetailReadViewProps {
@@ -114,6 +115,52 @@ export default function SystemDetailReadView({
                 This system is active.
               </Typography>
             )}
+          </CardContent>
+        </Card>
+        <Card variant="outlined" sx={{ mb: 3 }}>
+          <CardHeader
+            title="Data Lake Export"
+            titleTypographyProps={{ variant: 'h6' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+              <Typography variant="caption" color="text.secondary">
+                SDL Sync
+              </Typography>
+              {system.sdl_sync_enabled === null ? (
+                <Chip
+                  label="Not configured"
+                  size="small"
+                  color="default"
+                  variant="outlined"
+                />
+              ) : system.sdl_sync_enabled ? (
+                <Chip
+                  label="On"
+                  size="small"
+                  color="primary"
+                  variant="filled"
+                />
+              ) : (
+                <Chip
+                  label="Off"
+                  size="small"
+                  color="default"
+                  variant="outlined"
+                />
+              )}
+            </Box>
+            <Typography
+              variant="caption"
+              sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}
+            >
+              {system.sdl_sync_enabled === null
+                ? 'SDL sync has not been configured for this system.'
+                : system.sdl_sync_enabled
+                  ? SDL_SYNC_DESCRIPTION_ON
+                  : SDL_SYNC_DESCRIPTION_OFF}
+            </Typography>
           </CardContent>
         </Card>
         <Card variant="outlined">

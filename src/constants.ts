@@ -93,6 +93,18 @@ export const PILLAR_FUNCTION_MAP: { [key: string]: string[] } = {
     'Cross-VisibilityAnalytics',
   ],
 }
+export const SDL_SYNC_DESCRIPTION_ON =
+  'This system and its scores will be exported to the CMS data lake.'
+export const SDL_SYNC_DESCRIPTION_OFF =
+  'This system is excluded from CMS data lake exports.'
+
+export const SDL_SYNC_SWITCH_SX = {
+  '& .MuiSwitch-switchBase.Mui-checked': { color: '#004297' },
+  '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+    backgroundColor: '#004297',
+  },
+} as const
+
 export const TEXTFIELD_HELPER_TEXT = 'This field is required'
 
 export const INVALID_INPUT_TEXT = (key: string) =>
