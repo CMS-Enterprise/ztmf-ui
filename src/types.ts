@@ -199,6 +199,7 @@ export type CfactsSystemType = {
   lifecycle_phase: string | null
   component_acronym: string | null
   division_name: string | null
+  group_acronym: string | null
   group_name: string | null
   ato_expiration_date: string | null
   decommission_date: string | null

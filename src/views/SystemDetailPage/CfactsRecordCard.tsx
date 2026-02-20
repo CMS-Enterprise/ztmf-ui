@@ -219,6 +219,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
             sx={{ pb: 0 }}
           />
           <CardContent>
+            <FieldDisplay label="Group Acronym" value={cfacts.group_acronym} />
             <FieldDisplay label="Group Name" value={cfacts.group_name} />
             <FieldDisplay label="Division Name" value={cfacts.division_name} />
           </CardContent>
