@@ -30,8 +30,6 @@ export default function SystemDetailPage() {
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
 
   const isAdmin = userInfo.role === 'ADMIN'
-  const hasAdminRead =
-    userInfo.role === 'ADMIN' || userInfo.role === 'READONLY_ADMIN'
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
 
   const system = useMemo(
@@ -489,7 +487,7 @@ export default function SystemDetailPage() {
         />
       )}
 
-      {hasAdminRead && system.fismauid && (
+      {system.fismauid && (
         <>
           <Divider sx={{ my: 4 }} />
           <Typography variant="h6" sx={{ mb: 2 }}>

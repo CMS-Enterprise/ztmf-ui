@@ -107,6 +107,9 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
             error.response?.status === 404 ||
             error.response?.status === 403
           ) {
+            if (error.response?.status === 403) {
+              console.warn('CFACTS 403 for fismaUid:', fismaUid)
+            }
             setNotFound(true)
           } else {
             setHasError(true)

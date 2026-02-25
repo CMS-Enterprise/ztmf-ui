@@ -221,7 +221,10 @@ const pillarScoresCache = new Map<number, CachedScore>()
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const { fismaSystems, latestDataCallId, userInfo } = useContextProp()
-  const isAdmin = userInfo.role === 'ADMIN'
+  const hasSystemDetailAccess =
+    userInfo.role === 'ADMIN' ||
+    userInfo.role === 'READONLY_ADMIN' ||
+    userInfo.role === 'ISSO'
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
@@ -433,7 +436,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
               />
             </span>
           </Tooltip>
-          {isAdmin && (
+          {hasSystemDetailAccess && (
             <GridActionsCellItem
               icon={<VisibilityIcon />}
               key={`view-${params.row.fismasystemid}`}
