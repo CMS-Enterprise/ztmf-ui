@@ -65,3 +65,4 @@ stats.*
 src/__generated__/**
 
 public/build/p-*
+CFACTS_ISSO_ACCESS.md
