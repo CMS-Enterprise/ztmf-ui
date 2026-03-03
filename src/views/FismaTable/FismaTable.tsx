@@ -224,7 +224,8 @@ export default function FismaTable({ scores }: FismaTableProps) {
   const hasSystemDetailAccess =
     userInfo.role === 'ADMIN' ||
     userInfo.role === 'READONLY_ADMIN' ||
-    userInfo.role === 'ISSO'
+    userInfo.role === 'ISSO' ||
+    userInfo.role === 'ISSM'
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
