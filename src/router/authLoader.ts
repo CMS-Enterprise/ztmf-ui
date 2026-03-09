@@ -21,7 +21,12 @@ const authLoader = async () => {
       return { ok: false, response: emptyUser }
     }
     return { status: axiosUser.status, response: axiosUser.data.data }
-  } catch (error) {
+  } catch (error: unknown) {
+    const err = error as { response?: { status?: number }; status?: number }
+    const status = err?.response?.status || err?.status || 0
+    if (status >= 500 || status === 0) {
+      return { status, serverError: true, response: emptyUser }
+    }
     console.error('Error:', error)
   }
   return { ok: false, response: emptyUser }

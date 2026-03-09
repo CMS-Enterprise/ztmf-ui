@@ -16,6 +16,7 @@ import { Routes } from '@/router/constants'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import LoginPage from '../LoginPage/LoginPage'
+import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
 import { ERROR_MESSAGES } from '@/constants'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
@@ -38,6 +39,7 @@ const emptyUser: userData = {
 type PromiseType = {
   status: boolean | number
   response: userData
+  serverError?: boolean
 }
 export default function Title() {
   const navigate = useNavigate()
@@ -83,10 +85,11 @@ export default function Title() {
   )
 
   useEffect(() => {
-    fetchFismaSystems(showDecommissioned)
-  }, [showDecommissioned, fetchFismaSystems])
+    if (!loaderData.serverError) fetchFismaSystems(showDecommissioned)
+  }, [showDecommissioned, fetchFismaSystems, loaderData.serverError])
 
   useEffect(() => {
+    if (loaderData.serverError) return
     async function fetchLatestDatacall() {
       await axiosInstance
         .get('/datacalls/latest')
@@ -95,7 +98,7 @@ export default function Title() {
           setLatestDatacall(res.data.data.datacall)
         })
         .catch((error) => {
-          if (error.response.status == 401) {
+          if (error.response?.status == 401) {
             navigate(Routes.SIGNIN, {
               replace: true,
               state: {
@@ -106,7 +109,7 @@ export default function Title() {
         })
     }
     fetchLatestDatacall()
-  }, [navigate])
+  }, [navigate, loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -244,7 +247,9 @@ export default function Title() {
         )}
       </Container>
       <Container>
-        {loaderData.status !== 200 ? (
+        {loaderData.serverError ? (
+          <ServerErrorPage />
+        ) : loaderData.status !== 200 ? (
           <LoginPage />
         ) : (
           <>
