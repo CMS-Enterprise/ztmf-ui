@@ -59,7 +59,7 @@
     "@mui/x-data-grid": "^6.19.4",
     "@popperjs/core": "^2.11.8",
     "apollo-client": "^2.6.10",
-    "axios": "1.13.5",
+    "axios": "^1.14.0",
     "classnames": "^2.5.1",
     "clipboard-copy": "^4.0.1",
     "core-js": "^3.37.1",
@@ -248,6 +248,12 @@
   "resolutions": {
     "@babel/runtime": "^7.26.10",
     "form-data@^3.0.0": "^3.0.4",
-    "form-data@^4.0.0": "^4.0.4"
+    "form-data@^4.0.0": "^4.0.4",
+    "handlebars": "^4.7.9",
+    "flatted": "^3.4.2",
+    "picomatch": "^2.3.2",
+    "yaml": "^2.8.3",
+    "minimatch": "^3.1.5",
+    "immutable": "^4.3.8"
   }
 }
