@@ -93,7 +93,7 @@ const getMaturityLevel = (score: number) => {
     }
   return {
     name: 'No Score',
-    color: '#666666', // Gray text
+    color: '#525252', // Gray text (meets WCAG 4.5:1 contrast)
     backgroundColor: '#F8F8F8', // Light gray background
   }
 }
@@ -197,7 +197,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 
   // Helper function to get trend information
   const getTrendInfo = (currentScore: number, previousScore: number | null) => {
-    if (previousScore === null) return { color: '#666', trend: '', text: '' }
+    if (previousScore === null) return { color: '#525252', trend: '', text: '' }
 
     const difference = currentScore - previousScore
     const percentChange = ((difference / previousScore) * 100).toFixed(1)
@@ -684,6 +684,14 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                     onClick={() => setShowDataTable(!showDataTable)}
                     variant="outlined"
                     size="small"
+                    sx={{
+                      color: '#3B4DA0',
+                      borderColor: '#3B4DA0',
+                      '&:hover': {
+                        borderColor: '#2E3D7A',
+                        color: '#2E3D7A',
+                      },
+                    }}
                     aria-expanded={showDataTable}
                     aria-controls="pillar-data-table"
                     aria-label={`${showDataTable ? 'Hide' : 'Show'} detailed pillar scores data table`}
@@ -745,7 +753,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                               : {
                                   trend: '',
                                   text: 'No comparison data',
-                                  color: '#666',
+                                  color: '#525252',
                                 }
 
                           return (

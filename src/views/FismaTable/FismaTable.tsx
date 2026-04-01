@@ -11,7 +11,6 @@ import {
   GridRowId,
   useGridApiRef,
   GridRowParams,
-  useGridApiContext,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
 import { Box, IconButton } from '@mui/material'
@@ -49,7 +48,6 @@ export function CustomFooterSaveComponent(
   const [snackBarSeverity, setSnackBarSeverity] = useState<
     'success' | 'error' | 'warning' | 'info'
   >('error')
-  const apiRef = useGridApiContext()
   const [errorMessage, setErrorMessage] = useState<string>('')
   const navigate = useNavigate()
   const handleCloseSnackbar = () => {
@@ -120,19 +118,39 @@ export function CustomFooterSaveComponent(
             alignItems: 'center',
             gap: 1,
             ml: 1,
+            position: 'relative',
           }}
         >
-          <Tooltip title="Save System Answers">
+          <Tooltip title="Download selected system answers">
             <span>
               <IconButton
                 sx={{ color: '#004297' }}
                 onClick={saveSystemAnswers}
-                disabled={apiRef.current.getSelectedRows().size === 0}
+                disabled={
+                  !props.selectedRows || props.selectedRows.length === 0
+                }
+                aria-label={`Download selected system answers${props.selectedRows && props.selectedRows.length > 0 ? ` (${props.selectedRows.length} selected)` : ' (no systems selected)'}`}
               >
                 <FileDownloadSharpIcon />
               </IconButton>
             </span>
           </Tooltip>
+          <span
+            role="status"
+            aria-live="polite"
+            style={{
+              position: 'absolute',
+              width: 1,
+              height: 1,
+              overflow: 'hidden',
+              clip: 'rect(0, 0, 0, 0)',
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {props.selectedRows && props.selectedRows.length > 0
+              ? `${props.selectedRows.length} system${props.selectedRows.length === 1 ? '' : 's'} selected. Download button available.`
+              : ''}
+          </span>
         </Box>
         <GridFooter />
       </GridFooterContainer>
@@ -401,12 +419,12 @@ export default function FismaTable({ scores }: FismaTableProps) {
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => (
         <>
-          <Tooltip title="View Questionnare">
+          <Tooltip title="Questionnaire">
             <span>
               <GridActionsCellItem
                 icon={<QuestionAnswerOutlinedIcon />}
                 key={`question-${params.row.fismasystemid}`}
-                label="View Questionnare"
+                label={`View Questionnaire for ${params.row.fismaname}`}
                 className="textPrimary"
                 onClick={(event) => {
                   event.stopPropagation()
@@ -416,18 +434,17 @@ export default function FismaTable({ scores }: FismaTableProps) {
                       state: { fismasystemid: params.row.fismasystemid },
                     }
                   )
-                  // handleOpenModal(params.row as FismaSystemType)
                 }}
                 color="inherit"
               />
             </span>
           </Tooltip>
-          <Tooltip title="View Pillar Scores">
+          <Tooltip title="Pillar Scores">
             <span>
               <GridActionsCellItem
                 icon={<BarChartIcon />}
                 key={`chart-${params.row.fismasystemid}`}
-                label="View Pillar Scores"
+                label={`View Pillar Scores for ${params.row.fismaname}`}
                 className="textPrimary"
                 onClick={(event) => {
                   event.stopPropagation()
@@ -438,17 +455,21 @@ export default function FismaTable({ scores }: FismaTableProps) {
             </span>
           </Tooltip>
           {hasSystemDetailAccess && (
-            <GridActionsCellItem
-              icon={<VisibilityIcon />}
-              key={`view-${params.row.fismasystemid}`}
-              label="View"
-              className="textPrimary"
-              onClick={(event) => {
-                event.stopPropagation()
-                navigate(`/systems/${params.row.fismasystemid}`)
-              }}
-              color="inherit"
-            />
+            <Tooltip title="System Details">
+              <span>
+                <GridActionsCellItem
+                  icon={<VisibilityIcon />}
+                  key={`view-${params.row.fismasystemid}`}
+                  label={`View system details for ${params.row.fismaname}`}
+                  className="textPrimary"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    navigate(`/systems/${params.row.fismasystemid}`)
+                  }}
+                  color="inherit"
+                />
+              </span>
+            </Tooltip>
           )}
         </>
       ),

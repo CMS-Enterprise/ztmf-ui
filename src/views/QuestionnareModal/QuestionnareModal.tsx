@@ -465,7 +465,7 @@ export default function QuestionnareModal({
       <Dialog open={open} onClose={handClose} maxWidth="lg" fullWidth>
         <DialogTitle align="center">
           <div>
-            <Typography variant="h3">{'Questionnare'}</Typography>
+            <Typography variant="h3">{'Questionnaire'}</Typography>
           </div>
         </DialogTitle>
         <DialogContent>
