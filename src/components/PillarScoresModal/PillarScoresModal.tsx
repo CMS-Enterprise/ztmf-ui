@@ -76,13 +76,13 @@ const getMaturityLevel = (score: number) => {
   if (score >= 2.75)
     return {
       name: 'Advanced',
-      color: '#8B8000', // Dark yellow/gold text
+      color: '#6B6200', // Dark yellow/gold text (6.1:1 on #FEFEF0)
       backgroundColor: '#FEFEF0', // Very light yellow background
     }
   if (score >= 1.75)
     return {
       name: 'Initial',
-      color: '#CC5500', // Dark orange text
+      color: '#A34200', // Dark orange text (5.8:1 on #FFF4E6)
       backgroundColor: '#FFF4E6', // Very light orange background
     }
   if (score >= 1)
@@ -462,6 +462,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         borderColor: 'darkgray',
                         borderRadius: 1.5,
                         textAlign: 'center',
+                        height: '100%',
                         backgroundColor:
                           currentScore > 0
                             ? getMaturityLevel(currentScore).backgroundColor
@@ -471,7 +472,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       aria-label={`${pillar.pillar} pillar score: ${currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}`}
                     >
                       <Typography
-                        variant="subtitle2"
+                        variant="h4"
                         fontWeight="bold"
                         gutterBottom
                         sx={{ fontSize: '0.9rem' }}
