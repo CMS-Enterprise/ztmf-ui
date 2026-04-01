@@ -81,18 +81,18 @@ export default function StatisticsBlocks({
       }}
     >
       <StatisticsPaper variant="outlined">
-        <Typography variant="h4" sx={{ color: '#004297', fontSize: '56px' }}>
+        <Typography variant="h2" sx={{ color: '#004297', fontSize: '56px' }}>
           {totalSystems}
         </Typography>
         <Typography
-          variant="h6"
+          variant="body1"
           sx={{ fontSize: '16px', overflowWrap: 'break-word' }}
         >
           Total Systems
         </Typography>
       </StatisticsPaper>
       <StatisticsPaper variant="outlined">
-        <Typography variant="h4" sx={{ color: '#004297', fontSize: '56px' }}>
+        <Typography variant="h2" sx={{ color: '#004297', fontSize: '56px' }}>
           {avgSystemScore}
         </Typography>
         <Typography
@@ -104,7 +104,7 @@ export default function StatisticsBlocks({
       </StatisticsPaper>
       <StatisticsPaper variant="outlined">
         <Typography
-          variant="h4"
+          variant="h2"
           sx={{
             color: '#128172',
             fontSize: '50px',
@@ -124,11 +124,10 @@ export default function StatisticsBlocks({
       </StatisticsPaper>
       <StatisticsPaper variant="outlined">
         <Typography
-          variant="h4"
+          variant="h2"
           sx={{
             color: '#960B91',
             fontSize: '50px',
-            // overflowWrap: 'break-word',
           }}
         >
           {minSystemScore === Number.POSITIVE_INFINITY
