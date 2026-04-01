@@ -122,7 +122,7 @@ export function CustomFooterSaveComponent(
           }}
         >
           <Tooltip title="Download selected system answers">
-            <span>
+            <span role="presentation">
               <IconButton
                 sx={{ color: '#004297' }}
                 onClick={saveSystemAnswers}
@@ -426,6 +426,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
                 key={`question-${params.row.fismasystemid}`}
                 label={`View Questionnaire for ${params.row.fismaname}`}
                 className="textPrimary"
+                role="button"
                 onClick={(event) => {
                   event.stopPropagation()
                   navigate(
@@ -446,6 +447,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
                 key={`chart-${params.row.fismasystemid}`}
                 label={`View Pillar Scores for ${params.row.fismaname}`}
                 className="textPrimary"
+                role="button"
                 onClick={(event) => {
                   event.stopPropagation()
                   handleOpenPillarScores(params.row as FismaSystemType)
@@ -462,6 +464,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
                   key={`view-${params.row.fismasystemid}`}
                   label={`View system details for ${params.row.fismaname}`}
                   className="textPrimary"
+                  role="button"
                   onClick={(event) => {
                     event.stopPropagation()
                     navigate(`/systems/${params.row.fismasystemid}`)
