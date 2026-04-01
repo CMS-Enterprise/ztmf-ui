@@ -253,7 +253,7 @@ export default function Title() {
           <LoginPage />
         ) : (
           <>
-            <Box>
+            <Box component="main">
               <Outlet
                 context={{
                   fismaSystems,
