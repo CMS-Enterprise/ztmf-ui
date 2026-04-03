@@ -1,0 +1,8 @@
+# Snyk (https://snyk.io) policy file
+version: v1.25.0
+ignore:
+  SNYK-JS-LODASH-15869625:
+    - '*':
+        reason: No patched version available - vuln affects all lodash versions including 4.18.0
+        expires: 2026-05-01T00:00:00.000Z
+        created: 2026-04-01T00:00:00.000Z

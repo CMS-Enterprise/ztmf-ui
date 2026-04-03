@@ -76,13 +76,13 @@ const getMaturityLevel = (score: number) => {
   if (score >= 2.75)
     return {
       name: 'Advanced',
-      color: '#8B8000', // Dark yellow/gold text
+      color: '#6B6200', // Dark yellow/gold text (6.1:1 on #FEFEF0)
       backgroundColor: '#FEFEF0', // Very light yellow background
     }
   if (score >= 1.75)
     return {
       name: 'Initial',
-      color: '#CC5500', // Dark orange text
+      color: '#A34200', // Dark orange text (5.8:1 on #FFF4E6)
       backgroundColor: '#FFF4E6', // Very light orange background
     }
   if (score >= 1)
@@ -93,7 +93,7 @@ const getMaturityLevel = (score: number) => {
     }
   return {
     name: 'No Score',
-    color: '#666666', // Gray text
+    color: '#525252', // Gray text (meets WCAG 4.5:1 contrast)
     backgroundColor: '#F8F8F8', // Light gray background
   }
 }
@@ -197,7 +197,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 
   // Helper function to get trend information
   const getTrendInfo = (currentScore: number, previousScore: number | null) => {
-    if (previousScore === null) return { color: '#666', trend: '', text: '' }
+    if (previousScore === null) return { color: '#525252', trend: '', text: '' }
 
     const difference = currentScore - previousScore
     const percentChange = ((difference / previousScore) * 100).toFixed(1)
@@ -241,8 +241,8 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
           position="relative"
         >
           <Typography
-            variant="h6"
-            sx={{ textAlign: 'center', flex: 1 }}
+            variant="h2"
+            sx={{ textAlign: 'center', flex: 1, fontSize: '1.25rem' }}
             id="pillar-scores-modal-title"
           >
             {systemName} ({systemAcronym}) - Pillar Scores
@@ -281,7 +281,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
           <Box>
             {/* Overall System Score */}
             <Box mb={2} textAlign="center">
-              <Typography variant="h5" gutterBottom>
+              <Typography variant="h3" sx={{ fontSize: '1.5rem' }} gutterBottom>
                 Overall Score
               </Typography>
               <Box
@@ -300,14 +300,19 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                 aria-label={`Overall system score: ${latestScore.systemscore?.toFixed(2) || 'N/A'}`}
               >
                 <Box textAlign="center">
-                  <Typography variant="h4" fontWeight="bold" mb={0.5}>
+                  <Typography
+                    variant="h4"
+                    fontWeight="bold"
+                    mb={0.5}
+                    sx={{ fontSize: '2.125rem' }}
+                  >
                     {latestScore.systemscore?.toFixed(2) || 'N/A'}
                     {latestScore.systemscore && (
                       <Typography
                         component="span"
-                        variant="h6"
+                        variant="body1"
                         color="text.secondary"
-                        sx={{ fontWeight: 'normal' }}
+                        sx={{ fontWeight: 'normal', fontSize: '1.25rem' }}
                       >
                         {' / 4'}
                       </Typography>
@@ -351,7 +356,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       )
                       return (
                         <Typography
-                          variant="h5"
+                          variant="body1"
                           sx={{
                             color: trendInfo.color,
                             fontWeight: 'bold',
@@ -424,9 +429,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 
             {/* Pillar Scores */}
             <Typography
-              variant="h6"
+              variant="h3"
               gutterBottom
-              sx={{ mt: 3, mb: 1.5, textAlign: 'center' }}
+              sx={{ mt: 3, mb: 1.5, textAlign: 'center', fontSize: '1.25rem' }}
             >
               Pillar Scores - {getQuarterName(latestScore.datacallid)} (Latest)
             </Typography>
@@ -457,6 +462,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         borderColor: 'darkgray',
                         borderRadius: 1.5,
                         textAlign: 'center',
+                        height: '100%',
                         backgroundColor:
                           currentScore > 0
                             ? getMaturityLevel(currentScore).backgroundColor
@@ -466,7 +472,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       aria-label={`${pillar.pillar} pillar score: ${currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}`}
                     >
                       <Typography
-                        variant="subtitle2"
+                        variant="h4"
                         fontWeight="bold"
                         gutterBottom
                         sx={{ fontSize: '0.9rem' }}
@@ -481,7 +487,11 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         gap={0.8}
                         mb={0.8}
                       >
-                        <Typography variant="h5" fontWeight="bold">
+                        <Typography
+                          variant="h4"
+                          fontWeight="bold"
+                          sx={{ fontSize: '1.5rem' }}
+                        >
                           {currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}
                           {currentScore > 0 && (
                             <Typography
@@ -496,7 +506,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         </Typography>
                         {trendInfo.trend && currentScore > 0 && (
                           <Typography
-                            variant="h6"
+                            variant="body1"
                             sx={{
                               color: trendInfo.color,
                               fontWeight: 'bold',
@@ -574,9 +584,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
             {/* Radar Chart */}
             <Box mt={2}>
               <Typography
-                variant="h6"
+                variant="h3"
                 gutterBottom
-                sx={{ textAlign: 'center', mb: 2 }}
+                sx={{ textAlign: 'center', mb: 2, fontSize: '1.25rem' }}
               >
                 Pillar Scores Radar Chart
               </Typography>
@@ -679,11 +689,21 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   gap={2}
                   mb={2}
                 >
-                  <Typography variant="h6">Pillar Scores Data Table</Typography>
+                  <Typography variant="h3" sx={{ fontSize: '1.25rem' }}>
+                    Pillar Scores Data Table
+                  </Typography>
                   <Button
                     onClick={() => setShowDataTable(!showDataTable)}
                     variant="outlined"
                     size="small"
+                    sx={{
+                      color: '#3B4DA0',
+                      borderColor: '#3B4DA0',
+                      '&:hover': {
+                        borderColor: '#2E3D7A',
+                        color: '#2E3D7A',
+                      },
+                    }}
                     aria-expanded={showDataTable}
                     aria-controls="pillar-data-table"
                     aria-label={`${showDataTable ? 'Hide' : 'Show'} detailed pillar scores data table`}
@@ -745,7 +765,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                               : {
                                   trend: '',
                                   text: 'No comparison data',
-                                  color: '#666',
+                                  color: '#525252',
                                 }
 
                           return (
@@ -794,7 +814,12 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
           </Box>
         ) : (
           <Box textAlign="center" py={4}>
-            <Typography variant="h6" color="text.secondary" gutterBottom>
+            <Typography
+              variant="h3"
+              color="text.secondary"
+              gutterBottom
+              sx={{ fontSize: '1.25rem' }}
+            >
               No Score Data Available
             </Typography>
             <Typography variant="body1" color="text.secondary">

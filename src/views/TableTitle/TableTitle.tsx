@@ -10,7 +10,11 @@ const TableTitle: React.FC<TABLETITLEPROPS> = ({
   pillarType,
 }): JSX.Element => {
   return (
-    <Typography variant="h4" sx={{ my: 2 }} align="center">
+    <Typography
+      variant="h3"
+      sx={{ my: 2, fontSize: '2.125rem' }}
+      align="center"
+    >
       {system} Maturity {pillarType} Score Pillars
     </Typography>
   )
