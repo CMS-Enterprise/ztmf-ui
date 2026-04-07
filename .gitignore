@@ -34,6 +34,7 @@ dist-ssr
 CLAUDE.md
 AGENTS.md
 .claude/
+.githooks/
 
 # temporary
 tmp/

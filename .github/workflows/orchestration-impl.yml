@@ -1,0 +1,25 @@
+name: Orchestration IMPL
+
+on:
+  pull_request:
+    branches:
+      - impl
+    types:
+      - opened
+      - reopened
+      - synchronize
+
+jobs:
+  analysis:
+    name: Analysis
+    uses: ./.github/workflows/analysis.yml
+    secrets: inherit
+
+  ui:
+    name: ui
+    needs:
+      - analysis
+    uses: ./.github/workflows/ui.yml
+    with:
+      environment: impl
+    secrets: inherit
