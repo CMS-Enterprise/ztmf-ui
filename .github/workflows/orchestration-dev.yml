@@ -8,16 +8,19 @@ on:
       - opened
       - reopened
       - synchronize
+      - ready_for_review
 
 jobs:
   analysis:
     name: Analysis
+    if: github.event.pull_request.draft == false
     uses: ./.github/workflows/analysis.yml
     secrets: inherit
 
   ui:
     name: ui
-    needs: 
+    if: github.event.pull_request.draft == false
+    needs:
       - analysis
     uses: ./.github/workflows/ui.yml
     with:
