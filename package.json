@@ -25,6 +25,7 @@
     "dev": "vite",
     "build:prod": "tsc -p tsconfig.prod.json && vite build --mode production",
     "build:dev": "tsc -p tsconfig.prod.json && vite build --mode development",
+    "build:impl": "tsc -p tsconfig.prod.json && vite build --mode impl",
     "preview": "vite preview",
     "clean": "rimraf dist",
     "test": "NODE_ENV=test jest --coverage --colors --maxWorkers=50%",

@@ -1,9 +1,9 @@
-name: Orchestration DEV
+name: Orchestration IMPL
 
 on:
   pull_request:
     branches:
-      - main
+      - impl
     types:
       - opened
       - reopened
@@ -24,6 +24,5 @@ jobs:
       - analysis
     uses: ./.github/workflows/ui.yml
     with:
-      environment: dev
+      environment: impl
     secrets: inherit
-  
