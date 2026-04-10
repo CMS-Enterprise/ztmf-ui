@@ -1,3 +1,4 @@
+/* eslint-disable jest/no-disabled-tests -- test suite intentionally skipped, needs sandbox registry rework */
 import { SIGN_IN_GREETING } from '@/locales/en'
 import { AppConfig } from '@/types'
 
