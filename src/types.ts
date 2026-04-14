@@ -160,8 +160,8 @@ export type users = {
 export type datacall = {
   datacallid: number
   datacall: string
-  datecreated: number
-  deadline: number
+  datecreated: string
+  deadline: string
 }
 
 export type FormValidType = {

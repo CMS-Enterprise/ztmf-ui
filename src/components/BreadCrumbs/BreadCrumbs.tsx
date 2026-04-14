@@ -41,7 +41,7 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
       segmentLabels && segmentLabels[value]
         ? segmentLabels[value]
         : (() => {
-            const text = value.replace(/_/g, ' ')
+            const text = value.replace(/[_-]/g, ' ')
             return /^[A-Z]/.test(text) ? text : capitalize(text)
           })()
     return (

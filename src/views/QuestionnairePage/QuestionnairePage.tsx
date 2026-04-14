@@ -8,6 +8,7 @@ import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
 import { Button as CmsButton, ChoiceList, Spinner } from '@cmsgov/design-system'
 import Grid from '@mui/material/Grid'
+import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import TextField from '@mui/material/TextField'
 import {
@@ -65,6 +66,12 @@ const CssTextField = styled(TextField)({
     },
   },
 })
+const toSlug = (str: string) =>
+  str
+    .replace(/([a-z])([A-Z])/g, '$1-$2')
+    .toLowerCase()
+    .replaceAll(' ', '-')
+
 const addSpace = (str: string) => {
   for (let i = 0; i < str.length; i++) {
     if (
@@ -82,7 +89,7 @@ const addSpace = (str: string) => {
 export default function QuestionnarePage() {
   const { userInfo } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
-  const isReadOnly = userInfo.role === 'READONLY_ADMIN' || isPastDeadline
+  const isReadOnly = userInfo.role !== 'ADMIN'
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
   )
@@ -200,8 +207,9 @@ export default function QuestionnarePage() {
           console.error('Error updating score:', error)
           if (error.status === 401) {
             routeToSignIn()
+            return
           }
-          if (error.response.status === 403) {
+          if (error.response?.status === 403) {
             enqueueSnackbar(error.response.data.error, {
               variant: 'error',
               anchorOrigin: {
@@ -276,7 +284,7 @@ export default function QuestionnarePage() {
             .get(`/datacalls/latest`)
             .then((res) => {
               setDatacallID(res.data.data.datacallid)
-              datacall = res.data.data.datacall.replace(' ', '_')
+              datacall = res.data.data.datacall.replaceAll(' ', '_')
               setDatacall(datacall)
               if (new Date() > new Date(res.data.data.deadline)) {
                 setIsPastDeadline(true)
@@ -380,7 +388,7 @@ export default function QuestionnarePage() {
               setStepFunctionId(sortedFuncId) // contains an array of all functionid in order of render
               setCategories(categoriesData)
               navigate(
-                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${categoriesData[0].name.toLowerCase()}/${categoriesData[0].steps[0].function.function.toLowerCase()}`,
+                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
                 {
                   state: { fismasystemid: system },
                   replace: true,
@@ -437,7 +445,6 @@ export default function QuestionnarePage() {
               //   questionScoreMap[item.functionoptionid] = item
               //   funcScoreTable
               // })
-              console.log(hashTable)
               setQuestionScores(hashTable)
             })
             .catch((error) => {
@@ -540,6 +547,11 @@ export default function QuestionnarePage() {
   return (
     <>
       <BreadCrumbs />
+      {isPastDeadline && !isReadOnly && (
+        <Alert severity="warning" sx={{ mb: 2 }}>
+          This datacall has closed. Changes will be recorded as post-deadline.
+        </Alert>
+      )}
       <Container>
         <Grid container columnSpacing={2} sx={{ mt: 2 }}>
           <Grid item xs={3}>
@@ -599,7 +611,7 @@ export default function QuestionnarePage() {
                                 setOpenAlert(true)
                               } else {
                                 navigate(
-                                  `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${pillar.name === 'CrossCutting' ? 'cross-cutting' : pillar.name.toLowerCase()}/${func.function.function.toLowerCase()}`,
+                                  `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
                                   {
                                     state: { fismasystemid: system },
                                     replace: true,
@@ -664,12 +676,24 @@ export default function QuestionnarePage() {
                       setNotes(e.target.value)
                     }}
                   />
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}
-                  >
-                    {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                  </Typography>
+                  {!isReadOnly && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color:
+                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                            ? 'error.main'
+                            : notes.length >=
+                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                              ? 'warning.main'
+                              : 'text.secondary',
+                        display: 'block',
+                        mt: 0.5,
+                      }}
+                    >
+                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                    </Typography>
+                  )}
                   <Box
                     position="relative"
                     display="flex"
@@ -695,7 +719,7 @@ export default function QuestionnarePage() {
                           if (questions[id]) {
                             const q = questions[id]
                             navigate(
-                              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${q.pillar === 'CrossCutting' ? 'cross-cutting' : q.pillar.toLowerCase()}/${q.function.toLowerCase()}`,
+                              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                               {
                                 state: { fismasystemid: system },
                                 replace: true,
@@ -725,7 +749,7 @@ export default function QuestionnarePage() {
                         if (questions[id]) {
                           const q = questions[id]
                           navigate(
-                            `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${q.pillar === 'CrossCutting' ? 'cross-cutting' : q.pillar.toLowerCase()}/${q.function.toLowerCase()}`,
+                            `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                             {
                               state: { fismasystemid: system },
                               replace: true,

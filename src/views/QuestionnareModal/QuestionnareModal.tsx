@@ -2,6 +2,7 @@ import * as React from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import {
+  Alert,
   Box,
   Dialog,
   DialogContent,
@@ -75,7 +76,7 @@ export default function QuestionnareModal({
 }: SystemDetailsModalProps) {
   const { userInfo } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
-  const isReadOnly = userInfo.role === 'READONLY_ADMIN' || isPastDeadline
+  const isReadOnly = userInfo.role !== 'ADMIN'
   const checkValidResponse = (status: number) => {
     if (status !== 200 && status.toString()[0] === '4') {
       navigate(Routes.SIGNIN, {
@@ -137,7 +138,6 @@ export default function QuestionnareModal({
     }
   }
   const handleQuestionnareNext = () => {
-    // TODO: datacallid is hardcoded to 2, need to make it dynamic
     setLoadingQuestion(true)
     if (!isReadOnly) {
       if (scoreid) {
@@ -146,7 +146,7 @@ export default function QuestionnareModal({
             fismasystemid: system?.fismasystemid,
             notes: notes,
             functionoptionid: selectQuestionOption,
-            datacallid: 2,
+            datacallid: datacallID,
           })
           .then((res) => {
             checkValidResponse(res.status)
@@ -173,7 +173,7 @@ export default function QuestionnareModal({
             fismasystemid: system?.fismasystemid,
             notes: notes,
             functionoptionid: selectQuestionOption,
-            datacallid: 2,
+            datacallid: datacallID,
           })
           .then((res) => {
             checkValidResponse(res.status)
@@ -247,6 +247,7 @@ export default function QuestionnareModal({
     setActiveCategoryIndex(0)
     setActiveStepIndex(0)
     setNotes('')
+    setIsPastDeadline(false)
     onClose()
   }
   const handleQuestionChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -270,22 +271,26 @@ export default function QuestionnareModal({
     if (open && system) {
       const fetchData = async () => {
         try {
-          const datacall = await axiosInstance.get(`/datacalls`).then((res) => {
-            if (res.status !== 200 && res.status.toString()[0] === '4') {
-              navigate(Routes.SIGNIN, {
-                replace: true,
-                state: {
-                  message: ERROR_MESSAGES.expired,
-                },
-              })
-            }
-            return res.data.data
-          })
-          const latestDataCallId = datacall[0].datacallid
-          setDatacallID(latestDataCallId)
-          if (new Date() > new Date(datacall[0].deadline)) {
-            setIsPastDeadline(true)
-          }
+          const latestDataCallId = await axiosInstance
+            .get(`/datacalls/latest`)
+            .then((res) => {
+              setDatacallID(res.data.data.datacallid)
+              if (new Date() > new Date(res.data.data.deadline)) {
+                setIsPastDeadline(true)
+              }
+              return res.data.data.datacallid
+            })
+            .catch((error) => {
+              if (error.response?.status === 401) {
+                navigate(Routes.SIGNIN, {
+                  replace: true,
+                  state: {
+                    message: ERROR_MESSAGES.expired,
+                  },
+                })
+              }
+            })
+
           await axiosInstance
             .get(`/fismasystems/${system.fismasystemid}/questions`)
             .then((response) => {
@@ -418,7 +423,6 @@ export default function QuestionnareModal({
               funcOptId = item.functionoptionid
             }
           })
-          console.log(questionScores)
           if (!isValidOption) {
             setSelectQuestionOption(0)
             setScoreId(0)
@@ -477,6 +481,12 @@ export default function QuestionnareModal({
           </div>
         </DialogTitle>
         <DialogContent>
+          {isPastDeadline && !isReadOnly && (
+            <Alert severity="warning" sx={{ mb: 2 }}>
+              This datacall has closed. Changes will be recorded as
+              post-deadline.
+            </Alert>
+          )}
           <Box display="flex" flexDirection="row" sx={{ height: '50vh' }}>
             <Box
               display="flex"
@@ -609,12 +619,24 @@ export default function QuestionnareModal({
                     inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => setNotes(e.target.value)}
                   />
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}
-                  >
-                    {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                  </Typography>
+                  {!isReadOnly && (
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        color:
+                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                            ? 'error.main'
+                            : notes.length >=
+                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                              ? 'warning.main'
+                              : 'text.secondary',
+                        display: 'block',
+                        mt: 0.5,
+                      }}
+                    >
+                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                    </Typography>
+                  )}
                   <Box
                     position="relative"
                     display="flex"
