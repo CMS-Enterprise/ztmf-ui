@@ -105,6 +105,8 @@ export const SDL_SYNC_SWITCH_SX = {
   },
 } as const
 
+export const MAX_QUESTIONNAIRE_NOTES_LENGTH = 2000
+
 export const TEXTFIELD_HELPER_TEXT = 'This field is required'
 
 export const INVALID_INPUT_TEXT = (key: string) =>
