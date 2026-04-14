@@ -30,7 +30,11 @@ import { Routes } from '@/router/constants'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
-import { ERROR_MESSAGES, PILLAR_FUNCTION_MAP } from '@/constants'
+import {
+  ERROR_MESSAGES,
+  MAX_QUESTIONNAIRE_NOTES_LENGTH,
+  PILLAR_FUNCTION_MAP,
+} from '@/constants'
 import { useContextProp } from '../Title/Context'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
@@ -70,7 +74,8 @@ export default function QuestionnareModal({
   system,
 }: SystemDetailsModalProps) {
   const { userInfo } = useContextProp()
-  const isReadOnly = userInfo.role === 'READONLY_ADMIN'
+  const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
+  const isReadOnly = userInfo.role === 'READONLY_ADMIN' || isPastDeadline
   const checkValidResponse = (status: number) => {
     if (status !== 200 && status.toString()[0] === '4') {
       navigate(Routes.SIGNIN, {
@@ -278,6 +283,9 @@ export default function QuestionnareModal({
           })
           const latestDataCallId = datacall[0].datacallid
           setDatacallID(latestDataCallId)
+          if (new Date() > new Date(datacall[0].deadline)) {
+            setIsPastDeadline(true)
+          }
           await axiosInstance
             .get(`/fismasystems/${system.fismasystemid}/questions`)
             .then((response) => {
@@ -598,8 +606,15 @@ export default function QuestionnareModal({
                     fullWidth
                     value={notes}
                     disabled={isReadOnly}
+                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => setNotes(e.target.value)}
                   />
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}
+                  >
+                    {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                  </Typography>
                   <Box
                     position="relative"
                     display="flex"

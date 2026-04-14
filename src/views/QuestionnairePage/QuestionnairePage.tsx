@@ -26,6 +26,7 @@ import { Routes, RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
+  MAX_QUESTIONNAIRE_NOTES_LENGTH,
   PILLAR_FUNCTION_MAP,
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
@@ -80,7 +81,8 @@ const addSpace = (str: string) => {
 }
 export default function QuestionnarePage() {
   const { userInfo } = useContextProp()
-  const isReadOnly = userInfo.role === 'READONLY_ADMIN'
+  const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
+  const isReadOnly = userInfo.role === 'READONLY_ADMIN' || isPastDeadline
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
   )
@@ -276,6 +278,9 @@ export default function QuestionnarePage() {
               setDatacallID(res.data.data.datacallid)
               datacall = res.data.data.datacall.replace(' ', '_')
               setDatacall(datacall)
+              if (new Date() > new Date(res.data.data.deadline)) {
+                setIsPastDeadline(true)
+              }
               return res.data.data.datacallid
             })
             .catch((error) => {
@@ -654,10 +659,17 @@ export default function QuestionnarePage() {
                     fullWidth
                     value={notes}
                     disabled={isReadOnly}
+                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => {
                       setNotes(e.target.value)
                     }}
                   />
+                  <Typography
+                    variant="caption"
+                    sx={{ color: 'text.secondary', display: 'block', mt: 0.5 }}
+                  >
+                    {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                  </Typography>
                   <Box
                     position="relative"
                     display="flex"
