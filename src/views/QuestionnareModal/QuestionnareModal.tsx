@@ -76,7 +76,9 @@ export default function QuestionnareModal({
 }: SystemDetailsModalProps) {
   const { userInfo } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
-  const isReadOnly = userInfo.role !== 'ADMIN'
+  const isReadOnly =
+    userInfo.role === 'READONLY_ADMIN' ||
+    (isPastDeadline && userInfo.role !== 'ADMIN')
   const checkValidResponse = (status: number) => {
     if (status !== 200 && status.toString()[0] === '4') {
       navigate(Routes.SIGNIN, {

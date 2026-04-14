@@ -89,7 +89,9 @@ const addSpace = (str: string) => {
 export default function QuestionnarePage() {
   const { userInfo } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
-  const isReadOnly = userInfo.role !== 'ADMIN'
+  const isReadOnly =
+    userInfo.role === 'READONLY_ADMIN' ||
+    (isPastDeadline && userInfo.role !== 'ADMIN')
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
   )
