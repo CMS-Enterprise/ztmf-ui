@@ -30,6 +30,9 @@ interface SystemDetailEditViewProps {
   decommissionNotes: string
   showDecommissionForm: boolean
   decommissionedByName: string
+  reactivationNotes: string
+  showReactivateForm: boolean
+  reactivatedByName: string
   onInputChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     key: string
@@ -40,6 +43,9 @@ interface SystemDetailEditViewProps {
   onDecommissionNotesChange: (value: string) => void
   onShowDecommissionForm: (show: boolean) => void
   onDecommissionRequest: () => void
+  onReactivationNotesChange: (value: string) => void
+  onShowReactivateForm: (show: boolean) => void
+  onReactivateRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
   onSdlSyncToggle: (checked: boolean) => void
 }
@@ -198,6 +204,40 @@ function DecommissionDateNotesForm(props: SystemDetailEditViewProps) {
   )
 }
 
+function ReactivateNotesForm(props: SystemDetailEditViewProps) {
+  const { reactivationNotes, onReactivationNotesChange } = props
+  return (
+    <>
+      <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500 }}>
+        Reactivation Notes (optional)
+      </Typography>
+      <textarea
+        value={reactivationNotes}
+        maxLength={MAX_NOTES_LENGTH}
+        rows={3}
+        onChange={(e) => onReactivationNotesChange(e.target.value)}
+        placeholder="Reason for reactivation..."
+        style={{
+          width: '100%',
+          padding: '8px',
+          fontSize: '14px',
+          border: '1px solid #ccc',
+          borderRadius: '4px',
+          boxSizing: 'border-box',
+          fontFamily: 'inherit',
+          resize: 'vertical',
+        }}
+      />
+      <Typography
+        variant="caption"
+        sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
+      >
+        {reactivationNotes.length}/{MAX_NOTES_LENGTH}
+      </Typography>
+    </>
+  )
+}
+
 export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
   const {
     system,
@@ -207,6 +247,10 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     decommissionDate,
     onShowDecommissionForm,
     onDecommissionRequest,
+    showReactivateForm,
+    reactivatedByName,
+    onShowReactivateForm,
+    onReactivateRequest,
     validateDecommissionDate,
     onSdlSyncToggle,
   } = props
@@ -252,7 +296,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               sx={{ pb: 0 }}
             />
             <CardContent>
-              {!showDecommissionForm && (
+              {!showDecommissionForm && !showReactivateForm && (
                 <>
                   {system.decommissioned_date && (
                     <Box sx={{ mb: 2 }}>
@@ -286,13 +330,41 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                       </Typography>
                     </Box>
                   )}
-                  <CmsButton
-                    size="small"
-                    onClick={() => onShowDecommissionForm(true)}
-                    style={{ marginTop: '4px' }}
-                  >
-                    Edit Decommission Details
-                  </CmsButton>
+                  {system.reactivated_date && (
+                    <Box sx={{ mb: 2 }}>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          display: 'block',
+                          fontStyle: 'italic',
+                          color: 'text.secondary',
+                        }}
+                      >
+                        Previously reactivated on{' '}
+                        {new Date(system.reactivated_date).toLocaleDateString()}
+                        {system.reactivated_by &&
+                          ` by ${reactivatedByName || system.reactivated_by}`}
+                        {system.reactivation_notes
+                          ? ` (notes: ${system.reactivation_notes})`
+                          : ''}
+                      </Typography>
+                    </Box>
+                  )}
+                  <Box sx={{ display: 'flex', gap: 1, mt: '4px' }}>
+                    <CmsButton
+                      size="small"
+                      onClick={() => onShowDecommissionForm(true)}
+                    >
+                      Edit Decommission Details
+                    </CmsButton>
+                    <CmsButton
+                      variation="solid"
+                      size="small"
+                      onClick={() => onShowReactivateForm(true)}
+                    >
+                      Reactivate System
+                    </CmsButton>
+                  </Box>
                 </>
               )}
               {showDecommissionForm && (
@@ -313,6 +385,26 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                     <CmsButton
                       size="small"
                       onClick={() => onShowDecommissionForm(false)}
+                    >
+                      Cancel
+                    </CmsButton>
+                  </Box>
+                </Box>
+              )}
+              {showReactivateForm && (
+                <Box sx={{ mt: 1 }}>
+                  <ReactivateNotesForm {...props} />
+                  <Box sx={{ display: 'flex', gap: 1 }}>
+                    <CmsButton
+                      variation="solid"
+                      size="small"
+                      onClick={onReactivateRequest}
+                    >
+                      Reactivate
+                    </CmsButton>
+                    <CmsButton
+                      size="small"
+                      onClick={() => onShowReactivateForm(false)}
                     >
                       Cancel
                     </CmsButton>
