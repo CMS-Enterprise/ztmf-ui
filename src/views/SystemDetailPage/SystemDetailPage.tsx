@@ -391,7 +391,7 @@ export default function SystemDetailPage() {
     if (system?.decommissioned) {
       return `Update decommission details for "${system?.fismaname}" to ${dateDisplay}?${notesSuffix}`
     }
-    return `Are you sure you want to decommission "${system?.fismaname}" on ${dateDisplay}?${notesSuffix} This will hide the system from the active systems list. This action cannot be undone through the UI.`
+    return `Are you sure you want to decommission "${system?.fismaname}" on ${dateDisplay}?${notesSuffix} This will hide the system from the active systems list. An admin can later reactivate the system if needed.`
   }
 
   // Invalid system ID in URL
