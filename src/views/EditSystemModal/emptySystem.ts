@@ -18,4 +18,7 @@ export const EMPTY_SYSTEM = {
   decommissioned_date: null,
   decommissioned_by: null,
   decommissioned_notes: null,
+  reactivated_by: null,
+  reactivated_date: null,
+  reactivation_notes: null,
 }

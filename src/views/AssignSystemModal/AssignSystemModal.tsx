@@ -19,6 +19,7 @@ import { useSnackbar } from 'notistack'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
+import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
 
@@ -27,6 +28,7 @@ type Props = {
   open: boolean
   handleClose: () => void
   userid: GridRowId
+  userName: string
 }
 
 export default function AssignSystemModal({
@@ -34,10 +36,15 @@ export default function AssignSystemModal({
   open,
   handleClose,
   userid,
+  userName,
 }: Props) {
   const [assignedSystems, setAssignedSystems] = React.useState<number[]>([])
   const [fismaSystems, setFismaSystems] = React.useState<number[]>([])
   const [openSnackBar, setOpenSnackBar] = React.useState<boolean>(false)
+  const [pendingUnassign, setPendingUnassign] = React.useState<{
+    systemid: number
+    nextValue: number[]
+  } | null>(null)
   const { enqueueSnackbar } = useSnackbar()
   const navigate = useNavigate()
   React.useEffect(() => {
@@ -51,6 +58,51 @@ export default function AssignSystemModal({
       })
     }
   }, [open, userid, fismaSystemMap])
+  const handleConfirmUnassign = (confirm: boolean) => {
+    const target = pendingUnassign
+    setPendingUnassign(null)
+    if (!confirm || !target) return
+    axiosInstance
+      .delete(`/users/${userid}/assignedfismasystems/${target.systemid}`)
+      .then(() => {
+        setAssignedSystems(target.nextValue)
+        enqueueSnackbar(`Saved - unassigned system`, {
+          variant: 'success',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+        })
+      })
+      .catch((error) => {
+        if (error.response?.status === 401) {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.error,
+            },
+          })
+        } else if (error.response?.status === 403) {
+          enqueueSnackbar(ERROR_MESSAGES.permission, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 1500,
+          })
+        } else {
+          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 1500,
+          })
+        }
+      })
+  }
 
   return (
     <>
@@ -107,6 +159,7 @@ export default function AssignSystemModal({
                     fismasystemid: added[0],
                   })
                   .then(() => {
+                    setAssignedSystems(newValue)
                     enqueueSnackbar(`Saved - assign system`, {
                       variant: 'success',
                       anchorOrigin: {
@@ -116,14 +169,14 @@ export default function AssignSystemModal({
                     })
                   })
                   .catch((error) => {
-                    if (error.response.status === 401) {
+                    if (error.response?.status === 401) {
                       navigate(Routes.SIGNIN, {
                         replace: true,
                         state: {
                           message: ERROR_MESSAGES.error,
                         },
                       })
-                    } else if (error.response.status === 403) {
+                    } else if (error.response?.status === 403) {
                       enqueueSnackbar(ERROR_MESSAGES.permission, {
                         variant: 'error',
                         anchorOrigin: {
@@ -144,48 +197,11 @@ export default function AssignSystemModal({
                     }
                   })
               } else if (removed.length) {
-                axiosInstance
-                  .delete(`/users/${userid}/assignedfismasystems/${removed[0]}`)
-                  .then(() => {
-                    enqueueSnackbar(`Saved - unassigned system`, {
-                      variant: 'success',
-                      anchorOrigin: {
-                        vertical: 'top',
-                        horizontal: 'left',
-                      },
-                    })
-                  })
-                  .catch((error) => {
-                    if (error.response.status === 401) {
-                      navigate(Routes.SIGNIN, {
-                        replace: true,
-                        state: {
-                          message: ERROR_MESSAGES.error,
-                        },
-                      })
-                    } else if (error.response.status === 403) {
-                      enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                        variant: 'error',
-                        anchorOrigin: {
-                          vertical: 'top',
-                          horizontal: 'left',
-                        },
-                        autoHideDuration: 1500,
-                      })
-                    } else {
-                      enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                        variant: 'error',
-                        anchorOrigin: {
-                          vertical: 'top',
-                          horizontal: 'left',
-                        },
-                        autoHideDuration: 1500,
-                      })
-                    }
-                  })
+                setPendingUnassign({
+                  systemid: removed[0],
+                  nextValue: newValue,
+                })
               }
-
-              setAssignedSystems(newValue)
             }}
             renderInput={(params) => (
               <TextField
@@ -212,6 +228,24 @@ export default function AssignSystemModal({
         severity="success"
         duration={2000}
         text="Saved"
+      />
+      <ConfirmDialog
+        title="Confirm Unassign System"
+        confirmationText={
+          pendingUnassign
+            ? `Are you sure you want to unassign ${
+                fismaSystemMap[pendingUnassign.systemid]?.acronym ??
+                'this system'
+              }${
+                fismaSystemMap[pendingUnassign.systemid]
+                  ? ` - ${fismaSystemMap[pendingUnassign.systemid].name}`
+                  : ''
+              } from ${userName || 'this user'}?`
+            : ''
+        }
+        open={pendingUnassign !== null}
+        onClose={() => setPendingUnassign(null)}
+        confirmClick={handleConfirmUnassign}
       />
     </>
   )

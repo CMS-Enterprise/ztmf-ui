@@ -74,6 +74,12 @@ export default function EditSystemModal({
     React.useState<boolean>(false)
   const [decommissionedByName, setDecommissionedByName] =
     React.useState<string>('')
+  const [reactivatedByName, setReactivatedByName] = React.useState<string>('')
+  const [showReactivateForm, setShowReactivateForm] =
+    React.useState<boolean>(false)
+  const [reactivationNotes, setReactivationNotes] = React.useState<string>('')
+  const [openReactivateAlert, setOpenReactivateAlert] =
+    React.useState<boolean>(false)
   const [formValidErrorText, setFormValidErrorText] =
     React.useState<FormValidHelperText>({
       issoemail: TEXTFIELD_HELPER_TEXT,
@@ -148,6 +154,8 @@ export default function EditSystemModal({
       setDecommissionDateError('')
       setDecommissionNotes('')
       setShowDecommissionForm(false)
+      setReactivationNotes('')
+      setShowReactivateForm(false)
       setLoading(false)
     }
   }, [system, open])
@@ -173,6 +181,33 @@ export default function EditSystemModal({
         })
     } else {
       setDecommissionedByName('')
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [system, open])
+  React.useEffect(() => {
+    let cancelled = false
+    if (open && system?.reactivated_by) {
+      const userId = system.reactivated_by
+      axiosInstance
+        .get(`users/${userId}`)
+        .then((res) => {
+          if (!cancelled && system?.reactivated_by === userId) {
+            if (res.data?.data?.fullname) {
+              setReactivatedByName(res.data.data.fullname)
+            } else {
+              setReactivatedByName(userId)
+            }
+          }
+        })
+        .catch(() => {
+          if (!cancelled && system?.reactivated_by === userId) {
+            setReactivatedByName(userId)
+          }
+        })
+    } else {
+      setReactivatedByName('')
     }
     return () => {
       cancelled = true
@@ -389,6 +424,74 @@ export default function EditSystemModal({
       .catch((error) => {
         console.error(
           'Decommission error:',
+          error.response?.status,
+          error.response?.data
+        )
+        if (error.response?.status === 403) {
+          enqueueSnackbar('Permission denied. Admin access required.', {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+        } else if (error.response?.status === 404) {
+          enqueueSnackbar('System not found', {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+        } else if (error.response?.status === 400) {
+          const errorMsg = error.response?.data?.error || 'Invalid request'
+          enqueueSnackbar(`Error: ${errorMsg}`, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 3000,
+          })
+        } else {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: {
+              message: ERROR_MESSAGES.error,
+            },
+          })
+        }
+      })
+  }
+  const handleReactivate = async () => {
+    setOpenReactivateAlert(false)
+    const trimmedNotes = reactivationNotes.trim()
+    const body = trimmedNotes ? { notes: trimmedNotes } : undefined
+    await axiosInstance
+      .put(`fismasystems/${editedFismaSystem.fismasystemid}/reactivate`, body)
+      .then((res) => {
+        if (res.status === 200) {
+          enqueueSnackbar('System reactivated successfully', {
+            variant: 'success',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+          const updatedSystem: FismaSystemType = res.data?.data || {
+            ...editedFismaSystem,
+            decommissioned: false,
+            reactivation_notes: trimmedNotes || null,
+          }
+          onClose(updatedSystem)
+        }
+      })
+      .catch((error) => {
+        console.error(
+          'Reactivate error:',
           error.response?.status,
           error.response?.data
         )
@@ -720,7 +823,7 @@ export default function EditSystemModal({
                           >
                             System Decommissioned
                           </Typography>
-                          {!showDecommissionForm && (
+                          {!showDecommissionForm && !showReactivateForm && (
                             <>
                               {system?.decommissioned_date && (
                                 <Typography
@@ -764,33 +867,120 @@ export default function EditSystemModal({
                                   Notes: {system.decommissioned_notes}
                                 </Typography>
                               )}
-                              <CmsButton
-                                size="small"
-                                onClick={() => {
-                                  if (system?.decommissioned_date) {
-                                    const d = new Date(
-                                      system.decommissioned_date
+                              {system?.reactivated_date && (
+                                <Box sx={{ mt: 1 }}>
+                                  <Typography
+                                    variant="caption"
+                                    sx={{
+                                      display: 'block',
+                                      fontStyle: 'italic',
+                                      color: 'text.secondary',
+                                    }}
+                                  >
+                                    Previously reactivated on{' '}
+                                    {new Date(
+                                      system.reactivated_date
+                                    ).toLocaleDateString()}
+                                    {system?.reactivated_by &&
+                                      ` by ${reactivatedByName || system.reactivated_by}`}
+                                    {system?.reactivation_notes
+                                      ? ` (notes: ${system.reactivation_notes})`
+                                      : ''}
+                                  </Typography>
+                                </Box>
+                              )}
+                              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                                <CmsButton
+                                  size="small"
+                                  onClick={() => {
+                                    if (system?.decommissioned_date) {
+                                      const d = new Date(
+                                        system.decommissioned_date
+                                      )
+                                      const yyyy = d.getFullYear()
+                                      const mm = String(
+                                        d.getMonth() + 1
+                                      ).padStart(2, '0')
+                                      const dd = String(d.getDate()).padStart(
+                                        2,
+                                        '0'
+                                      )
+                                      setDecommissionDate(`${yyyy}-${mm}-${dd}`)
+                                    }
+                                    setDecommissionNotes(
+                                      system?.decommissioned_notes || ''
                                     )
-                                    const yyyy = d.getFullYear()
-                                    const mm = String(
-                                      d.getMonth() + 1
-                                    ).padStart(2, '0')
-                                    const dd = String(d.getDate()).padStart(
-                                      2,
-                                      '0'
-                                    )
-                                    setDecommissionDate(`${yyyy}-${mm}-${dd}`)
-                                  }
-                                  setDecommissionNotes(
-                                    system?.decommissioned_notes || ''
-                                  )
-                                  setShowDecommissionForm(true)
-                                }}
-                                style={{ marginTop: '8px' }}
-                              >
-                                Edit Decommission Details
-                              </CmsButton>
+                                    setShowDecommissionForm(true)
+                                  }}
+                                >
+                                  Edit Decommission Details
+                                </CmsButton>
+                                <CmsButton
+                                  variation="solid"
+                                  size="small"
+                                  onClick={() => {
+                                    setReactivationNotes('')
+                                    setShowReactivateForm(true)
+                                  }}
+                                >
+                                  Reactivate System
+                                </CmsButton>
+                              </Box>
                             </>
+                          )}
+                          {showReactivateForm && (
+                            <Box sx={{ ml: 2, mt: 2 }}>
+                              <Typography
+                                variant="body2"
+                                sx={{ mt: 0, mb: 0.5, fontWeight: 500 }}
+                              >
+                                Reactivation Notes (optional)
+                              </Typography>
+                              <textarea
+                                value={reactivationNotes}
+                                maxLength={500}
+                                rows={3}
+                                onChange={(e) =>
+                                  setReactivationNotes(e.target.value)
+                                }
+                                placeholder="Reason for reactivation..."
+                                style={{
+                                  width: '100%',
+                                  padding: '8px',
+                                  fontSize: '14px',
+                                  border: '1px solid #ccc',
+                                  borderRadius: '4px',
+                                  boxSizing: 'border-box',
+                                  fontFamily: 'inherit',
+                                  resize: 'vertical',
+                                }}
+                              />
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: 'text.secondary',
+                                  display: 'block',
+                                  mb: 1,
+                                }}
+                              >
+                                {reactivationNotes.length}/500
+                              </Typography>
+                              <Box sx={{ display: 'flex', gap: 1 }}>
+                                <CmsButton
+                                  variation="solid"
+                                  size="small"
+                                  onClick={() => setOpenReactivateAlert(true)}
+                                >
+                                  Reactivate
+                                </CmsButton>
+                                <CmsButton
+                                  size="small"
+                                  onClick={() => setShowReactivateForm(false)}
+                                >
+                                  Cancel
+                                </CmsButton>
+                              </Box>
+                            </Box>
                           )}
                           {showDecommissionForm && (
                             <Box sx={{ ml: 2, mt: 1 }}>
@@ -1058,7 +1248,7 @@ export default function EditSystemModal({
           confirmationText={
             system?.decommissioned
               ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
-              : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. This action cannot be undone through the UI.`
+              : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. An admin can later reactivate the system if needed.`
           }
           open={openDecommissionAlert}
           onClose={() => setOpenDecommissionAlert(false)}
@@ -1067,6 +1257,23 @@ export default function EditSystemModal({
               handleDecommission()
             } else {
               setOpenDecommissionAlert(false)
+            }
+          }}
+        />
+        <ConfirmDialog
+          title="Confirm Reactivate System"
+          confirmationText={`Reactivate "${system?.fismaname}"? This will move the system back to the active systems list.${
+            reactivationNotes.trim()
+              ? ` Notes: "${reactivationNotes.trim().length > 100 ? reactivationNotes.trim().substring(0, 100) + '...' : reactivationNotes.trim()}"`
+              : ''
+          }`}
+          open={openReactivateAlert}
+          onClose={() => setOpenReactivateAlert(false)}
+          confirmClick={(confirm: boolean) => {
+            if (confirm) {
+              handleReactivate()
+            } else {
+              setOpenReactivateAlert(false)
             }
           }}
         />

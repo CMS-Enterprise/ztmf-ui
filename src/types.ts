@@ -52,6 +52,9 @@ export type FismaSystemType = {
   decommissioned_date: string | null
   decommissioned_by: string | null
   decommissioned_notes: string | null
+  reactivated_by: string | null
+  reactivated_date: string | null
+  reactivation_notes: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
@@ -154,6 +157,7 @@ export type users = {
   fullname: string
   role: string
   userid: string
+  deleted?: boolean
   isNew?: boolean
 }
 

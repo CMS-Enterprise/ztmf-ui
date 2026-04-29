@@ -74,6 +74,7 @@ export default function SystemDetailPage() {
   const [isSaving, setIsSaving] = useState(false)
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
   const [openDecommissionDialog, setOpenDecommissionDialog] = useState(false)
+  const [openReactivateDialog, setOpenReactivateDialog] = useState(false)
 
   // Decommission-specific state
   const [decommissionDate, setDecommissionDate] = useState('')
@@ -81,6 +82,11 @@ export default function SystemDetailPage() {
   const [decommissionNotes, setDecommissionNotes] = useState('')
   const [showDecommissionForm, setShowDecommissionForm] = useState(false)
   const [decommissionedByName, setDecommissionedByName] = useState('')
+
+  // Reactivate-specific state
+  const [reactivationNotes, setReactivationNotes] = useState('')
+  const [showReactivateForm, setShowReactivateForm] = useState(false)
+  const [reactivatedByName, setReactivatedByName] = useState('')
 
   const [formValid, setFormValid] = useState<FormValidType>({
     issoemail: false,
@@ -123,6 +129,8 @@ export default function SystemDetailPage() {
       setDecommissionDateError('')
       setDecommissionNotes('')
       setShowDecommissionForm(false)
+      setReactivationNotes('')
+      setShowReactivateForm(false)
     }
   }, [isEditing, system])
 
@@ -146,6 +154,31 @@ export default function SystemDetailPage() {
         })
     } else {
       setDecommissionedByName('')
+    }
+    return () => {
+      cancelled = true
+    }
+  }, [system])
+
+  // Resolve reactivated_by UUID to a human-readable name
+  useEffect(() => {
+    let cancelled = false
+    if (system?.reactivated_by) {
+      const userId = system.reactivated_by
+      axiosInstance
+        .get(`users/${userId}`)
+        .then((res) => {
+          if (!cancelled) {
+            setReactivatedByName(res.data?.data?.fullname || userId)
+          }
+        })
+        .catch(() => {
+          if (!cancelled) {
+            setReactivatedByName(userId)
+          }
+        })
+    } else {
+      setReactivatedByName('')
     }
     return () => {
       cancelled = true
@@ -380,6 +413,75 @@ export default function SystemDetailPage() {
       })
   }
 
+  const handleReactivate = async () => {
+    if (!editedSystem) return
+    setOpenReactivateDialog(false)
+
+    const trimmedNotes = reactivationNotes.trim()
+    const body = trimmedNotes ? { notes: trimmedNotes } : undefined
+
+    await axiosInstance
+      .put(`fismasystems/${editedSystem.fismasystemid}/reactivate`, body)
+      .then((res) => {
+        if (res.status === 200) {
+          enqueueSnackbar('System reactivated successfully', {
+            variant: 'success',
+            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+            autoHideDuration: 2000,
+          })
+          const updatedSystem: FismaSystemType = res.data?.data || {
+            ...editedSystem,
+            decommissioned: false,
+            reactivated_by: userInfo.userid,
+            reactivated_date: new Date().toISOString(),
+            reactivation_notes: trimmedNotes || null,
+          }
+          setFismaSystems((prev) =>
+            prev.map((s) =>
+              s.fismasystemid === updatedSystem.fismasystemid
+                ? updatedSystem
+                : s
+            )
+          )
+          setReactivatedByName(userInfo.fullname || userInfo.userid)
+          setIsEditing(false)
+          setEditedSystem(null)
+        }
+      })
+      .catch((error) => {
+        console.error(
+          'Reactivate error:',
+          error.response?.status,
+          error.response?.data
+        )
+        if (error.response?.status === 403) {
+          enqueueSnackbar('Permission denied. Admin access required.', {
+            variant: 'error',
+            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+            autoHideDuration: 2000,
+          })
+        } else if (error.response?.status === 404) {
+          enqueueSnackbar('System not found', {
+            variant: 'error',
+            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+            autoHideDuration: 2000,
+          })
+        } else if (error.response?.status === 400) {
+          const errorMsg = error.response?.data?.error || 'Invalid request'
+          enqueueSnackbar(`Error: ${errorMsg}`, {
+            variant: 'error',
+            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+            autoHideDuration: 3000,
+          })
+        } else {
+          navigate(Routes.SIGNIN, {
+            replace: true,
+            state: { message: ERROR_MESSAGES.error },
+          })
+        }
+      })
+  }
+
   // Build decommission confirmation text
   const getDecommissionConfirmText = (): string => {
     const dateDisplay = new Date(
@@ -391,7 +493,13 @@ export default function SystemDetailPage() {
     if (system?.decommissioned) {
       return `Update decommission details for "${system?.fismaname}" to ${dateDisplay}?${notesSuffix}`
     }
-    return `Are you sure you want to decommission "${system?.fismaname}" on ${dateDisplay}?${notesSuffix} This will hide the system from the active systems list. This action cannot be undone through the UI.`
+    return `Are you sure you want to decommission "${system?.fismaname}" on ${dateDisplay}?${notesSuffix} This will hide the system from the active systems list. An admin can later reactivate the system if needed.`
+  }
+
+  const getReactivateConfirmText = (): string => {
+    const truncated = truncateNotes(reactivationNotes)
+    const notesSuffix = truncated ? ` Notes: "${truncated}"` : ''
+    return `Reactivate "${system?.fismaname}"? This will move the system back to the active systems list.${notesSuffix}`
   }
 
   // Invalid system ID in URL
@@ -466,6 +574,9 @@ export default function SystemDetailPage() {
           decommissionNotes={decommissionNotes}
           showDecommissionForm={showDecommissionForm}
           decommissionedByName={decommissionedByName}
+          reactivationNotes={reactivationNotes}
+          showReactivateForm={showReactivateForm}
+          reactivatedByName={reactivatedByName}
           onInputChange={handleInputChange}
           onFieldChange={handleFieldChange}
           onValidatedFieldChange={handleValidatedFieldChange}
@@ -473,6 +584,9 @@ export default function SystemDetailPage() {
           onDecommissionNotesChange={setDecommissionNotes}
           onShowDecommissionForm={setShowDecommissionForm}
           onDecommissionRequest={() => setOpenDecommissionDialog(true)}
+          onReactivationNotesChange={setReactivationNotes}
+          onShowReactivateForm={setShowReactivateForm}
+          onReactivateRequest={() => setOpenReactivateDialog(true)}
           validateDecommissionDate={validateDecommissionDate}
           onSdlSyncToggle={(checked) =>
             setEditedSystem((prev) =>
@@ -517,6 +631,19 @@ export default function SystemDetailPage() {
             handleDecommission()
           } else {
             setOpenDecommissionDialog(false)
+          }
+        }}
+      />
+      <ConfirmDialog
+        title="Confirm Reactivate System"
+        confirmationText={getReactivateConfirmText()}
+        open={openReactivateDialog}
+        onClose={() => setOpenReactivateDialog(false)}
+        confirmClick={(confirm: boolean) => {
+          if (confirm) {
+            handleReactivate()
+          } else {
+            setOpenReactivateDialog(false)
           }
         }}
       />

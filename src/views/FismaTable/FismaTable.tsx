@@ -80,7 +80,9 @@ export function CustomFooterSaveComponent(
         const [, filename] =
           response.headers['content-disposition'].split('filename=')
         const contentType = response.headers['content-type']
-        const data = new Blob([response.data], { type: contentType })
+        const data = new Blob([response.data], {
+          type: typeof contentType === 'string' ? contentType : undefined,
+        })
         const url = window.URL.createObjectURL(data)
         const tempLink = document.createElement('a')
         tempLink.href = url

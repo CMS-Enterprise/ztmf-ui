@@ -9,6 +9,7 @@ import FormControl from '@mui/material/FormControl'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
+import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
 import {
   GridRowsProp,
   GridRowModesModel,
@@ -30,8 +31,11 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
+  FormControlLabel,
+  Switch,
   Typography,
 } from '@mui/material'
+import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
@@ -53,10 +57,13 @@ interface EditToolbarProps {
     newModel: (oldModel: GridRowModesModel) => GridRowModesModel
   ) => void
   isAdmin?: boolean
+  showDeleted: boolean
+  setShowDeleted: (value: boolean) => void
 }
 
 function EditToolbar(props: EditToolbarProps) {
-  const { setRows, setRowModesModel, isAdmin } = props
+  const { setRows, setRowModesModel, isAdmin, showDeleted, setShowDeleted } =
+    props
   const addUserRow = () => {
     const userid = Math.floor(Math.random() * 1000) + 1
     setRows((oldRows) => [
@@ -73,32 +80,47 @@ function EditToolbar(props: EditToolbarProps) {
       <GridToolbarQuickFilter
         debounceMs={250}
         sx={{
-          // '& .MuiInputBase-root:before': {
-          //   borderBottomColor: '#5666b8',
-          //   borderBottomWidth: 2,
-          // },
           '& .MuiInputBase-input::placeholder': {
-            color: '#404040', // Change placeholder color to red
-            opacity: 0.8, // Ensure it is fully visible (MUI reduces opacity by default)
+            color: '#404040',
+            opacity: 0.8,
           },
           '& .MuiInputBase-root:after': {
-            borderBottomColor: '#5666b8', // Changes the underline color when active
+            borderBottomColor: '#5666b8',
           },
           '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: '#5666b8', // Changes the underline color on hover
+            borderBottomColor: '#5666b8',
           },
         }}
       />
-      {isAdmin && (
-        <Button
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={addUserRow}
-          sx={{ color: '#5666b8' }}
-        >
-          Add User
-        </Button>
-      )}
+      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showDeleted}
+              onChange={(e) => setShowDeleted(e.target.checked)}
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: '#004297',
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: '#004297',
+                },
+              }}
+            />
+          }
+          label="Show Deleted"
+        />
+        {isAdmin && !showDeleted && (
+          <Button
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={addUserRow}
+            sx={{ color: '#5666b8' }}
+          >
+            Add User
+          </Button>
+        )}
+      </Box>
     </GridToolbarContainer>
   )
 }
@@ -200,6 +222,10 @@ export default function UserTable() {
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
     Record<number, { name: string; acronym: string }>
   >({})
+  const [showDeleted, setShowDeleted] = useState<boolean>(false)
+  const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
+  const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
+  const [assignModalUserName, setAssignModalUserName] = useState<string>('')
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -263,6 +289,8 @@ export default function UserTable() {
   }
   const handleOpenModal = (id: GridRowId) => {
     setUserId(id)
+    const row = rows.find((r) => r.userid === id)
+    setAssignModalUserName(row?.fullname ?? '')
     setOpenModal(true)
   }
   const handleCloseModal = () => {
@@ -355,12 +383,19 @@ export default function UserTable() {
     setOpen(true)
   }
   const handleDeleteClick = (id: GridRowId) => () => {
-    const curRow = apiRef.current.getRow(id)
-    setRows(rows.filter((row) => row.userid !== id))
+    const curRow = apiRef.current.getRow(id) as users | undefined
+    if (!curRow) return
+    setPendingDeleteRow(curRow)
+  }
+  const handleConfirmDelete = (confirm: boolean) => {
+    const target = pendingDeleteRow
+    setPendingDeleteRow(null)
+    if (!confirm || !target) return
     axiosInstance
-      .delete(`/users/${id}`)
+      .delete(`/users/${target.userid}`)
       .then(() => {
-        enqueueSnackbar(`Saved - Delete User ${curRow.fullname}`, {
+        setRows((prev) => prev.filter((row) => row.userid !== target.userid))
+        enqueueSnackbar(`Saved - Delete User ${target.fullname}`, {
           variant: 'success',
           anchorOrigin: {
             vertical: 'top',
@@ -370,13 +405,52 @@ export default function UserTable() {
         })
       })
       .catch((error) => {
-        if (error.response.status === 401) {
+        if (error.response?.status === 401) {
           checkValidResponse(error.response.status)
-        } else if (error.response.status === 403) {
+        } else if (error.response?.status === 403) {
           handleUnautherized(error.response.status)
         } else {
-          enqueueSnackbar(`An error occurred, please try again later`, {
-            variant: 'success',
+          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+            variant: 'error',
+            anchorOrigin: {
+              vertical: 'top',
+              horizontal: 'left',
+            },
+            autoHideDuration: 2000,
+          })
+        }
+      })
+  }
+  const handleRestoreClick = (id: GridRowId) => () => {
+    const curRow = apiRef.current.getRow(id) as users | undefined
+    if (!curRow) return
+    setPendingRestoreRow(curRow)
+  }
+  const handleConfirmRestore = (confirm: boolean) => {
+    const target = pendingRestoreRow
+    setPendingRestoreRow(null)
+    if (!confirm || !target) return
+    axiosInstance
+      .put(`/users/${target.userid}/restore`)
+      .then(() => {
+        setRows((prev) => prev.filter((row) => row.userid !== target.userid))
+        enqueueSnackbar(`Saved - Restore User ${target.fullname}`, {
+          variant: 'success',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2000,
+        })
+      })
+      .catch((error) => {
+        if (error.response?.status === 401) {
+          checkValidResponse(error.response.status)
+        } else if (error.response?.status === 403) {
+          handleUnautherized(error.response.status)
+        } else {
+          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+            variant: 'error',
             anchorOrigin: {
               vertical: 'top',
               horizontal: 'left',
@@ -390,7 +464,7 @@ export default function UserTable() {
   useEffect(() => {
     if (!isAdmin) return
     axiosInstance
-      .get('/users')
+      .get('/users', { params: { deleted: showDeleted } })
       .then((res) => {
         if (res.status === 200) {
           const data = res.data.data.map((row: users) => ({
@@ -439,7 +513,7 @@ export default function UserTable() {
           })
         }
       })
-  }, [isAdmin, fismaSystems, navigate, enqueueSnackbar])
+  }, [isAdmin, fismaSystems, navigate, enqueueSnackbar, showDeleted])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
@@ -521,6 +595,24 @@ export default function UserTable() {
           ]
         }
 
+        if (params.row.deleted) {
+          return [
+            <Tooltip
+              title="Restore User"
+              key={`tooltip-restore-${params.id}`}
+              placement="right-start"
+            >
+              <GridActionsCellItem
+                icon={<RestoreIcon sx={{ color: 'black' }} />}
+                key={`restore-${params.id}`}
+                label="Restore"
+                onClick={handleRestoreClick(params.id)}
+                color="inherit"
+              />
+            </Tooltip>,
+          ]
+        }
+
         return [
           <GridActionsCellItem
             icon={<EditIcon />}
@@ -591,7 +683,13 @@ export default function UserTable() {
             toolbar: EditToolbar,
           }}
           slotProps={{
-            toolbar: { setRows, setRowModesModel, isAdmin },
+            toolbar: {
+              setRows,
+              setRowModesModel,
+              isAdmin,
+              showDeleted,
+              setShowDeleted,
+            },
             filterPanel: {
               sx: {
                 '& .MuiFormLabel-root': {
@@ -639,6 +737,29 @@ export default function UserTable() {
         open={openModal}
         handleClose={handleCloseModal}
         userid={userId}
+        userName={assignModalUserName}
+      />
+      <ConfirmDialog
+        title="Confirm User Deletion"
+        confirmationText={
+          pendingDeleteRow
+            ? `Are you sure you want to delete ${pendingDeleteRow.fullname}? This will remove their access to ZTMF. The user can be restored later from the "Show Deleted" view.`
+            : ''
+        }
+        open={pendingDeleteRow !== null}
+        onClose={() => setPendingDeleteRow(null)}
+        confirmClick={handleConfirmDelete}
+      />
+      <ConfirmDialog
+        title="Confirm User Restore"
+        confirmationText={
+          pendingRestoreRow
+            ? `Restore ${pendingRestoreRow.fullname}? This will re-enable their access to ZTMF.`
+            : ''
+        }
+        open={pendingRestoreRow !== null}
+        onClose={() => setPendingRestoreRow(null)}
+        confirmClick={handleConfirmRestore}
       />
       <Dialog
         open={openAlert}
