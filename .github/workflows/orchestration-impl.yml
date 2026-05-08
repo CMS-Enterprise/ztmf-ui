@@ -1,6 +1,18 @@
+# Trigger model (mirrors CMS-Enterprise/ztmf orchestration-impl.yml):
+#   - pull_request to `impl`: runs Analysis only (lint, security scan, unit
+#     tests). No S3 deploy. Gives the PR author CI feedback without racing
+#     other open PRs for shared impl state.
+#   - push to `impl`: runs the full pipeline (analysis -> ui) and deploys
+#     the frontend bundle to s3://impl.ztmf.cms.gov + invalidates the impl
+#     CloudFront distribution. Squash-merge from a feature branch into
+#     impl is the intended trigger; the resulting single commit on impl
+#     produces one ordered deploy per merged PR.
 name: Orchestration IMPL
 
 on:
+  push:
+    branches:
+      - impl
   pull_request:
     branches:
       - impl
@@ -13,13 +25,13 @@ on:
 jobs:
   analysis:
     name: Analysis
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'push' || github.event.pull_request.draft == false
     uses: ./.github/workflows/analysis.yml
     secrets: inherit
 
   ui:
     name: ui
-    if: github.event.pull_request.draft == false
+    if: github.event_name == 'push' && !failure() && !cancelled()
     needs:
       - analysis
     uses: ./.github/workflows/ui.yml
