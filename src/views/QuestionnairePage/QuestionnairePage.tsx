@@ -33,6 +33,7 @@ import {
 } from '@/constants'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
+import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -90,8 +91,7 @@ export default function QuestionnarePage() {
   const { userInfo } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
-    userInfo.role === 'READONLY_ADMIN' ||
-    (isPastDeadline && userInfo.role !== 'ADMIN')
+    isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
     {}
   )

@@ -2,7 +2,7 @@
  * Application-wide constants
  * @module constants
  */
-import { userData } from './types'
+import { userData, UserRole } from './types'
 
 //* Application Strings
 export const ORG_NAME = 'CMS'
@@ -30,7 +30,7 @@ export const EMPTY_USER: userData = {
   userid: '',
   email: '',
   fullname: '',
-  role: '',
+  role: '' as UserRole,
   assignedfismasystems: [],
 }
 export const CONFIRMATION_MESSAGE =

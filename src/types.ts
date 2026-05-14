@@ -20,12 +20,33 @@ export type FormField = {
   value?: string | number | boolean | null
   component: React.ElementType
 }
+export type UserRole =
+  | 'OWNER'
+  | 'HHS_ADMIN'
+  | 'HHS_READONLY_ADMIN'
+  | 'OPDIV_ADMIN'
+  | 'OPDIV_READONLY_ADMIN'
+  | 'ISSO'
+  | 'ISSM'
+  | 'ADMIN'
+  | 'READONLY_ADMIN'
+
+export type OpDiv = {
+  opdiv_id: number
+  code: string
+  name: string
+  is_parent: boolean
+  active: boolean
+}
+
 export type userData = {
   userid: string
   email: string
   fullname: string
-  role: string
+  role: UserRole
   assignedfismasystems?: number[]
+  identity_provider?: 'okta' | 'entra'
+  assignedopdivids?: number[] | null
 }
 export type RequestOptions = {
   method: string
@@ -55,6 +76,7 @@ export type FismaSystemType = {
   reactivated_by: string | null
   reactivated_date: string | null
   reactivation_notes: string | null
+  opdiv_id?: number | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
@@ -155,7 +177,7 @@ export type users = {
   assignedfismasystems: number[]
   email: string
   fullname: string
-  role: string
+  role: UserRole
   userid: string
   deleted?: boolean
   isNew?: boolean
