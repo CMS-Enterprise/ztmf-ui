@@ -17,6 +17,7 @@ import {
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
+import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
 
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
@@ -29,7 +30,7 @@ export default function SystemDetailPage() {
   const { enqueueSnackbar } = useSnackbar()
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
 
-  const isAdmin = userInfo.role === 'ADMIN'
+  const isAdmin = checkIsAdmin(userInfo)
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
 
   const system = useMemo(

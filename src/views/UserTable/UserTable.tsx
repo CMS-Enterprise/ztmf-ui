@@ -41,6 +41,7 @@ import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
 import { users } from '@/types'
+import { isAdmin as checkIsAdmin, isAdminTierRole } from '@/utils/userRoles'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
@@ -132,7 +133,7 @@ export default function UserTable() {
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const { userInfo, fismaSystems } = useContextProp()
-  const isAdmin = userInfo.role === 'ADMIN'
+  const isAdmin = checkIsAdmin(userInfo)
   useEffect(() => {
     if (userInfo.role && !isAdmin) {
       navigate(Routes.ROOT, { replace: true })
@@ -172,10 +173,7 @@ export default function UserTable() {
               params.id,
               'fullname'
             )
-            if (
-              event.target.value === 'ADMIN' ||
-              event.target.value === 'READONLY_ADMIN'
-            ) {
+            if (isAdminTierRole(event.target.value as string)) {
               setUserName(fullname)
               setSelectedRole(event.target.value)
               setOpenAlert(true)
@@ -214,7 +212,7 @@ export default function UserTable() {
     userid: '',
     email: '',
     fullname: '',
-    role: '',
+    role: '' as users['role'],
     assignedfismasystems: [],
   })
   const [userName, setUserName] = useState<string | undefined>(undefined)

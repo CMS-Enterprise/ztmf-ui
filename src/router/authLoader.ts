@@ -1,5 +1,5 @@
 import 'core-js/stable/atob'
-import { userData } from '@/types'
+import { userData, UserRole } from '@/types'
 import axiosInstance from '@/axiosConfig'
 /**
  * Auth state loader for react-router data routes.
@@ -11,7 +11,7 @@ const emptyUser: userData = {
   userid: '',
   email: '',
   fullname: '',
-  role: '',
+  role: '' as UserRole,
   assignedfismasystems: [],
 }
 const authLoader = async () => {
