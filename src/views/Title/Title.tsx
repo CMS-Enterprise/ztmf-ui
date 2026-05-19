@@ -4,7 +4,11 @@ import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData } from '@/types'
+import { userData, UserRole } from '@/types'
+import {
+  isAdmin as checkIsAdmin,
+  hasAdminRead as checkHasAdminRead,
+} from '@/utils/userRoles'
 import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
@@ -32,7 +36,7 @@ const emptyUser: userData = {
   userid: '',
   email: '',
   fullname: '',
-  role: '',
+  role: '' as UserRole,
   assignedfismasystems: [],
 }
 
@@ -133,9 +137,8 @@ export default function Title() {
   const handleDataCallClose = () => {
     setOpenDataCallModal(false)
   }
-  const isAdmin = userInfo.role === 'ADMIN'
-  const hasAdminRead =
-    userInfo.role === 'ADMIN' || userInfo.role === 'READONLY_ADMIN'
+  const isAdmin = checkIsAdmin(userInfo)
+  const hasAdminRead = checkHasAdminRead(userInfo)
   return (
     <>
       <UsaBanner />

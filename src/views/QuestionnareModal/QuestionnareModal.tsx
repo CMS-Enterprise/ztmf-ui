@@ -37,6 +37,7 @@ import {
   PILLAR_FUNCTION_MAP,
 } from '@/constants'
 import { useContextProp } from '../Title/Context'
+import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
     color: 'rgb(13, 36, 153)',
@@ -77,8 +78,7 @@ export default function QuestionnareModal({
   const { userInfo } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
-    userInfo.role === 'READONLY_ADMIN' ||
-    (isPastDeadline && userInfo.role !== 'ADMIN')
+    isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const checkValidResponse = (status: number) => {
     if (status !== 200 && status.toString()[0] === '4') {
       navigate(Routes.SIGNIN, {

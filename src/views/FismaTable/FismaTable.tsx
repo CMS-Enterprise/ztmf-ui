@@ -31,6 +31,7 @@ import BarChartIcon from '@mui/icons-material/BarChart'
 import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresModal'
 // import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { FismaTableProps } from '@/types'
+import { hasSystemAccess } from '@/utils/userRoles'
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
@@ -241,11 +242,7 @@ const pillarScoresCache = new Map<number, CachedScore>()
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const { fismaSystems, latestDataCallId, userInfo } = useContextProp()
-  const hasSystemDetailAccess =
-    userInfo.role === 'ADMIN' ||
-    userInfo.role === 'READONLY_ADMIN' ||
-    userInfo.role === 'ISSO' ||
-    userInfo.role === 'ISSM'
+  const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
