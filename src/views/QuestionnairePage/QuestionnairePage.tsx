@@ -588,7 +588,9 @@ export default function QuestionnarePage() {
         <BreadCrumbs />
         <Container>
           <Alert severity="info" sx={{ mt: 2 }}>
-            This system is decommissioned and has no active questionnaire.
+            No questionnaire is available for this system. This typically
+            applies to systems whose data center environment is no longer in
+            scope for the current data call.
           </Alert>
         </Container>
       </>
