@@ -5,6 +5,8 @@ import {
   hasUnscopedRead,
   isAdmin,
   isAdminTierRole,
+  isHHSTier,
+  isOpDivTier,
   isReadOnlyAdmin,
   isReadOnlyAdminRole,
   isWriteAdminRole,
@@ -74,6 +76,30 @@ const hasSystemAccessCases: Case[] = [
   ['ISSM', true],
 ]
 
+const isHHSTierCases: Case[] = [
+  ['HHS_ADMIN', true],
+  ['HHS_READONLY_ADMIN', true],
+  ['OWNER', false],
+  ['OPDIV_ADMIN', false],
+  ['OPDIV_READONLY_ADMIN', false],
+  ['ISSO', false],
+  ['ISSM', false],
+  ['ADMIN', false], // legacy is CMS-tenant pre-migration, not HHS tier
+  ['READONLY_ADMIN', false],
+]
+
+const isOpDivTierCases: Case[] = [
+  ['OPDIV_ADMIN', true],
+  ['OPDIV_READONLY_ADMIN', true],
+  ['OWNER', false],
+  ['HHS_ADMIN', false],
+  ['HHS_READONLY_ADMIN', false],
+  ['ISSO', false],
+  ['ISSM', false],
+  ['ADMIN', false],
+  ['READONLY_ADMIN', false],
+]
+
 test.each(isAdminCases)('isAdmin(%s) === %s', (role, expected) => {
   expect(isAdmin(roleUser(role))).toBe(expected)
   expect(isWriteAdminRole(role)).toBe(expected)
@@ -119,6 +145,32 @@ test.each(hasSystemAccessCases)(
   }
 )
 
+test.each(isHHSTierCases)('isHHSTier(%s) === %s', (role, expected) => {
+  expect(isHHSTier(roleUser(role))).toBe(expected)
+})
+
+test.each(isOpDivTierCases)('isOpDivTier(%s) === %s', (role, expected) => {
+  expect(isOpDivTier(roleUser(role))).toBe(expected)
+})
+
+test('HHS and OpDiv tiers are mutually exclusive', () => {
+  const allRoles: UserRole[] = [
+    'OWNER',
+    'HHS_ADMIN',
+    'HHS_READONLY_ADMIN',
+    'OPDIV_ADMIN',
+    'OPDIV_READONLY_ADMIN',
+    'ISSO',
+    'ISSM',
+    'ADMIN',
+    'READONLY_ADMIN',
+  ]
+  allRoles.forEach((role) => {
+    const user = roleUser(role)
+    expect(isHHSTier(user) && isOpDivTier(user)).toBe(false)
+  })
+})
+
 test('isAdminTierRole returns true for every admin tier (write or read-only)', () => {
   const adminTiers: UserRole[] = [
     'OWNER',
@@ -147,6 +199,8 @@ test('all helpers reject null, undefined, and empty-role placeholder users', () 
     expect(hasAdminRead(user)).toBe(false)
     expect(hasUnscopedRead(user)).toBe(false)
     expect(hasSystemAccess(user)).toBe(false)
+    expect(isHHSTier(user)).toBe(false)
+    expect(isOpDivTier(user)).toBe(false)
   })
 })
 

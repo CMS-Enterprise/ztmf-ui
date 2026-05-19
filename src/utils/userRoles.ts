@@ -46,10 +46,21 @@ export const hasAdminRead = (user: UserLike): boolean =>
 export const hasUnscopedRead = (user: UserLike): boolean =>
   !!user && UNSCOPED_READ_ROLES.has(user.role as UserRole)
 
-// Row-level OpDiv scoping is server-enforced — the backend narrows the
+// Row-level OpDiv scoping is server-enforced - the backend narrows the
 // fismaSystems list before it reaches the frontend, so this gate only needs
 // to decide whether the user belongs to a tier that gets system-detail UI at
 // all (any admin tier + ISSO/ISSM).
 export const hasSystemAccess = (user: UserLike): boolean =>
   hasAdminRead(user) ||
   (!!user && SYSTEM_SCOPED_ROLES.has(user.role as UserRole))
+
+// Tier membership checks mirror the backend's IsHHSTier and IsOpDivTier
+// helpers. Both cover the read-only variant of the tier, so callers must
+// not use these as a write gate - use isAdmin for that. Stage 2+ UI work
+// (OpDiv badges, scoped admin panels) will be the first consumer.
+export const isHHSTier = (user: UserLike): boolean =>
+  !!user && (user.role === 'HHS_ADMIN' || user.role === 'HHS_READONLY_ADMIN')
+
+export const isOpDivTier = (user: UserLike): boolean =>
+  !!user &&
+  (user.role === 'OPDIV_ADMIN' || user.role === 'OPDIV_READONLY_ADMIN')
