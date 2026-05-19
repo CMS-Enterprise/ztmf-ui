@@ -335,11 +335,14 @@ export default function QuestionnarePage() {
           await axiosInstance
             .get(`/fismasystems/${system}/questions`)
             .then((response) => {
-              const data = response.data.data
               // Decommissioned systems join to zero functions, so the questions
-              // endpoint returns an empty array. Surface a friendly message
-              // instead of crashing on categoriesData[0] below.
-              if (Array.isArray(data) && data.length === 0) {
+              // endpoint returns no rows. The Go backend serializes a nil
+              // slice as JSON null, so the response can be either { data: null }
+              // or { data: [] } depending on driver behavior - treat both as
+              // the empty-state signal. Surface a friendly message instead of
+              // crashing on categoriesData[0] below.
+              const data = response.data?.data
+              if (!data || (Array.isArray(data) && data.length === 0)) {
                 questionsEmpty = true
                 setNoQuestions(true)
                 setLoadingQuestion(false)
@@ -585,7 +588,9 @@ export default function QuestionnarePage() {
         <BreadCrumbs />
         <Container>
           <Alert severity="info" sx={{ mt: 2 }}>
-            This system is decommissioned and has no active questionnaire.
+            No questionnaire is available for this system. This typically
+            applies to systems whose data center environment is no longer in
+            scope for the current data call.
           </Alert>
         </Container>
       </>
