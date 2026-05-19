@@ -418,7 +418,13 @@ export default function FismaTable({ scores }: FismaTableProps) {
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => (
         <>
-          <Tooltip title="Questionnaire">
+          <Tooltip
+            title={
+              params.row.decommissioned
+                ? 'Decommissioned systems have no active questionnaire'
+                : 'Questionnaire'
+            }
+          >
             <span>
               <GridActionsCellItem
                 icon={<QuestionAnswerOutlinedIcon />}
@@ -426,8 +432,12 @@ export default function FismaTable({ scores }: FismaTableProps) {
                 label={`View Questionnaire for ${params.row.fismaname}`}
                 className="textPrimary"
                 role="button"
+                disabled={params.row.decommissioned === true}
                 onClick={(event) => {
                   event.stopPropagation()
+                  if (params.row.decommissioned) {
+                    return
+                  }
                   navigate(
                     `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
                     {

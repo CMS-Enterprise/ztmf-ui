@@ -104,6 +104,7 @@ export default function QuestionnarePage() {
   const [datacall, setDatacall] = React.useState<string>('')
   // const { latestDatacall, latestDatacallId } = useContextProp()
   const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
+  const [noQuestions, setNoQuestions] = React.useState<boolean>(false)
   const [categories, setCategories] = React.useState<Category[]>([])
   const [stepFunctionId, setStepFunctionId] = React.useState<number[]>([])
   const [functionIdIdx, setFunctionIdIdx] = React.useState<{
@@ -169,7 +170,10 @@ export default function QuestionnarePage() {
   const location = useLocation()
   const { fismaacronym } = useParams()
 
-  const system = location.state.fismasystemid
+  // Direct/bookmarked navigation to /questionnaire/<acronym> has a null
+  // location.state. Optional-chain instead of crashing on first render; the
+  // missing-system path is handled by an early render guard below.
+  const system = location.state?.fismasystemid as number | undefined
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -279,8 +283,12 @@ export default function QuestionnarePage() {
 
   React.useEffect(() => {
     if (system) {
+      // Reset the empty-questionnaire flag so a previous decommissioned-system
+      // view does not bleed into the next render when system changes.
+      setNoQuestions(false)
       const fetchData = async () => {
         try {
+          let questionsEmpty = false
           let datacall = ''
           const latestDataCallId = await axiosInstance
             .get(`/datacalls/latest`)
@@ -328,6 +336,15 @@ export default function QuestionnarePage() {
             .get(`/fismasystems/${system}/questions`)
             .then((response) => {
               const data = response.data.data
+              // Decommissioned systems join to zero functions, so the questions
+              // endpoint returns an empty array. Surface a friendly message
+              // instead of crashing on categoriesData[0] below.
+              if (Array.isArray(data) && data.length === 0) {
+                questionsEmpty = true
+                setNoQuestions(true)
+                setLoadingQuestion(false)
+                return
+              }
               const organizedData: Record<string, FismaQuestion[]> = {}
               const questionData: Record<number, Question> = {}
               const pillarOrder: Record<string, number> = {}
@@ -432,6 +449,9 @@ export default function QuestionnarePage() {
                 })
               }
             })
+          if (questionsEmpty) {
+            return
+          }
           await axiosInstance
             .get(
               `scores?datacallid=${latestDataCallId}&fismasystemid=${system}&include=functionoption`
@@ -546,6 +566,31 @@ export default function QuestionnarePage() {
       }
     }
   }, [questionId, questionScores, questions, navigate])
+  if (!system) {
+    return (
+      <>
+        <BreadCrumbs />
+        <Container>
+          <Alert severity="warning" sx={{ mt: 2 }}>
+            Cannot load questionnaire from a direct link. Please open it from
+            the system list.
+          </Alert>
+        </Container>
+      </>
+    )
+  }
+  if (noQuestions) {
+    return (
+      <>
+        <BreadCrumbs />
+        <Container>
+          <Alert severity="info" sx={{ mt: 2 }}>
+            This system is decommissioned and has no active questionnaire.
+          </Alert>
+        </Container>
+      </>
+    )
+  }
   return (
     <>
       <BreadCrumbs />
