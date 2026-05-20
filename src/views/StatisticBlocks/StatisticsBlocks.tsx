@@ -4,6 +4,7 @@ import Paper from '@mui/material/Paper'
 import { Typography } from '@mui/material'
 import { styled } from '@mui/material/styles'
 import { useContextProp } from '../Title/Context'
+import type { SystemScoreEntry } from '@/types'
 const StatisticsPaper = styled(Paper)(({ theme }) => ({
   width: 120,
   height: 120,
@@ -16,7 +17,7 @@ const StatisticsPaper = styled(Paper)(({ theme }) => ({
 export default function StatisticsBlocks({
   scores,
 }: {
-  scores: Record<number, number>
+  scores: Record<number, SystemScoreEntry>
 }) {
   const { fismaSystems } = useContextProp()
   const [totalSystems, setTotalSystems] = useState<number>(0)
@@ -35,18 +36,17 @@ export default function StatisticsBlocks({
     let minScoreSystem: string = ''
     let totalScores: number = 0
     for (const system of fismaSystems) {
-      if (scores[system.fismasystemid]) {
-        if (scores[system.fismasystemid] > maxScore) {
-          maxScore = scores[system.fismasystemid]
+      const entry = scores[system.fismasystemid]
+      if (entry && entry.score) {
+        if (entry.score > maxScore) {
+          maxScore = entry.score
           maxScoreSystem = system.fismaacronym
         }
-        if (scores[system.fismasystemid] < minScore) {
-          minScore = scores[system.fismasystemid]
+        if (entry.score < minScore) {
+          minScore = entry.score
           minScoreSystem = system.fismaacronym
         }
-        if (scores[system.fismasystemid]) {
-          totalScores += scores[system.fismasystemid]
-        }
+        totalScores += entry.score
       }
     }
     if (totalCount === 0) {

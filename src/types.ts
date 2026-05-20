@@ -168,6 +168,39 @@ export type ScoreData = {
   systemscore: number
 }
 
+export type ScoreTier =
+  | 'Optimal'
+  | 'Advanced'
+  | 'Initial'
+  | 'Traditional'
+  | 'Not Assessed'
+
+export type PillarScore = {
+  pillarid: number
+  pillar: string
+  score: number
+  tier?: ScoreTier
+}
+
+export type ScoreAggregate = {
+  datacallid: number
+  fismasystemid: number
+  systemscore: number
+  systemtier?: ScoreTier
+  pillarscores?: PillarScore[]
+}
+
+// Per-system score lookup shape passed from Home.tsx down to the list
+// views. Carries the authoritative tier string alongside the numeric
+// score so downstream cells do not have to re-derive a tier label from
+// the number. `tier` is optional to keep the type honest during the
+// brief cutover window when an older backend has not yet shipped tier
+// strings.
+export type SystemScoreEntry = {
+  score: number
+  tier?: ScoreTier
+}
+
 export type QuestionChoice = {
   label: string
   value: number
@@ -199,7 +232,7 @@ export type FormValidHelperText = {
 }
 
 export type FismaTableProps = {
-  scores: Record<number, number>
+  scores: Record<number, SystemScoreEntry>
   latestDataCallId: number
 }
 
