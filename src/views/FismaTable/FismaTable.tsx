@@ -33,7 +33,7 @@ import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresMo
 import { FismaTableProps } from '@/types'
 import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
-import { styleForTier } from '@/utils/tierStyles'
+import { cellStyleForTier } from '@/utils/tierStyles'
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
@@ -368,7 +368,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
         // background fill so a transient deploy mismatch reads as
         // "unknown" rather than a misleading color.
         const backgroundColor =
-          styleForTier(entry?.tier)?.backgroundColor ?? 'transparent'
+          cellStyleForTier(entry?.tier)?.backgroundColor ?? 'transparent'
         return (
           <Box
             sx={{

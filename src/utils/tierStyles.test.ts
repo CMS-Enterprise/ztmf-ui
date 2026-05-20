@@ -1,5 +1,11 @@
 import type { ScoreTier } from '@/types'
-import { TIER_STYLES, styleForTier } from '@/utils/tierStyles'
+import {
+  TIER_STYLES,
+  TIER_CHIP_STYLES,
+  TIER_CELL_STYLES,
+  styleForTier,
+  cellStyleForTier,
+} from '@/utils/tierStyles'
 
 /**
  * Regression contract for the HHS tier style map.
@@ -45,4 +51,46 @@ test('styleForTier returns the matching entry for known tiers', () => {
 
 test('styleForTier returns undefined for an absent tier', () => {
   expect(styleForTier(undefined)).toBeUndefined()
+})
+
+test('TIER_STYLES is a legacy alias for TIER_CHIP_STYLES', () => {
+  expect(TIER_STYLES).toBe(TIER_CHIP_STYLES)
+})
+
+test('TIER_CELL_STYLES exposes an entry for every ScoreTier value', () => {
+  allTiers.forEach((tier) => {
+    expect(TIER_CELL_STYLES[tier]).toBeDefined()
+    expect(TIER_CELL_STYLES[tier].backgroundColor).toBeDefined()
+  })
+})
+
+test.each(allTiers.filter((t) => t !== 'Not Assessed'))(
+  'TIER_CELL_STYLES[%s] has a valid hex background',
+  (tier) => {
+    expect(TIER_CELL_STYLES[tier].backgroundColor).toMatch(hex)
+  }
+)
+
+test('TIER_CELL_STYLES["Not Assessed"] is transparent so the table row reads as "unknown"', () => {
+  expect(TIER_CELL_STYLES['Not Assessed'].backgroundColor).toBe('transparent')
+})
+
+test('cellStyleForTier returns the matching cell entry for known tiers', () => {
+  allTiers.forEach((tier) => {
+    expect(cellStyleForTier(tier)).toBe(TIER_CELL_STYLES[tier])
+  })
+})
+
+test('cellStyleForTier returns undefined for an absent tier', () => {
+  expect(cellStyleForTier(undefined)).toBeUndefined()
+})
+
+test('chip and cell palettes are deliberately distinct so the table can keep 508-passing high-contrast cell colors while the modal keeps chip pastels', () => {
+  allTiers
+    .filter((t) => t !== 'Not Assessed')
+    .forEach((tier) => {
+      expect(TIER_CELL_STYLES[tier].backgroundColor).not.toBe(
+        TIER_CHIP_STYLES[tier].backgroundColor
+      )
+    })
 })

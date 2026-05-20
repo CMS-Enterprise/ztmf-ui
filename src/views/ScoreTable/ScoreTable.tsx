@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Table, TableBody, TableCell, TableRow, TableHead } from '@mui/material'
 import type { ScoreTier } from '@/types'
-import { TIER_STYLES } from '@/utils/tierStyles'
+import { TIER_CELL_STYLES } from '@/utils/tierStyles'
 
 // Static legend of the HHS scoring tiers. Order mirrors the maturity
 // progression so a reader scans left (lowest) to right (highest). Ranges
@@ -28,8 +28,7 @@ const ScoreTable: React.FC = (): JSX.Element => {
               key={`${tier}-header`}
               sx={{
                 border: 1,
-                backgroundColor: TIER_STYLES[tier].backgroundColor,
-                color: TIER_STYLES[tier].color,
+                backgroundColor: TIER_CELL_STYLES[tier].backgroundColor,
                 fontWeight: 'bold',
               }}
               align="center"
