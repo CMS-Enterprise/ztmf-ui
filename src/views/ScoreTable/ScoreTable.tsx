@@ -4,13 +4,18 @@ import type { ScoreTier } from '@/types'
 import { TIER_STYLES } from '@/utils/tierStyles'
 
 // Static legend of the HHS scoring tiers. Order mirrors the maturity
-// progression so a reader scans left (lowest) to right (highest).
+// progression so a reader scans left (lowest) to right (highest). Ranges
+// are expressed as the floor of each tier to match the backend Tier()
+// predicate, which compares the score against >= 1.01 / 2.1 / 3.1 / 4.1.
+// Closed intervals would mislead at the boundary (e.g. a score of 2.05
+// is Traditional on the backend but a "1.01 - 2.0" cell suggests it is
+// already Initial).
 const TIER_LEGEND: Array<{ tier: ScoreTier; range: string }> = [
   { tier: 'Not Assessed', range: '< 1.01' },
-  { tier: 'Traditional', range: '1.01 - 2.0' },
-  { tier: 'Initial', range: '2.1 - 3.0' },
-  { tier: 'Advanced', range: '3.1 - 4.0' },
-  { tier: 'Optimal', range: '4.1 - 5.0' },
+  { tier: 'Traditional', range: '≥ 1.01' },
+  { tier: 'Initial', range: '≥ 2.1' },
+  { tier: 'Advanced', range: '≥ 3.1' },
+  { tier: 'Optimal', range: '≥ 4.1' },
 ]
 
 const ScoreTable: React.FC = (): JSX.Element => {

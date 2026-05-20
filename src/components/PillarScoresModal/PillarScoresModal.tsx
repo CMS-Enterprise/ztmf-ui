@@ -282,8 +282,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                     )}
                   </Typography>
 
-                  {/* Maturity Level Display */}
-                  {latestScore.systemscore && latestScore.systemtier && (
+                  {/* Maturity Level Display - keyed on tier presence so
+                      an explicit "Not Assessed" with a score of 0 still
+                      renders the chip instead of silently disappearing. */}
+                  {latestScore.systemtier && (
                     <Typography
                       variant="body1"
                       sx={{
@@ -483,8 +485,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         )}
                       </Box>
 
-                      {/* Maturity Level for Pillar */}
-                      {currentScore > 0 && pillar.tier && (
+                      {/* Maturity Level for Pillar - keyed on tier
+                          presence so an explicit "Not Assessed" with a
+                          0 score still renders the chip. */}
+                      {pillar.tier && (
                         <Typography
                           variant="caption"
                           sx={{
