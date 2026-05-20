@@ -31,24 +31,13 @@ import {
   Tooltip,
 } from 'recharts'
 import axiosInstance from '@/axiosConfig'
+import type { ScoreAggregate } from '@/types'
+import { styleForTier, TIER_STYLES } from '@/utils/tierStyles'
 
 // Static cache for datacalls that persists across component instances
 const datacallsCache: { data: DataCall[] | null; timestamp: number | null } = {
   data: null,
   timestamp: null,
-}
-
-interface PillarScore {
-  pillarid: number
-  pillar: string
-  score: number
-}
-
-interface SystemScore {
-  datacallid: number
-  fismasystemid: number
-  systemscore: number
-  pillarscores: PillarScore[]
 }
 
 interface DataCall {
@@ -63,40 +52,13 @@ interface PillarScoresModalProps {
   onClose: () => void
   systemName: string
   systemAcronym: string
-  scores: SystemScore[]
+  scores: ScoreAggregate[]
 }
 
-const getMaturityLevel = (score: number) => {
-  if (score >= 3.66)
-    return {
-      name: 'Optimal',
-      color: '#0F5C4C', // Dark teal text
-      backgroundColor: '#E8F8F6', // Very light teal background
-    }
-  if (score >= 2.75)
-    return {
-      name: 'Advanced',
-      color: '#6B6200', // Dark yellow/gold text (6.1:1 on #FEFEF0)
-      backgroundColor: '#FEFEF0', // Very light yellow background
-    }
-  if (score >= 1.75)
-    return {
-      name: 'Initial',
-      color: '#A34200', // Dark orange text (5.8:1 on #FFF4E6)
-      backgroundColor: '#FFF4E6', // Very light orange background
-    }
-  if (score >= 1)
-    return {
-      name: 'Traditional',
-      color: '#663399', // Dark purple text
-      backgroundColor: '#F3F0FF', // Very light purple background
-    }
-  return {
-    name: 'No Score',
-    color: '#525252', // Gray text (meets WCAG 4.5:1 contrast)
-    backgroundColor: '#F8F8F8', // Light gray background
-  }
-}
+// Background color used when the API has not (yet) returned a tier
+// string for this score. Matches TIER_STYLES['Not Assessed'] so a
+// missing-tier cell visually reads as "no data" rather than a blank.
+const FALLBACK_BACKGROUND = TIER_STYLES['Not Assessed'].backgroundColor
 
 const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   open,
@@ -126,7 +88,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 
   // Prepare radar chart data
   const radarData = useMemo(() => {
-    if (!hasValidData) return []
+    if (!hasValidData || !latestScore?.pillarscores) return []
 
     const previousDatacall = scores
       .filter((s) => s.datacallid !== latestScore.datacallid)
@@ -291,8 +253,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   borderColor: 'darkgray',
                   borderRadius: 2,
                   backgroundColor: latestScore.systemscore
-                    ? getMaturityLevel(latestScore.systemscore).backgroundColor
-                    : '#F8F8F8',
+                    ? styleForTier(latestScore.systemtier)?.backgroundColor ??
+                      FALLBACK_BACKGROUND
+                    : FALLBACK_BACKGROUND,
                   maxWidth: '320px',
                   margin: '0 auto',
                 }}
@@ -314,23 +277,25 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         color="text.secondary"
                         sx={{ fontWeight: 'normal', fontSize: '1.25rem' }}
                       >
-                        {' / 4'}
+                        {' / 5'}
                       </Typography>
                     )}
                   </Typography>
 
-                  {/* Maturity Level Display */}
-                  {latestScore.systemscore && (
+                  {/* Maturity Level Display - keyed on tier presence so
+                      an explicit "Not Assessed" with a score of 0 still
+                      renders the chip instead of silently disappearing. */}
+                  {latestScore.systemtier && (
                     <Typography
                       variant="body1"
                       sx={{
-                        color: getMaturityLevel(latestScore.systemscore).color,
+                        color: TIER_STYLES[latestScore.systemtier].color,
                         fontWeight: 'bold',
                         fontSize: '1rem',
                         mb: 1,
                       }}
                     >
-                      {getMaturityLevel(latestScore.systemscore).name}
+                      {latestScore.systemtier}
                     </Typography>
                   )}
                 </Box>
@@ -436,7 +401,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               Pillar Scores - {getQuarterName(latestScore.datacallid)} (Latest)
             </Typography>
             <Grid container spacing={2}>
-              {latestScore.pillarscores.map((pillar) => {
+              {(latestScore.pillarscores ?? []).map((pillar) => {
                 // Find previous score for this pillar
                 const previousDatacall = scores
                   .filter((s) => s.datacallid !== latestScore.datacallid)
@@ -465,8 +430,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         height: '100%',
                         backgroundColor:
                           currentScore > 0
-                            ? getMaturityLevel(currentScore).backgroundColor
-                            : '#F8F8F8',
+                            ? styleForTier(pillar.tier)?.backgroundColor ??
+                              FALLBACK_BACKGROUND
+                            : FALLBACK_BACKGROUND,
                       }}
                       role="region"
                       aria-label={`${pillar.pillar} pillar score: ${currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}`}
@@ -500,7 +466,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                               color="text.secondary"
                               sx={{ fontWeight: 'normal' }}
                             >
-                              {' / 4'}
+                              {' / 5'}
                             </Typography>
                           )}
                         </Typography>
@@ -519,19 +485,21 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         )}
                       </Box>
 
-                      {/* Maturity Level for Pillar */}
-                      {currentScore > 0 && (
+                      {/* Maturity Level for Pillar - keyed on tier
+                          presence so an explicit "Not Assessed" with a
+                          0 score still renders the chip. */}
+                      {pillar.tier && (
                         <Typography
                           variant="caption"
                           sx={{
-                            color: getMaturityLevel(currentScore).color,
+                            color: TIER_STYLES[pillar.tier].color,
                             fontWeight: 'bold',
                             fontSize: '0.8rem',
                             display: 'block',
                             mb: 0.5,
                           }}
                         >
-                          {getMaturityLevel(currentScore).name}
+                          {pillar.tier}
                         </Typography>
                       )}
 
@@ -605,9 +573,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                     <PolarAngleAxis dataKey="pillar" />
                     <PolarRadiusAxis
                       angle={90}
-                      domain={[0, 4]}
+                      domain={[0, 5]}
                       tick={{ fontSize: 12 }}
-                      tickCount={5}
+                      tickCount={6}
                     />
                     <Radar
                       name="Current"
