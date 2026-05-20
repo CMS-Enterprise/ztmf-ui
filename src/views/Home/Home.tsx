@@ -8,6 +8,7 @@ import { ERROR_MESSAGES } from '@/constants'
 import { useContextProp } from '../Title/Context'
 import { Box, CircularProgress } from '@mui/material'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 /**
  * Component that renders the contents of the Home view.
  * @returns {JSX.Element} Component that renders the home contents.
@@ -16,7 +17,7 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const navigate = useNavigate()
-  const [scoreMap, setScoreMap] = useState<Record<number, number>>({})
+  const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
   const { latestDataCallId } = useContextProp()
   useEffect(() => {
     async function fetchScores() {
@@ -24,13 +25,12 @@ export default function HomePageContainer() {
         await axiosInstance
           .get(`/scores/aggregate?datacallid=${latestDataCallId}`)
           .then((res) => {
-            const scoresMap: Record<number, number> = {}
-            for (const obj of res.data.data) {
-              let score = 0
-              if (obj.systemscore) {
-                score = obj.systemscore
+            const scoresMap: Record<number, SystemScoreEntry> = {}
+            for (const obj of res.data.data as ScoreAggregate[]) {
+              scoresMap[obj.fismasystemid] = {
+                score: obj.systemscore ?? 0,
+                tier: obj.systemtier,
               }
-              scoresMap[obj.fismasystemid] = score
             }
             setScoreMap(scoresMap)
             setLoading(false)

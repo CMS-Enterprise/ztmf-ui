@@ -31,14 +31,16 @@ import BarChartIcon from '@mui/icons-material/BarChart'
 import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresModal'
 // import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { FismaTableProps } from '@/types'
+import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
+import { styleForTier } from '@/utils/tierStyles'
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
     latestDataCallId: number
-    scores: Record<number, number>
+    scores: Record<number, SystemScoreEntry>
   }
 }
 
@@ -222,19 +224,8 @@ function QuickSearchToolbar() {
   )
 }
 // Cache for pillar scores to avoid repeated API calls
-interface SystemScore {
-  datacallid: number
-  fismasystemid: number
-  systemscore: number
-  pillarscores: Array<{
-    pillarid: number
-    pillar: string
-    score: number
-  }>
-}
-
 interface CachedScore {
-  data: SystemScore[]
+  data: ScoreAggregate[]
   timestamp: number
 }
 const pillarScoresCache = new Map<number, CachedScore>()
@@ -252,7 +243,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
     systemName: string
     systemAcronym: string
     fismasystemid: number
-    scores: SystemScore[]
+    scores: ScoreAggregate[]
   }>({
     open: false,
     systemName: '',
@@ -363,26 +354,21 @@ export default function FismaTable({ scores }: FismaTableProps) {
       align: 'center',
       hideable: false,
       valueGetter: (value) => {
-        if (!scores[value.row.fismasystemid]) {
+        const entry = scores[value.row.fismasystemid]
+        if (!entry || !entry.score) {
           return 0
         }
-        return scores[value.row.fismasystemid].toFixed(2)
+        return entry.score.toFixed(2)
       },
       renderCell: (params) => {
-        let score: number = 0
-        let backgroundColor: string = ''
-        if (scores[params.row.fismasystemid]) {
-          score = scores[params.row.fismasystemid]
-          if (score >= 1 && score <= 1.74) {
-            backgroundColor = '#DAA9EC'
-          } else if (score >= 1.75 && score <= 2.74) {
-            backgroundColor = '#FFD5A5'
-          } else if (score >= 2.75 && score <= 3.65) {
-            backgroundColor = '#F2FBC4'
-          } else if (score >= 3.66) {
-            backgroundColor = '#93F0ED'
-          }
-        }
+        const entry = scores[params.row.fismasystemid]
+        const score = entry?.score ?? 0
+        // Tier comes from the backend on /scores/aggregate; do not derive
+        // it from the numeric score. Cells without a tier render with no
+        // background fill so a transient deploy mismatch reads as
+        // "unknown" rather than a misleading color.
+        const backgroundColor =
+          styleForTier(entry?.tier)?.backgroundColor ?? 'transparent'
         return (
           <Box
             sx={{
@@ -391,7 +377,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
               px: 4,
               borderRadius: 2,
               borderColor: 'darkgray',
-              backgroundColor: backgroundColor,
+              backgroundColor,
             }}
           >
             {score.toFixed(2)}
