@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Table, TableBody, TableCell, TableRow, TableHead } from '@mui/material'
 import type { ScoreTier } from '@/types'
-import { TIER_CELL_STYLES } from '@/utils/tierStyles'
+import { TIER_CELL_STYLES, TIER_CHIP_STYLES } from '@/utils/tierStyles'
 
 // Static legend of the HHS scoring tiers. Order mirrors the maturity
 // progression so a reader scans left (lowest) to right (highest). Ranges
@@ -23,19 +23,33 @@ const ScoreTable: React.FC = (): JSX.Element => {
     <Table sx={{ minWidth: 650, maxHeight: 10, border: 1, mt: 8 }} size="small">
       <TableHead>
         <TableRow>
-          {TIER_LEGEND.map(({ tier }) => (
-            <TableCell
-              key={`${tier}-header`}
-              sx={{
-                border: 1,
-                backgroundColor: TIER_CELL_STYLES[tier].backgroundColor,
-                fontWeight: 'bold',
-              }}
-              align="center"
-            >
-              {tier}
-            </TableCell>
-          ))}
+          {TIER_LEGEND.map(({ tier }) => {
+            // Legend mirrors the table cell colors so a reader can map the
+            // bright background in a row directly to a tier name here. Cell
+            // palette for Not Assessed is intentionally transparent on actual
+            // score rows (score=0 reads as "no signal"), but a transparent
+            // legend swatch on a white page looks like a missing cell, so
+            // fall back to the soft chip gray for the Not Assessed legend
+            // entry only.
+            const cellBg = TIER_CELL_STYLES[tier].backgroundColor
+            const legendBg =
+              cellBg === 'transparent'
+                ? TIER_CHIP_STYLES[tier].backgroundColor
+                : cellBg
+            return (
+              <TableCell
+                key={`${tier}-header`}
+                sx={{
+                  border: 1,
+                  backgroundColor: legendBg,
+                  fontWeight: 'bold',
+                }}
+                align="center"
+              >
+                {tier}
+              </TableCell>
+            )
+          })}
         </TableRow>
       </TableHead>
       <TableBody>
