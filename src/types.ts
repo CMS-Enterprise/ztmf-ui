@@ -114,6 +114,13 @@ export type questionPillar = {
   order: number
 }
 
+export type LastEditedBy = {
+  userid: string
+  name: string
+  email: string
+  role?: UserRole
+}
+
 export type QuestionScores = {
   scoreid: number
   fismasystemid: number
@@ -121,6 +128,8 @@ export type QuestionScores = {
   notes: string
   functionoptionid: number
   datacallid: number
+  last_edited_at?: string | null
+  last_edited_by?: LastEditedBy | null
 }
 
 export type Question = {

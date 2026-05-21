@@ -34,6 +34,7 @@ import {
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import LastEditedFooter from './LastEditedFooter'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -519,6 +520,10 @@ export default function QuestionnarePage() {
   }, [system, navigate, fismaacronym, enqueueSnackbar])
   React.useEffect(() => {
     if (questionId) {
+      // Clear saved-state markers before async load so the last-edited
+      // footer does not flash the previous question's editor during the
+      // refetch window.
+      setInitQuestionChoice(-1)
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
       try {
@@ -569,11 +574,14 @@ export default function QuestionnarePage() {
       }
     }
   }, [questionId, questionScores, questions, navigate])
+  const breadcrumbSegmentLabels = fismaacronym
+    ? { [fismaacronym]: fismaacronym.toUpperCase() }
+    : undefined
   if (!system) {
     return (
       <>
-        <BreadCrumbs />
-        <Container>
+        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <Container maxWidth={false} disableGutters>
           <Alert severity="warning" sx={{ mt: 2 }}>
             Cannot load questionnaire from a direct link. Please open it from
             the system list.
@@ -585,8 +593,8 @@ export default function QuestionnarePage() {
   if (noQuestions) {
     return (
       <>
-        <BreadCrumbs />
-        <Container>
+        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <Container maxWidth={false} disableGutters>
           <Alert severity="info" sx={{ mt: 2 }}>
             No questionnaire is available for this system. This typically
             applies to systems whose data center environment is no longer in
@@ -598,15 +606,15 @@ export default function QuestionnarePage() {
   }
   return (
     <>
-      <BreadCrumbs />
+      <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
       {isPastDeadline && !isReadOnly && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           This datacall has closed. Changes will be recorded as post-deadline.
         </Alert>
       )}
-      <Container>
+      <Container maxWidth={false} disableGutters>
         <Grid container columnSpacing={2} sx={{ mt: 2 }}>
-          <Grid item xs={3}>
+          <Grid item xs={12} md={3}>
             <List
               sx={{
                 width: '100%',
@@ -615,7 +623,7 @@ export default function QuestionnarePage() {
                 position: 'relative',
                 overflow: 'auto',
                 overflowX: 'hidden',
-                maxHeight: 600,
+                maxHeight: { xs: 300, md: 'calc(100vh - 240px)' },
                 '& ul': { padding: 0 },
                 msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
                 '&::-webkit-scrollbar': { display: 'none' },
@@ -686,7 +694,7 @@ export default function QuestionnarePage() {
               ))}
             </List>
           </Grid>
-          <Grid item xs={9}>
+          <Grid item xs={12} md={9}>
             <Box>
               <Box
                 sx={{
@@ -829,6 +837,20 @@ export default function QuestionnarePage() {
                       {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
                     </CmsButton>
                   </Box>
+                  <LastEditedFooter
+                    lastEditedAt={
+                      initQuestionChoice !== -1 &&
+                      questionScores[initQuestionChoice]
+                        ? questionScores[initQuestionChoice].last_edited_at
+                        : null
+                    }
+                    lastEditedBy={
+                      initQuestionChoice !== -1 &&
+                      questionScores[initQuestionChoice]
+                        ? questionScores[initQuestionChoice].last_edited_by
+                        : null
+                    }
+                  />
                 </Box>
               )}
             </Box>

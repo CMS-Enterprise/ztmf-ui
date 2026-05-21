@@ -36,7 +36,14 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
     </Typography>,
   ]
   const crumbs = location.pathname.split('/').filter((x) => x)
-  const path = crumbs.map((value) => {
+  const path = crumbs.map((rawValue) => {
+    const value = (() => {
+      try {
+        return decodeURIComponent(rawValue)
+      } catch {
+        return rawValue
+      }
+    })()
     const displayText =
       segmentLabels && segmentLabels[value]
         ? segmentLabels[value]

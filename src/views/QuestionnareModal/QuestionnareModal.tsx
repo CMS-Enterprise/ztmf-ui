@@ -23,7 +23,9 @@ import {
   QuestionOption,
   SystemDetailsModalProps,
   QuestionScores,
+  LastEditedBy,
 } from '@/types'
+import LastEditedFooter from '../QuestionnairePage/LastEditedFooter'
 import axiosInstance from '@/axiosConfig'
 import CircularProgress from '@mui/material/CircularProgress'
 import { useSnackbar } from 'notistack'
@@ -115,6 +117,16 @@ export default function QuestionnareModal({
   const [notes, setNotes] = React.useState<string>('')
   const [selectQuestionOption, setSelectQuestionOption] =
     React.useState<number>(0)
+  // Saved-state mirror for the last-edited footer. The page component
+  // tracks an `initQuestionChoice` funcOptId and looks the score up live;
+  // the modal does not, so we cache the two fields directly when the load
+  // effect resolves. Updated alongside `scoreid` / `notes` to stay in
+  // lockstep with the saved score.
+  const [savedLastEditedAt, setSavedLastEditedAt] = React.useState<
+    string | null
+  >(null)
+  const [savedLastEditedBy, setSavedLastEditedBy] =
+    React.useState<LastEditedBy | null>(null)
   const activeCategory = categories[activeCategoryIndex]
   const activeStep = activeCategory?.steps[activeStepIndex]
 
@@ -429,12 +441,20 @@ export default function QuestionnareModal({
             setSelectQuestionOption(0)
             setScoreId(0)
             setNotes('')
+            setSavedLastEditedAt(null)
+            setSavedLastEditedBy(null)
           } else {
             const id = questionScores[funcOptId].scoreid
             const notes = questionScores[funcOptId].notes
             setSelectQuestionOption(funcOptId)
             setScoreId(id)
             setNotes(notes)
+            setSavedLastEditedAt(
+              questionScores[funcOptId].last_edited_at ?? null
+            )
+            setSavedLastEditedBy(
+              questionScores[funcOptId].last_edited_by ?? null
+            )
           }
           setLoadingQuestion(false)
         })
@@ -476,7 +496,7 @@ export default function QuestionnareModal({
   }
   return (
     <>
-      <Dialog open={open} onClose={handClose} maxWidth="lg" fullWidth>
+      <Dialog open={open} onClose={handClose} maxWidth="xl" fullWidth>
         <DialogTitle align="center">
           <div>
             <Typography variant="h3">{'Questionnaire'}</Typography>
@@ -489,14 +509,23 @@ export default function QuestionnareModal({
               post-deadline.
             </Alert>
           )}
-          <Box display="flex" flexDirection="row" sx={{ height: '50vh' }}>
+          <Box
+            display="flex"
+            sx={{
+              flexDirection: { xs: 'column', md: 'row' },
+              height: { xs: 'auto', md: '60vh', lg: '70vh' },
+            }}
+          >
             <Box
               display="flex"
               flexDirection="column"
-              flex={0.3}
               overflow="auto"
               maxHeight="100%"
-              sx={{ paddingRight: '40px' }}
+              sx={{
+                flex: { xs: 1, md: 0.3 },
+                paddingRight: { xs: 0, md: '40px' },
+                mb: { xs: 2, md: 0 },
+              }}
             >
               {categories.map((category, categoryIndex) => (
                 <Box key={category.name} sx={{ mb: 2, mt: 0 }}>
@@ -576,8 +605,8 @@ export default function QuestionnareModal({
               ))}
             </Box>
             <Box
-              flex={0.7}
               sx={{
+                flex: { xs: 1, md: 0.7 },
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',
@@ -668,6 +697,10 @@ export default function QuestionnareModal({
                       <NavigateNextIcon sx={{ pt: '2px' }} />
                     </CmsButton>
                   </Box>
+                  <LastEditedFooter
+                    lastEditedAt={savedLastEditedAt}
+                    lastEditedBy={savedLastEditedBy}
+                  />
                 </Box>
               )}
             </Box>
