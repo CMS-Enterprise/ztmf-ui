@@ -145,16 +145,24 @@ export default function QuestionnarePage() {
   }
   const renderRadioGroup = (options: QuestionChoice[]) => {
     return (
-      <ChoiceList
-        choices={options}
-        name={'radio-choices'}
-        type={'radio'}
-        label={undefined}
-        className="ds-u-margin-top--05"
-        size="small"
-        onChange={handleChoiceChange}
-        disabled={isReadOnly}
-      />
+      <Box
+        sx={{
+          '& .ds-c-choice-wrapper': {
+            maxWidth: 'none',
+          },
+        }}
+      >
+        <ChoiceList
+          choices={options}
+          name={'radio-choices'}
+          type={'radio'}
+          label={undefined}
+          className="ds-u-margin-top--05"
+          size="small"
+          onChange={handleChoiceChange}
+          disabled={isReadOnly}
+        />
+      </Box>
     )
   }
 
