@@ -325,6 +325,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
       headerName: 'ISSO Name',
       flex: 1.2,
       minWidth: 120,
+      maxWidth: 240,
       hideable: false,
       valueGetter: (value) => {
         const name = value.row.issoemail.split('@')
@@ -349,9 +350,9 @@ export default function FismaTable({ scores }: FismaTableProps) {
       field: 'Score',
       headerName: 'Zero Trust Score',
       type: 'number',
-      flex: 1,
-      minWidth: 140,
+      width: 160,
       align: 'center',
+      headerAlign: 'center',
       hideable: false,
       valueGetter: (value) => {
         const entry = scores[value.row.fismasystemid]
