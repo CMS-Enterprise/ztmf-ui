@@ -117,6 +117,15 @@ export default function QuestionnareModal({
   const [notes, setNotes] = React.useState<string>('')
   const [selectQuestionOption, setSelectQuestionOption] =
     React.useState<number>(0)
+  // Loaded-state snapshot for the dirty check on Next/Back. The product
+  // rule is "save on real change, not on read-through" -- otherwise a
+  // user walking past a question already answered by someone else gets
+  // stamped as the new editor and overwrites the prior cycle's history.
+  // The backend enforces the same rule as defense in depth, but the FE
+  // check saves a wasted PUT roundtrip on every read-through navigation.
+  const [loadedNotes, setLoadedNotes] = React.useState<string>('')
+  const [loadedSelectQuestionOption, setLoadedSelectQuestionOption] =
+    React.useState<number>(0)
   // Saved-state mirror for the last-edited footer. The page component
   // tracks an `initQuestionChoice` funcOptId and looks the score up live;
   // the modal does not, so we cache the two fields directly when the load
@@ -153,7 +162,19 @@ export default function QuestionnareModal({
   }
   const handleQuestionnareNext = () => {
     setLoadingQuestion(true)
-    if (!isReadOnly) {
+    // Dirty check: skip the API call entirely when nothing changed. The
+    // questionnaire intentionally shows last cycle's answer as a default
+    // (rolled forward by copyPreviousScores), so clicking Next without
+    // editing is a read-through, not an edit. PUTting on a read-through
+    // would overwrite the prior cycle's editor in the audit trail with
+    // whoever happens to be scrolling. The backend enforces the same
+    // rule, but skipping here saves the wasted PUT roundtrip.
+    const isReadThrough =
+      !isReadOnly &&
+      scoreid !== 0 &&
+      selectQuestionOption === loadedSelectQuestionOption &&
+      (notes ?? '') === (loadedNotes ?? '')
+    if (!isReadOnly && !isReadThrough) {
       if (scoreid) {
         axiosInstance
           .put(`scores/${scoreid}`, {
@@ -441,6 +462,8 @@ export default function QuestionnareModal({
             setSelectQuestionOption(0)
             setScoreId(0)
             setNotes('')
+            setLoadedSelectQuestionOption(0)
+            setLoadedNotes('')
             setSavedLastEditedAt(null)
             setSavedLastEditedBy(null)
           } else {
@@ -449,6 +472,12 @@ export default function QuestionnareModal({
             setSelectQuestionOption(funcOptId)
             setScoreId(id)
             setNotes(notes)
+            // Snapshot the loaded answer so handleQuestionnareNext can
+            // detect "no real change" and skip the PUT. Without this the
+            // backend's no-op guard still preserves history, but we
+            // would still pay a wasted roundtrip on every Next click.
+            setLoadedSelectQuestionOption(funcOptId)
+            setLoadedNotes(notes)
             setSavedLastEditedAt(
               questionScores[funcOptId].last_edited_at ?? null
             )
