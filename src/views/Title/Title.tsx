@@ -144,7 +144,10 @@ export default function Title() {
       <UsaBanner />
       <Container
         maxWidth={false}
-        sx={{ px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 } }}
+        sx={{
+          px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          minWidth: 800,
+        }}
       >
         {loaderData.status == 200 ? (
           <Box
@@ -254,7 +257,10 @@ export default function Title() {
       </Container>
       <Container
         maxWidth={false}
-        sx={{ px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 } }}
+        sx={{
+          px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          minWidth: 800,
+        }}
       >
         {loaderData.serverError ? (
           <ServerErrorPage />

@@ -511,21 +511,16 @@ export default function QuestionnareModal({
           )}
           <Box
             display="flex"
-            sx={{
-              flexDirection: { xs: 'column', md: 'row' },
-              height: { xs: 'auto', md: '60vh', lg: '70vh' },
-            }}
+            flexDirection="row"
+            sx={{ height: { md: '60vh', lg: '70vh' } }}
           >
             <Box
               display="flex"
               flexDirection="column"
+              flex={0.3}
               overflow="auto"
               maxHeight="100%"
-              sx={{
-                flex: { xs: 1, md: 0.3 },
-                paddingRight: { xs: 0, md: '40px' },
-                mb: { xs: 2, md: 0 },
-              }}
+              sx={{ paddingRight: '40px' }}
             >
               {categories.map((category, categoryIndex) => (
                 <Box key={category.name} sx={{ mb: 2, mt: 0 }}>
@@ -605,8 +600,8 @@ export default function QuestionnareModal({
               ))}
             </Box>
             <Box
+              flex={0.7}
               sx={{
-                flex: { xs: 1, md: 0.7 },
                 display: 'flex',
                 justifyContent: 'center',
                 alignItems: 'center',

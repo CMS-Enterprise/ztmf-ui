@@ -614,7 +614,7 @@ export default function QuestionnarePage() {
       )}
       <Container maxWidth={false} disableGutters>
         <Grid container columnSpacing={2} sx={{ mt: 2 }}>
-          <Grid item xs={12} md={3}>
+          <Grid item xs={3}>
             <List
               sx={{
                 width: '100%',
@@ -623,7 +623,7 @@ export default function QuestionnarePage() {
                 position: 'relative',
                 overflow: 'auto',
                 overflowX: 'hidden',
-                maxHeight: { xs: 300, md: 'calc(100vh - 240px)' },
+                maxHeight: 'calc(100vh - 240px)',
                 '& ul': { padding: 0 },
                 msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
                 '&::-webkit-scrollbar': { display: 'none' },
@@ -694,7 +694,7 @@ export default function QuestionnarePage() {
               ))}
             </List>
           </Grid>
-          <Grid item xs={12} md={9}>
+          <Grid item xs={9}>
             <Box>
               <Box
                 sx={{
