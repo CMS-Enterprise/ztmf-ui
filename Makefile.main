@@ -1,0 +1,3 @@
+# main environment - default ports
+# Vars left at defaults; file exists for symmetry and future overrides.
+FRONTEND_PORT = 5174
