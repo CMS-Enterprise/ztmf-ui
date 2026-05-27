@@ -95,10 +95,23 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
     setHasError(false)
 
     axiosInstance
-      .get(`cfactssystems/${fismaUid}`)
+      .get(`systemenrichment/${fismaUid}`)
       .then((res) => {
         if (!cancelled) {
-          setCfacts(res.data?.data ?? res.data)
+          // The endpoint returns { data: { fisma_uuid, payload, synced_at } }.
+          // The enrichment fields live in payload; fisma_uuid and synced_at are
+          // top-level siblings. Flatten into the existing shape so the rendering
+          // below is unchanged.
+          const record = res.data?.data
+          setCfacts(
+            record
+              ? {
+                  ...record.payload,
+                  fisma_uuid: record.fisma_uuid,
+                  synced_at: record.synced_at,
+                }
+              : null
+          )
         }
       })
       .catch((error) => {
@@ -108,7 +121,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
             error.response?.status === 403
           ) {
             if (error.response?.status === 403) {
-              console.warn('CFACTS 403 for fismaUid:', fismaUid)
+              console.warn('ZTMF Insights 403 for fismaUid:', fismaUid)
             }
             setNotFound(true)
           } else {
@@ -136,7 +149,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
   if (hasError) {
     return (
       <Typography variant="body2" color="error" sx={{ mt: 1 }}>
-        Failed to load CFACTS data. Please try again.
+        Failed to load ZTMF Insights data. Please try again.
       </Typography>
     )
   }
@@ -144,7 +157,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
   if (notFound || !cfacts) {
     return (
       <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        No CFACTS record found.
+        No ZTMF Insights data found.
       </Typography>
     )
   }

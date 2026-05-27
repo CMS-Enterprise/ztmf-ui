@@ -602,11 +602,13 @@ export default function SystemDetailPage() {
         />
       )}
 
-      {system.fismauid && (
+      {/* ZTMF Insights enrichment is CMS-only for now; gate the whole section on
+          the per-system sdl_sync_enabled toggle (default false for new OpDivs). */}
+      {system.fismauid && system.sdl_sync_enabled && (
         <>
           <Divider sx={{ my: 4 }} />
           <Typography variant="h6" sx={{ mb: 2 }}>
-            CFACTS Record
+            ZTMF Insights
           </Typography>
           <CfactsRecordCard fismaUid={system.fismauid} />
         </>
