@@ -31,6 +31,7 @@ import {
   PILLAR_FUNCTION_MAP,
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
+import { sortPillars } from '@/utils/sortPillars'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 type Category = {
@@ -330,11 +331,9 @@ export default function QuestionnarePage() {
               const data = response.data.data
               const organizedData: Record<string, FismaQuestion[]> = {}
               const questionData: Record<number, Question> = {}
-              const pillarOrder: Record<string, number> = {}
               data.forEach((question: FismaQuestion) => {
                 if (!organizedData[question.pillar.pillar]) {
                   organizedData[question.pillar.pillar] = []
-                  pillarOrder[question.pillar.pillar] = question.pillar.order
                 }
                 questionData[question.function.functionid] = {
                   question: question.question,
@@ -346,9 +345,7 @@ export default function QuestionnarePage() {
                 organizedData[question.pillar.pillar].push(question)
               })
               setQuestions(questionData)
-              const sortedPillars = Object.keys(organizedData).sort(
-                (a, b) => pillarOrder[a] - pillarOrder[b]
-              )
+              const sortedPillars = sortPillars(Object.keys(organizedData))
               const sortSteps = (
                 steps: FismaQuestion[],
                 order: string[]

@@ -36,6 +36,7 @@ import {
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   PILLAR_FUNCTION_MAP,
 } from '@/constants'
+import { sortPillars } from '@/utils/sortPillars'
 import { useContextProp } from '../Title/Context'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
@@ -309,17 +310,13 @@ export default function QuestionnareModal({
               }
               const data = response.data.data
               const organizedData: Record<string, FismaQuestion[]> = {}
-              const pillarOrder: Record<string, number> = {}
               data.forEach((question: FismaQuestion) => {
                 if (!organizedData[question.pillar.pillar]) {
                   organizedData[question.pillar.pillar] = []
-                  pillarOrder[question.pillar.pillar] = question.pillar.order
                 }
                 organizedData[question.pillar.pillar].push(question)
               })
-              const sortedPillars = Object.keys(organizedData).sort(
-                (a, b) => pillarOrder[a] - pillarOrder[b]
-              )
+              const sortedPillars = sortPillars(Object.keys(organizedData))
               const sortSteps = (
                 steps: FismaQuestion[],
                 order: string[]
