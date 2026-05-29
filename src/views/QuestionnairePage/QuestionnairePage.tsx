@@ -28,10 +28,10 @@ import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
-  PILLAR_FUNCTION_MAP,
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
 import { sortPillars } from '@/utils/sortPillars'
+import { sortFunctions } from '@/utils/sortFunctions'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
@@ -375,22 +375,9 @@ export default function QuestionnarePage() {
               })
               setQuestions(questionData)
               const sortedPillars = sortPillars(Object.keys(organizedData))
-              const sortSteps = (
-                steps: FismaQuestion[],
-                order: string[]
-              ): FismaQuestion[] => {
-                return steps.sort(
-                  (a, b) =>
-                    order.indexOf(a.function.function) -
-                    order.indexOf(b.function.function)
-                )
-              }
               let sortedFuncId: number[] = []
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
-                const sortedSteps = sortSteps(
-                  organizedData[pillar],
-                  PILLAR_FUNCTION_MAP[pillar]
-                )
+                const sortedSteps = sortFunctions(pillar, organizedData[pillar])
                 const sortedStepFuncId = sortedSteps.map(
                   (d) => d.function.functionid
                 )
