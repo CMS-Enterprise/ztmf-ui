@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<!DOCTYPE svg PUBLIC "-//W3C//DTD SVG 1.1//EN" "http://www.w3.org/Graphics/SVG/1.1/DTD/svg11.dtd">
+<svg width="100%" height="100%" viewBox="0 0 650 358" version="1.1" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" xml:space="preserve" xmlns:serif="http://www.serif.com/" style="fill-rule:evenodd;clip-rule:evenodd;stroke-linejoin:round;stroke-miterlimit:2;">
+    <path d="M155.62,134.11L82.96,232.57L155.62,232.57L155.62,272L28.4,272L28.4,235.05L100.32,136.34L28.4,136.34L28.4,97.16L155.62,97.16L155.62,134.11Z" style="fill:rgb(111,142,172);fill-rule:nonzero;"/>
+    <path d="M168.24,97.16L309.6,97.16L309.6,135.85L262.98,135.85L262.98,272L214.37,272L214.37,135.85L168.24,135.85L168.24,97.16Z" style="fill:rgb(24,42,70);fill-rule:nonzero;"/>
+    <path d="M489.89,97.16L608.43,97.16L608.43,135.85L538.5,135.85L538.5,166.6L590.08,166.6L590.08,203.55L538.5,203.55L538.5,272L489.89,272L489.89,97.16Z" style="fill:rgb(24,42,70);fill-rule:nonzero;"/>
+    <g transform="matrix(0.816327,0,0,7.535714,204.306122,-1777.714286)">
+        <rect x="214" y="244" width="49" height="28" style="fill:rgb(24,42,70);"/>
+    </g>
+    <g transform="matrix(0.816327,0,0,8.535714,264.306122,-2049.714286)">
+        <rect x="214" y="244" width="49" height="28" style="fill:rgb(244,190,53);"/>
+    </g>
+    <g transform="matrix(0.816327,0,0,6.214286,145.306122,-1418.285714)">
+        <path d="M263,255.828L263,257.78L262.363,257.725L214,267.438L214,244L263,244L263,244.022L311.811,259.29L369.689,241.186L353.835,240.322L401.179,237.492L419.355,243.894L401.831,242.939L330.683,265.193L330.702,265.199L330.675,265.198L329.52,265.557L324.21,267.218L323.387,267.172L299.267,267.172L294.102,265.557L294.097,265.557L294.083,265.551L263,255.828Z" style="fill:rgb(60,124,173);"/>
+    </g>
+    <g transform="matrix(0.816327,0,0,6.214286,145.306122,-1418.285714)">
+        <path d="M263,260.539L263,272L214,272L214,270.38L263,260.539Z" style="fill:rgb(111,142,172);"/>
+    </g>
+</svg>
