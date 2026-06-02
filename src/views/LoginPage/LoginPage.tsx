@@ -1,6 +1,7 @@
 import { Box, Typography } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { useLocation } from 'react-router-dom'
+import ztmfLogo from '@/assets/ztmf-logo-login.svg'
 
 export default function LoginPage() {
   const location = useLocation()
@@ -12,7 +13,7 @@ export default function LoginPage() {
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        height: '50vh',
+        minHeight: '54vh',
       }}
     >
       <Box
@@ -20,12 +21,32 @@ export default function LoginPage() {
           display: 'flex',
           flexDirection: 'column',
           alignItems: 'center',
+          gap: 2.5,
+          maxWidth: 520,
+          textAlign: 'center',
         }}
       >
-        <Typography variant="h4" sx={{ mb: 2 }}>
-          {message}
-        </Typography>
-        <CmsButton href="/login">Login</CmsButton>
+        {/* ZTMF logo - large, branded hero moment */}
+        <img
+          src={ztmfLogo}
+          alt="ZTMF - Zero Trust Maturity Framework Scoring Tool"
+          style={{ width: 320, height: 'auto' }}
+        />
+
+        {/* error / session message */}
+        {message && (
+          <Typography
+            variant="body2"
+            sx={{ color: 'error.main', fontWeight: 600 }}
+          >
+            {message}
+          </Typography>
+        )}
+
+        {/* login button */}
+        <CmsButton href="/login" size="big">
+          Sign in
+        </CmsButton>
       </Box>
     </Box>
   )
