@@ -8,6 +8,8 @@ type ContextType = {
   userInfo: userData
   latestDataCallId: number
   latestDatacall: string
+  selectedDataCallId: number
+  setSelectedDataCallId: React.Dispatch<React.SetStateAction<number>>
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
   fetchFismaSystems: (decommissioned?: boolean) => Promise<void>

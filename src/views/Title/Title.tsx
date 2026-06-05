@@ -1,10 +1,10 @@
-import { Container, Typography } from '@mui/material'
-import { useLoaderData, useNavigate } from 'react-router-dom'
+import { Container, Typography, Select } from '@mui/material'
+import { useLoaderData, useNavigate, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData, UserRole } from '@/types'
+import { userData, UserRole, datacall } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -53,7 +53,9 @@ export default function Title() {
     loaderData.status != 200 ? emptyUser : loaderData.response
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
+  const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
+  const [selectedDataCallId, setSelectedDataCallId] = useState<number>(0)
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -94,12 +96,19 @@ export default function Title() {
 
   useEffect(() => {
     if (loaderData.serverError) return
-    async function fetchLatestDatacall() {
+    async function fetchDatacalls() {
       await axiosInstance
-        .get('/datacalls/latest')
+        .get('/datacalls')
         .then((res) => {
-          setLatestDataCallId(res.data.data.datacallid)
-          setLatestDatacall(res.data.data.datacall)
+          const sorted: datacall[] = [...res.data.data].sort(
+            (a: datacall, b: datacall) => b.datacallid - a.datacallid
+          )
+          setDatacalls(sorted)
+          if (sorted.length > 0) {
+            setLatestDataCallId(sorted[0].datacallid)
+            setLatestDatacall(sorted[0].datacall)
+            setSelectedDataCallId(sorted[0].datacallid)
+          }
         })
         .catch((error) => {
           if (error.response?.status == 401) {
@@ -112,7 +121,7 @@ export default function Title() {
           }
         })
     }
-    fetchLatestDatacall()
+    fetchDatacalls()
   }, [navigate, loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
@@ -139,6 +148,9 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
+  const { pathname } = useLocation()
+  const isQuestionnaire = pathname.startsWith('/questionnaire')
+  const isSystemDetail = pathname.startsWith('/systems/')
   return (
     <>
       <UsaBanner />
@@ -157,10 +169,36 @@ export default function Title() {
               justifyContent: 'space-between',
             }}
           >
-            <Typography variant="subtitle1" sx={{ mt: 1 }}>
-              <span className="ds-u-font-weight--semibold">Datacall:</span>{' '}
-              {latestDatacall}
-            </Typography>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1, mt: 1 }}>
+              <Typography
+                variant="subtitle1"
+                component="span"
+                sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+              >
+                Datacall:
+              </Typography>
+              {isQuestionnaire || isSystemDetail ? (
+                <Typography variant="subtitle1" component="span">
+                  {latestDatacall}
+                </Typography>
+              ) : (
+                <Select
+                  size="small"
+                  value={selectedDataCallId || ''}
+                  onChange={(e) =>
+                    setSelectedDataCallId(Number(e.target.value))
+                  }
+                  displayEmpty
+                  sx={{ minWidth: 140 }}
+                >
+                  {datacalls.map((dc) => (
+                    <MenuItem key={dc.datacallid} value={dc.datacallid}>
+                      {dc.datacall}
+                    </MenuItem>
+                  ))}
+                </Select>
+              )}
+            </Box>
             <Box
               sx={{
                 display: 'flex',
@@ -276,6 +314,8 @@ export default function Title() {
                   userInfo,
                   latestDataCallId,
                   latestDatacall,
+                  selectedDataCallId,
+                  setSelectedDataCallId,
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,

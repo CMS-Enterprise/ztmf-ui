@@ -39,7 +39,6 @@ declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
-    latestDataCallId: number
     scores: Record<number, SystemScoreEntry>
   }
 }
@@ -53,11 +52,13 @@ export function CustomFooterSaveComponent(
   >('error')
   const [errorMessage, setErrorMessage] = useState<string>('')
   const navigate = useNavigate()
+  const { selectedDataCallId, latestDataCallId } = useContextProp()
+  const activeDataCallId = selectedDataCallId || latestDataCallId
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
   }
   const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${props.latestDataCallId}/export`
+    let exportUrl = `/datacalls/${activeDataCallId}/export`
     if (
       props.selectedRows &&
       props.fismaSystems &&
@@ -232,8 +233,12 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId, userInfo } = useContextProp()
+  const { fismaSystems, latestDataCallId, selectedDataCallId, userInfo } =
+    useContextProp()
+  const activeDataCallId = selectedDataCallId || latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
+  const isLatestDatacall =
+    selectedDataCallId === 0 || selectedDataCallId === latestDataCallId
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
@@ -405,27 +410,29 @@ export default function FismaTable({ scores }: FismaTableProps) {
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => (
         <>
-          <Tooltip title="Questionnaire">
-            <span>
-              <GridActionsCellItem
-                icon={<QuestionAnswerOutlinedIcon />}
-                key={`question-${params.row.fismasystemid}`}
-                label={`View Questionnaire for ${params.row.fismaname}`}
-                className="textPrimary"
-                role="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  navigate(
-                    `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
-                    {
-                      state: { fismasystemid: params.row.fismasystemid },
-                    }
-                  )
-                }}
-                color="inherit"
-              />
-            </span>
-          </Tooltip>
+          {isLatestDatacall && (
+            <Tooltip title="Questionnaire">
+              <span>
+                <GridActionsCellItem
+                  icon={<QuestionAnswerOutlinedIcon />}
+                  key={`question-${params.row.fismasystemid}`}
+                  label={`View Questionnaire for ${params.row.fismaname}`}
+                  className="textPrimary"
+                  role="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    navigate(
+                      `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
+                      {
+                        state: { fismasystemid: params.row.fismasystemid },
+                      }
+                    )
+                  }}
+                  color="inherit"
+                />
+              </span>
+            </Tooltip>
+          )}
           <Tooltip title="Pillar Scores">
             <span>
               <GridActionsCellItem
@@ -481,7 +488,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems, latestDataCallId, scores },
+          footer: { selectedRows, fismaSystems, scores },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
@@ -536,6 +543,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
         systemName={pillarScoresModal.systemName}
         systemAcronym={pillarScoresModal.systemAcronym}
         scores={pillarScoresModal.scores}
+        selectedDataCallId={activeDataCallId}
       />
     </Box>
   )

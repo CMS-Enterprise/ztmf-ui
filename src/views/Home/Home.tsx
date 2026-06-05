@@ -18,12 +18,13 @@ export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const navigate = useNavigate()
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
-  const { latestDataCallId } = useContextProp()
+  const { latestDataCallId, selectedDataCallId } = useContextProp()
+  const activeDataCallId = selectedDataCallId || latestDataCallId
   useEffect(() => {
     async function fetchScores() {
-      if (latestDataCallId !== 0) {
+      if (activeDataCallId !== 0) {
         await axiosInstance
-          .get(`/scores/aggregate?datacallid=${latestDataCallId}`)
+          .get(`/scores/aggregate?datacallid=${activeDataCallId}`)
           .then((res) => {
             const scoresMap: Record<number, SystemScoreEntry> = {}
             for (const obj of res.data.data as ScoreAggregate[]) {
@@ -50,7 +51,7 @@ export default function HomePageContainer() {
       }
     }
     fetchScores()
-  }, [navigate, latestDataCallId])
+  }, [navigate, activeDataCallId])
 
   if (loading) {
     return (
@@ -70,7 +71,7 @@ export default function HomePageContainer() {
     <Box>
       <StatisticsBlocks scores={scoreMap} />
       <BreadCrumbs />
-      <FismaTable scores={scoreMap} latestDataCallId={latestDataCallId} />
+      <FismaTable scores={scoreMap} />
     </Box>
   )
 }
