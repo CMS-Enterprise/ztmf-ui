@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { Box, CircularProgress, Divider, Typography } from '@mui/material'
 import { useSnackbar } from 'notistack'
 import _ from 'lodash'
@@ -7,13 +7,12 @@ import _ from 'lodash'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
-import { Routes } from '@/router/constants'
 import {
-  ERROR_MESSAGES,
   CONFIRMATION_MESSAGE,
   TEXTFIELD_HELPER_TEXT,
   INVALID_INPUT_TEXT,
 } from '@/constants'
+import { isAuthHandled } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
@@ -26,7 +25,6 @@ import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
 
@@ -298,6 +296,7 @@ export default function SystemDetailPage() {
         )
       })
       .catch((error) => {
+        if (isAuthHandled(error)) return
         if (error.response?.status === 400) {
           const data: { [key: string]: string } = error.response.data.data
           Object.entries(data).forEach(([key]) => {
@@ -312,22 +311,11 @@ export default function SystemDetailPage() {
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 1500,
           })
-        } else if (error.response?.status === 403) {
-          enqueueSnackbar('Permission denied. Admin access required.', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 2000,
-          })
         } else if (error.response?.status === 404) {
           enqueueSnackbar('System not found', {
             variant: 'error',
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 2000,
-          })
-        } else {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: { message: ERROR_MESSAGES.error },
           })
         }
       })
@@ -381,18 +369,13 @@ export default function SystemDetailPage() {
         }
       })
       .catch((error) => {
+        if (isAuthHandled(error)) return
         console.error(
           'Decommission error:',
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 403) {
-          enqueueSnackbar('Permission denied. Admin access required.', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 2000,
-          })
-        } else if (error.response?.status === 404) {
+        if (error.response?.status === 404) {
           enqueueSnackbar('System not found', {
             variant: 'error',
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
@@ -404,11 +387,6 @@ export default function SystemDetailPage() {
             variant: 'error',
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 3000,
-          })
-        } else {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: { message: ERROR_MESSAGES.error },
           })
         }
       })
@@ -450,18 +428,13 @@ export default function SystemDetailPage() {
         }
       })
       .catch((error) => {
+        if (isAuthHandled(error)) return
         console.error(
           'Reactivate error:',
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 403) {
-          enqueueSnackbar('Permission denied. Admin access required.', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 2000,
-          })
-        } else if (error.response?.status === 404) {
+        if (error.response?.status === 404) {
           enqueueSnackbar('System not found', {
             variant: 'error',
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
@@ -473,11 +446,6 @@ export default function SystemDetailPage() {
             variant: 'error',
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 3000,
-          })
-        } else {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: { message: ERROR_MESSAGES.error },
           })
         }
       })

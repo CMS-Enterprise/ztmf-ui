@@ -50,6 +50,7 @@ import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, ROLES } from '@/constants'
+import { isAuthHandled } from '@/utils/notify'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
@@ -139,18 +140,6 @@ export default function UserTable() {
       navigate(Routes.ROOT, { replace: true })
     }
   }, [userInfo.role, isAdmin, navigate])
-  //TODO: add these to a file to be imported and used in multiple places
-  const checkValidResponse = (status: number) => {
-    if (status == 401) {
-      navigate(Routes.SIGNIN, {
-        replace: true,
-        state: {
-          message: ERROR_MESSAGES.notSaved,
-        },
-      })
-    }
-    return
-  }
   const renderSingleSelectEditCell = (params: GridRenderEditCellParams) => {
     const { value } = params
     return (
@@ -242,17 +231,6 @@ export default function UserTable() {
     }
     setOpenAlert(false)
   }
-  const handleUnautherized = (errorStatus: number) => {
-    if (errorStatus === 403) {
-      enqueueSnackbar(ERROR_MESSAGES.permission, {
-        variant: 'error',
-        anchorOrigin: {
-          vertical: 'top',
-          horizontal: 'left',
-        },
-      })
-    }
-  }
   const handleEditClick = (id: GridRowId) => () => {
     const curRow = rows.find((row) => row.userid === id)
     setSelectedRow(curRow)
@@ -332,16 +310,11 @@ export default function UserTable() {
           setOpen(true)
         })
         .catch((error) => {
+          if (isAuthHandled(error)) return
           console.error('Error updating score:', error)
-          if (error.response.status === 401) {
-            checkValidResponse(error.response.status)
-          } else if (error.response.status === 403) {
-            handleUnautherized(error.response.status)
-          } else {
-            setSnackBarSeverity('error')
-            setSnackBarText(ERROR_MESSAGES.tryAgain)
-            setOpen(true)
-          }
+          setSnackBarSeverity('error')
+          setSnackBarText(ERROR_MESSAGES.tryAgain)
+          setOpen(true)
         })
     } else {
       // const updatedRow = { ...newRow } as users
@@ -351,22 +324,16 @@ export default function UserTable() {
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
         })
-        .then((res) => {
-          checkValidResponse(res.status)
+        .then(() => {
           setSnackBarSeverity('success')
           setSnackBarText('Saved')
           setOpen(true)
         })
         .catch((error) => {
-          if (error.response.status === 401) {
-            checkValidResponse(error.response.status)
-          } else if (error.response.status === 403) {
-            handleUnautherized(error.response.status)
-          } else {
-            setSnackBarSeverity('error')
-            setSnackBarText(ERROR_MESSAGES.tryAgain)
-            setOpen(true)
-          }
+          if (isAuthHandled(error)) return
+          setSnackBarSeverity('error')
+          setSnackBarText(ERROR_MESSAGES.tryAgain)
+          setOpen(true)
         })
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
@@ -403,20 +370,15 @@ export default function UserTable() {
         })
       })
       .catch((error) => {
-        if (error.response?.status === 401) {
-          checkValidResponse(error.response.status)
-        } else if (error.response?.status === 403) {
-          handleUnautherized(error.response.status)
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        }
+        if (isAuthHandled(error)) return
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2000,
+        })
       })
   }
   const handleRestoreClick = (id: GridRowId) => () => {
@@ -442,20 +404,15 @@ export default function UserTable() {
         })
       })
       .catch((error) => {
-        if (error.response?.status === 401) {
-          checkValidResponse(error.response.status)
-        } else if (error.response?.status === 403) {
-          handleUnautherized(error.response.status)
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        }
+        if (isAuthHandled(error)) return
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2000,
+        })
       })
   }
   // TODO: Custom hook for fetching data
@@ -485,33 +442,17 @@ export default function UserTable() {
         }
       })
       .catch((error) => {
-        console.log(error)
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.notSaved,
-            },
-          })
-        } else if (error.response.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-          })
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-          })
-        }
+        if (isAuthHandled(error)) return
+        console.error('Fetch users error:', error)
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+        })
       })
-  }, [isAdmin, fismaSystems, navigate, enqueueSnackbar, showDeleted])
+  }, [isAdmin, fismaSystems, enqueueSnackbar, showDeleted])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
