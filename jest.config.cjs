@@ -28,10 +28,6 @@ module.exports = {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^react-native$': 'react-native-web',
     '^.+\\.module\\.(css|sass|scss)$': 'identity-obj-proxy',
-    // Force module uuid to resolve with the CJS entry point,
-    // because Jest does not support package.json.exports.
-    // See https://github.com/uuidjs/uuid/issues/451
-    uuid: require.resolve('uuid'),
   },
   moduleFileExtensions: [
     // Place tsx and ts to beginning as suggestion from Jest team
