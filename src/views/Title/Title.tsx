@@ -27,7 +27,7 @@ import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
 import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
-import ztmfLogo from '@/assets/ztmf-logo-clean.svg'
+import ztmfLogo from '@/assets/ztmf-logo-color.png'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -140,6 +140,14 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
+  // Single source of truth for header logo sizing; divider scales with it
+  // so the mark, divider, and wordmark stay vertically centered on resize.
+  const LOGO_HEIGHT = 55
+  // The logo art is vertically asymmetric: the arrow tip extends well above the
+  // letter caps, so the PNG's bounding-box center sits above the wordmark's
+  // optical center. Shift the divider + text down by ~10% of the logo height so
+  // they align to the letters rather than the box. Scales with LOGO_HEIGHT.
+  const LOGO_OPTICAL_OFFSET = Math.round(LOGO_HEIGHT * 0.1)
   return (
     <>
       <UsaBanner />
@@ -160,17 +168,23 @@ export default function Title() {
           <img
             src={ztmfLogo}
             alt="ZTMF"
-            style={{ height: 42, width: 'auto', display: 'block' }}
+            style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
           />
           <Box
             sx={{
               width: '1px',
-              height: 38,
+              height: Math.round(LOGO_HEIGHT * 0.7),
               backgroundColor: 'rgba(0,0,0,0.12)',
               flexShrink: 0,
+              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
             }}
           />
-          <Box sx={{ lineHeight: 1.15 }}>
+          <Box
+            sx={{
+              lineHeight: 1.15,
+              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
+            }}
+          >
             <Typography
               sx={{
                 fontSize: 17,
