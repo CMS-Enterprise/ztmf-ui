@@ -1,0 +1,112 @@
+// Source-text guardrail. Asserts that every view touched by the auth
+// centralization refactor delegates to the shared interceptor: imports
+// isAuthHandled, short-circuits its catch on it, and no longer carries
+// the per-view redirect/permission ladders that the centralization
+// replaced. This is a long-lived consistency check, not a behavioral
+// test. Behavioral coverage lives next to each view (e.g.
+// EmailModal.test.tsx, CfactsRecordCard.test.tsx).
+import fs from 'node:fs'
+import path from 'node:path'
+
+type FileExpectation = {
+  filePath: string
+  includes?: string[]
+  excludes?: string[]
+}
+
+const expectations: FileExpectation[] = [
+  {
+    filePath: 'src/views/AssignSystemModal/AssignSystemModal.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/DatacallModal/DataCallModal.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/EditSystemModal/EditSystemModal.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/FismaTable/FismaTable.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/Home/Home.tsx',
+    excludes: ['Routes.SIGNIN', 'ERROR_MESSAGES.expired'],
+  },
+  {
+    filePath: 'src/views/QuestionnairePage/QuestionnairePage.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/QuestionnareModal/QuestionnareModal.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/SystemDetailPage/CfactsRecordCard.tsx',
+    includes: ['skipAuthHandling: true'],
+  },
+  {
+    filePath: 'src/views/SystemDetailPage/SystemDetailPage.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/Title/Title.tsx',
+    excludes: ['Routes.SIGNIN', 'const navigate = useNavigate()'],
+  },
+  {
+    filePath: 'src/views/UserTable/UserTable.tsx',
+    includes: [
+      "import { isAuthHandled } from '@/utils/notify'",
+      'if (isAuthHandled(error)) return',
+    ],
+    excludes: ['handleUnautherized', 'checkValidResponse'],
+  },
+]
+
+describe('auth-handling centralization invariants', () => {
+  test.each(expectations)(
+    '$filePath delegates auth handling to the central interceptor',
+    ({ filePath, includes = [], excludes = [] }) => {
+      const absolutePath = path.resolve(process.cwd(), filePath)
+      const source = fs.readFileSync(absolutePath, 'utf8')
+
+      includes.forEach((needle) => {
+        expect(source).toContain(needle)
+      })
+
+      excludes.forEach((needle) => {
+        expect(source).not.toContain(needle)
+      })
+    }
+  )
+})
