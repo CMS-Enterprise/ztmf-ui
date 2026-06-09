@@ -27,9 +27,13 @@ import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
-import { TEXTFIELD_HELPER_TEXT, INVALID_INPUT_TEXT } from '@/constants'
+import {
+  ERROR_MESSAGES,
+  TEXTFIELD_HELPER_TEXT,
+  INVALID_INPUT_TEXT,
+} from '@/constants'
 import { useSnackbar } from 'notistack'
-import { isAuthHandled } from '@/utils/notify'
+import { isAuthHandled, notify } from '@/utils/notify'
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -265,6 +269,8 @@ export default function EditSystemModal({
               },
               autoHideDuration: 1500,
             })
+          } else {
+            notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
           }
         })
     } else if (mode === 'create') {
@@ -316,6 +322,8 @@ export default function EditSystemModal({
               },
               autoHideDuration: 1500,
             })
+          } else {
+            notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
           }
         })
     }
@@ -411,6 +419,8 @@ export default function EditSystemModal({
             },
             autoHideDuration: 3000,
           })
+        } else {
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
       })
   }
@@ -464,6 +474,8 @@ export default function EditSystemModal({
             },
             autoHideDuration: 3000,
           })
+        } else {
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
       })
   }

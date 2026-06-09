@@ -17,34 +17,22 @@ type FileExpectation = {
 const expectations: FileExpectation[] = [
   {
     filePath: 'src/views/AssignSystemModal/AssignSystemModal.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
   },
   {
     filePath: 'src/views/DatacallModal/DataCallModal.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
   },
   {
     filePath: 'src/views/EditSystemModal/EditSystemModal.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['Routes.SIGNIN'],
   },
   {
     filePath: 'src/views/FismaTable/FismaTable.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
   },
   {
@@ -53,18 +41,12 @@ const expectations: FileExpectation[] = [
   },
   {
     filePath: 'src/views/QuestionnairePage/QuestionnairePage.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['Routes.SIGNIN'],
   },
   {
     filePath: 'src/views/QuestionnareModal/QuestionnareModal.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['Routes.SIGNIN'],
   },
   {
@@ -73,10 +55,7 @@ const expectations: FileExpectation[] = [
   },
   {
     filePath: 'src/views/SystemDetailPage/SystemDetailPage.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['Routes.SIGNIN'],
   },
   {
@@ -85,10 +64,7 @@ const expectations: FileExpectation[] = [
   },
   {
     filePath: 'src/views/UserTable/UserTable.tsx',
-    includes: [
-      "import { isAuthHandled } from '@/utils/notify'",
-      'if (isAuthHandled(error)) return',
-    ],
+    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['handleUnautherized', 'checkValidResponse'],
   },
 ]

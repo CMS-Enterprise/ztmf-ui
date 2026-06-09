@@ -8,11 +8,12 @@ import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
+  ERROR_MESSAGES,
   CONFIRMATION_MESSAGE,
   TEXTFIELD_HELPER_TEXT,
   INVALID_INPUT_TEXT,
 } from '@/constants'
-import { isAuthHandled } from '@/utils/notify'
+import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
@@ -317,6 +318,8 @@ export default function SystemDetailPage() {
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 2000,
           })
+        } else {
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
       })
       .finally(() => {
@@ -388,6 +391,8 @@ export default function SystemDetailPage() {
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 3000,
           })
+        } else {
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
       })
   }
@@ -447,6 +452,8 @@ export default function SystemDetailPage() {
             anchorOrigin: { vertical: 'top', horizontal: 'left' },
             autoHideDuration: 3000,
           })
+        } else {
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
       })
   }
