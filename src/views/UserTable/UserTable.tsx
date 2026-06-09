@@ -136,6 +136,8 @@ export default function UserTable() {
   // backend is the security boundary - this only governs which controls render.
   const isAdmin = checkIsAdmin(userInfo)
   const canRead = hasAdminRead(userInfo)
+  // Roles this admin may assign; also the valid option set for the role editor.
+  const assignableRoles = selectableRoles(userInfo.role)
   useEffect(() => {
     if (userInfo.role && !canRead) {
       navigate(Routes.ROOT, { replace: true })
@@ -438,6 +440,9 @@ export default function UserTable() {
   // TODO: Custom hook for fetching data
   useEffect(() => {
     if (!canRead) return
+    // Guard against a superseded run (e.g. a fast Show Deleted toggle)
+    // resolving late and clobbering fresher grant state.
+    let ignore = false
     axiosInstance
       .get('/users', { params: { deleted: showDeleted } })
       .then((res) => {
@@ -465,7 +470,15 @@ export default function UserTable() {
                 .then((ids) => [u.userid, ids] as [string, number[]])
                 .catch(() => [u.userid, []] as [string, number[]])
             )
-          ).then((entries) => setUserOpDivMap(Object.fromEntries(entries)))
+          ).then((entries) => {
+            if (ignore) return
+            // Merge rather than replace so an in-flight per-user refresh
+            // (e.g. from closing the grant modal) is not clobbered.
+            setUserOpDivMap((prev) => ({
+              ...prev,
+              ...Object.fromEntries(entries),
+            }))
+          })
         } else {
           return
         }
@@ -497,6 +510,9 @@ export default function UserTable() {
           })
         }
       })
+    return () => {
+      ignore = true
+    }
   }, [canRead, fismaSystems, navigate, enqueueSnackbar, showDeleted])
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
@@ -578,7 +594,7 @@ export default function UserTable() {
       editable: isAdmin,
       // Native DataGrid dropdown, scoped to the roles this admin may assign.
       type: 'singleSelect',
-      valueOptions: selectableRoles(userInfo.role),
+      valueOptions: assignableRoles,
     },
     {
       field: 'opdivs',
@@ -733,6 +749,12 @@ export default function UserTable() {
           rows={rows}
           apiRef={apiRef}
           columns={columns}
+          // Don't let an admin edit a role they can't assign: if a row's
+          // current role is above this admin's tier, lock the role cell so it
+          // can't be blanked or downgraded on save. The server enforces this too.
+          isCellEditable={(params) =>
+            params.field !== 'role' || assignableRoles.includes(params.row.role)
+          }
           editMode="row"
           getRowId={(row) => row.userid}
           initialState={{

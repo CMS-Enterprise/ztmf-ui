@@ -22,6 +22,7 @@ const isStringMap = (value: unknown): value is Record<string, string> =>
   typeof value === 'object' &&
   value !== null &&
   !Array.isArray(value) &&
+  Object.keys(value).length > 0 &&
   Object.values(value).every((v) => typeof v === 'string')
 
 export function parseApiError(error: unknown): ParsedApiError {

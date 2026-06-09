@@ -63,6 +63,16 @@ export default function OpDivGrantModal({
     return map
   }, [opdivOptions])
 
+  const sortedOptionIds = React.useMemo(
+    () =>
+      opdivOptions
+        .map((od) => od.opdiv_id)
+        .sort((a, b) =>
+          (opdivMap[a]?.code || '').localeCompare(opdivMap[b]?.code || '')
+        ),
+    [opdivOptions, opdivMap]
+  )
+
   React.useEffect(() => {
     if (open && userid) {
       fetchUserOpDivs(String(userid))
@@ -127,29 +137,20 @@ export default function OpDivGrantModal({
             multiple
             disableCloseOnSelect
             limitTags={3}
-            options={opdivOptions
-              .map((od) => od.opdiv_id)
-              .slice()
-              .sort((a, b) =>
-                (opdivMap[a]?.code || '').localeCompare(opdivMap[b]?.code || '')
-              )}
+            options={sortedOptionIds}
             disableClearable
             getOptionLabel={optionLabel}
-            renderOption={(props, option, { selected }) => {
-              const isAssigned = assignedOpDivs.includes(option)
-              return (
-                <li {...props} key={option}>
-                  <Checkbox
-                    icon={icon}
-                    checkedIcon={checkedIcon}
-                    style={{ marginRight: 8 }}
-                    checked={selected || isAssigned}
-                    disabled={isAssigned}
-                  />
-                  {optionLabel(option)}
-                </li>
-              )
-            }}
+            renderOption={(props, option, { selected }) => (
+              <li {...props} key={option}>
+                <Checkbox
+                  icon={icon}
+                  checkedIcon={checkedIcon}
+                  style={{ marginRight: 8 }}
+                  checked={selected}
+                />
+                {optionLabel(option)}
+              </li>
+            )}
             value={assignedOpDivs}
             onChange={(_event, newValue) => {
               const added = newValue.filter(
@@ -158,18 +159,29 @@ export default function OpDivGrantModal({
               const removed = assignedOpDivs.filter(
                 (item) => !newValue.includes(item)
               )
-              if (added.length) {
-                grantOpDiv(String(userid), added[0])
+              // Grant every added OpDiv and reflect only what the server
+              // confirms - never trust the optimistic newValue wholesale.
+              added.forEach((opdivId) => {
+                grantOpDiv(String(userid), opdivId)
                   .then(() => {
-                    setAssignedOpDivs(newValue)
+                    setAssignedOpDivs((prev) =>
+                      prev.includes(opdivId) ? prev : [...prev, opdivId]
+                    )
                     enqueueSnackbar('Saved - granted OpDiv', {
                       variant: 'success',
                       anchorOrigin: SNACK_ANCHOR,
                     })
                   })
                   .catch((error) => handleError(error))
-              } else if (removed.length) {
-                setPendingRevoke({ opdivId: removed[0], nextValue: newValue })
+              })
+              // Revocations confirm one at a time; compute the next value from
+              // the single id being removed rather than the optimistic value.
+              if (removed.length) {
+                const opdivId = removed[0]
+                setPendingRevoke({
+                  opdivId,
+                  nextValue: assignedOpDivs.filter((id) => id !== opdivId),
+                })
               }
             }}
             renderInput={(params) => (
