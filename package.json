@@ -76,7 +76,7 @@
     "react-hook-form": "^7.50.1",
     "react-is": "^19.1.1",
     "react-popper": "^2.3.0",
-    "react-router": "7.15.0",
+    "react-router": "7.17.0",
     "react-router-dom": "7.15.0",
     "react-virtuoso": "^4.10.1",
     "recharts": "^3.1.2",
@@ -256,6 +256,6 @@
     "brace-expansion": "^1.1.13",
     "@tootallnate/once": "^3.0.1",
     "follow-redirects": "^1.16.0",
-    "ws": "^8.20.0"
+    "ws": "^8.21.0"
   }
 }
