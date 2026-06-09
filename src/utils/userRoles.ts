@@ -23,6 +23,46 @@ const UNSCOPED_READ_ROLES = new Set<UserRole>([
 
 const SYSTEM_SCOPED_ROLES = new Set<UserRole>(['ISSO', 'ISSM'])
 
+// Roles an admin may assign, narrowed by the acting admin's own tier so the
+// dropdown can never offer a privilege escalation. Legacy ADMIN / READONLY_ADMIN
+// are excluded everywhere: the backend already dropped them (migration 0040 /
+// ztmf#314) and only accepts the new taxonomy.
+//
+// These lists are display gating only. The backend SaveUser escalation guard is
+// the security boundary and must enforce the same matrix - only OWNER assigns
+// OWNER, HHS_ADMIN cannot mint OWNER, OPDIV_ADMIN stays at/below OpDiv tier - so
+// a crafted request that bypasses the dropdown is still rejected.
+
+// OWNER (platform/dev) may assign any tier, including OWNER.
+const OWNER_ASSIGNABLE_ROLES: UserRole[] = [
+  'OWNER',
+  'HHS_ADMIN',
+  'HHS_READONLY_ADMIN',
+  'OPDIV_ADMIN',
+  'OPDIV_READONLY_ADMIN',
+  'ISSO',
+  'ISSM',
+]
+
+// HHS_ADMIN sits below OWNER, so it may assign everything except OWNER.
+const HHS_ASSIGNABLE_ROLES: UserRole[] = [
+  'HHS_ADMIN',
+  'HHS_READONLY_ADMIN',
+  'OPDIV_ADMIN',
+  'OPDIV_READONLY_ADMIN',
+  'ISSO',
+  'ISSM',
+]
+
+// An OPDIV_ADMIN cannot mint OWNER/HHS tiers - they may only assign roles at
+// or below their own OpDiv scope.
+const OPDIV_ASSIGNABLE_ROLES: UserRole[] = [
+  'OPDIV_ADMIN',
+  'OPDIV_READONLY_ADMIN',
+  'ISSO',
+  'ISSM',
+]
+
 type UserLike = Pick<userData, 'role'> | null | undefined
 
 export const isWriteAdminRole = (role: string): boolean =>
@@ -64,3 +104,15 @@ export const isHHSTier = (user: UserLike): boolean =>
 export const isOpDivTier = (user: UserLike): boolean =>
   !!user &&
   (user.role === 'OPDIV_ADMIN' || user.role === 'OPDIV_READONLY_ADMIN')
+
+// The set of roles the acting admin is allowed to grant, scoped to their tier:
+// OWNER -> any tier; HHS_ADMIN -> any except OWNER; OPDIV_ADMIN -> OpDiv tier and
+// below. The legacy ADMIN carryover mapped to OWNER, so it gets the OWNER set.
+// Read-only admins cannot assign at all.
+export const selectableRoles = (actorRole: string): UserRole[] => {
+  if (actorRole === 'OWNER' || actorRole === 'ADMIN')
+    return [...OWNER_ASSIGNABLE_ROLES]
+  if (actorRole === 'HHS_ADMIN') return [...HHS_ASSIGNABLE_ROLES]
+  if (actorRole === 'OPDIV_ADMIN') return [...OPDIV_ASSIGNABLE_ROLES]
+  return []
+}

@@ -3,11 +3,9 @@ import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import ChecklistIcon from '@mui/icons-material/Checklist'
+import DomainIcon from '@mui/icons-material/Domain'
 import SaveIcon from '@mui/icons-material/Save'
 import CancelIcon from '@mui/icons-material/Close'
-import FormControl from '@mui/material/FormControl'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
 import {
@@ -26,30 +24,30 @@ import {
   GridToolbarQuickFilter,
   useGridApiRef,
 } from '@mui/x-data-grid'
-import {
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  Switch,
-  Typography,
-} from '@mui/material'
+import { Chip, FormControlLabel, Switch, Typography } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
-import { Button as CmsButton } from '@cmsgov/design-system'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
-import { users } from '@/types'
-import { isAdmin as checkIsAdmin, isAdminTierRole } from '@/utils/userRoles'
+import { users, OpDiv } from '@/types'
+import {
+  isAdmin as checkIsAdmin,
+  hasAdminRead,
+  isOpDivTier,
+  selectableRoles,
+} from '@/utils/userRoles'
+import { fetchOpDivs } from '@/utils/opdivs'
+import { fetchUserOpDivs } from '@/utils/userOpdivs'
+import { parseApiError } from '@/utils/apiErrors'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import { useSnackbar } from 'notistack'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
+import OpDivGrantModal from '../OpDivGrantModal/OpDivGrantModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES, ROLES } from '@/constants'
+import { ERROR_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
@@ -133,12 +131,16 @@ export default function UserTable() {
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const { userInfo, fismaSystems } = useContextProp()
+  // Write-tier admins get the create/edit/delete/assign controls; read-only
+  // admins may view the table but every mutating control is withheld. The
+  // backend is the security boundary - this only governs which controls render.
   const isAdmin = checkIsAdmin(userInfo)
+  const canRead = hasAdminRead(userInfo)
   useEffect(() => {
-    if (userInfo.role && !isAdmin) {
+    if (userInfo.role && !canRead) {
       navigate(Routes.ROOT, { replace: true })
     }
-  }, [userInfo.role, isAdmin, navigate])
+  }, [userInfo.role, canRead, navigate])
   //TODO: add these to a file to be imported and used in multiple places
   const checkValidResponse = (status: number) => {
     if (status == 401) {
@@ -151,53 +153,6 @@ export default function UserTable() {
     }
     return
   }
-  const renderSingleSelectEditCell = (params: GridRenderEditCellParams) => {
-    const { value } = params
-    return (
-      <FormControl sx={{ minWidth: 120 }} error={!value} fullWidth>
-        <Select
-          sx={{
-            '& .MuiOutlinedInput-input': {
-              py: 1.7,
-            },
-            '& .MuiOutlinedInput-notchedOutline': {
-              mt: 0,
-              '@supports (-moz-appearance:none)': {
-                mt: -3, // Only applied in Firefox
-              },
-            },
-          }}
-          value={value || ''}
-          onChange={(event) => {
-            const fullname: string = params.api.getCellValue(
-              params.id,
-              'fullname'
-            )
-            if (isAdminTierRole(event.target.value as string)) {
-              setUserName(fullname)
-              setSelectedRole(event.target.value)
-              setOpenAlert(true)
-            }
-            params.api.setEditCellValue(
-              {
-                id: params.id,
-                field: params.field,
-                value: event.target.value,
-              },
-              event
-            )
-          }}
-          renderValue={(value) => `${value}`}
-        >
-          {ROLES.map((role) => (
-            <MenuItem value={role} key={role}>
-              {role}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-    )
-  }
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
@@ -207,7 +162,6 @@ export default function UserTable() {
     'success' | 'error' | 'warning' | 'info'
   >('success')
   const [openModal, setOpenModal] = useState<boolean>(false)
-  const [openAlert, setOpenAlert] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<users | undefined>({
     userid: '',
     email: '',
@@ -215,8 +169,6 @@ export default function UserTable() {
     role: '' as users['role'],
     assignedfismasystems: [],
   })
-  const [userName, setUserName] = useState<string | undefined>(undefined)
-  const [selectedRole, setSelectedRole] = useState<string>('')
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
     Record<number, { name: string; acronym: string }>
   >({})
@@ -224,6 +176,15 @@ export default function UserTable() {
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
   const [assignModalUserName, setAssignModalUserName] = useState<string>('')
+  const [openOpDivModal, setOpenOpDivModal] = useState<boolean>(false)
+  const [opdivModalUserId, setOpDivModalUserId] = useState<GridRowId>('')
+  const [opdivModalUserName, setOpDivModalUserName] = useState<string>('')
+  const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
+  // opdiv_id -> code, for rendering the OpDivs membership column.
+  const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
+  // userid -> granted opdiv ids. The list endpoint omits grants (always null),
+  // so these are fetched per user from the detail endpoint after the list loads.
+  const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -231,16 +192,6 @@ export default function UserTable() {
     if (params.reason === GridRowEditStopReasons.rowFocusOut) {
       event.defaultMuiPrevented = true
     }
-  }
-  const handleAlertCloseModal = (response: boolean) => {
-    if (response == false && selectedRow) {
-      apiRef.current.setEditCellValue({
-        id: selectedRow.userid,
-        field: 'role',
-        value: selectedRow.role,
-      })
-    }
-    setOpenAlert(false)
   }
   const handleUnautherized = (errorStatus: number) => {
     if (errorStatus === 403) {
@@ -294,6 +245,24 @@ export default function UserTable() {
   const handleCloseModal = () => {
     setOpenModal(false)
   }
+  const handleOpenOpDivModal = (id: GridRowId) => {
+    setOpDivModalUserId(id)
+    const row = rows.find((r) => r.userid === id)
+    setOpDivModalUserName(row?.fullname ?? '')
+    setOpenOpDivModal(true)
+  }
+  const handleCloseOpDivModal = () => {
+    setOpenOpDivModal(false)
+    // Reflect any grant/revoke made in the modal back into the OpDivs column.
+    const editedId = String(opdivModalUserId)
+    if (editedId) {
+      fetchUserOpDivs(editedId)
+        .then((ids) =>
+          setUserOpDivMap((prev) => ({ ...prev, [editedId]: ids }))
+        )
+        .catch(() => {})
+    }
+  }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
       ...rowModesModel,
@@ -338,9 +307,7 @@ export default function UserTable() {
           } else if (error.response.status === 403) {
             handleUnautherized(error.response.status)
           } else {
-            setSnackBarSeverity('error')
-            setSnackBarText(ERROR_MESSAGES.tryAgain)
-            setOpen(true)
+            setSaveError(error)
           }
         })
     } else {
@@ -363,9 +330,7 @@ export default function UserTable() {
           } else if (error.response.status === 403) {
             handleUnautherized(error.response.status)
           } else {
-            setSnackBarSeverity('error')
-            setSnackBarText(ERROR_MESSAGES.tryAgain)
-            setOpen(true)
+            setSaveError(error)
           }
         })
     }
@@ -378,6 +343,18 @@ export default function UserTable() {
   const handleProcessRowUpdateError = () => {
     setSnackBarSeverity('error')
     setSnackBarText('An error occurred while saving the row')
+    setOpen(true)
+  }
+  // Surface the backend's specific reason on a failed save. On a 400 the body
+  // carries a field -> message map (e.g. a duplicate email); join those so the
+  // user sees what to fix rather than a generic retry message.
+  const setSaveError = (error: unknown) => {
+    const parsed = parseApiError(error)
+    const message = parsed.fieldErrors
+      ? Object.values(parsed.fieldErrors).join(' ')
+      : parsed.message
+    setSnackBarSeverity('error')
+    setSnackBarText(message)
     setOpen(true)
   }
   const handleDeleteClick = (id: GridRowId) => () => {
@@ -460,7 +437,7 @@ export default function UserTable() {
   }
   // TODO: Custom hook for fetching data
   useEffect(() => {
-    if (!isAdmin) return
+    if (!canRead) return
     axiosInstance
       .get('/users', { params: { deleted: showDeleted } })
       .then((res) => {
@@ -480,6 +457,15 @@ export default function UserTable() {
             }
           }
           setFismaSystemsMap(map)
+          // Grants are omitted from the list response, so resolve each user's
+          // OpDivs from the detail endpoint in parallel for the OpDivs column.
+          Promise.all(
+            data.map((u: users) =>
+              fetchUserOpDivs(u.userid)
+                .then((ids) => [u.userid, ids] as [string, number[]])
+                .catch(() => [u.userid, []] as [string, number[]])
+            )
+          ).then((entries) => setUserOpDivMap(Object.fromEntries(entries)))
         } else {
           return
         }
@@ -511,7 +497,37 @@ export default function UserTable() {
           })
         }
       })
-  }, [isAdmin, fismaSystems, navigate, enqueueSnackbar, showDeleted])
+  }, [canRead, fismaSystems, navigate, enqueueSnackbar, showDeleted])
+  // OpDiv options for the grant modal: assignable children only (the HHS
+  // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
+  // own OpDivs, so narrow the option set to their own grants; the server
+  // enforces the same rule.
+  useEffect(() => {
+    if (!isAdmin) return
+    // Pull the full list (incl. inactive/parent) so any granted id resolves to
+    // a code in the OpDivs column; derive the assignable subset from the same
+    // response for the grant modal.
+    fetchOpDivs(true)
+      .then((all) => {
+        const codeMap: Record<number, string> = {}
+        all.forEach((od) => {
+          codeMap[od.opdiv_id] = od.code
+        })
+        setOpDivCodeMap(codeMap)
+
+        let assignable = all.filter((od) => !od.is_parent && od.active)
+        if (isOpDivTier(userInfo)) {
+          const own = new Set(userInfo.assignedopdivids ?? [])
+          assignable = assignable.filter((od) => own.has(od.opdiv_id))
+        }
+        setOpDivOptions(assignable)
+      })
+      .catch(() => {
+        // Non-fatal: the grant modal simply shows no options if this fails.
+        setOpDivOptions([])
+        setOpDivCodeMap({})
+      })
+  }, [isAdmin, userInfo])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
@@ -532,7 +548,7 @@ export default function UserTable() {
           }}
         />
       ),
-      editable: true,
+      editable: isAdmin,
     },
     {
       field: 'email',
@@ -553,14 +569,50 @@ export default function UserTable() {
           }}
         />
       ),
-      editable: true,
+      editable: isAdmin,
     },
     {
       field: 'role',
       headerName: 'Role',
       flex: 1,
-      editable: true,
-      renderEditCell: renderSingleSelectEditCell,
+      editable: isAdmin,
+      // Native DataGrid dropdown, scoped to the roles this admin may assign.
+      type: 'singleSelect',
+      valueOptions: selectableRoles(userInfo.role),
+    },
+    {
+      field: 'opdivs',
+      headerName: 'OpDivs',
+      flex: 1,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const ids = userOpDivMap[params.row.userid] ?? []
+        if (!ids.length) {
+          return (
+            <Typography variant="body2" color="text.secondary">
+              —
+            </Typography>
+          )
+        }
+        return (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', py: 0.5 }}>
+            {ids.map((id) => (
+              <Chip key={id} size="small" label={opdivCodeMap[id] ?? id} />
+            ))}
+          </Box>
+        )
+      },
+    },
+    {
+      field: 'identity_provider',
+      headerName: 'IdP',
+      flex: 0.5,
+      editable: false,
+      // Display-only. The backend derives this from the user's OpDiv, with an
+      // OWNER-only override handled server-side; the UI never sends it. Show
+      // the resolved value, or '—' until the backend has populated it.
+      valueGetter: (params) => params.row.identity_provider ?? '—',
     },
     {
       field: 'actions',
@@ -569,6 +621,8 @@ export default function UserTable() {
       width: 140,
       cellClassName: 'actions',
       getActions: (params) => {
+        // Read-only admins see the table but no mutating controls.
+        if (!isAdmin) return []
         const isInEditMode =
           rowModesModel[params.id]?.mode === GridRowModes.Edit
         if (isInEditMode) {
@@ -633,6 +687,19 @@ export default function UserTable() {
               color="inherit"
             />
           </Tooltip>,
+          <Tooltip
+            title={`Assign OpDivs`}
+            key={`tooltip-opdiv-${params.id}`}
+            placement="right-start"
+          >
+            <GridActionsCellItem
+              icon={<DomainIcon sx={{ color: 'black' }} />}
+              key={`assignopdiv-${params.id}`}
+              label="assignedOpDivs"
+              onClick={() => handleOpenOpDivModal(params.id)}
+              color="inherit"
+            />
+          </Tooltip>,
           <GridActionsCellItem
             key={`delete-${params.id}`}
             icon={<DeleteIcon sx={{ color: 'black' }} />}
@@ -662,6 +729,7 @@ export default function UserTable() {
         }}
       >
         <DataGrid
+          aria-label="Users"
           rows={rows}
           apiRef={apiRef}
           columns={columns}
@@ -737,6 +805,13 @@ export default function UserTable() {
         userid={userId}
         userName={assignModalUserName}
       />
+      <OpDivGrantModal
+        open={openOpDivModal}
+        handleClose={handleCloseOpDivModal}
+        userid={opdivModalUserId}
+        userName={opdivModalUserName}
+        opdivOptions={opdivOptions}
+      />
       <ConfirmDialog
         title="Confirm User Deletion"
         confirmationText={
@@ -747,6 +822,7 @@ export default function UserTable() {
         open={pendingDeleteRow !== null}
         onClose={() => setPendingDeleteRow(null)}
         confirmClick={handleConfirmDelete}
+        confirmLabel="Delete"
       />
       <ConfirmDialog
         title="Confirm User Restore"
@@ -758,30 +834,8 @@ export default function UserTable() {
         open={pendingRestoreRow !== null}
         onClose={() => setPendingRestoreRow(null)}
         confirmClick={handleConfirmRestore}
+        confirmLabel="Restore"
       />
-      <Dialog
-        open={openAlert}
-        onClose={() => setOpenAlert(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          <div>
-            <Typography variant="h4">Confirm Role Change</Typography>
-          </div>
-        </DialogTitle>
-        <DialogContent>
-          <Box>
-            <Typography variant="h6">
-              Are you sure you want to change {userName} as a {selectedRole}?
-            </Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={() => handleAlertCloseModal(false)}>No</CmsButton>
-          <CmsButton onClick={() => handleAlertCloseModal(true)}>Yes</CmsButton>
-        </DialogActions>
-      </Dialog>
     </>
   )
 }
