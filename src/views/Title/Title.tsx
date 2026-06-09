@@ -1,4 +1,4 @@
-import { Container, Typography, Select } from '@mui/material'
+import { Container, Typography, Autocomplete, TextField } from '@mui/material'
 import { useLoaderData, useNavigate, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
@@ -13,6 +13,7 @@ import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
+
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { useState, useEffect, useCallback } from 'react'
 import { FismaSystemType } from '@/types'
@@ -56,6 +57,7 @@ export default function Title() {
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
   const [selectedDataCallId, setSelectedDataCallId] = useState<number>(0)
+  const [selectedDatacall, setSelectedDatacall] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -108,6 +110,7 @@ export default function Title() {
             setLatestDataCallId(sorted[0].datacallid)
             setLatestDatacall(sorted[0].datacall)
             setSelectedDataCallId(sorted[0].datacallid)
+            setSelectedDatacall(sorted[0].datacall)
           }
         })
         .catch((error) => {
@@ -123,6 +126,7 @@ export default function Title() {
     }
     fetchDatacalls()
   }, [navigate, loaderData.serverError])
+
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -149,7 +153,6 @@ export default function Title() {
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
   const { pathname } = useLocation()
-  const isQuestionnaire = pathname.startsWith('/questionnaire')
   const isSystemDetail = pathname.startsWith('/systems/')
   return (
     <>
@@ -177,26 +180,37 @@ export default function Title() {
               >
                 Datacall:
               </Typography>
-              {isQuestionnaire || isSystemDetail ? (
+              {isSystemDetail ? (
                 <Typography variant="subtitle1" component="span">
                   {latestDatacall}
                 </Typography>
               ) : (
-                <Select
-                  size="small"
-                  value={selectedDataCallId || ''}
-                  onChange={(e) =>
-                    setSelectedDataCallId(Number(e.target.value))
-                  }
-                  displayEmpty
-                  sx={{ minWidth: 140 }}
-                >
-                  {datacalls.map((dc) => (
-                    <MenuItem key={dc.datacallid} value={dc.datacallid}>
-                      {dc.datacall}
-                    </MenuItem>
-                  ))}
-                </Select>
+                datacalls.length > 0 && (
+                  <Autocomplete
+                    size="small"
+                    options={datacalls}
+                    getOptionLabel={(dc) => dc.datacall}
+                    isOptionEqualToValue={(option, value) =>
+                      option.datacallid === value.datacallid
+                    }
+                    value={
+                      datacalls.find(
+                        (dc) => dc.datacallid === selectedDataCallId
+                      ) ?? datacalls[0]
+                    }
+                    onChange={(_, dc) => {
+                      if (dc) {
+                        setSelectedDataCallId(dc.datacallid)
+                        setSelectedDatacall(dc.datacall)
+                      }
+                    }}
+                    disableClearable
+                    sx={{ minWidth: 260 }}
+                    renderInput={(params) => (
+                      <TextField {...params} size="small" />
+                    )}
+                  />
+                )
               )}
             </Box>
             <Box
@@ -316,6 +330,8 @@ export default function Title() {
                   latestDatacall,
                   selectedDataCallId,
                   setSelectedDataCallId,
+                  selectedDatacall,
+                  setSelectedDatacall,
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,

@@ -237,8 +237,6 @@ export default function FismaTable({ scores }: FismaTableProps) {
     useContextProp()
   const activeDataCallId = selectedDataCallId || latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
-  const isLatestDatacall =
-    selectedDataCallId === 0 || selectedDataCallId === latestDataCallId
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
@@ -410,29 +408,27 @@ export default function FismaTable({ scores }: FismaTableProps) {
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => (
         <>
-          {isLatestDatacall && (
-            <Tooltip title="Questionnaire">
-              <span>
-                <GridActionsCellItem
-                  icon={<QuestionAnswerOutlinedIcon />}
-                  key={`question-${params.row.fismasystemid}`}
-                  label={`View Questionnaire for ${params.row.fismaname}`}
-                  className="textPrimary"
-                  role="button"
-                  onClick={(event) => {
-                    event.stopPropagation()
-                    navigate(
-                      `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
-                      {
-                        state: { fismasystemid: params.row.fismasystemid },
-                      }
-                    )
-                  }}
-                  color="inherit"
-                />
-              </span>
-            </Tooltip>
-          )}
+          <Tooltip title="Questionnaire">
+            <span>
+              <GridActionsCellItem
+                icon={<QuestionAnswerOutlinedIcon />}
+                key={`question-${params.row.fismasystemid}`}
+                label={`View Questionnaire for ${params.row.fismaname}`}
+                className="textPrimary"
+                role="button"
+                onClick={(event) => {
+                  event.stopPropagation()
+                  navigate(
+                    `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
+                    {
+                      state: { fismasystemid: params.row.fismasystemid },
+                    }
+                  )
+                }}
+                color="inherit"
+              />
+            </span>
+          </Tooltip>
           <Tooltip title="Pillar Scores">
             <span>
               <GridActionsCellItem
