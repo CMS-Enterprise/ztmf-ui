@@ -8,6 +8,7 @@ import { userData, UserRole } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
+  isUnscopedWriteAdmin,
 } from '@/utils/userRoles'
 import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
@@ -234,7 +235,7 @@ export default function Title() {
                         Add Fisma System
                       </MenuItem>
                     )}
-                    {isAdmin && (
+                    {isUnscopedWriteAdmin(userInfo) && (
                       <MenuItem
                         onClick={() => {
                           setAnchorEl(null)

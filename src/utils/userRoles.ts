@@ -101,6 +101,14 @@ export const hasSystemAccess = (user: UserLike): boolean =>
 export const isHHSTier = (user: UserLike): boolean =>
   !!user && (user.role === 'HHS_ADMIN' || user.role === 'HHS_READONLY_ADMIN')
 
+// Unscoped write admins (OWNER / HHS_ADMIN, plus the legacy ADMIN that maps to
+// OWNER). These are the only tiers the backend lets act across all OpDivs for
+// privileged, non-scoped actions like mass email. OpDiv-scoped and read-only
+// admins are excluded and would get a 403.
+export const isUnscopedWriteAdmin = (user: UserLike): boolean =>
+  !!user &&
+  (user.role === 'OWNER' || user.role === 'HHS_ADMIN' || user.role === 'ADMIN')
+
 export const isOpDivTier = (user: UserLike): boolean =>
   !!user &&
   (user.role === 'OPDIV_ADMIN' || user.role === 'OPDIV_READONLY_ADMIN')
