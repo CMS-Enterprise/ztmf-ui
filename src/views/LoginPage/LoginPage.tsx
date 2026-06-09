@@ -1,7 +1,7 @@
 import { Box, Typography } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { useLocation } from 'react-router-dom'
-import ztmfLogo from '@/assets/ztmf-logo-login.svg'
+import ztmfLogo from '@/assets/ztmf-logo-login.png'
 
 export default function LoginPage() {
   const location = useLocation()
@@ -30,7 +30,7 @@ export default function LoginPage() {
         <img
           src={ztmfLogo}
           alt="ZTMF - Zero Trust Maturity Framework Scoring Tool"
-          style={{ width: 320, height: 'auto' }}
+          style={{ width: 540, height: 'auto' }}
         />
 
         {/* error / session message */}
