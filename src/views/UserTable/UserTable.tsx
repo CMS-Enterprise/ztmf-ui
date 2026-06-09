@@ -253,27 +253,31 @@ export default function UserTable() {
     setOpDivModalUserName(row?.fullname ?? '')
     setOpenOpDivModal(true)
   }
-  const handleCloseOpDivModal = () => {
-    setOpenOpDivModal(false)
-    const editedId = String(opdivModalUserId)
-    if (!editedId) return
-    // Reflect any grant/revoke back into the OpDivs column.
-    fetchUserOpDivs(editedId)
-      .then((ids) => setUserOpDivMap((prev) => ({ ...prev, [editedId]: ids })))
+  // Pull a single user's current OpDiv grants and derived identity_provider
+  // and patch them onto the row. Called after a confirmed grant/revoke (the
+  // backend recomputes identity_provider, which can flip okta <-> entra) and
+  // again on modal close as a backstop. Each call targets its own row, so a
+  // late response can't contaminate a different user.
+  const refreshUserRow = (userid: string) => {
+    if (!userid) return
+    fetchUserOpDivs(userid)
+      .then((ids) => setUserOpDivMap((prev) => ({ ...prev, [userid]: ids })))
       .catch(() => {})
-    // A grant/revoke recomputes identity_provider server-side (it can flip
-    // okta <-> entra), so refresh it on the row from the user detail.
     axiosInstance
-      .get(`/users/${editedId}`)
+      .get(`/users/${userid}`)
       .then((res) => {
         const idp = res.data?.data?.identity_provider
         setRows((prev) =>
           prev.map((row) =>
-            row.userid === editedId ? { ...row, identity_provider: idp } : row
+            row.userid === userid ? { ...row, identity_provider: idp } : row
           )
         )
       })
       .catch(() => {})
+  }
+  const handleCloseOpDivModal = () => {
+    setOpenOpDivModal(false)
+    refreshUserRow(String(opdivModalUserId))
   }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
@@ -457,6 +461,7 @@ export default function UserTable() {
       .get('/users', { params: { deleted: showDeleted } })
       .then((res) => {
         if (res.status === 200) {
+          if (ignore) return
           const data = res.data.data.map((row: users) => ({
             ...row,
             role: row.role.trim(),
@@ -768,9 +773,14 @@ export default function UserTable() {
           columns={columns}
           // Don't let an admin edit a role they can't assign: if a row's
           // current role is above this admin's tier, lock the role cell so it
-          // can't be blanked or downgraded on save. The server enforces this too.
+          // can't be blanked or downgraded on save. New rows (blank role,
+          // mid-create) stay editable - valueOptions already limits the choices
+          // to the admin's assignable set. The server enforces this too.
           isCellEditable={(params) =>
-            params.field !== 'role' || assignableRoles.includes(params.row.role)
+            params.field !== 'role' ||
+            params.row.isNew ||
+            !params.row.role ||
+            assignableRoles.includes(params.row.role)
           }
           editMode="row"
           getRowId={(row) => row.userid}
@@ -850,6 +860,7 @@ export default function UserTable() {
         userid={opdivModalUserId}
         userName={opdivModalUserName}
         opdivOptions={opdivOptions}
+        onChanged={refreshUserRow}
       />
       <ConfirmDialog
         title="Confirm User Deletion"

@@ -36,6 +36,12 @@ type Props = {
    * does not re-scope; it renders exactly what it is given.
    */
   opdivOptions: OpDiv[]
+  /**
+   * Fired after a confirmed grant or revoke so the caller can refresh the
+   * user's row (grants + derived identity_provider) against post-mutation
+   * server state.
+   */
+  onChanged?: (userid: string) => void
 }
 
 const SNACK_ANCHOR = { vertical: 'top', horizontal: 'left' } as const
@@ -46,11 +52,11 @@ export default function OpDivGrantModal({
   userid,
   userName,
   opdivOptions,
+  onChanged,
 }: Props) {
   const [assignedOpDivs, setAssignedOpDivs] = React.useState<number[]>([])
   const [pendingRevoke, setPendingRevoke] = React.useState<{
     opdivId: number
-    nextValue: number[]
   } | null>(null)
   const { enqueueSnackbar } = useSnackbar()
   const navigate = useNavigate()
@@ -104,11 +110,14 @@ export default function OpDivGrantModal({
     if (!confirm || !target) return
     revokeOpDiv(String(userid), target.opdivId)
       .then(() => {
-        setAssignedOpDivs(target.nextValue)
+        // Functional update so a grant that resolved while the confirm was
+        // open is not dropped by a stale snapshot.
+        setAssignedOpDivs((prev) => prev.filter((id) => id !== target.opdivId))
         enqueueSnackbar('Saved - revoked OpDiv', {
           variant: 'success',
           anchorOrigin: SNACK_ANCHOR,
         })
+        onChanged?.(String(userid))
       })
       .catch((error) => handleError(error))
   }
@@ -171,17 +180,14 @@ export default function OpDivGrantModal({
                       variant: 'success',
                       anchorOrigin: SNACK_ANCHOR,
                     })
+                    onChanged?.(String(userid))
                   })
                   .catch((error) => handleError(error))
               })
-              // Revocations confirm one at a time; compute the next value from
-              // the single id being removed rather than the optimistic value.
+              // Revocations confirm one at a time; the revoke handler computes
+              // the next value functionally from the id being removed.
               if (removed.length) {
-                const opdivId = removed[0]
-                setPendingRevoke({
-                  opdivId,
-                  nextValue: assignedOpDivs.filter((id) => id !== opdivId),
-                })
+                setPendingRevoke({ opdivId: removed[0] })
               }
             }}
             renderInput={(params) => (
