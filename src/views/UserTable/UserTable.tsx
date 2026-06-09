@@ -255,15 +255,25 @@ export default function UserTable() {
   }
   const handleCloseOpDivModal = () => {
     setOpenOpDivModal(false)
-    // Reflect any grant/revoke made in the modal back into the OpDivs column.
     const editedId = String(opdivModalUserId)
-    if (editedId) {
-      fetchUserOpDivs(editedId)
-        .then((ids) =>
-          setUserOpDivMap((prev) => ({ ...prev, [editedId]: ids }))
+    if (!editedId) return
+    // Reflect any grant/revoke back into the OpDivs column.
+    fetchUserOpDivs(editedId)
+      .then((ids) => setUserOpDivMap((prev) => ({ ...prev, [editedId]: ids })))
+      .catch(() => {})
+    // A grant/revoke recomputes identity_provider server-side (it can flip
+    // okta <-> entra), so refresh it on the row from the user detail.
+    axiosInstance
+      .get(`/users/${editedId}`)
+      .then((res) => {
+        const idp = res.data?.data?.identity_provider
+        setRows((prev) =>
+          prev.map((row) =>
+            row.userid === editedId ? { ...row, identity_provider: idp } : row
+          )
         )
-        .catch(() => {})
-    }
+      })
+      .catch(() => {})
   }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
@@ -662,6 +672,13 @@ export default function UserTable() {
             />,
           ]
         }
+
+        // Mirror the backend CanManageUser rule: an admin can only manage a
+        // user whose role is within their assignable tier (the list is already
+        // OpDiv-scoped server-side). Withhold edit/assign/delete/restore for
+        // out-of-tier targets so they don't hit a 403. New rows (blank role,
+        // mid-create) are handled by the edit-mode branch above.
+        if (!assignableRoles.includes(params.row.role)) return []
 
         if (params.row.deleted) {
           return [
