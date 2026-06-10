@@ -226,7 +226,7 @@ export default function QuestionnarePage() {
             return
           }
           if (error.response?.status === 403) {
-            enqueueSnackbar(error.response.data.error, {
+            enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
               variant: 'error',
               anchorOrigin: {
                 vertical: 'top',
@@ -266,10 +266,10 @@ export default function QuestionnarePage() {
         })
         .catch((error) => {
           console.error('Error posting score:', error)
-          if (error.status === 401) {
+          if (error.response?.status === 401) {
             routeToSignIn()
-          } else if (error.status === 403) {
-            enqueueSnackbar(error.response.data.error, {
+          } else if (error.response?.status === 403) {
+            enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
               variant: 'error',
               anchorOrigin: {
                 vertical: 'top',

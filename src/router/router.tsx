@@ -13,6 +13,7 @@ import UserTable from '@/views/UserTable/UserTable'
 import LoginPage from '@/views/LoginPage/LoginPage'
 import QuestionnarePage from '@/views/QuestionnairePage/QuestionnairePage'
 import SystemDetailPage from '@/views/SystemDetailPage/SystemDetailPage'
+import OpDivAdmin from '@/views/OpDivAdmin/OpDivAdmin'
 /**
  * The hash router for the application that defines routes
  *  and specifies the loaders for routes with dynamic data.
@@ -49,6 +50,12 @@ const router = createHashRouter([
         path: Routes.SYSTEM_DETAIL,
         id: RouteIds.SYSTEM_DETAIL,
         element: <SystemDetailPage />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
+        path: Routes.ADMIN_OPDIVS,
+        id: RouteIds.ADMIN_OPDIVS,
+        element: <OpDivAdmin />,
         errorElement: <ErrorBoundary />,
       },
       {

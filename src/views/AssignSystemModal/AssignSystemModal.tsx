@@ -83,7 +83,7 @@ export default function AssignSystemModal({
             },
           })
         } else if (error.response?.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
+          enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
             variant: 'error',
             anchorOrigin: {
               vertical: 'top',
@@ -177,7 +177,7 @@ export default function AssignSystemModal({
                         },
                       })
                     } else if (error.response?.status === 403) {
-                      enqueueSnackbar(ERROR_MESSAGES.permission, {
+                      enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
                         variant: 'error',
                         anchorOrigin: {
                           vertical: 'top',

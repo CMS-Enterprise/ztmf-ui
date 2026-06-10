@@ -8,6 +8,7 @@ import { userData, UserRole } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
+  isUnscopedWriteAdmin,
 } from '@/utils/userRoles'
 import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
@@ -248,13 +249,21 @@ export default function Title() {
                       Dashboard
                     </MenuItem>
                   </Link>
-                  {isAdmin && (
+                  {hasAdminRead && (
                     <Link
                       to={Routes.USERS}
                       style={{ textDecoration: 'none', color: 'black' }}
                     >
+                      <MenuItem onClick={() => handleOption()}>Users</MenuItem>
+                    </Link>
+                  )}
+                  {userInfo.role === 'OWNER' && (
+                    <Link
+                      to={Routes.ADMIN_OPDIVS}
+                      style={{ textDecoration: 'none', color: 'black' }}
+                    >
                       <MenuItem onClick={() => handleOption()}>
-                        Edit Users
+                        Manage OpDivs
                       </MenuItem>
                     </Link>
                   )}
@@ -268,7 +277,7 @@ export default function Title() {
                       Add Fisma System
                     </MenuItem>
                   )}
-                  {isAdmin && (
+                  {isUnscopedWriteAdmin(userInfo) && (
                     <MenuItem
                       onClick={() => {
                         setAnchorEl(null)

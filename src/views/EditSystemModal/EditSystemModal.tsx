@@ -428,7 +428,7 @@ export default function EditSystemModal({
           error.response?.data
         )
         if (error.response?.status === 403) {
-          enqueueSnackbar('Permission denied. Admin access required.', {
+          enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
             variant: 'error',
             anchorOrigin: {
               vertical: 'top',
@@ -496,7 +496,7 @@ export default function EditSystemModal({
           error.response?.data
         )
         if (error.response?.status === 403) {
-          enqueueSnackbar('Permission denied. Admin access required.', {
+          enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
             variant: 'error',
             anchorOrigin: {
               vertical: 'top',
