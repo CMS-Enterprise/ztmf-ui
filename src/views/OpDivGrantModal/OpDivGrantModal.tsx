@@ -79,15 +79,6 @@ export default function OpDivGrantModal({
     [opdivOptions, opdivMap]
   )
 
-  React.useEffect(() => {
-    if (open && userid) {
-      fetchUserOpDivs(String(userid))
-        .then((grants) => setAssignedOpDivs(grants))
-        .catch((error) => handleError(error))
-    }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [open, userid])
-
   const handleError = (error: unknown) => {
     const parsed = parseApiError(error)
     if (parsed.status === 401) {
@@ -103,6 +94,15 @@ export default function OpDivGrantModal({
       autoHideDuration: 1500,
     })
   }
+
+  React.useEffect(() => {
+    if (open && userid) {
+      fetchUserOpDivs(String(userid))
+        .then((grants) => setAssignedOpDivs(grants))
+        .catch((error) => handleError(error))
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, userid])
 
   const handleConfirmRevoke = (confirm: boolean) => {
     const target = pendingRevoke

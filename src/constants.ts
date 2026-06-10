@@ -27,6 +27,8 @@ export const ERROR_MESSAGES = {
   outOfScope:
     'This item is outside your OpDiv, so you cannot make changes to it.',
   tryAgain: 'An error occurred, please try again later',
+  refresh:
+    'Could not refresh the latest data. The information shown may be out of date.',
 }
 export const EMPTY_USER: userData = {
   userid: '',

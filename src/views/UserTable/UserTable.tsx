@@ -262,7 +262,18 @@ export default function UserTable() {
     if (!userid) return
     fetchUserOpDivs(userid)
       .then((ids) => setUserOpDivMap((prev) => ({ ...prev, [userid]: ids })))
-      .catch(() => {})
+      .catch((error) => {
+        // Non-blocking refresh: keep the previous grants but surface that the
+        // displayed row may be stale.
+        console.error(
+          `Failed to refresh OpDiv grants for user ${userid}`,
+          error
+        )
+        enqueueSnackbar(ERROR_MESSAGES.refresh, {
+          variant: 'warning',
+          anchorOrigin: { vertical: 'top', horizontal: 'left' },
+        })
+      })
     axiosInstance
       .get(`/users/${userid}`)
       .then((res) => {
@@ -273,7 +284,9 @@ export default function UserTable() {
           )
         )
       })
-      .catch(() => {})
+      .catch((error) => {
+        console.error(`Failed to refresh user row for ${userid}`, error)
+      })
   }
   const handleCloseOpDivModal = () => {
     setOpenOpDivModal(false)
