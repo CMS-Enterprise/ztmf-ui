@@ -24,7 +24,11 @@ export const ERROR_MESSAGES = {
   error:
     'An error occurred. Please log in and try again. If the error persists, please contact support.',
   permission: 'You do not have permission to do this action.',
+  outOfScope:
+    'This item is outside your OpDiv, so you cannot make changes to it.',
   tryAgain: 'An error occurred, please try again later',
+  refresh:
+    'Could not refresh the latest data. The information shown may be out of date.',
 }
 export const EMPTY_USER: userData = {
   userid: '',
@@ -39,58 +43,71 @@ export const CONFIRMATION_MESSAGE =
 export const CONFIRMATION_MESSAGE_QUESTION =
   'Your changes will not be saved! Are you sure you want to leave question without saving your changes?'
 
+/**
+ * The fixed order for pillars on the questionnaire, no matter what order the
+ * API returns them in. Each name has to match the API's
+ * `question.pillar.pillar` value exactly (same keys as {@link PILLAR_FUNCTION_MAP}).
+ */
+export const PILLAR_ORDER: string[] = [
+  'Identity',
+  'Devices',
+  'Networks',
+  'Applications',
+  'Data',
+  'CrossCutting',
+]
 export const PILLAR_FUNCTION_MAP: { [key: string]: string[] } = {
   Identity: [
-    'AccessManagement',
-    'Identity-AutomationOrchestration',
-    'Identity-Governance',
+    'Authentication-Users',
     'IdentityStores-Users',
     'RiskAssessment',
-    'Authentication-Users',
+    'AccessManagement',
     'Identity-VisibilityAnalytics',
+    'Identity-AutomationOrchestration',
+    'Identity-Governance',
   ],
   Devices: [
+    'PolicyEnforcement',
     'AssetRiskManagement',
+    'ResourceAccess',
+    'Device-ThreatProtection',
+    'Device-VisibilityAnalytics',
     'Device-AutomationOrchestration',
     'Device-Governance',
-    'DeviceThreatProtection',
-    'PolicyEnforcement',
-    'Device-VisibilityAnalytics',
-    'ResourceAccess',
   ],
   Networks: [
-    'Network-AutomationOrchestration',
-    'Network-Encryption',
-    'Network-Governance',
-    'NetworkResilience',
     'NetworkSegmentation',
     'NetworkTrafficManagement',
+    'Network-Encryption',
+    'NetworkResilience',
     'Network-VisibilityAnalytics',
+    'Network-AutomationOrchestration',
+    'Network-Governance',
   ],
   Applications: [
-    'AccessibleApplications',
     'AccessAuthorization-Users',
+    'Application-ThreatProtection',
+    'AccessibleApplications',
+    'SecureDevDeployWorkflow',
+    'Application-SecurityTesting',
+    'Application-VisibilityAnalytics',
     'Application-AutomationOrchestration',
     'Application-Governance',
-    'SecureDevDeployWorkflow',
-    'ApplicationSecurityTesting',
-    'AppThreatProtection',
-    'Application-VisibilityAnalytics',
   ],
   Data: [
-    'DataAccess',
-    'Data-AutomationOrchestration',
-    'DataAvailability',
-    'DataCategorization',
-    'DataEncryption',
-    'Data-Governance',
     'DataInventoryManagement',
+    'DataCategorization',
+    'DataAvailability',
+    'DataAccess',
+    'DataEncryption',
     'Data-VisibilityAnalytics',
+    'Data-AutomationOrchestration',
+    'Data-Governance',
   ],
   CrossCutting: [
+    'Cross-VisibilityAnalytics',
     'Cross-AutomationOrchestration',
     'Cross-Governance',
-    'Cross-VisibilityAnalytics',
   ],
 }
 export const SDL_SYNC_DESCRIPTION_ON =
