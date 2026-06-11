@@ -3,11 +3,9 @@ import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import ChecklistIcon from '@mui/icons-material/Checklist'
+import DomainIcon from '@mui/icons-material/Domain'
 import SaveIcon from '@mui/icons-material/Save'
 import CancelIcon from '@mui/icons-material/Close'
-import FormControl from '@mui/material/FormControl'
-import Select from '@mui/material/Select'
-import MenuItem from '@mui/material/MenuItem'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
 import {
@@ -26,31 +24,31 @@ import {
   GridToolbarQuickFilter,
   useGridApiRef,
 } from '@mui/x-data-grid'
-import {
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
-  FormControlLabel,
-  Switch,
-  Typography,
-} from '@mui/material'
+import { Chip, FormControlLabel, Switch, Typography } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
-import { Button as CmsButton } from '@cmsgov/design-system'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
-import { users } from '@/types'
-import { isAdmin as checkIsAdmin, isAdminTierRole } from '@/utils/userRoles'
+import { users, OpDiv } from '@/types'
+import {
+  isAdmin as checkIsAdmin,
+  hasAdminRead,
+  isOpDivTier,
+  selectableRoles,
+} from '@/utils/userRoles'
+import { fetchOpDivs } from '@/utils/opdivs'
+import { fetchUserOpDivs } from '@/utils/userOpdivs'
+import { parseApiError } from '@/utils/apiErrors'
+import { isAuthHandled } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import { useSnackbar } from 'notistack'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
+import OpDivGrantModal from '../OpDivGrantModal/OpDivGrantModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES, ROLES } from '@/constants'
-import { isAuthHandled } from '@/utils/notify'
+import { ERROR_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
@@ -134,59 +132,18 @@ export default function UserTable() {
   const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const { userInfo, fismaSystems } = useContextProp()
+  // Write-tier admins get the create/edit/delete/assign controls; read-only
+  // admins may view the table but every mutating control is withheld. The
+  // backend is the security boundary - this only governs which controls render.
   const isAdmin = checkIsAdmin(userInfo)
+  const canRead = hasAdminRead(userInfo)
+  // Roles this admin may assign; also the valid option set for the role editor.
+  const assignableRoles = selectableRoles(userInfo.role)
   useEffect(() => {
-    if (userInfo.role && !isAdmin) {
+    if (userInfo.role && !canRead) {
       navigate(Routes.ROOT, { replace: true })
     }
-  }, [userInfo.role, isAdmin, navigate])
-  const renderSingleSelectEditCell = (params: GridRenderEditCellParams) => {
-    const { value } = params
-    return (
-      <FormControl sx={{ minWidth: 120 }} error={!value} fullWidth>
-        <Select
-          sx={{
-            '& .MuiOutlinedInput-input': {
-              py: 1.7,
-            },
-            '& .MuiOutlinedInput-notchedOutline': {
-              mt: 0,
-              '@supports (-moz-appearance:none)': {
-                mt: -3, // Only applied in Firefox
-              },
-            },
-          }}
-          value={value || ''}
-          onChange={(event) => {
-            const fullname: string = params.api.getCellValue(
-              params.id,
-              'fullname'
-            )
-            if (isAdminTierRole(event.target.value as string)) {
-              setUserName(fullname)
-              setSelectedRole(event.target.value)
-              setOpenAlert(true)
-            }
-            params.api.setEditCellValue(
-              {
-                id: params.id,
-                field: params.field,
-                value: event.target.value,
-              },
-              event
-            )
-          }}
-          renderValue={(value) => `${value}`}
-        >
-          {ROLES.map((role) => (
-            <MenuItem value={role} key={role}>
-              {role}
-            </MenuItem>
-          ))}
-        </Select>
-      </FormControl>
-    )
-  }
+  }, [userInfo.role, canRead, navigate])
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
@@ -196,7 +153,6 @@ export default function UserTable() {
     'success' | 'error' | 'warning' | 'info'
   >('success')
   const [openModal, setOpenModal] = useState<boolean>(false)
-  const [openAlert, setOpenAlert] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<users | undefined>({
     userid: '',
     email: '',
@@ -204,8 +160,6 @@ export default function UserTable() {
     role: '' as users['role'],
     assignedfismasystems: [],
   })
-  const [userName, setUserName] = useState<string | undefined>(undefined)
-  const [selectedRole, setSelectedRole] = useState<string>('')
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
     Record<number, { name: string; acronym: string }>
   >({})
@@ -213,6 +167,15 @@ export default function UserTable() {
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
   const [assignModalUserName, setAssignModalUserName] = useState<string>('')
+  const [openOpDivModal, setOpenOpDivModal] = useState<boolean>(false)
+  const [opdivModalUserId, setOpDivModalUserId] = useState<GridRowId>('')
+  const [opdivModalUserName, setOpDivModalUserName] = useState<string>('')
+  const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
+  // opdiv_id -> code, for rendering the OpDivs membership column.
+  const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
+  // userid -> granted opdiv ids. The list endpoint omits grants (always null),
+  // so these are fetched per user from the detail endpoint after the list loads.
+  const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -220,16 +183,6 @@ export default function UserTable() {
     if (params.reason === GridRowEditStopReasons.rowFocusOut) {
       event.defaultMuiPrevented = true
     }
-  }
-  const handleAlertCloseModal = (response: boolean) => {
-    if (response == false && selectedRow) {
-      apiRef.current.setEditCellValue({
-        id: selectedRow.userid,
-        field: 'role',
-        value: selectedRow.role,
-      })
-    }
-    setOpenAlert(false)
   }
   const handleEditClick = (id: GridRowId) => () => {
     const curRow = rows.find((row) => row.userid === id)
@@ -272,6 +225,51 @@ export default function UserTable() {
   const handleCloseModal = () => {
     setOpenModal(false)
   }
+  const handleOpenOpDivModal = (id: GridRowId) => {
+    setOpDivModalUserId(id)
+    const row = rows.find((r) => r.userid === id)
+    setOpDivModalUserName(row?.fullname ?? '')
+    setOpenOpDivModal(true)
+  }
+  // Pull a single user's current OpDiv grants and derived identity_provider
+  // and patch them onto the row. Called after a confirmed grant/revoke (the
+  // backend recomputes identity_provider, which can flip okta <-> entra) and
+  // again on modal close as a backstop. Each call targets its own row, so a
+  // late response can't contaminate a different user.
+  const refreshUserRow = (userid: string) => {
+    if (!userid) return
+    fetchUserOpDivs(userid)
+      .then((ids) => setUserOpDivMap((prev) => ({ ...prev, [userid]: ids })))
+      .catch((error) => {
+        // Non-blocking refresh: keep the previous grants but surface that the
+        // displayed row may be stale.
+        console.error(
+          `Failed to refresh OpDiv grants for user ${userid}`,
+          error
+        )
+        enqueueSnackbar(ERROR_MESSAGES.refresh, {
+          variant: 'warning',
+          anchorOrigin: { vertical: 'top', horizontal: 'left' },
+        })
+      })
+    axiosInstance
+      .get(`/users/${userid}`)
+      .then((res) => {
+        const idp = res.data?.data?.identity_provider
+        setRows((prev) =>
+          prev.map((row) =>
+            row.userid === userid ? { ...row, identity_provider: idp } : row
+          )
+        )
+      })
+      .catch((error) => {
+        console.error(`Failed to refresh user row for ${userid}`, error)
+      })
+  }
+  const handleCloseOpDivModal = () => {
+    setOpenOpDivModal(false)
+    refreshUserRow(String(opdivModalUserId))
+  }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
       ...rowModesModel,
@@ -312,9 +310,7 @@ export default function UserTable() {
         .catch((error) => {
           if (isAuthHandled(error)) return
           console.error('Error updating score:', error)
-          setSnackBarSeverity('error')
-          setSnackBarText(ERROR_MESSAGES.tryAgain)
-          setOpen(true)
+          setSaveError(error)
         })
     } else {
       // const updatedRow = { ...newRow } as users
@@ -331,9 +327,7 @@ export default function UserTable() {
         })
         .catch((error) => {
           if (isAuthHandled(error)) return
-          setSnackBarSeverity('error')
-          setSnackBarText(ERROR_MESSAGES.tryAgain)
-          setOpen(true)
+          setSaveError(error)
         })
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
@@ -345,6 +339,18 @@ export default function UserTable() {
   const handleProcessRowUpdateError = () => {
     setSnackBarSeverity('error')
     setSnackBarText('An error occurred while saving the row')
+    setOpen(true)
+  }
+  // Surface the backend's specific reason on a failed save. On a 400 the body
+  // carries a field -> message map (e.g. a duplicate email); join those so the
+  // user sees what to fix rather than a generic retry message.
+  const setSaveError = (error: unknown) => {
+    const parsed = parseApiError(error)
+    const message = parsed.fieldErrors
+      ? Object.values(parsed.fieldErrors).join(' ')
+      : parsed.message
+    setSnackBarSeverity('error')
+    setSnackBarText(message)
     setOpen(true)
   }
   const handleDeleteClick = (id: GridRowId) => () => {
@@ -417,11 +423,15 @@ export default function UserTable() {
   }
   // TODO: Custom hook for fetching data
   useEffect(() => {
-    if (!isAdmin) return
+    if (!canRead) return
+    // Guard against a superseded run (e.g. a fast Show Deleted toggle)
+    // resolving late and clobbering fresher grant state.
+    let ignore = false
     axiosInstance
       .get('/users', { params: { deleted: showDeleted } })
       .then((res) => {
         if (res.status === 200) {
+          if (ignore) return
           const data = res.data.data.map((row: users) => ({
             ...row,
             role: row.role.trim(),
@@ -437,6 +447,23 @@ export default function UserTable() {
             }
           }
           setFismaSystemsMap(map)
+          // Grants are omitted from the list response, so resolve each user's
+          // OpDivs from the detail endpoint in parallel for the OpDivs column.
+          Promise.all(
+            data.map((u: users) =>
+              fetchUserOpDivs(u.userid)
+                .then((ids) => [u.userid, ids] as [string, number[]])
+                .catch(() => [u.userid, []] as [string, number[]])
+            )
+          ).then((entries) => {
+            if (ignore) return
+            // Merge rather than replace so an in-flight per-user refresh
+            // (e.g. from closing the grant modal) is not clobbered.
+            setUserOpDivMap((prev) => ({
+              ...prev,
+              ...Object.fromEntries(entries),
+            }))
+          })
         } else {
           return
         }
@@ -452,7 +479,40 @@ export default function UserTable() {
           },
         })
       })
-  }, [isAdmin, fismaSystems, enqueueSnackbar, showDeleted])
+    return () => {
+      ignore = true
+    }
+  }, [canRead, fismaSystems, navigate, enqueueSnackbar, showDeleted])
+  // OpDiv options for the grant modal: assignable children only (the HHS
+  // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
+  // own OpDivs, so narrow the option set to their own grants; the server
+  // enforces the same rule.
+  useEffect(() => {
+    if (!isAdmin) return
+    // Pull the full list (incl. inactive/parent) so any granted id resolves to
+    // a code in the OpDivs column; derive the assignable subset from the same
+    // response for the grant modal.
+    fetchOpDivs(true)
+      .then((all) => {
+        const codeMap: Record<number, string> = {}
+        all.forEach((od) => {
+          codeMap[od.opdiv_id] = od.code
+        })
+        setOpDivCodeMap(codeMap)
+
+        let assignable = all.filter((od) => !od.is_parent && od.active)
+        if (isOpDivTier(userInfo)) {
+          const own = new Set(userInfo.assignedopdivids ?? [])
+          assignable = assignable.filter((od) => own.has(od.opdiv_id))
+        }
+        setOpDivOptions(assignable)
+      })
+      .catch(() => {
+        // Non-fatal: the grant modal simply shows no options if this fails.
+        setOpDivOptions([])
+        setOpDivCodeMap({})
+      })
+  }, [isAdmin, userInfo])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
@@ -473,7 +533,7 @@ export default function UserTable() {
           }}
         />
       ),
-      editable: true,
+      editable: isAdmin,
     },
     {
       field: 'email',
@@ -494,14 +554,50 @@ export default function UserTable() {
           }}
         />
       ),
-      editable: true,
+      editable: isAdmin,
     },
     {
       field: 'role',
       headerName: 'Role',
       flex: 1,
-      editable: true,
-      renderEditCell: renderSingleSelectEditCell,
+      editable: isAdmin,
+      // Native DataGrid dropdown, scoped to the roles this admin may assign.
+      type: 'singleSelect',
+      valueOptions: assignableRoles,
+    },
+    {
+      field: 'opdivs',
+      headerName: 'OpDivs',
+      flex: 1,
+      sortable: false,
+      filterable: false,
+      renderCell: (params) => {
+        const ids = userOpDivMap[params.row.userid] ?? []
+        if (!ids.length) {
+          return (
+            <Typography variant="body2" color="text.secondary">
+              —
+            </Typography>
+          )
+        }
+        return (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', py: 0.5 }}>
+            {ids.map((id) => (
+              <Chip key={id} size="small" label={opdivCodeMap[id] ?? id} />
+            ))}
+          </Box>
+        )
+      },
+    },
+    {
+      field: 'identity_provider',
+      headerName: 'IdP',
+      flex: 0.5,
+      editable: false,
+      // Display-only. The backend derives this from the user's OpDiv, with an
+      // OWNER-only override handled server-side; the UI never sends it. Show
+      // the resolved value, or '—' until the backend has populated it.
+      valueGetter: (params) => params.row.identity_provider ?? '—',
     },
     {
       field: 'actions',
@@ -510,6 +606,8 @@ export default function UserTable() {
       width: 140,
       cellClassName: 'actions',
       getActions: (params) => {
+        // Read-only admins see the table but no mutating controls.
+        if (!isAdmin) return []
         const isInEditMode =
           rowModesModel[params.id]?.mode === GridRowModes.Edit
         if (isInEditMode) {
@@ -533,6 +631,13 @@ export default function UserTable() {
             />,
           ]
         }
+
+        // Mirror the backend CanManageUser rule: an admin can only manage a
+        // user whose role is within their assignable tier (the list is already
+        // OpDiv-scoped server-side). Withhold edit/assign/delete/restore for
+        // out-of-tier targets so they don't hit a 403. New rows (blank role,
+        // mid-create) are handled by the edit-mode branch above.
+        if (!assignableRoles.includes(params.row.role)) return []
 
         if (params.row.deleted) {
           return [
@@ -574,6 +679,19 @@ export default function UserTable() {
               color="inherit"
             />
           </Tooltip>,
+          <Tooltip
+            title={`Assign OpDivs`}
+            key={`tooltip-opdiv-${params.id}`}
+            placement="right-start"
+          >
+            <GridActionsCellItem
+              icon={<DomainIcon sx={{ color: 'black' }} />}
+              key={`assignopdiv-${params.id}`}
+              label="assignedOpDivs"
+              onClick={() => handleOpenOpDivModal(params.id)}
+              color="inherit"
+            />
+          </Tooltip>,
           <GridActionsCellItem
             key={`delete-${params.id}`}
             icon={<DeleteIcon sx={{ color: 'black' }} />}
@@ -603,9 +721,21 @@ export default function UserTable() {
         }}
       >
         <DataGrid
+          aria-label="Users"
           rows={rows}
           apiRef={apiRef}
           columns={columns}
+          // Don't let an admin edit a role they can't assign: if a row's
+          // current role is above this admin's tier, lock the role cell so it
+          // can't be blanked or downgraded on save. New rows (blank role,
+          // mid-create) stay editable - valueOptions already limits the choices
+          // to the admin's assignable set. The server enforces this too.
+          isCellEditable={(params) =>
+            params.field !== 'role' ||
+            params.row.isNew ||
+            !params.row.role ||
+            assignableRoles.includes(params.row.role)
+          }
           editMode="row"
           getRowId={(row) => row.userid}
           initialState={{
@@ -678,6 +808,14 @@ export default function UserTable() {
         userid={userId}
         userName={assignModalUserName}
       />
+      <OpDivGrantModal
+        open={openOpDivModal}
+        handleClose={handleCloseOpDivModal}
+        userid={opdivModalUserId}
+        userName={opdivModalUserName}
+        opdivOptions={opdivOptions}
+        onChanged={refreshUserRow}
+      />
       <ConfirmDialog
         title="Confirm User Deletion"
         confirmationText={
@@ -688,6 +826,7 @@ export default function UserTable() {
         open={pendingDeleteRow !== null}
         onClose={() => setPendingDeleteRow(null)}
         confirmClick={handleConfirmDelete}
+        confirmLabel="Delete"
       />
       <ConfirmDialog
         title="Confirm User Restore"
@@ -699,30 +838,8 @@ export default function UserTable() {
         open={pendingRestoreRow !== null}
         onClose={() => setPendingRestoreRow(null)}
         confirmClick={handleConfirmRestore}
+        confirmLabel="Restore"
       />
-      <Dialog
-        open={openAlert}
-        onClose={() => setOpenAlert(false)}
-        maxWidth="sm"
-        fullWidth
-      >
-        <DialogTitle>
-          <div>
-            <Typography variant="h4">Confirm Role Change</Typography>
-          </div>
-        </DialogTitle>
-        <DialogContent>
-          <Box>
-            <Typography variant="h6">
-              Are you sure you want to change {userName} as a {selectedRole}?
-            </Typography>
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={() => handleAlertCloseModal(false)}>No</CmsButton>
-          <CmsButton onClick={() => handleAlertCloseModal(true)}>Yes</CmsButton>
-        </DialogActions>
-      </Dialog>
     </>
   )
 }

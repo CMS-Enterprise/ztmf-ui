@@ -8,6 +8,7 @@ import { userData, UserRole } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
+  isUnscopedWriteAdmin,
 } from '@/utils/userRoles'
 import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
@@ -26,6 +27,7 @@ import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
 import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
+import ztmfLogo from '@/assets/ztmf-logo-color.png'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -122,122 +124,188 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
+  // Single source of truth for header logo sizing; divider scales with it
+  // so the mark, divider, and wordmark stay vertically centered on resize.
+  const LOGO_HEIGHT = 55
+  // The logo art is vertically asymmetric: the arrow tip extends well above the
+  // letter caps, so the PNG's bounding-box center sits above the wordmark's
+  // optical center. Shift the divider + text down by ~10% of the logo height so
+  // they align to the letters rather than the box. Scales with LOGO_HEIGHT.
+  const LOGO_OPTICAL_OFFSET = Math.round(LOGO_HEIGHT * 0.1)
   return (
     <>
       <UsaBanner />
-      <Container
-        maxWidth={false}
+      {/* Branded header bar */}
+      <Box
         sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
           px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          py: 1.5,
+          borderBottom: '1px solid rgba(0,0,0,0.12)',
           minWidth: 800,
         }}
       >
-        {loaderData.status == 200 ? (
+        {/* left: ZTMF mark + wordmark */}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <img
+            src={ztmfLogo}
+            alt="ZTMF"
+            style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
+          />
           <Box
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'space-between',
+              width: '1px',
+              height: Math.round(LOGO_HEIGHT * 0.7),
+              backgroundColor: 'rgba(0,0,0,0.12)',
+              flexShrink: 0,
+              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
+            }}
+          />
+          <Box
+            sx={{
+              lineHeight: 1.15,
+              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
             }}
           >
-            <Typography variant="subtitle1" sx={{ mt: 1 }}>
-              <span className="ds-u-font-weight--semibold">Datacall:</span>{' '}
-              {latestDatacall}
-            </Typography>
-            <Box
+            <Typography
               sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'flex-end',
+                fontSize: 17,
+                fontWeight: 700,
+                color: '#102B52',
+                letterSpacing: '0.2px',
+                lineHeight: 1.15,
               }}
             >
-              <AccountCircleIcon fontSize={'large'} />
-              {userInfo.fullname ? (
-                <span
-                  style={{ verticalAlign: '13px' }}
-                  className="ds-text-body--md"
+              Zero Trust Maturity Framework
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: 12,
+                fontWeight: 600,
+                color: '#7997AF',
+                letterSpacing: '2px',
+                textTransform: 'uppercase',
+                lineHeight: 1.15,
+              }}
+            >
+              Scoring Tool
+            </Typography>
+          </Box>
+        </Box>
+
+        {/* right: account chip (shown when logged in) */}
+        {loaderData.status == 200 && (
+          <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <AccountCircleIcon fontSize={'large'} />
+            {userInfo.fullname && (
+              <span
+                style={{ verticalAlign: '13px' }}
+                className="ds-text-body--md"
+              >
+                {userInfo.fullname}
+              </span>
+            )}
+            {hasAdminRead && (
+              <>
+                <IconButton
+                  aria-label="more"
+                  aria-controls="long-menu"
+                  aria-haspopup="true"
+                  onClick={handleClick}
                 >
-                  {userInfo.fullname}
-                </span>
-              ) : (
-                ''
-              )}
-              {hasAdminRead ? (
-                <>
-                  <IconButton
-                    aria-label="more"
-                    aria-controls="long-menu"
-                    aria-haspopup="true"
-                    onClick={handleClick}
+                  <MoreVertIcon />
+                </IconButton>
+                <Menu
+                  id="long-menu"
+                  anchorEl={anchorEl}
+                  keepMounted
+                  open={Boolean(anchorEl)}
+                  onClose={handleClose}
+                >
+                  <Link
+                    to={Routes.ROOT}
+                    style={{ textDecoration: 'none', color: 'black' }}
                   >
-                    <MoreVertIcon />
-                  </IconButton>
-                  <Menu
-                    id="long-menu"
-                    anchorEl={anchorEl}
-                    keepMounted
-                    open={Boolean(anchorEl)}
-                    onClose={handleClose}
-                  >
+                    <MenuItem onClick={() => handleOption()}>
+                      Dashboard
+                    </MenuItem>
+                  </Link>
+                  {hasAdminRead && (
                     <Link
-                      to={Routes.ROOT}
+                      to={Routes.USERS}
+                      style={{ textDecoration: 'none', color: 'black' }}
+                    >
+                      <MenuItem onClick={() => handleOption()}>Users</MenuItem>
+                    </Link>
+                  )}
+                  {userInfo.role === 'OWNER' && (
+                    <Link
+                      to={Routes.ADMIN_OPDIVS}
                       style={{ textDecoration: 'none', color: 'black' }}
                     >
                       <MenuItem onClick={() => handleOption()}>
-                        Dashboard
+                        Manage OpDivs
                       </MenuItem>
                     </Link>
-                    {isAdmin && (
-                      <Link
-                        to={Routes.USERS}
-                        style={{ textDecoration: 'none', color: 'black' }}
-                      >
-                        <MenuItem onClick={() => handleOption()}>
-                          Edit Users
-                        </MenuItem>
-                      </Link>
-                    )}
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => {
-                          setAnchorEl(null)
-                          setOpenModal(true)
-                        }}
-                      >
-                        Add Fisma System
-                      </MenuItem>
-                    )}
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => {
-                          setAnchorEl(null)
-                          setOpenEmailModal(true)
-                        }}
-                      >
-                        {'Email Users'}
-                      </MenuItem>
-                    )}
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => {
-                          handleClose()
-                          setOpenDataCallModal(true)
-                        }}
-                      >
-                        Create Datacall
-                      </MenuItem>
-                    )}
-                  </Menu>
-                </>
-              ) : (
-                <></>
-              )}
-            </Box>
+                  )}
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenModal(true)
+                      }}
+                    >
+                      Add Fisma System
+                    </MenuItem>
+                  )}
+                  {isUnscopedWriteAdmin(userInfo) && (
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenEmailModal(true)
+                      }}
+                    >
+                      {'Email Users'}
+                    </MenuItem>
+                  )}
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        handleClose()
+                        setOpenDataCallModal(true)
+                      }}
+                    >
+                      Create Datacall
+                    </MenuItem>
+                  )}
+                </Menu>
+              </>
+            )}
           </Box>
-        ) : (
-          <div></div>
         )}
-      </Container>
+      </Box>
+      {/* Datacall sub-bar (shown when logged in) */}
+      {loaderData.status == 200 && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+            py: 1,
+            backgroundColor: '#fbfbfd',
+            borderBottom: '1px solid rgba(0,0,0,0.12)',
+            minWidth: 800,
+          }}
+        >
+          <Typography variant="subtitle1">
+            <span className="ds-u-font-weight--semibold">Datacall:</span>{' '}
+            {latestDatacall}
+          </Typography>
+        </Box>
+      )}
       <Container
         maxWidth={false}
         sx={{

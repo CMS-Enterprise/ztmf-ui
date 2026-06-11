@@ -18,3 +18,35 @@ export async function fetchOpDivs(includeInactive = false): Promise<OpDiv[]> {
   })
   return response.data.data
 }
+
+/**
+ * Request body for POST /opdivs and PUT /opdivs/{opdiv_id} (OpDivInput).
+ * `active` is honored on update only - a new OpDiv is always created active.
+ */
+export type OpDivInput = {
+  code: string
+  name: string
+  is_parent?: boolean
+  active?: boolean
+}
+
+/**
+ * Creates an OpDiv via POST /opdivs (OWNER only). Returns the created row.
+ * A 400 carries a field-level message under data.code (e.g. a duplicate
+ * active code) - callers should surface it inline via parseApiError.
+ */
+export async function createOpDiv(input: OpDivInput): Promise<OpDiv> {
+  const response = await axiosInstance.post<{ data: OpDiv }>('/opdivs', input)
+  return response.data.data
+}
+
+/**
+ * Updates or deactivates an OpDiv via PUT /opdivs/{opdiv_id} (OWNER only).
+ * Set active=false to soft-deactivate. The endpoint returns 204 (no body).
+ */
+export async function updateOpDiv(
+  opdivId: number,
+  input: OpDivInput
+): Promise<void> {
+  await axiosInstance.put(`/opdivs/${opdivId}`, input)
+}
