@@ -14,9 +14,6 @@ import Autocomplete from '@mui/material/Autocomplete'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import { useSnackbar } from 'notistack'
-import { useNavigate } from 'react-router-dom'
-import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
@@ -60,7 +57,6 @@ export default function OpDivGrantModal({
     opdivId: number
   } | null>(null)
   const { enqueueSnackbar } = useSnackbar()
-  const navigate = useNavigate()
 
   const opdivMap = React.useMemo(() => {
     const map: Record<number, { code: string; name: string }> = {}
@@ -83,13 +79,6 @@ export default function OpDivGrantModal({
   const handleError = (error: unknown) => {
     if (isAuthHandled(error)) return
     const parsed = parseApiError(error)
-    if (parsed.status === 401) {
-      navigate(Routes.SIGNIN, {
-        replace: true,
-        state: { message: ERROR_MESSAGES.error },
-      })
-      return
-    }
     enqueueSnackbar(parsed.message, {
       variant: 'error',
       anchorOrigin: SNACK_ANCHOR,

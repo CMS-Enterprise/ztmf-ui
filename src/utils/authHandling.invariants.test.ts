@@ -67,6 +67,16 @@ const expectations: FileExpectation[] = [
     includes: ['if (isAuthHandled(error)) return'],
     excludes: ['handleUnautherized', 'checkValidResponse'],
   },
+  {
+    filePath: 'src/views/OpDivAdmin/OpDivAdmin.tsx',
+    includes: ['if (isAuthHandled(error)) return'],
+    excludes: ['Routes.SIGNIN'],
+  },
+  {
+    filePath: 'src/views/OpDivGrantModal/OpDivGrantModal.tsx',
+    includes: ['if (isAuthHandled(error)) return'],
+    excludes: ['Routes.SIGNIN'],
+  },
 ]
 
 describe('auth-handling centralization invariants', () => {

@@ -90,16 +90,12 @@ export default function OpDivAdmin() {
       .catch((error) => {
         if (isAuthHandled(error)) return
         const parsed = parseApiError(error)
-        if (parsed.status === 401) {
-          navigate(Routes.SIGNIN, { replace: true })
-          return
-        }
         enqueueSnackbar(parsed.message, {
           variant: 'error',
           anchorOrigin: SNACK_ANCHOR,
         })
       })
-  }, [navigate, enqueueSnackbar])
+  }, [enqueueSnackbar])
 
   useEffect(() => {
     if (isOwner) loadOpDivs()
