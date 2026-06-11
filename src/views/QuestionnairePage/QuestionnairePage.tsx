@@ -28,9 +28,10 @@ import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
-  PILLAR_FUNCTION_MAP,
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
+import { sortPillars } from '@/utils/sortPillars'
+import { sortFunctions } from '@/utils/sortFunctions'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
@@ -225,7 +226,7 @@ export default function QuestionnarePage() {
             return
           }
           if (error.response?.status === 403) {
-            enqueueSnackbar(error.response.data.error, {
+            enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
               variant: 'error',
               anchorOrigin: {
                 vertical: 'top',
@@ -265,10 +266,10 @@ export default function QuestionnarePage() {
         })
         .catch((error) => {
           console.error('Error posting score:', error)
-          if (error.status === 401) {
+          if (error.response?.status === 401) {
             routeToSignIn()
-          } else if (error.status === 403) {
-            enqueueSnackbar(error.response.data.error, {
+          } else if (error.response?.status === 403) {
+            enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
               variant: 'error',
               anchorOrigin: {
                 vertical: 'top',
@@ -359,11 +360,9 @@ export default function QuestionnarePage() {
               }
               const organizedData: Record<string, FismaQuestion[]> = {}
               const questionData: Record<number, Question> = {}
-              const pillarOrder: Record<string, number> = {}
               data.forEach((question: FismaQuestion) => {
                 if (!organizedData[question.pillar.pillar]) {
                   organizedData[question.pillar.pillar] = []
-                  pillarOrder[question.pillar.pillar] = question.pillar.order
                 }
                 questionData[question.function.functionid] = {
                   question: question.question,
@@ -375,25 +374,10 @@ export default function QuestionnarePage() {
                 organizedData[question.pillar.pillar].push(question)
               })
               setQuestions(questionData)
-              const sortedPillars = Object.keys(organizedData).sort(
-                (a, b) => pillarOrder[a] - pillarOrder[b]
-              )
-              const sortSteps = (
-                steps: FismaQuestion[],
-                order: string[]
-              ): FismaQuestion[] => {
-                return steps.sort(
-                  (a, b) =>
-                    order.indexOf(a.function.function) -
-                    order.indexOf(b.function.function)
-                )
-              }
+              const sortedPillars = sortPillars(Object.keys(organizedData))
               let sortedFuncId: number[] = []
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
-                const sortedSteps = sortSteps(
-                  organizedData[pillar],
-                  PILLAR_FUNCTION_MAP[pillar]
-                )
+                const sortedSteps = sortFunctions(pillar, organizedData[pillar])
                 const sortedStepFuncId = sortedSteps.map(
                   (d) => d.function.functionid
                 )

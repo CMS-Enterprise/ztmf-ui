@@ -33,11 +33,9 @@ import { Routes } from '@/router/constants'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
-import {
-  ERROR_MESSAGES,
-  MAX_QUESTIONNAIRE_NOTES_LENGTH,
-  PILLAR_FUNCTION_MAP,
-} from '@/constants'
+import { ERROR_MESSAGES, MAX_QUESTIONNAIRE_NOTES_LENGTH } from '@/constants'
+import { sortPillars } from '@/utils/sortPillars'
+import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 const CssTextField = styled(TextField)({
@@ -342,34 +340,17 @@ export default function QuestionnareModal({
               }
               const data = response.data.data
               const organizedData: Record<string, FismaQuestion[]> = {}
-              const pillarOrder: Record<string, number> = {}
               data.forEach((question: FismaQuestion) => {
                 if (!organizedData[question.pillar.pillar]) {
                   organizedData[question.pillar.pillar] = []
-                  pillarOrder[question.pillar.pillar] = question.pillar.order
                 }
                 organizedData[question.pillar.pillar].push(question)
               })
-              const sortedPillars = Object.keys(organizedData).sort(
-                (a, b) => pillarOrder[a] - pillarOrder[b]
-              )
-              const sortSteps = (
-                steps: FismaQuestion[],
-                order: string[]
-              ): FismaQuestion[] => {
-                return steps.sort(
-                  (a, b) =>
-                    order.indexOf(a.function.function) -
-                    order.indexOf(b.function.function)
-                )
-              }
+              const sortedPillars = sortPillars(Object.keys(organizedData))
               const categoriesData: Category[] = sortedPillars.map(
                 (pillar) => ({
                   name: pillar,
-                  steps: sortSteps(
-                    organizedData[pillar],
-                    PILLAR_FUNCTION_MAP[pillar]
-                  ),
+                  steps: sortFunctions(pillar, organizedData[pillar]),
                 })
               )
               // const categoriesData: Category[] = sortedPillars.map(
