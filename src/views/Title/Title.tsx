@@ -1,5 +1,5 @@
 import { Container, Typography } from '@mui/material'
-import { useLoaderData } from 'react-router-dom'
+import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
@@ -47,10 +47,13 @@ type PromiseType = {
   serverError?: boolean
 }
 export default function Title() {
+  const location = useLocation()
   const loaderData = useLoaderData() as PromiseType
   const [openDataCallModal, setOpenDataCallModal] = useState<boolean>(false)
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
+  // Determine wether we are on the sign-in page or not
+  const isSignInRoute = location.pathname === Routes.SIGNIN
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
@@ -135,159 +138,164 @@ export default function Title() {
   return (
     <>
       <UsaBanner />
-      {/* Branded header bar */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
-          py: 1.5,
-          borderBottom: '1px solid rgba(0,0,0,0.12)',
-          minWidth: 800,
-        }}
-      >
-        {/* left: ZTMF mark + wordmark */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <img
-            src={ztmfLogo}
-            alt="ZTMF"
-            style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
-          />
-          <Box
-            sx={{
-              width: '1px',
-              height: Math.round(LOGO_HEIGHT * 0.7),
-              backgroundColor: 'rgba(0,0,0,0.12)',
-              flexShrink: 0,
-              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-            }}
-          />
-          <Box
-            sx={{
-              lineHeight: 1.15,
-              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-            }}
-          >
-            <Typography
+      {/* Branded header bar (hidden on signin so it does not contradict the
+          "please sign in" prompt) */}
+      {!isSignInRoute && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+            py: 1.5,
+            borderBottom: '1px solid rgba(0,0,0,0.12)',
+            minWidth: 800,
+          }}
+        >
+          {/* left: ZTMF mark + wordmark */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <img
+              src={ztmfLogo}
+              alt="ZTMF"
+              style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
+            />
+            <Box
               sx={{
-                fontSize: 17,
-                fontWeight: 700,
-                color: '#102B52',
-                letterSpacing: '0.2px',
+                width: '1px',
+                height: Math.round(LOGO_HEIGHT * 0.7),
+                backgroundColor: 'rgba(0,0,0,0.12)',
+                flexShrink: 0,
+                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
+              }}
+            />
+            <Box
+              sx={{
                 lineHeight: 1.15,
+                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
               }}
             >
-              Zero Trust Maturity Framework
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#7997AF',
-                letterSpacing: '2px',
-                textTransform: 'uppercase',
-                lineHeight: 1.15,
-              }}
-            >
-              Scoring Tool
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* right: account chip (shown when logged in) */}
-        {loaderData.status == 200 && (
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <AccountCircleIcon fontSize={'large'} />
-            {userInfo.fullname && (
-              <span
-                style={{ verticalAlign: '13px' }}
-                className="ds-text-body--md"
+              <Typography
+                sx={{
+                  fontSize: 17,
+                  fontWeight: 700,
+                  color: '#102B52',
+                  letterSpacing: '0.2px',
+                  lineHeight: 1.15,
+                }}
               >
-                {userInfo.fullname}
-              </span>
-            )}
-            {hasAdminRead && (
-              <>
-                <IconButton
-                  aria-label="more"
-                  aria-controls="long-menu"
-                  aria-haspopup="true"
-                  onClick={handleClick}
+                Zero Trust Maturity Framework
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#7997AF',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  lineHeight: 1.15,
+                }}
+              >
+                Scoring Tool
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* right: account chip (shown when logged in) */}
+          {loaderData.status == 200 && (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <AccountCircleIcon fontSize={'large'} />
+              {userInfo.fullname && (
+                <span
+                  style={{ verticalAlign: '13px' }}
+                  className="ds-text-body--md"
                 >
-                  <MoreVertIcon />
-                </IconButton>
-                <Menu
-                  id="long-menu"
-                  anchorEl={anchorEl}
-                  keepMounted
-                  open={Boolean(anchorEl)}
-                  onClose={handleClose}
-                >
-                  <Link
-                    to={Routes.ROOT}
-                    style={{ textDecoration: 'none', color: 'black' }}
+                  {userInfo.fullname}
+                </span>
+              )}
+              {hasAdminRead && (
+                <>
+                  <IconButton
+                    aria-label="more"
+                    aria-controls="long-menu"
+                    aria-haspopup="true"
+                    onClick={handleClick}
                   >
-                    <MenuItem onClick={() => handleOption()}>
-                      Dashboard
-                    </MenuItem>
-                  </Link>
-                  {hasAdminRead && (
+                    <MoreVertIcon />
+                  </IconButton>
+                  <Menu
+                    id="long-menu"
+                    anchorEl={anchorEl}
+                    keepMounted
+                    open={Boolean(anchorEl)}
+                    onClose={handleClose}
+                  >
                     <Link
-                      to={Routes.USERS}
-                      style={{ textDecoration: 'none', color: 'black' }}
-                    >
-                      <MenuItem onClick={() => handleOption()}>Users</MenuItem>
-                    </Link>
-                  )}
-                  {userInfo.role === 'OWNER' && (
-                    <Link
-                      to={Routes.ADMIN_OPDIVS}
+                      to={Routes.ROOT}
                       style={{ textDecoration: 'none', color: 'black' }}
                     >
                       <MenuItem onClick={() => handleOption()}>
-                        Manage OpDivs
+                        Dashboard
                       </MenuItem>
                     </Link>
-                  )}
-                  {isAdmin && (
-                    <MenuItem
-                      onClick={() => {
-                        setAnchorEl(null)
-                        setOpenModal(true)
-                      }}
-                    >
-                      Add Fisma System
-                    </MenuItem>
-                  )}
-                  {isUnscopedWriteAdmin(userInfo) && (
-                    <MenuItem
-                      onClick={() => {
-                        setAnchorEl(null)
-                        setOpenEmailModal(true)
-                      }}
-                    >
-                      {'Email Users'}
-                    </MenuItem>
-                  )}
-                  {isAdmin && (
-                    <MenuItem
-                      onClick={() => {
-                        handleClose()
-                        setOpenDataCallModal(true)
-                      }}
-                    >
-                      Create Datacall
-                    </MenuItem>
-                  )}
-                </Menu>
-              </>
-            )}
-          </Box>
-        )}
-      </Box>
-      {/* Datacall sub-bar (shown when logged in) */}
-      {loaderData.status == 200 && (
+                    {hasAdminRead && (
+                      <Link
+                        to={Routes.USERS}
+                        style={{ textDecoration: 'none', color: 'black' }}
+                      >
+                        <MenuItem onClick={() => handleOption()}>
+                          Users
+                        </MenuItem>
+                      </Link>
+                    )}
+                    {userInfo.role === 'OWNER' && (
+                      <Link
+                        to={Routes.ADMIN_OPDIVS}
+                        style={{ textDecoration: 'none', color: 'black' }}
+                      >
+                        <MenuItem onClick={() => handleOption()}>
+                          Manage OpDivs
+                        </MenuItem>
+                      </Link>
+                    )}
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => {
+                          setAnchorEl(null)
+                          setOpenModal(true)
+                        }}
+                      >
+                        Add Fisma System
+                      </MenuItem>
+                    )}
+                    {isUnscopedWriteAdmin(userInfo) && (
+                      <MenuItem
+                        onClick={() => {
+                          setAnchorEl(null)
+                          setOpenEmailModal(true)
+                        }}
+                      >
+                        {'Email Users'}
+                      </MenuItem>
+                    )}
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => {
+                          handleClose()
+                          setOpenDataCallModal(true)
+                        }}
+                      >
+                        Create Datacall
+                      </MenuItem>
+                    )}
+                  </Menu>
+                </>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
+      {/* Datacall sub-bar (shown when logged in, hidden on signin) */}
+      {loaderData.status == 200 && !isSignInRoute && (
         <Box
           sx={{
             display: 'flex',
