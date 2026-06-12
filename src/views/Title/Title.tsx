@@ -53,7 +53,8 @@ export default function Title() {
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
   // Determine wether we are on the sign-in page or not
-  const isSignInRoute = location.pathname === Routes.SIGNIN
+  const normalizedPath = location.pathname.toLowerCase().replace(/\/$/, '')
+  const isSignInRoute = normalizedPath === Routes.SIGNIN.toLowerCase()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
