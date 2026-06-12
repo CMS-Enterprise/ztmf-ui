@@ -69,13 +69,21 @@ const expectations: FileExpectation[] = [
   },
   {
     filePath: 'src/views/OpDivAdmin/OpDivAdmin.tsx',
-    includes: ['if (isAuthHandled(error)) return'],
-    excludes: ['Routes.SIGNIN'],
+    includes: ['if (isAuthHandled(error)) return', 'parseApiError(error)'],
+    excludes: [
+      'Routes.SIGNIN',
+      'ERROR_MESSAGES.permission',
+      'ERROR_MESSAGES.outOfScope',
+    ],
   },
   {
     filePath: 'src/views/OpDivGrantModal/OpDivGrantModal.tsx',
-    includes: ['if (isAuthHandled(error)) return'],
-    excludes: ['Routes.SIGNIN'],
+    includes: ['if (isAuthHandled(error)) return', 'parseApiError(error)'],
+    excludes: [
+      'Routes.SIGNIN',
+      'ERROR_MESSAGES.permission',
+      'ERROR_MESSAGES.outOfScope',
+    ],
   },
 ]
 

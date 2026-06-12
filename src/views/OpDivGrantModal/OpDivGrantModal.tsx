@@ -17,7 +17,7 @@ import { useSnackbar } from 'notistack'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
-import { isAuthHandled } from '@/utils/notify'
+import { isAuthHandled, notify } from '@/utils/notify'
 import type { OpDiv } from '@/types'
 
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
@@ -79,11 +79,7 @@ export default function OpDivGrantModal({
   const handleError = (error: unknown) => {
     if (isAuthHandled(error)) return
     const parsed = parseApiError(error)
-    enqueueSnackbar(parsed.message, {
-      variant: 'error',
-      anchorOrigin: SNACK_ANCHOR,
-      autoHideDuration: 1500,
-    })
+    notify(parsed.message, 'error')
   }
 
   React.useEffect(() => {
@@ -92,7 +88,6 @@ export default function OpDivGrantModal({
         .then((grants) => setAssignedOpDivs(grants))
         .catch((error) => handleError(error))
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open, userid])
 
   const handleConfirmRevoke = (confirm: boolean) => {
