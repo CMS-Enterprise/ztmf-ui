@@ -37,6 +37,7 @@ import {
   type OpDivInput,
 } from '@/utils/opdivs'
 import { parseApiError } from '@/utils/apiErrors'
+import { isAuthHandled, notify } from '@/utils/notify'
 import type { OpDiv } from '@/types'
 
 const SNACK_ANCHOR = { vertical: 'top', horizontal: 'left' } as const
@@ -87,17 +88,11 @@ export default function OpDivAdmin() {
     fetchOpDivs(true)
       .then(setRows)
       .catch((error) => {
+        if (isAuthHandled(error)) return
         const parsed = parseApiError(error)
-        if (parsed.status === 401) {
-          navigate(Routes.SIGNIN, { replace: true })
-          return
-        }
-        enqueueSnackbar(parsed.message, {
-          variant: 'error',
-          anchorOrigin: SNACK_ANCHOR,
-        })
+        notify(parsed.message, 'error')
       })
-  }, [navigate, enqueueSnackbar])
+  }, [])
 
   useEffect(() => {
     if (isOwner) loadOpDivs()
@@ -154,16 +149,14 @@ export default function OpDivAdmin() {
         loadOpDivs()
       })
       .catch((error) => {
+        if (isAuthHandled(error)) return
         const parsed = parseApiError(error)
         if (parsed.fieldErrors) {
           // Surface backend field-level validation inline (e.g. duplicate code).
           setFieldErrors(parsed.fieldErrors)
           return
         }
-        enqueueSnackbar(parsed.message, {
-          variant: 'error',
-          anchorOrigin: SNACK_ANCHOR,
-        })
+        notify(parsed.message, 'error')
       })
   }
 
@@ -187,11 +180,9 @@ export default function OpDivAdmin() {
         loadOpDivs()
       })
       .catch((error) => {
+        if (isAuthHandled(error)) return
         const parsed = parseApiError(error)
-        enqueueSnackbar(parsed.message, {
-          variant: 'error',
-          anchorOrigin: SNACK_ANCHOR,
-        })
+        notify(parsed.message, 'error')
       })
   }
 

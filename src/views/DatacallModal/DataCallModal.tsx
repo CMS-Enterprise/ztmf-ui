@@ -1,5 +1,4 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   Button as CmsButton,
   TextField as CMSTextField,
@@ -21,12 +20,11 @@ import { useSnackbar } from 'notistack'
 import { datacallModalProps } from '@/types'
 import './DatacallModal.css'
 import axiosInstance from '@/axiosConfig'
-import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
+import { isAuthHandled } from '@/utils/notify'
 
 export default function DataCallModal({ open, onClose }: datacallModalProps) {
   const { enqueueSnackbar } = useSnackbar()
-  const navigate = useNavigate()
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
@@ -84,32 +82,15 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
         })
       })
       .catch((error) => {
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
-          })
-        } else if (error.response.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
-        }
+        if (isAuthHandled(error)) return
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2500,
+        })
       })
   }
   return (

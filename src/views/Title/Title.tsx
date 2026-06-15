@@ -1,5 +1,5 @@
 import { Container, Typography } from '@mui/material'
-import { useLoaderData, useNavigate } from 'react-router-dom'
+import { useLoaderData } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
@@ -22,7 +22,6 @@ import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
-import { ERROR_MESSAGES } from '@/constants'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
@@ -48,7 +47,6 @@ type PromiseType = {
   serverError?: boolean
 }
 export default function Title() {
-  const navigate = useNavigate()
   const loaderData = useLoaderData() as PromiseType
   const [openDataCallModal, setOpenDataCallModal] = useState<boolean>(false)
   const userInfo: userData =
@@ -77,17 +75,9 @@ export default function Title() {
             error.response?.status,
             error.response?.data
           )
-          if (error.response?.status === 401) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.login,
-              },
-            })
-          }
         })
     },
-    [navigate]
+    []
   )
 
   useEffect(() => {
@@ -104,18 +94,11 @@ export default function Title() {
           setLatestDatacall(res.data.data.datacall)
         })
         .catch((error) => {
-          if (error.response?.status == 401) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
+          console.error('Fetch latest datacall error:', error)
         })
     }
     fetchLatestDatacall()
-  }, [navigate, loaderData.serverError])
+  }, [loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }

@@ -27,14 +27,13 @@ import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
-import { useNavigate } from 'react-router-dom'
-import { Routes } from '@/router/constants'
 import {
   ERROR_MESSAGES,
   TEXTFIELD_HELPER_TEXT,
   INVALID_INPUT_TEXT,
 } from '@/constants'
 import { useSnackbar } from 'notistack'
+import { isAuthHandled, notify } from '@/utils/notify'
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -60,7 +59,6 @@ export default function EditSystemModal({
   const isFormValid = (): boolean => {
     return Object.values(formValid).every((value) => value === true)
   }
-  const navigate = useNavigate()
   const { enqueueSnackbar } = useSnackbar()
   const [loading, setLoading] = React.useState<boolean>(true)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
@@ -238,15 +236,7 @@ export default function EditSystemModal({
           issoemail: editedFismaSystem.issoemail,
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
         })
-        .then((res) => {
-          if (res.status !== 200 && res.status.toString()[0] === '4') {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
+        .then(() => {
           enqueueSnackbar(`Saved`, {
             variant: 'success',
             anchorOrigin: {
@@ -258,10 +248,10 @@ export default function EditSystemModal({
           onClose(editedFismaSystem)
         })
         .catch((error) => {
-          if (error.response.status === 400) {
+          if (isAuthHandled(error)) return
+          if (error.response?.status === 400) {
             const data: { [key: string]: string } = error.response.data.data
             Object.entries(data).forEach(([key]) => {
-              // formValid.current[key] = false
               setFormValid((prevState) => ({
                 ...prevState,
                 [key]: false,
@@ -280,12 +270,7 @@ export default function EditSystemModal({
               autoHideDuration: 1500,
             })
           } else {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.error,
-              },
-            })
+            notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
           }
         })
     } else if (mode === 'create') {
@@ -304,15 +289,7 @@ export default function EditSystemModal({
           issoemail: editedFismaSystem.issoemail,
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
         })
-        .then((res) => {
-          if (res.status !== 200 && res.status.toString()[0] === '4') {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
+        .then(() => {
           enqueueSnackbar(`Created`, {
             variant: 'success',
             anchorOrigin: {
@@ -324,10 +301,10 @@ export default function EditSystemModal({
           onClose(editedFismaSystem)
         })
         .catch((error) => {
-          if (error.response.status === 400) {
+          if (isAuthHandled(error)) return
+          if (error.response?.status === 400) {
             const data: { [key: string]: string } = error.response.data.data
             Object.entries(data).forEach(([key]) => {
-              // formValid.current[key] = false
               setFormValid((prevState) => ({
                 ...prevState,
                 [key]: false,
@@ -346,12 +323,7 @@ export default function EditSystemModal({
               autoHideDuration: 1500,
             })
           } else {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.error,
-              },
-            })
+            notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
           }
         })
     }
@@ -422,21 +394,13 @@ export default function EditSystemModal({
         }
       })
       .catch((error) => {
+        if (isAuthHandled(error)) return
         console.error(
           'Decommission error:',
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        } else if (error.response?.status === 404) {
+        if (error.response?.status === 404) {
           enqueueSnackbar('System not found', {
             variant: 'error',
             anchorOrigin: {
@@ -456,12 +420,7 @@ export default function EditSystemModal({
             autoHideDuration: 3000,
           })
         } else {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.error,
-            },
-          })
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
       })
   }
@@ -490,21 +449,13 @@ export default function EditSystemModal({
         }
       })
       .catch((error) => {
+        if (isAuthHandled(error)) return
         console.error(
           'Reactivate error:',
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        } else if (error.response?.status === 404) {
+        if (error.response?.status === 404) {
           enqueueSnackbar('System not found', {
             variant: 'error',
             anchorOrigin: {
@@ -524,12 +475,7 @@ export default function EditSystemModal({
             autoHideDuration: 3000,
           })
         } else {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.error,
-            },
-          })
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
       })
   }

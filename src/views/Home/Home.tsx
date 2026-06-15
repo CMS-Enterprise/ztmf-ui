@@ -2,9 +2,6 @@ import FismaTable from '../FismaTable/FismaTable'
 import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
 import { useState, useEffect } from 'react'
 import axiosInstance from '@/axiosConfig'
-import { useNavigate } from 'react-router-dom'
-import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
 import { useContextProp } from '../Title/Context'
 import { Box, CircularProgress } from '@mui/material'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -16,7 +13,6 @@ import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
-  const navigate = useNavigate()
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
   const { latestDataCallId } = useContextProp()
   useEffect(() => {
@@ -33,24 +29,17 @@ export default function HomePageContainer() {
               }
             }
             setScoreMap(scoresMap)
-            setLoading(false)
           })
           .catch((error) => {
-            if (error.response.status == 401) {
-              if (error.response.status == 401) {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              }
-            }
+            console.error('Error fetching scores:', error)
+          })
+          .finally(() => {
+            setLoading(false)
           })
       }
     }
     fetchScores()
-  }, [navigate, latestDataCallId])
+  }, [latestDataCallId])
 
   if (loading) {
     return (

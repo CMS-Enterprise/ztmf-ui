@@ -39,6 +39,7 @@ import {
 import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
+import { isAuthHandled } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
@@ -143,18 +144,6 @@ export default function UserTable() {
       navigate(Routes.ROOT, { replace: true })
     }
   }, [userInfo.role, canRead, navigate])
-  //TODO: add these to a file to be imported and used in multiple places
-  const checkValidResponse = (status: number) => {
-    if (status == 401) {
-      navigate(Routes.SIGNIN, {
-        replace: true,
-        state: {
-          message: ERROR_MESSAGES.notSaved,
-        },
-      })
-    }
-    return
-  }
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
@@ -193,17 +182,6 @@ export default function UserTable() {
   ) => {
     if (params.reason === GridRowEditStopReasons.rowFocusOut) {
       event.defaultMuiPrevented = true
-    }
-  }
-  const handleUnautherized = (errorStatus: number) => {
-    if (errorStatus === 403) {
-      enqueueSnackbar(ERROR_MESSAGES.permission, {
-        variant: 'error',
-        anchorOrigin: {
-          vertical: 'top',
-          horizontal: 'left',
-        },
-      })
     }
   }
   const handleEditClick = (id: GridRowId) => () => {
@@ -330,14 +308,9 @@ export default function UserTable() {
           setOpen(true)
         })
         .catch((error) => {
+          if (isAuthHandled(error)) return
           console.error('Error updating score:', error)
-          if (error.response.status === 401) {
-            checkValidResponse(error.response.status)
-          } else if (error.response.status === 403) {
-            handleUnautherized(error.response.status)
-          } else {
-            setSaveError(error)
-          }
+          setSaveError(error)
         })
     } else {
       // const updatedRow = { ...newRow } as users
@@ -347,20 +320,14 @@ export default function UserTable() {
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
         })
-        .then((res) => {
-          checkValidResponse(res.status)
+        .then(() => {
           setSnackBarSeverity('success')
           setSnackBarText('Saved')
           setOpen(true)
         })
         .catch((error) => {
-          if (error.response.status === 401) {
-            checkValidResponse(error.response.status)
-          } else if (error.response.status === 403) {
-            handleUnautherized(error.response.status)
-          } else {
-            setSaveError(error)
-          }
+          if (isAuthHandled(error)) return
+          setSaveError(error)
         })
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
@@ -409,20 +376,15 @@ export default function UserTable() {
         })
       })
       .catch((error) => {
-        if (error.response?.status === 401) {
-          checkValidResponse(error.response.status)
-        } else if (error.response?.status === 403) {
-          handleUnautherized(error.response.status)
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        }
+        if (isAuthHandled(error)) return
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2000,
+        })
       })
   }
   const handleRestoreClick = (id: GridRowId) => () => {
@@ -448,20 +410,15 @@ export default function UserTable() {
         })
       })
       .catch((error) => {
-        if (error.response?.status === 401) {
-          checkValidResponse(error.response.status)
-        } else if (error.response?.status === 403) {
-          handleUnautherized(error.response.status)
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        }
+        if (isAuthHandled(error)) return
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 2000,
+        })
       })
   }
   // TODO: Custom hook for fetching data
@@ -512,31 +469,15 @@ export default function UserTable() {
         }
       })
       .catch((error) => {
-        console.log(error)
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.notSaved,
-            },
-          })
-        } else if (error.response.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-          })
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-          })
-        }
+        if (isAuthHandled(error)) return
+        console.error('Fetch users error:', error)
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+        })
       })
     return () => {
       ignore = true
