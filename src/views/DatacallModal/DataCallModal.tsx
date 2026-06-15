@@ -19,7 +19,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import { datacallModalProps } from '@/types'
 import './DatacallModal.css'
 import axiosInstance from '@/axiosConfig'
-import { ERROR_MESSAGES } from '@/constants'
+import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 
 export default function DataCallModal({ open, onClose }: datacallModalProps) {
@@ -76,7 +76,9 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+        notify(parseApiError(error).message, 'error', {
+          autoHideDuration: 2500,
+        })
       })
   }
   return (

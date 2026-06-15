@@ -7,11 +7,12 @@ import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
-  ERROR_MESSAGES,
   CONFIRMATION_MESSAGE,
+  ERROR_MESSAGES,
+  STATUS_MESSAGES,
   TEXTFIELD_HELPER_TEXT,
-  INVALID_INPUT_TEXT,
 } from '@/constants'
+import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -283,7 +284,7 @@ export default function SystemDetailPage() {
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
       })
       .then(() => {
-        notify('Saved', 'success', { autoHideDuration: 1500 })
+        notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
         setFismaSystems((prev) =>
           prev.map((s) =>
             s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
@@ -292,21 +293,22 @@ export default function SystemDetailPage() {
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        if (error.response?.status === 400) {
-          const data: { [key: string]: string } = error.response.data.data
-          Object.entries(data).forEach(([key]) => {
+        const parsed = parseApiError(error)
+        if (parsed.fieldErrors) {
+          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
             setFormValid((prev) => ({ ...prev, [key]: false }))
-            setFormValidErrorText((prev) => ({
-              ...prev,
-              [key]: INVALID_INPUT_TEXT(key),
-            }))
+            setFormValidErrorText((prev) => ({ ...prev, [key]: message }))
           })
-          notify('Not Saved', 'error', { autoHideDuration: 1500 })
-        } else if (error.response?.status === 404) {
-          notify('System not found', 'error', { autoHideDuration: 2000 })
-        } else {
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+          notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
+          return
         }
+        if (parsed.status === 404) {
+          notify(ERROR_MESSAGES.systemNotFound, 'error', {
+            autoHideDuration: 2000,
+          })
+          return
+        }
+        notify(parsed.message, 'error')
       })
       .finally(() => {
         setIsSaving(false)
@@ -333,7 +335,7 @@ export default function SystemDetailPage() {
       .delete(`fismasystems/${editedSystem.fismasystemid}`, { data: body })
       .then((res) => {
         if (res.status === 200 || res.status === 204) {
-          notify('System decommissioned successfully', 'success', {
+          notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -362,14 +364,14 @@ export default function SystemDetailPage() {
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 404) {
-          notify('System not found', 'error', { autoHideDuration: 2000 })
-        } else if (error.response?.status === 400) {
-          const errorMsg = error.response?.data?.error || 'Invalid request'
-          notify(`Error: ${errorMsg}`, 'error')
-        } else {
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+        const parsed = parseApiError(error)
+        if (parsed.status === 404) {
+          notify(ERROR_MESSAGES.systemNotFound, 'error', {
+            autoHideDuration: 2000,
+          })
+          return
         }
+        notify(parsed.message, 'error')
       })
   }
 
@@ -384,7 +386,7 @@ export default function SystemDetailPage() {
       .put(`fismasystems/${editedSystem.fismasystemid}/reactivate`, body)
       .then((res) => {
         if (res.status === 200) {
-          notify('System reactivated successfully', 'success', {
+          notify(STATUS_MESSAGES.systemReactivated, 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -413,14 +415,14 @@ export default function SystemDetailPage() {
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 404) {
-          notify('System not found', 'error', { autoHideDuration: 2000 })
-        } else if (error.response?.status === 400) {
-          const errorMsg = error.response?.data?.error || 'Invalid request'
-          notify(`Error: ${errorMsg}`, 'error')
-        } else {
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+        const parsed = parseApiError(error)
+        if (parsed.status === 404) {
+          notify(ERROR_MESSAGES.systemNotFound, 'error', {
+            autoHideDuration: 2000,
+          })
+          return
         }
+        notify(parsed.message, 'error')
       })
   }
 

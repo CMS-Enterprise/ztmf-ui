@@ -47,7 +47,7 @@ import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 import OpDivGrantModal from '../OpDivGrantModal/OpDivGrantModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
+import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
@@ -146,7 +146,9 @@ export default function UserTable() {
   const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const [open, setOpen] = useState<boolean>(false)
-  const [snackBarText, setSnackBarText] = useState<string>('Saved')
+  const [snackBarText, setSnackBarText] = useState<string>(
+    STATUS_MESSAGES.saved
+  )
   const [snackBarSeverity, setSnackBarSeverity] = useState<
     'success' | 'error' | 'warning' | 'info'
   >('success')
@@ -299,7 +301,7 @@ export default function UserTable() {
           ])
           apiRef.current.updateRows([updatedRow])
           setSnackBarSeverity('success')
-          setSnackBarText('Saved')
+          setSnackBarText(STATUS_MESSAGES.saved)
           setOpen(true)
         })
         .catch((error) => {
@@ -317,7 +319,7 @@ export default function UserTable() {
         })
         .then(() => {
           setSnackBarSeverity('success')
-          setSnackBarText('Saved')
+          setSnackBarText(STATUS_MESSAGES.saved)
           setOpen(true)
         })
         .catch((error) => {

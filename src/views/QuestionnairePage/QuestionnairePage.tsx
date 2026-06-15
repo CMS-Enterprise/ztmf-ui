@@ -26,6 +26,7 @@ import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
+  STATUS_MESSAGES,
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
@@ -200,7 +201,7 @@ export default function QuestionnarePage() {
         })
         .then(() => {
           // checkValidResponse(res.status)
-          notify('Saved', 'success', { autoHideDuration: 1500 })
+          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
           fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
@@ -217,7 +218,7 @@ export default function QuestionnarePage() {
           datacallid: datacallID,
         })
         .then(() => {
-          notify('Saved', 'success', { autoHideDuration: 1500 })
+          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
           fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
