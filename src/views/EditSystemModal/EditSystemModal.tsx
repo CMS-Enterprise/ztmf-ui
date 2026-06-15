@@ -32,7 +32,6 @@ import {
   TEXTFIELD_HELPER_TEXT,
   INVALID_INPUT_TEXT,
 } from '@/constants'
-import { useSnackbar } from 'notistack'
 import { isAuthHandled, notify } from '@/utils/notify'
 /**
  * Component that renders a modal to edit fisma systems.
@@ -59,7 +58,6 @@ export default function EditSystemModal({
   const isFormValid = (): boolean => {
     return Object.values(formValid).every((value) => value === true)
   }
-  const { enqueueSnackbar } = useSnackbar()
   const [loading, setLoading] = React.useState<boolean>(true)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [openDecommissionAlert, setOpenDecommissionAlert] =
@@ -237,14 +235,7 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
         })
         .then(() => {
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
+          notify('Saved', 'success', { autoHideDuration: 1500 })
           onClose(editedFismaSystem)
         })
         .catch((error) => {
@@ -261,14 +252,7 @@ export default function EditSystemModal({
                 [key]: INVALID_INPUT_TEXT(key),
               }))
             })
-            enqueueSnackbar(`Not Saved`, {
-              variant: 'error',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-              autoHideDuration: 1500,
-            })
+            notify('Not Saved', 'error', { autoHideDuration: 1500 })
           } else {
             notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
           }
@@ -290,14 +274,7 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
         })
         .then(() => {
-          enqueueSnackbar(`Created`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
+          notify('Created', 'success', { autoHideDuration: 1500 })
           onClose(editedFismaSystem)
         })
         .catch((error) => {
@@ -314,14 +291,7 @@ export default function EditSystemModal({
                 [key]: INVALID_INPUT_TEXT(key),
               }))
             })
-            enqueueSnackbar(`Not Created`, {
-              variant: 'error',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-              autoHideDuration: 1500,
-            })
+            notify('Not Created', 'error', { autoHideDuration: 1500 })
           } else {
             notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
           }
@@ -376,12 +346,7 @@ export default function EditSystemModal({
       })
       .then((res) => {
         if (res.status === 200 || res.status === 204) {
-          enqueueSnackbar('System decommissioned successfully', {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
+          notify('System decommissioned successfully', 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -401,24 +366,10 @@ export default function EditSystemModal({
           error.response?.data
         )
         if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
+          notify('System not found', 'error', { autoHideDuration: 2000 })
         } else if (error.response?.status === 400) {
           const errorMsg = error.response?.data?.error || 'Invalid request'
-          enqueueSnackbar(`Error: ${errorMsg}`, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 3000,
-          })
+          notify(`Error: ${errorMsg}`, 'error')
         } else {
           notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
@@ -432,12 +383,7 @@ export default function EditSystemModal({
       .put(`fismasystems/${editedFismaSystem.fismasystemid}/reactivate`, body)
       .then((res) => {
         if (res.status === 200) {
-          enqueueSnackbar('System reactivated successfully', {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
+          notify('System reactivated successfully', 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -456,24 +402,10 @@ export default function EditSystemModal({
           error.response?.data
         )
         if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
+          notify('System not found', 'error', { autoHideDuration: 2000 })
         } else if (error.response?.status === 400) {
           const errorMsg = error.response?.data?.error || 'Invalid request'
-          enqueueSnackbar(`Error: ${errorMsg}`, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 3000,
-          })
+          notify(`Error: ${errorMsg}`, 'error')
         } else {
           notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }

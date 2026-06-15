@@ -1,7 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { Box, CircularProgress, Divider, Typography } from '@mui/material'
-import { useSnackbar } from 'notistack'
 import _ from 'lodash'
 
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
@@ -26,7 +25,6 @@ import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const { enqueueSnackbar } = useSnackbar()
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
@@ -285,11 +283,7 @@ export default function SystemDetailPage() {
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
       })
       .then(() => {
-        enqueueSnackbar('Saved', {
-          variant: 'success',
-          anchorOrigin: { vertical: 'top', horizontal: 'left' },
-          autoHideDuration: 1500,
-        })
+        notify('Saved', 'success', { autoHideDuration: 1500 })
         setFismaSystems((prev) =>
           prev.map((s) =>
             s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
@@ -307,17 +301,9 @@ export default function SystemDetailPage() {
               [key]: INVALID_INPUT_TEXT(key),
             }))
           })
-          enqueueSnackbar('Not Saved', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 1500,
-          })
+          notify('Not Saved', 'error', { autoHideDuration: 1500 })
         } else if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 2000,
-          })
+          notify('System not found', 'error', { autoHideDuration: 2000 })
         } else {
           notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
@@ -347,9 +333,7 @@ export default function SystemDetailPage() {
       .delete(`fismasystems/${editedSystem.fismasystemid}`, { data: body })
       .then((res) => {
         if (res.status === 200 || res.status === 204) {
-          enqueueSnackbar('System decommissioned successfully', {
-            variant: 'success',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+          notify('System decommissioned successfully', 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -379,18 +363,10 @@ export default function SystemDetailPage() {
           error.response?.data
         )
         if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 2000,
-          })
+          notify('System not found', 'error', { autoHideDuration: 2000 })
         } else if (error.response?.status === 400) {
           const errorMsg = error.response?.data?.error || 'Invalid request'
-          enqueueSnackbar(`Error: ${errorMsg}`, {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 3000,
-          })
+          notify(`Error: ${errorMsg}`, 'error')
         } else {
           notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }
@@ -408,9 +384,7 @@ export default function SystemDetailPage() {
       .put(`fismasystems/${editedSystem.fismasystemid}/reactivate`, body)
       .then((res) => {
         if (res.status === 200) {
-          enqueueSnackbar('System reactivated successfully', {
-            variant: 'success',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+          notify('System reactivated successfully', 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -440,18 +414,10 @@ export default function SystemDetailPage() {
           error.response?.data
         )
         if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 2000,
-          })
+          notify('System not found', 'error', { autoHideDuration: 2000 })
         } else if (error.response?.status === 400) {
           const errorMsg = error.response?.data?.error || 'Invalid request'
-          enqueueSnackbar(`Error: ${errorMsg}`, {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 3000,
-          })
+          notify(`Error: ${errorMsg}`, 'error')
         } else {
           notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         }

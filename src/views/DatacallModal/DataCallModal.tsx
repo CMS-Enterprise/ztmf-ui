@@ -16,15 +16,13 @@ import {
   // FormControl,
 } from '@mui/material'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
-import { useSnackbar } from 'notistack'
 import { datacallModalProps } from '@/types'
 import './DatacallModal.css'
 import axiosInstance from '@/axiosConfig'
 import { ERROR_MESSAGES } from '@/constants'
-import { isAuthHandled } from '@/utils/notify'
+import { isAuthHandled, notify } from '@/utils/notify'
 
 export default function DataCallModal({ open, onClose }: datacallModalProps) {
-  const { enqueueSnackbar } = useSnackbar()
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
@@ -72,25 +70,13 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
         deadline: new Date(deadline).toISOString(),
       })
       .then(() => {
-        enqueueSnackbar(`Datacall has successfully been created`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
+        notify('Datacall has successfully been created', 'success', {
           autoHideDuration: 2500,
         })
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-          variant: 'error',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
-          autoHideDuration: 2500,
-        })
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
       })
   }
   return (

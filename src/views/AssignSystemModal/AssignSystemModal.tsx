@@ -15,9 +15,8 @@ import TextField from '@mui/material/TextField'
 import Autocomplete from '@mui/material/Autocomplete'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
-import { useSnackbar } from 'notistack'
 import { ERROR_MESSAGES } from '@/constants'
-import { isAuthHandled } from '@/utils/notify'
+import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
@@ -44,7 +43,6 @@ export default function AssignSystemModal({
     systemid: number
     nextValue: number[]
   } | null>(null)
-  const { enqueueSnackbar } = useSnackbar()
   React.useEffect(() => {
     if (open && userid) {
       axiosInstance.get(`/users/${userid}/assignedfismasystems`).then((res) => {
@@ -64,24 +62,11 @@ export default function AssignSystemModal({
       .delete(`/users/${userid}/assignedfismasystems/${target.systemid}`)
       .then(() => {
         setAssignedSystems(target.nextValue)
-        enqueueSnackbar(`Saved - unassigned system`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
-        })
+        notify('Saved - unassigned system', 'success')
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-          variant: 'error',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
-          autoHideDuration: 1500,
-        })
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 1500 })
       })
   }
 
@@ -141,22 +126,11 @@ export default function AssignSystemModal({
                   })
                   .then(() => {
                     setAssignedSystems(newValue)
-                    enqueueSnackbar(`Saved - assign system`, {
-                      variant: 'success',
-                      anchorOrigin: {
-                        vertical: 'top',
-                        horizontal: 'left',
-                      },
-                    })
+                    notify('Saved - assign system', 'success')
                   })
                   .catch((error) => {
                     if (isAuthHandled(error)) return
-                    enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                      variant: 'error',
-                      anchorOrigin: {
-                        vertical: 'top',
-                        horizontal: 'left',
-                      },
+                    notify(ERROR_MESSAGES.tryAgain, 'error', {
                       autoHideDuration: 1500,
                     })
                   })

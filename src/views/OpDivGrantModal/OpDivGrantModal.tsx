@@ -13,7 +13,6 @@ import TextField from '@mui/material/TextField'
 import Autocomplete from '@mui/material/Autocomplete'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
-import { useSnackbar } from 'notistack'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
@@ -42,8 +41,6 @@ type Props = {
   onChanged?: (userid: string) => void
 }
 
-const SNACK_ANCHOR = { vertical: 'top', horizontal: 'left' } as const
-
 export default function OpDivGrantModal({
   open,
   handleClose,
@@ -56,7 +53,6 @@ export default function OpDivGrantModal({
   const [pendingRevoke, setPendingRevoke] = React.useState<{
     opdivId: number
   } | null>(null)
-  const { enqueueSnackbar } = useSnackbar()
 
   const opdivMap = React.useMemo(() => {
     const map: Record<number, { code: string; name: string }> = {}
@@ -99,10 +95,7 @@ export default function OpDivGrantModal({
         // Functional update so a grant that resolved while the confirm was
         // open is not dropped by a stale snapshot.
         setAssignedOpDivs((prev) => prev.filter((id) => id !== target.opdivId))
-        enqueueSnackbar('Saved - revoked OpDiv', {
-          variant: 'success',
-          anchorOrigin: SNACK_ANCHOR,
-        })
+        notify('Saved - revoked OpDiv', 'success')
         onChanged?.(String(userid))
       })
       .catch((error) => handleError(error))
@@ -162,10 +155,7 @@ export default function OpDivGrantModal({
                     setAssignedOpDivs((prev) =>
                       prev.includes(opdivId) ? prev : [...prev, opdivId]
                     )
-                    enqueueSnackbar('Saved - granted OpDiv', {
-                      variant: 'success',
-                      anchorOrigin: SNACK_ANCHOR,
-                    })
+                    notify('Saved - granted OpDiv', 'success')
                     onChanged?.(String(userid))
                   })
                   .catch((error) => handleError(error))
