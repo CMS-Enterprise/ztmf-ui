@@ -217,6 +217,7 @@ export type QuestionChoice = {
 }
 export type users = {
   assignedfismasystems: number[]
+  assignedopdivids?: number[] | null
   email: string
   fullname: string
   role: UserRole
