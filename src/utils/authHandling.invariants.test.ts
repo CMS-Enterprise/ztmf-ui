@@ -59,8 +59,17 @@ const expectations: FileExpectation[] = [
     excludes: ['Routes.SIGNIN'],
   },
   {
+    // Title legitimately references Routes.SIGNIN to compare the current path
+    // and hide the header on the signin route, so the bare name is allowed.
+    // Ban the redirect shapes instead (imperative + declarative) plus the hook
+    // needed for an imperative redirect, which is what the centralization
+    // actually forbids here.
     filePath: 'src/views/Title/Title.tsx',
-    excludes: ['Routes.SIGNIN', 'const navigate = useNavigate()'],
+    excludes: [
+      'navigate(Routes.SIGNIN',
+      'to={Routes.SIGNIN}',
+      'const navigate = useNavigate()',
+    ],
   },
   {
     filePath: 'src/views/UserTable/UserTable.tsx',
