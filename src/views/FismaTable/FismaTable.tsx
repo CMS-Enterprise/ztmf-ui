@@ -58,21 +58,15 @@ export function CustomFooterSaveComponent(
   }
   const saveSystemAnswers = async () => {
     let exportUrl = `/datacalls/${props.latestDataCallId}/export`
-    if (
-      props.selectedRows &&
-      props.fismaSystems &&
-      props.selectedRows.length < props.fismaSystems.length
-    ) {
+    if (props.selectedRows && props.selectedRows.length > 0) {
       exportUrl += '?'
       let idString: string = ''
-      if (props.selectedRows) {
-        props.selectedRows.forEach((id, index) => {
-          idString += 'fsids=' + id
-          if (index < (props.selectedRows ?? []).length - 1) {
-            idString += '&'
-          }
-        })
-      }
+      props.selectedRows.forEach((id, index) => {
+        idString += 'fsids=' + id
+        if (props.selectedRows && index < props.selectedRows.length - 1) {
+          idString += '&'
+        }
+      })
       exportUrl += idString
     }
     return await axiosInstance
