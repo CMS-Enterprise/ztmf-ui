@@ -76,9 +76,18 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        notify(parseApiError(error).message, 'error', {
-          autoHideDuration: 2500,
-        })
+        const parsed = parseApiError(error)
+        // Backend 400 with a field map: route each reason to the matching
+        // field's error setter. No toast on this branch, the inline errors
+        // are the user feedback.
+        if (parsed.fieldErrors) {
+          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+            if (key === 'datacall') setDatacallError(message)
+            else if (key === 'deadline') setDeadlineError(message)
+          })
+          return
+        }
+        notify(parsed.message, 'error', { autoHideDuration: 2500 })
       })
   }
   return (

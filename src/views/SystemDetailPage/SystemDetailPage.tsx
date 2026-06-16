@@ -294,6 +294,9 @@ export default function SystemDetailPage() {
       .catch((error) => {
         if (isAuthHandled(error)) return
         const parsed = parseApiError(error)
+        // Backend 400 with a field map: render each reason inline under its
+        // input via formValid + formValidErrorText. The 'Not Saved' toast
+        // is a status flag, not the detail.
         if (parsed.fieldErrors) {
           Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
             setFormValid((prev) => ({ ...prev, [key]: false }))
