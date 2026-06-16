@@ -467,15 +467,27 @@ export default function UserTable() {
                   .then((ids) => [u.userid, ids] as [string, number[]])
                   .catch(() => [u.userid, []] as [string, number[]])
               )
-            ).then((entries) => {
-              if (ignore) return
-              // Merge rather than replace so an in-flight per-user refresh
-              // (e.g. from closing the grant modal) is not clobbered.
-              setUserOpDivMap((prev) => ({
-                ...prev,
-                ...Object.fromEntries(entries),
-              }))
-            })
+            )
+              .then((entries) => {
+                if (ignore) return
+                // Merge rather than replace so an in-flight per-user refresh
+                // (e.g. from closing the grant modal) is not clobbered.
+                setUserOpDivMap((prev) => ({
+                  ...prev,
+                  ...Object.fromEntries(entries),
+                }))
+              })
+              .catch((error) => {
+                if (ignore) return
+                // The per-user catches above already default to [], so this only
+                // trips on an unexpected failure. Surface it rather than leaving
+                // the OpDivs column silently blank.
+                console.error('Failed to backfill OpDiv grants', error)
+                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                  variant: 'warning',
+                  anchorOrigin: { vertical: 'top', horizontal: 'left' },
+                })
+              })
           }
         } else {
           return

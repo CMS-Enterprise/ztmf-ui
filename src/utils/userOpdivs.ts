@@ -8,9 +8,10 @@ import axiosInstance from '@/axiosConfig'
  * (GET returns { data: number[] }; POST body { opdiv_id }; DELETE by id).
  * Granting/revoking recomputes the user's derived identity_provider server-side.
  *
- * The list endpoint (GET /users) always returns assignedopdivids as null - the
- * join is skipped there - so callers must use fetchUserOpDivs per user rather
- * than reading a list row.
+ * The list endpoint (GET /users) returns each row's grants inline as
+ * assignedopdivids, so the users table reads them off the row directly.
+ * fetchUserOpDivs is for single-user refresh (e.g. after the grant modal) and
+ * as a fallback for older backends that omit the field.
  *
  * NOTE: these endpoints are built on the backend RBAC branch
  * (feature/opdiv-rbac-enforcement) but are not yet in backend/openapi.yaml, so
