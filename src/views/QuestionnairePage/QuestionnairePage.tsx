@@ -91,7 +91,7 @@ const addSpace = (str: string) => {
   return str
 }
 export default function QuestionnarePage() {
-  const { userInfo } = useContextProp()
+  const { userInfo, selectedDataCallId, selectedDatacall } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
@@ -105,7 +105,6 @@ export default function QuestionnarePage() {
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
-  // const { latestDatacall, latestDatacallId } = useContextProp()
   const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
   const [noQuestions, setNoQuestions] = React.useState<boolean>(false)
   const [categories, setCategories] = React.useState<Category[]>([])
@@ -270,13 +269,21 @@ export default function QuestionnarePage() {
           const latestDataCallId = await axiosInstance
             .get(`/datacalls/latest`)
             .then((res) => {
-              setDatacallID(res.data.data.datacallid)
-              datacall = res.data.data.datacall.replaceAll(' ', '_')
-              setDatacall(datacall)
-              if (new Date() > new Date(res.data.data.deadline)) {
+              const latestId = res.data.data.datacallid
+              const isHistorical =
+                selectedDataCallId > 0 && selectedDataCallId !== latestId
+              if (isHistorical) {
+                setDatacallID(selectedDataCallId)
+                datacall = selectedDatacall.replaceAll(' ', '_')
+                setDatacall(datacall)
                 setIsPastDeadline(true)
+              } else {
+                setDatacallID(latestId)
+                datacall = res.data.data.datacall.replaceAll(' ', '_')
+                setDatacall(datacall)
+                setIsPastDeadline(new Date() > new Date(res.data.data.deadline))
               }
-              return res.data.data.datacallid
+              return isHistorical ? selectedDataCallId : latestId
             })
             .catch((error) => {
               if (isAuthHandled(error)) return
@@ -411,7 +418,14 @@ export default function QuestionnarePage() {
       }
       fetchData()
     }
-  }, [system, navigate, fismaacronym, enqueueSnackbar])
+  }, [
+    system,
+    navigate,
+    fismaacronym,
+    enqueueSnackbar,
+    selectedDataCallId,
+    selectedDatacall,
+  ])
   React.useEffect(() => {
     if (questionId) {
       // Clear saved-state markers before async load so the last-edited
