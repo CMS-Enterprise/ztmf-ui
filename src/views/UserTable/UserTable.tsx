@@ -173,8 +173,10 @@ export default function UserTable() {
   const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
   // opdiv_id -> code, for rendering the OpDivs membership column.
   const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
-  // userid -> granted opdiv ids. The list endpoint omits grants (always null),
-  // so these are fetched per user from the detail endpoint after the list loads.
+  // userid -> granted opdiv ids, used as a refresh override after the grant modal
+  // closes. The list now returns grants inline (assignedopdivids); this map only
+  // holds rows refreshed since load, plus a one-time backfill against older
+  // backends that omit the inline grants (see the load effect).
   const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
@@ -447,23 +449,34 @@ export default function UserTable() {
             }
           }
           setFismaSystemsMap(map)
-          // Grants are omitted from the list response, so resolve each user's
-          // OpDivs from the detail endpoint in parallel for the OpDivs column.
-          Promise.all(
-            data.map((u: users) =>
-              fetchUserOpDivs(u.userid)
-                .then((ids) => [u.userid, ids] as [string, number[]])
-                .catch(() => [u.userid, []] as [string, number[]])
-            )
-          ).then((entries) => {
-            if (ignore) return
-            // Merge rather than replace so an in-flight per-user refresh
-            // (e.g. from closing the grant modal) is not clobbered.
-            setUserOpDivMap((prev) => ({
-              ...prev,
-              ...Object.fromEntries(entries),
-            }))
-          })
+          // Grants now arrive inline on each list row (assignedopdivids), so the
+          // OpDivs column reads them directly with no per-user calls. Fall back to
+          // the per-user detail endpoint only against an older backend that omits
+          // them, keeping this safe to ship before or after the backend deploys.
+          // Distinguish "old backend omitted the field" (key absent -> backfill)
+          // from "new backend, user simply has zero grants" (key present, value
+          // null/[] -> no backfill). A value check would misfire on every
+          // zero-grant user and re-introduce the N+1.
+          const missingInlineGrants = data.some(
+            (u: users) => !('assignedopdivids' in u)
+          )
+          if (missingInlineGrants) {
+            Promise.all(
+              data.map((u: users) =>
+                fetchUserOpDivs(u.userid)
+                  .then((ids) => [u.userid, ids] as [string, number[]])
+                  .catch(() => [u.userid, []] as [string, number[]])
+              )
+            ).then((entries) => {
+              if (ignore) return
+              // Merge rather than replace so an in-flight per-user refresh
+              // (e.g. from closing the grant modal) is not clobbered.
+              setUserOpDivMap((prev) => ({
+                ...prev,
+                ...Object.fromEntries(entries),
+              }))
+            })
+          }
         } else {
           return
         }
@@ -572,7 +585,10 @@ export default function UserTable() {
       sortable: false,
       filterable: false,
       renderCell: (params) => {
-        const ids = userOpDivMap[params.row.userid] ?? []
+        // Refresh override (post grant-modal) wins; otherwise use the grants the
+        // list returned inline on the row.
+        const ids =
+          userOpDivMap[params.row.userid] ?? params.row.assignedopdivids ?? []
         if (!ids.length) {
           return (
             <Typography variant="body2" color="text.secondary">
