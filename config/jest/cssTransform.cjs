@@ -2,7 +2,8 @@
 
 module.exports = {
   process() {
-    return 'module.exports = {};'
+    // Jest expects transformed source under the `code` key.
+    return { code: 'module.exports = {};' }
   },
   getCacheKey() {
     // The output is always the same.

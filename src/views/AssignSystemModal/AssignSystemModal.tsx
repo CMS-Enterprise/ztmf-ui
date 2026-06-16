@@ -16,9 +16,8 @@ import Autocomplete from '@mui/material/Autocomplete'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import { useSnackbar } from 'notistack'
-import { useNavigate } from 'react-router-dom'
-import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
+import { isAuthHandled } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
@@ -46,7 +45,6 @@ export default function AssignSystemModal({
     nextValue: number[]
   } | null>(null)
   const { enqueueSnackbar } = useSnackbar()
-  const navigate = useNavigate()
   React.useEffect(() => {
     if (open && userid) {
       axiosInstance.get(`/users/${userid}/assignedfismasystems`).then((res) => {
@@ -75,32 +73,15 @@ export default function AssignSystemModal({
         })
       })
       .catch((error) => {
-        if (error.response?.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.error,
-            },
-          })
-        } else if (error.response?.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
-        }
+        if (isAuthHandled(error)) return
+        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+          variant: 'error',
+          anchorOrigin: {
+            vertical: 'top',
+            horizontal: 'left',
+          },
+          autoHideDuration: 1500,
+        })
       })
   }
 
@@ -169,32 +150,15 @@ export default function AssignSystemModal({
                     })
                   })
                   .catch((error) => {
-                    if (error.response?.status === 401) {
-                      navigate(Routes.SIGNIN, {
-                        replace: true,
-                        state: {
-                          message: ERROR_MESSAGES.error,
-                        },
-                      })
-                    } else if (error.response?.status === 403) {
-                      enqueueSnackbar(ERROR_MESSAGES.permission, {
-                        variant: 'error',
-                        anchorOrigin: {
-                          vertical: 'top',
-                          horizontal: 'left',
-                        },
-                        autoHideDuration: 1500,
-                      })
-                    } else {
-                      enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                        variant: 'error',
-                        anchorOrigin: {
-                          vertical: 'top',
-                          horizontal: 'left',
-                        },
-                        autoHideDuration: 1500,
-                      })
-                    }
+                    if (isAuthHandled(error)) return
+                    enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
+                      variant: 'error',
+                      anchorOrigin: {
+                        vertical: 'top',
+                        horizontal: 'left',
+                      },
+                      autoHideDuration: 1500,
+                    })
                   })
               } else if (removed.length) {
                 setPendingUnassign({

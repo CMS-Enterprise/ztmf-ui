@@ -94,8 +94,12 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
     setNotFound(false)
     setHasError(false)
 
+    // ZTMF Insights treats 403 as "no record for this OpDiv" and renders
+    // an empty state. Bypass the cross-cutting auth handler so it does
+    // not surface a permission snackbar over what is a normal absent-data
+    // case.
     axiosInstance
-      .get(`systemenrichment/${fismaUid}`)
+      .get(`systemenrichment/${fismaUid}`, { skipAuthHandling: true })
       .then((res) => {
         if (!cancelled) {
           // The endpoint returns { data: { fisma_uuid, payload, synced_at } }.

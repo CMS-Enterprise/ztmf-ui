@@ -223,6 +223,7 @@ export type users = {
   userid: string
   deleted?: boolean
   isNew?: boolean
+  identity_provider?: 'okta' | 'entra'
 }
 
 export type datacall = {

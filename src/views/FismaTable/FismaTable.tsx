@@ -23,8 +23,9 @@ import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { useNavigate, Link } from 'react-router-dom'
-import { RouteNames, Routes } from '@/router/constants'
+import { RouteNames } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
+import { isAuthHandled } from '@/utils/notify'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import BarChartIcon from '@mui/icons-material/BarChart'
@@ -51,7 +52,6 @@ export function CustomFooterSaveComponent(
     'success' | 'error' | 'warning' | 'info'
   >('error')
   const [errorMessage, setErrorMessage] = useState<string>('')
-  const navigate = useNavigate()
   const { selectedDataCallId, latestDataCallId } = useContextProp()
   const activeDataCallId = selectedDataCallId || latestDataCallId
   const handleCloseSnackbar = () => {
@@ -96,22 +96,10 @@ export function CustomFooterSaveComponent(
         window.URL.revokeObjectURL(url)
       })
       .catch((error) => {
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.error,
-            },
-          })
-        } else if (error.response.status === 403) {
-          setErrorMessage(ERROR_MESSAGES.permission)
-          setSnackBarSeverity('warning')
-          setOpenSnackbar(true)
-        } else {
-          setErrorMessage(ERROR_MESSAGES.tryAgain)
-          setSnackBarSeverity('warning')
-          setOpenSnackbar(true)
-        }
+        if (isAuthHandled(error)) return
+        setErrorMessage(ERROR_MESSAGES.tryAgain)
+        setSnackBarSeverity('warning')
+        setOpenSnackbar(true)
       })
   }
   return (
