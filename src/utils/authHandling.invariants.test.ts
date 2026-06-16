@@ -22,13 +22,23 @@ const expectations: FileExpectation[] = [
   },
   {
     filePath: 'src/views/DatacallModal/DataCallModal.tsx',
-    includes: ['if (isAuthHandled(error)) return'],
-    excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
+    includes: ['if (isAuthHandled(error)) return', 'parseApiError(error)'],
+    excludes: [
+      'Routes.SIGNIN',
+      'ERROR_MESSAGES.permission',
+      'ERROR_MESSAGES.outOfScope',
+      'error.response.data.data',
+    ],
   },
   {
     filePath: 'src/views/EditSystemModal/EditSystemModal.tsx',
-    includes: ['if (isAuthHandled(error)) return'],
-    excludes: ['Routes.SIGNIN'],
+    includes: ['if (isAuthHandled(error)) return', 'parseApiError(error)'],
+    excludes: [
+      'Routes.SIGNIN',
+      'ERROR_MESSAGES.permission',
+      'ERROR_MESSAGES.outOfScope',
+      'error.response.data.data',
+    ],
   },
   {
     filePath: 'src/views/FismaTable/FismaTable.tsx',
@@ -55,8 +65,13 @@ const expectations: FileExpectation[] = [
   },
   {
     filePath: 'src/views/SystemDetailPage/SystemDetailPage.tsx',
-    includes: ['if (isAuthHandled(error)) return'],
-    excludes: ['Routes.SIGNIN'],
+    includes: ['if (isAuthHandled(error)) return', 'parseApiError(error)'],
+    excludes: [
+      'Routes.SIGNIN',
+      'ERROR_MESSAGES.permission',
+      'ERROR_MESSAGES.outOfScope',
+      'error.response.data.data',
+    ],
   },
   {
     filePath: 'src/views/Title/Title.tsx',
