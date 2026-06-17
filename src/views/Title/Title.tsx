@@ -113,6 +113,15 @@ export default function Title() {
   const handleClose = () => {
     setAnchorEl(null)
   }
+  // Display name for the IdP that minted the user's session. Surfaced
+  // as a small badge next to the name so support can debug "I logged
+  // in but the dashboard looks wrong" without DevTools.
+  const idpBadge =
+    userInfo.identity_provider === 'entra'
+      ? 'Entra'
+      : userInfo.identity_provider === 'okta'
+        ? 'Okta'
+        : ''
   const handleCloseModal = (newRowData: FismaSystemType) => {
     if (!_.isEqual(EMPTY_SYSTEM, newRowData)) {
       setFismaSystems((prevFismSystems) => [...prevFismSystems, newRowData])
@@ -211,6 +220,18 @@ export default function Title() {
                   className="ds-text-body--md"
                 >
                   {userInfo.fullname}
+                  {idpBadge && (
+                    <Typography
+                      component="span"
+                      sx={{
+                        color: 'text.secondary',
+                        ml: 0.5,
+                        fontSize: '0.85em',
+                      }}
+                    >
+                      ({idpBadge})
+                    </Typography>
+                  )}
                 </span>
               )}
               {hasAdminRead && (
