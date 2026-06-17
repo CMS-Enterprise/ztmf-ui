@@ -91,7 +91,13 @@ const addSpace = (str: string) => {
   return str
 }
 export default function QuestionnarePage() {
-  const { userInfo, selectedDataCallId, selectedDatacall } = useContextProp()
+  const {
+    userInfo,
+    selectedDatacall,
+    latestDataCallId,
+    latestDatacall,
+    latestDeadline,
+  } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
@@ -266,36 +272,23 @@ export default function QuestionnarePage() {
         try {
           let questionsEmpty = false
           let datacall = ''
-          const latestDataCallId = await axiosInstance
-            .get(`/datacalls/latest`)
-            .then((res) => {
-              const latestId = res.data.data.datacallid
-              const isHistorical =
-                selectedDataCallId > 0 && selectedDataCallId !== latestId
-              if (isHistorical) {
-                setDatacallID(selectedDataCallId)
-                datacall = selectedDatacall.replaceAll(' ', '_')
-                setDatacall(datacall)
-                setIsPastDeadline(true)
-              } else {
-                setDatacallID(latestId)
-                datacall = res.data.data.datacall.replaceAll(' ', '_')
-                setDatacall(datacall)
-                setIsPastDeadline(new Date() > new Date(res.data.data.deadline))
-              }
-              return isHistorical ? selectedDataCallId : latestId
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                variant: 'error',
-                anchorOrigin: {
-                  vertical: 'top',
-                  horizontal: 'left',
-                },
-                autoHideDuration: 2500,
-              })
-            })
+          const isHistorical =
+            selectedDatacall !== null &&
+            selectedDatacall.datacallid !== latestDataCallId
+          let activeDataCallId: number
+          if (isHistorical && selectedDatacall) {
+            setDatacallID(selectedDatacall.datacallid)
+            datacall = selectedDatacall.datacall.replaceAll(' ', '_')
+            setDatacall(datacall)
+            setIsPastDeadline(true)
+            activeDataCallId = selectedDatacall.datacallid
+          } else {
+            setDatacallID(latestDataCallId)
+            datacall = latestDatacall.replaceAll(' ', '_')
+            setDatacall(datacall)
+            setIsPastDeadline(new Date() > new Date(latestDeadline))
+            activeDataCallId = latestDataCallId
+          }
           await axiosInstance
             .get(`/fismasystems/${system}/questions`)
             .then((response) => {
@@ -384,7 +377,7 @@ export default function QuestionnarePage() {
           }
           await axiosInstance
             .get(
-              `scores?datacallid=${latestDataCallId}&fismasystemid=${system}&include=functionoption`
+              `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`
             )
             .then((res) => {
               const hashTable: questionScoreMap = Object.assign(
@@ -423,8 +416,10 @@ export default function QuestionnarePage() {
     navigate,
     fismaacronym,
     enqueueSnackbar,
-    selectedDataCallId,
     selectedDatacall,
+    latestDataCallId,
+    latestDatacall,
+    latestDeadline,
   ])
   React.useEffect(() => {
     if (questionId) {
