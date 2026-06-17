@@ -21,16 +21,16 @@ import {
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
-import { useSnackbar } from 'notistack'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
+  STATUS_MESSAGES,
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
-import { isAuthHandled } from '@/utils/notify'
+import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -167,7 +167,6 @@ export default function QuestionnarePage() {
     )
   }
 
-  const { enqueueSnackbar } = useSnackbar()
   const navigate = useNavigate()
   const location = useLocation()
   const { fismaacronym } = useParams()
@@ -201,27 +200,13 @@ export default function QuestionnarePage() {
         })
         .then(() => {
           // checkValidResponse(res.status)
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
+          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
           fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
           if (isAuthHandled(error)) return
           console.error('Error updating score:', error)
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         })
     } else {
       axiosInstance
@@ -232,27 +217,13 @@ export default function QuestionnarePage() {
           datacallid: datacallID,
         })
         .then(() => {
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
+          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
           fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
           if (isAuthHandled(error)) return
           console.error('Error posting score:', error)
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         })
     }
   }
@@ -287,12 +258,7 @@ export default function QuestionnarePage() {
             })
             .catch((error) => {
               if (isAuthHandled(error)) return
-              enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                variant: 'error',
-                anchorOrigin: {
-                  vertical: 'top',
-                  horizontal: 'left',
-                },
+              notify(ERROR_MESSAGES.tryAgain, 'error', {
                 autoHideDuration: 2500,
               })
             })
@@ -370,14 +336,7 @@ export default function QuestionnarePage() {
             })
             .catch((error) => {
               if (isAuthHandled(error)) return
-              enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                variant: 'error',
-                anchorOrigin: {
-                  vertical: 'top',
-                  horizontal: 'left',
-                },
-                autoHideDuration: 3000,
-              })
+              notify(ERROR_MESSAGES.tryAgain, 'error')
             })
           if (questionsEmpty) {
             return
@@ -402,14 +361,7 @@ export default function QuestionnarePage() {
             .catch((error) => {
               if (isAuthHandled(error)) return
               console.error('Error fetching question scores:', error)
-              enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                variant: 'error',
-                anchorOrigin: {
-                  vertical: 'top',
-                  horizontal: 'left',
-                },
-                autoHideDuration: 3000,
-              })
+              notify(ERROR_MESSAGES.tryAgain, 'error')
             })
         } catch (error) {
           if (isAuthHandled(error)) return
@@ -418,14 +370,7 @@ export default function QuestionnarePage() {
       }
       fetchData()
     }
-  }, [
-    system,
-    navigate,
-    fismaacronym,
-    enqueueSnackbar,
-    selectedDataCallId,
-    selectedDatacall,
-  ])
+  }, [system, navigate, fismaacronym, selectedDataCallId, selectedDatacall])
   React.useEffect(() => {
     if (questionId) {
       // Clear saved-state markers before async load so the last-edited

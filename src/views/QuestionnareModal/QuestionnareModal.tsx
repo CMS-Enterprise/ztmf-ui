@@ -27,12 +27,11 @@ import {
 import LastEditedFooter from '../QuestionnairePage/LastEditedFooter'
 import axiosInstance from '@/axiosConfig'
 import CircularProgress from '@mui/material/CircularProgress'
-import { useSnackbar } from 'notistack'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
-import { MAX_QUESTIONNAIRE_NOTES_LENGTH } from '@/constants'
-import { isAuthHandled } from '@/utils/notify'
+import { MAX_QUESTIONNAIRE_NOTES_LENGTH, STATUS_MESSAGES } from '@/constants'
+import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
@@ -78,7 +77,6 @@ export default function QuestionnareModal({
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
-  const { enqueueSnackbar } = useSnackbar()
   const [activeCategoryIndex, setActiveCategoryIndex] =
     React.useState<number>(0)
   const [activeStepIndex, setActiveStepIndex] = React.useState<number>(0)
@@ -160,13 +158,7 @@ export default function QuestionnareModal({
             datacallid: datacallID,
           })
           .then(() => {
-            enqueueSnackbar(`Saved`, {
-              variant: 'success',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-            })
+            notify(STATUS_MESSAGES.saved, 'success')
             fetchQuestionScores(
               Number(system?.fismasystemid),
               setQuestionScores

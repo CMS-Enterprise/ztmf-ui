@@ -1,18 +1,18 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams } from 'react-router-dom'
 import { Box, CircularProgress, Divider, Typography } from '@mui/material'
-import { useSnackbar } from 'notistack'
 import _ from 'lodash'
 
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
-  ERROR_MESSAGES,
   CONFIRMATION_MESSAGE,
+  ERROR_MESSAGES,
+  STATUS_MESSAGES,
   TEXTFIELD_HELPER_TEXT,
-  INVALID_INPUT_TEXT,
 } from '@/constants'
+import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -26,7 +26,6 @@ import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const { enqueueSnackbar } = useSnackbar()
   const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
@@ -285,11 +284,7 @@ export default function SystemDetailPage() {
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
       })
       .then(() => {
-        enqueueSnackbar('Saved', {
-          variant: 'success',
-          anchorOrigin: { vertical: 'top', horizontal: 'left' },
-          autoHideDuration: 1500,
-        })
+        notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
         setFismaSystems((prev) =>
           prev.map((s) =>
             s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
@@ -298,29 +293,25 @@ export default function SystemDetailPage() {
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        if (error.response?.status === 400) {
-          const data: { [key: string]: string } = error.response.data.data
-          Object.entries(data).forEach(([key]) => {
+        const parsed = parseApiError(error)
+        // Backend 400 with a field map: render each reason inline under its
+        // input via formValid + formValidErrorText. The 'Not Saved' toast
+        // is a status flag, not the detail.
+        if (parsed.fieldErrors) {
+          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
             setFormValid((prev) => ({ ...prev, [key]: false }))
-            setFormValidErrorText((prev) => ({
-              ...prev,
-              [key]: INVALID_INPUT_TEXT(key),
-            }))
+            setFormValidErrorText((prev) => ({ ...prev, [key]: message }))
           })
-          enqueueSnackbar('Not Saved', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 1500,
-          })
-        } else if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+          notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
+          return
+        }
+        if (parsed.status === 404) {
+          notify(ERROR_MESSAGES.systemNotFound, 'error', {
             autoHideDuration: 2000,
           })
-        } else {
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+          return
         }
+        notify(parsed.message, 'error')
       })
       .finally(() => {
         setIsSaving(false)
@@ -347,9 +338,7 @@ export default function SystemDetailPage() {
       .delete(`fismasystems/${editedSystem.fismasystemid}`, { data: body })
       .then((res) => {
         if (res.status === 200 || res.status === 204) {
-          enqueueSnackbar('System decommissioned successfully', {
-            variant: 'success',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+          notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -378,22 +367,14 @@ export default function SystemDetailPage() {
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+        const parsed = parseApiError(error)
+        if (parsed.status === 404) {
+          notify(ERROR_MESSAGES.systemNotFound, 'error', {
             autoHideDuration: 2000,
           })
-        } else if (error.response?.status === 400) {
-          const errorMsg = error.response?.data?.error || 'Invalid request'
-          enqueueSnackbar(`Error: ${errorMsg}`, {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 3000,
-          })
-        } else {
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+          return
         }
+        notify(parsed.message, 'error')
       })
   }
 
@@ -408,9 +389,7 @@ export default function SystemDetailPage() {
       .put(`fismasystems/${editedSystem.fismasystemid}/reactivate`, body)
       .then((res) => {
         if (res.status === 200) {
-          enqueueSnackbar('System reactivated successfully', {
-            variant: 'success',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+          notify(STATUS_MESSAGES.systemReactivated, 'success', {
             autoHideDuration: 2000,
           })
           const updatedSystem: FismaSystemType = res.data?.data || {
@@ -439,22 +418,14 @@ export default function SystemDetailPage() {
           error.response?.status,
           error.response?.data
         )
-        if (error.response?.status === 404) {
-          enqueueSnackbar('System not found', {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
+        const parsed = parseApiError(error)
+        if (parsed.status === 404) {
+          notify(ERROR_MESSAGES.systemNotFound, 'error', {
             autoHideDuration: 2000,
           })
-        } else if (error.response?.status === 400) {
-          const errorMsg = error.response?.data?.error || 'Invalid request'
-          enqueueSnackbar(`Error: ${errorMsg}`, {
-            variant: 'error',
-            anchorOrigin: { vertical: 'top', horizontal: 'left' },
-            autoHideDuration: 3000,
-          })
-        } else {
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+          return
         }
+        notify(parsed.message, 'error')
       })
   }
 
