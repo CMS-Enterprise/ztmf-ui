@@ -1,4 +1,4 @@
-import { useState, type FormEvent, type ChangeEvent } from 'react'
+import { useState, useRef, type FormEvent, type ChangeEvent } from 'react'
 import { Box, TextField, Typography } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { Navigate, useLocation, useRouteLoaderData } from 'react-router-dom'
@@ -72,6 +72,7 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
   const [email, setEmail] = useState('')
   const [isSubmitting, setIsSubmitting] = useState(false)
   const [lookupError, setLookupError] = useState('')
+  const emailInputRef = useRef<HTMLInputElement>(null)
 
   const trimmedEmail = email.trim()
   const canSubmit =
@@ -107,6 +108,9 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
     // timeout) into the same generic message. No enumeration signal.
     setLookupError(UNKNOWN_EMAIL_MESSAGE)
     setIsSubmitting(false)
+    // Return focus to the field so keyboard/SR users land on the input the
+    // error refers to, not the now-disabled submit button.
+    emailInputRef.current?.focus()
   }
 
   return (
@@ -134,7 +138,10 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
           autoComplete="email"
           disabled={isSubmitting}
           error={!!lookupError}
-          inputProps={{ 'aria-label': 'Email address' }}
+          inputRef={emailInputRef}
+          inputProps={{
+            'aria-describedby': lookupError ? 'login-lookup-error' : undefined,
+          }}
           InputLabelProps={{ sx: { marginTop: 0 } }}
         />
         <CmsButton type="submit" disabled={!canSubmit} aria-busy={isSubmitting}>
@@ -142,6 +149,7 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
         </CmsButton>
         {lookupError && (
           <Typography
+            id="login-lookup-error"
             variant="body2"
             role="alert"
             sx={{ color: 'error.main', fontWeight: 600, mt: 1 }}
