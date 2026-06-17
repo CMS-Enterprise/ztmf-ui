@@ -50,6 +50,11 @@ jobs:
         run: yarn lint
 
       - name: BUILD
+        # VITE_* vars are baked into the bundle at build time, so they must
+        # be set on the build step itself, not on the deployed container.
+        # Default off; flip per environment as IdP rollout progresses.
+        env:
+          VITE_IDP_ENABLED: ${{ inputs.environment == 'dev' && 'true' || 'false' }}
         run: yarn build:${{ inputs.environment }}
 
       - name: Get AWS Creds
