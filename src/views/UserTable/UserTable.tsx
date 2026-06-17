@@ -39,16 +39,15 @@ import {
 import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
-import { isAuthHandled } from '@/utils/notify'
+import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
-import { useSnackbar } from 'notistack'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 import OpDivGrantModal from '../OpDivGrantModal/OpDivGrantModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
+import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
@@ -130,7 +129,6 @@ function validateEmail(email: string) {
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
-  const { enqueueSnackbar } = useSnackbar()
   const { userInfo, fismaSystems } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
   // admins may view the table but every mutating control is withheld. The
@@ -148,7 +146,9 @@ export default function UserTable() {
   const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const [open, setOpen] = useState<boolean>(false)
-  const [snackBarText, setSnackBarText] = useState<string>('Saved')
+  const [snackBarText, setSnackBarText] = useState<string>(
+    STATUS_MESSAGES.saved
+  )
   const [snackBarSeverity, setSnackBarSeverity] = useState<
     'success' | 'error' | 'warning' | 'info'
   >('success')
@@ -249,10 +249,7 @@ export default function UserTable() {
           `Failed to refresh OpDiv grants for user ${userid}`,
           error
         )
-        enqueueSnackbar(ERROR_MESSAGES.refresh, {
-          variant: 'warning',
-          anchorOrigin: { vertical: 'top', horizontal: 'left' },
-        })
+        notify(ERROR_MESSAGES.refresh, 'warning')
       })
     axiosInstance
       .get(`/users/${userid}`)
@@ -306,7 +303,7 @@ export default function UserTable() {
           ])
           apiRef.current.updateRows([updatedRow])
           setSnackBarSeverity('success')
-          setSnackBarText('Saved')
+          setSnackBarText(STATUS_MESSAGES.saved)
           setOpen(true)
         })
         .catch((error) => {
@@ -324,7 +321,7 @@ export default function UserTable() {
         })
         .then(() => {
           setSnackBarSeverity('success')
-          setSnackBarText('Saved')
+          setSnackBarText(STATUS_MESSAGES.saved)
           setOpen(true)
         })
         .catch((error) => {
@@ -368,25 +365,13 @@ export default function UserTable() {
       .delete(`/users/${target.userid}`)
       .then(() => {
         setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        enqueueSnackbar(`Saved - Delete User ${target.fullname}`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
+        notify(`Saved - Delete User ${target.fullname}`, 'success', {
           autoHideDuration: 2000,
         })
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-          variant: 'error',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
-          autoHideDuration: 2000,
-        })
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
       })
   }
   const handleRestoreClick = (id: GridRowId) => () => {
@@ -402,25 +387,13 @@ export default function UserTable() {
       .put(`/users/${target.userid}/restore`)
       .then(() => {
         setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        enqueueSnackbar(`Saved - Restore User ${target.fullname}`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
+        notify(`Saved - Restore User ${target.fullname}`, 'success', {
           autoHideDuration: 2000,
         })
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
-        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-          variant: 'error',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
-          autoHideDuration: 2000,
-        })
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
       })
   }
   // TODO: Custom hook for fetching data
@@ -483,10 +456,7 @@ export default function UserTable() {
                 // trips on an unexpected failure. Surface it rather than leaving
                 // the OpDivs column silently blank.
                 console.error('Failed to backfill OpDiv grants', error)
-                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                  variant: 'warning',
-                  anchorOrigin: { vertical: 'top', horizontal: 'left' },
-                })
+                notify(ERROR_MESSAGES.tryAgain, 'warning')
               })
           }
         } else {
@@ -496,18 +466,12 @@ export default function UserTable() {
       .catch((error) => {
         if (isAuthHandled(error)) return
         console.error('Fetch users error:', error)
-        enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-          variant: 'error',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
-        })
+        notify(ERROR_MESSAGES.tryAgain, 'error')
       })
     return () => {
       ignore = true
     }
-  }, [canRead, fismaSystems, navigate, enqueueSnackbar, showDeleted])
+  }, [canRead, fismaSystems, navigate, showDeleted])
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
   // own OpDivs, so narrow the option set to their own grants; the server

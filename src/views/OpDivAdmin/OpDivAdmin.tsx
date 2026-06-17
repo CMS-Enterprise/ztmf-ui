@@ -25,7 +25,6 @@ import {
   GridToolbarContainer,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid'
-import { useSnackbar } from 'notistack'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
@@ -40,7 +39,6 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import type { OpDiv } from '@/types'
 
-const SNACK_ANCHOR = { vertical: 'top', horizontal: 'left' } as const
 const CODE_MAX = 16
 const NAME_MAX = 128
 
@@ -66,7 +64,6 @@ function CreateToolbar({ onCreate }: { onCreate: () => void }) {
 export default function OpDivAdmin() {
   const navigate = useNavigate()
   const { userInfo } = useContextProp()
-  const { enqueueSnackbar } = useSnackbar()
   const isOwner = userInfo.role === 'OWNER'
 
   const [rows, setRows] = useState<OpDiv[]>([])
@@ -138,12 +135,9 @@ export default function OpDivAdmin() {
       : createOpDiv(input)
     request
       .then(() => {
-        enqueueSnackbar(
+        notify(
           editing ? 'Saved - OpDiv updated' : 'Saved - OpDiv created',
-          {
-            variant: 'success',
-            anchorOrigin: SNACK_ANCHOR,
-          }
+          'success'
         )
         setDialogOpen(false)
         loadOpDivs()
@@ -171,11 +165,11 @@ export default function OpDivAdmin() {
       active: !target.active,
     })
       .then(() => {
-        enqueueSnackbar(
+        notify(
           target.active
             ? 'Saved - OpDiv deactivated'
             : 'Saved - OpDiv activated',
-          { variant: 'success', anchorOrigin: SNACK_ANCHOR }
+          'success'
         )
         loadOpDivs()
       })
