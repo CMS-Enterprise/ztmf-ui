@@ -40,7 +40,7 @@ declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
-    latestDataCallId: number
+    activeDataCallId: number
     scores: Record<number, SystemScoreEntry>
   }
 }
@@ -57,7 +57,7 @@ export function CustomFooterSaveComponent(
     setOpenSnackbar(false)
   }
   const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${props.latestDataCallId}/export`
+    let exportUrl = `/datacalls/${props.activeDataCallId}/export`
     if (props.selectedRows && props.selectedRows.length > 0) {
       exportUrl += '?'
       let idString: string = ''
@@ -214,7 +214,9 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId, userInfo } = useContextProp()
+  const { fismaSystems, latestDataCallId, selectedDataCallId, userInfo } =
+    useContextProp()
+  const activeDataCallId = selectedDataCallId || latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
@@ -463,7 +465,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems, latestDataCallId, scores },
+          footer: { selectedRows, fismaSystems, activeDataCallId, scores },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
@@ -518,6 +520,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
         systemName={pillarScoresModal.systemName}
         systemAcronym={pillarScoresModal.systemAcronym}
         scores={pillarScoresModal.scores}
+        selectedDataCallId={activeDataCallId}
       />
     </Box>
   )

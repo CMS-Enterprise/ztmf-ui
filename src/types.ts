@@ -244,7 +244,6 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, SystemScoreEntry>
-  latestDataCallId: number
 }
 
 export type ThemeColor =

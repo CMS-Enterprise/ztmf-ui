@@ -35,7 +35,7 @@ const SYSTEMS = [
 
 const baseProps = {
   fismaSystems: SYSTEMS as unknown as FismaSystemType[],
-  latestDataCallId: 42,
+  activeDataCallId: 42,
   scores: {},
 }
 
@@ -89,6 +89,8 @@ describe('CustomFooterSaveComponent download button', () => {
       screen.getByRole('button', { name: /download selected system answers/i })
     )
     const calledUrl: string = mockAxiosGet.mock.calls[0][0]
+    // Exports against the active datacall (selected or latest), not a stale id
+    expect(calledUrl).toContain('/datacalls/42/export')
     expect(calledUrl).toContain('fsids=1')
     expect(calledUrl).toContain('fsids=2')
     // Must NOT be a bare export URL (no fsids = download everything)

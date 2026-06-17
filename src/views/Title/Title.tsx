@@ -1,10 +1,10 @@
-import { Container, Typography } from '@mui/material'
+import { Container, Typography, Autocomplete, TextField } from '@mui/material'
 import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData, UserRole } from '@/types'
+import { userData, UserRole, datacall } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -57,7 +57,10 @@ export default function Title() {
   const isSignInRoute = normalizedPath === Routes.SIGNIN.toLowerCase()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
+  const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
+  const [selectedDataCallId, setSelectedDataCallId] = useState<number>(0)
+  const [selectedDatacall, setSelectedDatacall] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -90,18 +93,26 @@ export default function Title() {
 
   useEffect(() => {
     if (loaderData.serverError) return
-    async function fetchLatestDatacall() {
+    async function fetchDatacalls() {
       await axiosInstance
-        .get('/datacalls/latest')
+        .get('/datacalls')
         .then((res) => {
-          setLatestDataCallId(res.data.data.datacallid)
-          setLatestDatacall(res.data.data.datacall)
+          const sorted: datacall[] = [...res.data.data].sort(
+            (a: datacall, b: datacall) => b.datacallid - a.datacallid
+          )
+          setDatacalls(sorted)
+          if (sorted.length > 0) {
+            setLatestDataCallId(sorted[0].datacallid)
+            setLatestDatacall(sorted[0].datacall)
+            setSelectedDataCallId(sorted[0].datacallid)
+            setSelectedDatacall(sorted[0].datacall)
+          }
         })
         .catch((error) => {
           console.error('Fetch latest datacall error:', error)
         })
     }
-    fetchLatestDatacall()
+    fetchDatacalls()
   }, [loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
@@ -137,6 +148,7 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
+  const isSystemDetail = location.pathname.startsWith('/systems/')
   // Single source of truth for header logo sizing; divider scales with it
   // so the mark, divider, and wordmark stay vertically centered on resize.
   const LOGO_HEIGHT = 55
@@ -330,10 +342,47 @@ export default function Title() {
             minWidth: 800,
           }}
         >
-          <Typography variant="subtitle1">
-            <span className="ds-u-font-weight--semibold">Datacall:</span>{' '}
-            {latestDatacall}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="subtitle1"
+              component="span"
+              sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+            >
+              Datacall:
+            </Typography>
+            {isSystemDetail ? (
+              <Typography variant="subtitle1" component="span">
+                {latestDatacall}
+              </Typography>
+            ) : (
+              datacalls.length > 0 && (
+                <Autocomplete
+                  size="small"
+                  options={datacalls}
+                  getOptionLabel={(dc) => dc.datacall}
+                  isOptionEqualToValue={(option, value) =>
+                    option.datacallid === value.datacallid
+                  }
+                  value={
+                    datacalls.find(
+                      (dc) => dc.datacallid === selectedDataCallId
+                    ) ?? datacalls[0]
+                  }
+                  onChange={(_, dc) => {
+                    if (dc) {
+                      setSelectedDataCallId(dc.datacallid)
+                      setSelectedDatacall(dc.datacall)
+                    }
+                  }}
+                  disableClearable
+                  sx={{ minWidth: 260 }}
+                  renderInput={(params) => (
+                    <TextField {...params} size="small" />
+                  )}
+                />
+              )
+            )}
+          </Box>
         </Box>
       )}
       <Container
@@ -357,6 +406,10 @@ export default function Title() {
                   userInfo,
                   latestDataCallId,
                   latestDatacall,
+                  selectedDataCallId,
+                  setSelectedDataCallId,
+                  selectedDatacall,
+                  setSelectedDatacall,
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,
