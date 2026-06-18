@@ -269,87 +269,98 @@ export default function QuestionnareModal({
     return str
   }
   React.useEffect(() => {
-    if (open && system) {
-      const fetchData = async () => {
-        try {
-          const latestDataCallId = await axiosInstance
-            .get(`/datacalls/latest`)
-            .then((res) => {
-              setDatacallID(res.data.data.datacallid)
-              if (new Date() > new Date(res.data.data.deadline)) {
-                setIsPastDeadline(true)
-              }
-              return res.data.data.datacallid
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              console.error('Error fetching latest datacall:', error)
-            })
+    if (!open || !system) return
+    const controller = new AbortController()
+    const fetchData = async () => {
+      try {
+        const latestDataCallId = await axiosInstance
+          .get(`/datacalls/latest`, { signal: controller.signal })
+          .then((res) => {
+            setDatacallID(res.data.data.datacallid)
+            if (new Date() > new Date(res.data.data.deadline)) {
+              setIsPastDeadline(true)
+            }
+            return res.data.data.datacallid
+          })
+          .catch((error) => {
+            if (controller.signal.aborted) return
+            if (isAuthHandled(error)) return
+            console.error('Error fetching latest datacall:', error)
+          })
 
-          await axiosInstance
-            .get(`/fismasystems/${system.fismasystemid}/questions`)
-            .then((response) => {
-              const data = response.data.data
-              const organizedData: Record<string, FismaQuestion[]> = {}
-              data.forEach((question: FismaQuestion) => {
-                if (!organizedData[question.pillar.pillar]) {
-                  organizedData[question.pillar.pillar] = []
-                }
-                organizedData[question.pillar.pillar].push(question)
-              })
-              const sortedPillars = sortPillars(Object.keys(organizedData))
-              const categoriesData: Category[] = sortedPillars.map(
-                (pillar) => ({
-                  name: pillar,
-                  steps: sortFunctions(pillar, organizedData[pillar]),
-                })
-              )
-              // const categoriesData: Category[] = sortedPillars.map(
-              //   (pillar) => ({
-              //     name: pillar,
-              //     steps: organizedData[pillar],
-              //   })
-              // )
-              // console.log(categoriesData)
-              setCategories(categoriesData)
-              if (data.length > 0) {
-                // console.log(categoriesData)
-                setQuestionId(categoriesData[0]['steps'][0].function.functionid)
+        await axiosInstance
+          .get(`/fismasystems/${system.fismasystemid}/questions`, {
+            signal: controller.signal,
+          })
+          .then((response) => {
+            const data = response.data.data
+            const organizedData: Record<string, FismaQuestion[]> = {}
+            data.forEach((question: FismaQuestion) => {
+              if (!organizedData[question.pillar.pillar]) {
+                organizedData[question.pillar.pillar] = []
               }
+              organizedData[question.pillar.pillar].push(question)
             })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              console.error('Error fetching questions:', error)
-            })
-          await axiosInstance
-            .get(
-              `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`
+            const sortedPillars = sortPillars(Object.keys(organizedData))
+            const categoriesData: Category[] = sortedPillars.map((pillar) => ({
+              name: pillar,
+              steps: sortFunctions(pillar, organizedData[pillar]),
+            }))
+            // const categoriesData: Category[] = sortedPillars.map(
+            //   (pillar) => ({
+            //     name: pillar,
+            //     steps: organizedData[pillar],
+            //   })
+            // )
+            // console.log(categoriesData)
+            setCategories(categoriesData)
+            if (data.length > 0) {
+              // console.log(categoriesData)
+              setQuestionId(categoriesData[0]['steps'][0].function.functionid)
+            }
+          })
+          .catch((error) => {
+            if (controller.signal.aborted) return
+            if (isAuthHandled(error)) return
+            console.error('Error fetching questions:', error)
+          })
+        await axiosInstance
+          .get(
+            `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`,
+            { signal: controller.signal }
+          )
+          .then((res) => {
+            const hashTable: questionScoreMap = Object.assign(
+              {},
+              ...res.data.data.map((item: QuestionScores) => ({
+                [item.functionoptionid]: item,
+              }))
             )
-            .then((res) => {
-              const hashTable: questionScoreMap = Object.assign(
-                {},
-                ...res.data.data.map((item: QuestionScores) => ({
-                  [item.functionoptionid]: item,
-                }))
-              )
-              setQuestionScores(hashTable)
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              console.error('Error fetching question scores:', error)
-            })
-        } catch (error) {
-          if (isAuthHandled(error)) return
-          console.error('Error fetching data:', error)
-        }
+            setQuestionScores(hashTable)
+          })
+          .catch((error) => {
+            if (controller.signal.aborted) return
+            if (isAuthHandled(error)) return
+            console.error('Error fetching question scores:', error)
+          })
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        console.error('Error fetching data:', error)
       }
-      fetchData()
+    }
+    fetchData()
+    return () => {
+      controller.abort()
     }
   }, [open, system])
   React.useEffect(() => {
-    if (questionId) {
-      try {
-        axiosInstance.get(`functions/${questionId}/options`).then((res) => {
+    if (!questionId) return
+    const controller = new AbortController()
+    try {
+      axiosInstance
+        .get(`functions/${questionId}/options`, { signal: controller.signal })
+        .then((res) => {
           setOptions(res.data.data)
           let isValidOption: boolean = false
           let funcOptId: number = 0
@@ -388,10 +399,13 @@ export default function QuestionnareModal({
           }
           setLoadingQuestion(false)
         })
-      } catch (error) {
-        if (isAuthHandled(error)) return
-        console.error('Error fetching data:', error)
-      }
+    } catch (error) {
+      if (controller.signal.aborted) return
+      if (isAuthHandled(error)) return
+      console.error('Error fetching data:', error)
+    }
+    return () => {
+      controller.abort()
     }
   }, [questionId, questionScores])
   const renderRadioGroup = (options: QuestionOption[]) => {

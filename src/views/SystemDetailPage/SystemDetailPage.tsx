@@ -42,29 +42,30 @@ export default function SystemDetailPage() {
   const [retryingFetch, setRetryingFetch] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (fismaSystems.length > 0 && !system && !triedFetch.current) {
       triedFetch.current = true
       setRetryingFetch(true)
-      axiosInstance
-        .get(`fismasystems/${systemId}`)
-        .then((res) => {
-          if (!cancelled) {
-            const data = res.data?.data
-            if (data) {
-              setFismaSystems((prev) => [...prev, data])
-            }
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`fismasystems/${systemId}`, {
+            signal: controller.signal,
+          })
+          const data = res.data?.data
+          if (data) {
+            setFismaSystems((prev) => [...prev, data])
           }
-        })
-        .catch(() => {
+        } catch {
+          if (controller.signal.aborted) return
           // System truly doesn't exist
-        })
-        .finally(() => {
-          if (!cancelled) setRetryingFetch(false)
-        })
+        } finally {
+          if (!controller.signal.aborted) setRetryingFetch(false)
+        }
+      }
+      load()
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [fismaSystems, system, systemId, setFismaSystems])
 
@@ -135,52 +136,52 @@ export default function SystemDetailPage() {
 
   // Resolve decommissioned_by UUID to a human-readable name
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (system?.decommissioned && system?.decommissioned_by) {
       const userId = system.decommissioned_by
-      axiosInstance
-        .get(`users/${userId}`)
-        .then((res) => {
-          if (!cancelled) {
-            setDecommissionedByName(res.data?.data?.fullname || userId)
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            // User may have been removed — fall back to UUID
-            setDecommissionedByName(userId)
-          }
-        })
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`users/${userId}`, {
+            signal: controller.signal,
+          })
+          setDecommissionedByName(res.data?.data?.fullname || userId)
+        } catch {
+          if (controller.signal.aborted) return
+          // User may have been removed — fall back to UUID
+          setDecommissionedByName(userId)
+        }
+      }
+      load()
     } else {
       setDecommissionedByName('')
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [system])
 
   // Resolve reactivated_by UUID to a human-readable name
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (system?.reactivated_by) {
       const userId = system.reactivated_by
-      axiosInstance
-        .get(`users/${userId}`)
-        .then((res) => {
-          if (!cancelled) {
-            setReactivatedByName(res.data?.data?.fullname || userId)
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setReactivatedByName(userId)
-          }
-        })
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`users/${userId}`, {
+            signal: controller.signal,
+          })
+          setReactivatedByName(res.data?.data?.fullname || userId)
+        } catch {
+          if (controller.signal.aborted) return
+          setReactivatedByName(userId)
+        }
+      }
+      load()
     } else {
       setReactivatedByName('')
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [system])
 

@@ -44,14 +44,27 @@ export default function AssignSystemModal({
     nextValue: number[]
   } | null>(null)
   React.useEffect(() => {
-    if (open && userid) {
-      axiosInstance.get(`/users/${userid}/assignedfismasystems`).then((res) => {
+    if (!open || !userid) return
+    const controller = new AbortController()
+    async function fetchAssigned() {
+      try {
+        const res = await axiosInstance.get(
+          `/users/${userid}/assignedfismasystems`,
+          { signal: controller.signal }
+        )
         const assignedSys = res.data.data || []
         setAssignedSystems(assignedSys)
         // Include all systems in options
         const systemIds = Object.keys(fismaSystemMap).map(Number)
         setFismaSystems(systemIds)
-      })
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error('Error fetching assigned systems:', error)
+      }
+    }
+    fetchAssigned()
+    return () => {
+      controller.abort()
     }
   }, [open, userid, fismaSystemMap])
   const handleConfirmUnassign = (confirm: boolean) => {

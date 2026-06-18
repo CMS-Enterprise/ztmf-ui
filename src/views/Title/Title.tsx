@@ -93,26 +93,31 @@ export default function Title() {
 
   useEffect(() => {
     if (loaderData.serverError) return
+    const controller = new AbortController()
     async function fetchDatacalls() {
-      await axiosInstance
-        .get('/datacalls')
-        .then((res) => {
-          const sorted: datacall[] = [...res.data.data].sort(
-            (a: datacall, b: datacall) => b.datacallid - a.datacallid
-          )
-          setDatacalls(sorted)
-          if (sorted.length > 0) {
-            setLatestDataCallId(sorted[0].datacallid)
-            setLatestDatacall(sorted[0].datacall)
-            setSelectedDataCallId(sorted[0].datacallid)
-            setSelectedDatacall(sorted[0].datacall)
-          }
+      try {
+        const res = await axiosInstance.get('/datacalls', {
+          signal: controller.signal,
         })
-        .catch((error) => {
-          console.error('Fetch latest datacall error:', error)
-        })
+        const sorted: datacall[] = [...res.data.data].sort(
+          (a: datacall, b: datacall) => b.datacallid - a.datacallid
+        )
+        setDatacalls(sorted)
+        if (sorted.length > 0) {
+          setLatestDataCallId(sorted[0].datacallid)
+          setLatestDatacall(sorted[0].datacall)
+          setSelectedDataCallId(sorted[0].datacallid)
+          setSelectedDatacall(sorted[0].datacall)
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error('Fetch latest datacall error:', error)
+      }
     }
     fetchDatacalls()
+    return () => {
+      controller.abort()
+    }
   }, [loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)

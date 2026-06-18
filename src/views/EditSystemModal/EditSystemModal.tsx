@@ -157,57 +157,57 @@ export default function EditSystemModal({
     }
   }, [system, open])
   React.useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (open && system?.decommissioned && system?.decommissioned_by) {
       const userId = system.decommissioned_by
-      axiosInstance
-        .get(`users/${userId}`)
-        .then((res) => {
-          if (!cancelled && system?.decommissioned_by === userId) {
-            if (res.data?.data?.fullname) {
-              setDecommissionedByName(res.data.data.fullname)
-            } else {
-              setDecommissionedByName(userId)
-            }
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`users/${userId}`, {
+            signal: controller.signal,
+          })
+          if (system?.decommissioned_by === userId) {
+            setDecommissionedByName(res.data?.data?.fullname || userId)
           }
-        })
-        .catch(() => {
-          if (!cancelled && system?.decommissioned_by === userId) {
+        } catch {
+          if (controller.signal.aborted) return
+          if (system?.decommissioned_by === userId) {
             setDecommissionedByName(userId)
           }
-        })
+        }
+      }
+      load()
     } else {
       setDecommissionedByName('')
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [system, open])
   React.useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (open && system?.reactivated_by) {
       const userId = system.reactivated_by
-      axiosInstance
-        .get(`users/${userId}`)
-        .then((res) => {
-          if (!cancelled && system?.reactivated_by === userId) {
-            if (res.data?.data?.fullname) {
-              setReactivatedByName(res.data.data.fullname)
-            } else {
-              setReactivatedByName(userId)
-            }
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`users/${userId}`, {
+            signal: controller.signal,
+          })
+          if (system?.reactivated_by === userId) {
+            setReactivatedByName(res.data?.data?.fullname || userId)
           }
-        })
-        .catch(() => {
-          if (!cancelled && system?.reactivated_by === userId) {
+        } catch {
+          if (controller.signal.aborted) return
+          if (system?.reactivated_by === userId) {
             setReactivatedByName(userId)
           }
-        })
+        }
+      }
+      load()
     } else {
       setReactivatedByName('')
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [system, open])
   const handleClose = () => {

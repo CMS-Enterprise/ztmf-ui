@@ -399,14 +399,17 @@ export default function UserTable() {
   // TODO: Custom hook for fetching data
   useEffect(() => {
     if (!canRead) return
-    // Guard against a superseded run (e.g. a fast Show Deleted toggle)
-    // resolving late and clobbering fresher grant state.
-    let ignore = false
-    axiosInstance
-      .get('/users', { params: { deleted: showDeleted } })
-      .then((res) => {
+    const controller = new AbortController()
+    // backfillAborted guards the Promise.all per-user calls, which can't receive
+    // a signal since fetchUserOpDivs doesn't accept one.
+    let backfillAborted = false
+    async function load() {
+      try {
+        const res = await axiosInstance.get('/users', {
+          params: { deleted: showDeleted },
+          signal: controller.signal,
+        })
         if (res.status === 200) {
-          if (ignore) return
           const data = res.data.data.map((row: users) => ({
             ...row,
             role: row.role.trim(),
@@ -442,7 +445,7 @@ export default function UserTable() {
               )
             )
               .then((entries) => {
-                if (ignore) return
+                if (backfillAborted) return
                 // Merge rather than replace so an in-flight per-user refresh
                 // (e.g. from closing the grant modal) is not clobbered.
                 setUserOpDivMap((prev) => ({
@@ -451,7 +454,7 @@ export default function UserTable() {
                 }))
               })
               .catch((error) => {
-                if (ignore) return
+                if (backfillAborted) return
                 // The per-user catches above already default to [], so this only
                 // trips on an unexpected failure. Surface it rather than leaving
                 // the OpDivs column silently blank.
@@ -459,17 +462,18 @@ export default function UserTable() {
                 notify(ERROR_MESSAGES.tryAgain, 'warning')
               })
           }
-        } else {
-          return
         }
-      })
-      .catch((error) => {
+      } catch (error) {
+        if (controller.signal.aborted) return
         if (isAuthHandled(error)) return
         console.error('Fetch users error:', error)
         notify(ERROR_MESSAGES.tryAgain, 'error')
-      })
+      }
+    }
+    load()
     return () => {
-      ignore = true
+      controller.abort()
+      backfillAborted = true
     }
   }, [canRead, fismaSystems, navigate, showDeleted])
   // OpDiv options for the grant modal: assignable children only (the HHS
