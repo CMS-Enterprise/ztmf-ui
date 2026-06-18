@@ -280,7 +280,7 @@ export default function UserTable() {
       setRows(rows.filter((row) => row.userid !== id))
     }
   }
-  const processRowUpdate = (newRow: GridRowModel) => {
+  const processRowUpdate = async (newRow: GridRowModel) => {
     const updatedRow = {
       ...selectedRow,
       ...newRow,
@@ -289,45 +289,38 @@ export default function UserTable() {
     } as users
     const curRowUserId = updatedRow.userid
     if (newRow.isNew) {
-      axiosInstance
-        .post('/users', {
+      try {
+        const res = await axiosInstance.post('/users', {
           email: updatedRow.email,
           fullname: updatedRow.fullname,
           role: updatedRow.role,
         })
-        .then((res) => {
-          newRow = res.data.data
-          updatedRow.userid = newRow.userid
-          apiRef.current.updateRows([
-            { userid: curRowUserId, _action: 'delete' },
-          ])
-          apiRef.current.updateRows([updatedRow])
-          setSnackBarSeverity('success')
-          setSnackBarText(STATUS_MESSAGES.saved)
-          setOpen(true)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error updating score:', error)
-          setSaveError(error)
-        })
+        newRow = res.data.data
+        updatedRow.userid = newRow.userid
+        apiRef.current.updateRows([{ userid: curRowUserId, _action: 'delete' }])
+        apiRef.current.updateRows([updatedRow])
+        setSnackBarSeverity('success')
+        setSnackBarText(STATUS_MESSAGES.saved)
+        setOpen(true)
+      } catch (error) {
+        if (isAuthHandled(error)) return updatedRow
+        console.error('Error updating score:', error)
+        setSaveError(error)
+      }
     } else {
-      // const updatedRow = { ...newRow } as users
-      axiosInstance
-        .put(`/users/${updatedRow?.userid}`, {
+      try {
+        await axiosInstance.put(`/users/${updatedRow?.userid}`, {
           email: updatedRow?.email,
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
         })
-        .then(() => {
-          setSnackBarSeverity('success')
-          setSnackBarText(STATUS_MESSAGES.saved)
-          setOpen(true)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          setSaveError(error)
-        })
+        setSnackBarSeverity('success')
+        setSnackBarText(STATUS_MESSAGES.saved)
+        setOpen(true)
+      } catch (error) {
+        if (isAuthHandled(error)) return updatedRow
+        setSaveError(error)
+      }
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
     return updatedRow
@@ -357,44 +350,40 @@ export default function UserTable() {
     if (!curRow) return
     setPendingDeleteRow(curRow)
   }
-  const handleConfirmDelete = (confirm: boolean) => {
+  const handleConfirmDelete = async (confirm: boolean) => {
     const target = pendingDeleteRow
     setPendingDeleteRow(null)
     if (!confirm || !target) return
-    axiosInstance
-      .delete(`/users/${target.userid}`)
-      .then(() => {
-        setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        notify(`Saved - Delete User ${target.fullname}`, 'success', {
-          autoHideDuration: 2000,
-        })
+    try {
+      await axiosInstance.delete(`/users/${target.userid}`)
+      setRows((prev) => prev.filter((row) => row.userid !== target.userid))
+      notify(`Saved - Delete User ${target.fullname}`, 'success', {
+        autoHideDuration: 2000,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
-      })
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
+    }
   }
   const handleRestoreClick = (id: GridRowId) => () => {
     const curRow = apiRef.current.getRow(id) as users | undefined
     if (!curRow) return
     setPendingRestoreRow(curRow)
   }
-  const handleConfirmRestore = (confirm: boolean) => {
+  const handleConfirmRestore = async (confirm: boolean) => {
     const target = pendingRestoreRow
     setPendingRestoreRow(null)
     if (!confirm || !target) return
-    axiosInstance
-      .put(`/users/${target.userid}/restore`)
-      .then(() => {
-        setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        notify(`Saved - Restore User ${target.fullname}`, 'success', {
-          autoHideDuration: 2000,
-        })
+    try {
+      await axiosInstance.put(`/users/${target.userid}/restore`)
+      setRows((prev) => prev.filter((row) => row.userid !== target.userid))
+      notify(`Saved - Restore User ${target.fullname}`, 'success', {
+        autoHideDuration: 2000,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
-      })
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
+    }
   }
   // TODO: Custom hook for fetching data
   useEffect(() => {

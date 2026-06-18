@@ -75,25 +75,21 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const submitEmail = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
-    await axiosInstance
-      .post('/massemails', {
+    try {
+      const res = await axiosInstance.post('/massemails', {
         group: formData.get('email_group'),
         subject: formData.get('email_subject'),
         body: formData.get('email_body'),
       })
-      .then((res) => {
-        setSentGroup(groupValue)
-        notify('Emails have successfully been sent', 'success', {
-          autoHideDuration: 2500,
-        })
-        setSentToEmails(res.data.data)
+      setSentGroup(groupValue)
+      notify('Emails have successfully been sent', 'success', {
+        autoHideDuration: 2500,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        notify(ERROR_MESSAGES.tryAgain, 'error', {
-          autoHideDuration: 2500,
-        })
-      })
+      setSentToEmails(res.data.data)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+    }
   }
 
   const handleChange = (value: string) => {
