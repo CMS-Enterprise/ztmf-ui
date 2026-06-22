@@ -212,10 +212,14 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     return sorted
   }, [diffResults, functionPillarMap])
 
-  // Fetch diff whenever both pickers are set and different
+  // Fetch diff whenever both pickers are set and different.
+  // AbortController cancels any in-flight request when pickers change or the
+  // modal closes, preventing a stale response from overwriting a newer one.
   useEffect(() => {
     if (!fromDatacall || !toDatacall) return
     if (fromDatacall.datacallid === toDatacall.datacallid) return
+
+    const controller = new AbortController()
 
     setLoading(true)
     setError(null)
@@ -223,18 +227,25 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
 
     axiosInstance
       .get(
-        `/scores/diff?from=${fromDatacall.datacallid}&to=${toDatacall.datacallid}&fismasystemid=${fismasystemid}`
+        `/scores/diff?from=${fromDatacall.datacallid}&to=${toDatacall.datacallid}&fismasystemid=${fismasystemid}`,
+        { signal: controller.signal }
       )
       .then((res) => {
         setDiffResults(res.data.data ?? [])
       })
       .catch((err) => {
-        if (isAuthHandled(err)) return
+        if (controller.signal.aborted) return
+        if (isAuthHandled(err)) {
+          setError('Failed to load diff. Please try again.')
+          return
+        }
         setError('Failed to load diff. Please try again.')
       })
       .finally(() => {
-        setLoading(false)
+        if (!controller.signal.aborted) setLoading(false)
       })
+
+    return () => controller.abort()
   }, [fromDatacall, toDatacall, fismasystemid, diffKey])
 
   const renderOption = (
@@ -530,7 +541,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
                     </TableRow>
                     {entries.map((entry, i) => (
                       <TableRow
-                        key={entry.functionid}
+                        key={`${entry.functionid}-${i}`}
                         sx={{
                           backgroundColor: i % 2 === 1 ? '#f5f5f5' : 'inherit',
                         }}
