@@ -37,6 +37,7 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
+import { shouldPersistResponse } from './saveGuard'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -196,6 +197,16 @@ export default function QuestionnarePage() {
   }
 
   const saveResponse = async () => {
+    if (
+      !shouldPersistResponse({
+        selectQuestionOption,
+        initQuestionChoice,
+        notes,
+        initNotes,
+      })
+    ) {
+      return
+    }
     try {
       if (scoreid) {
         await axiosInstance.put(`scores/${scoreid}`, {
@@ -244,7 +255,9 @@ export default function QuestionnarePage() {
             setDatacallID(latestDataCallId)
             datacall = latestDatacall.replaceAll(' ', '_')
             setDatacall(datacall)
-            setIsPastDeadline(new Date() > new Date(latestDeadline))
+            setIsPastDeadline(
+              latestDeadline ? new Date() > new Date(latestDeadline) : true
+            )
             activeDataCallId = latestDataCallId
           }
           try {
@@ -293,7 +306,11 @@ export default function QuestionnarePage() {
                 }
               })
               const funcIdToIdx = sortedFuncId.reduce(
-                (acc: { [key: number]: number }, num: number, index: number) => {
+                (
+                  acc: { [key: number]: number },
+                  num: number,
+                  index: number
+                ) => {
                   acc[num] = index
                   return acc
                 },

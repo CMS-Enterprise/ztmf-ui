@@ -55,7 +55,7 @@ function BooleanChip({
 }
 
 function parseDateOnly(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number)
+  const [year, month, day] = dateStr.split(/[ T]/)[0].split('-').map(Number)
   return new Date(year, month - 1, day)
 }
 
@@ -79,7 +79,9 @@ function parseDate(dateStr: string): Date {
 
 function formatDate(dateStr: string | null): string | null {
   if (!dateStr) return null
-  return parseDate(dateStr).toLocaleDateString()
+  const date = parseDate(dateStr)
+  if (isNaN(date.getTime())) return null
+  return date.toLocaleDateString()
 }
 
 export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
