@@ -37,6 +37,7 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
+import { shouldPersistResponse } from './saveGuard'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -190,6 +191,16 @@ export default function QuestionnarePage() {
   }
 
   const saveResponse = () => {
+    if (
+      !shouldPersistResponse({
+        selectQuestionOption,
+        initQuestionChoice,
+        notes,
+        initNotes,
+      })
+    ) {
+      return
+    }
     if (scoreid) {
       axiosInstance
         .put(`scores/${scoreid}`, {
