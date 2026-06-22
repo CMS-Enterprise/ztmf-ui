@@ -1,4 +1,10 @@
-import { Container, Typography, Autocomplete, TextField } from '@mui/material'
+import {
+  Container,
+  Typography,
+  Autocomplete,
+  TextField,
+  Chip,
+} from '@mui/material'
 import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
@@ -59,8 +65,10 @@ export default function Title() {
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
-  const [selectedDataCallId, setSelectedDataCallId] = useState<number>(0)
-  const [selectedDatacall, setSelectedDatacall] = useState<string>('')
+  const [selectedDatacall, setSelectedDatacall] = useState<datacall | null>(
+    null
+  )
+  const [latestDeadline, setLatestDeadline] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -104,8 +112,8 @@ export default function Title() {
           if (sorted.length > 0) {
             setLatestDataCallId(sorted[0].datacallid)
             setLatestDatacall(sorted[0].datacall)
-            setSelectedDataCallId(sorted[0].datacallid)
-            setSelectedDatacall(sorted[0].datacall)
+            setLatestDeadline(sorted[0].deadline)
+            setSelectedDatacall(sorted[0])
           }
         })
         .catch((error) => {
@@ -363,16 +371,56 @@ export default function Title() {
                   isOptionEqualToValue={(option, value) =>
                     option.datacallid === value.datacallid
                   }
-                  value={
-                    datacalls.find(
-                      (dc) => dc.datacallid === selectedDataCallId
-                    ) ?? datacalls[0]
-                  }
+                  value={selectedDatacall ?? datacalls[0]}
                   onChange={(_, dc) => {
-                    if (dc) {
-                      setSelectedDataCallId(dc.datacallid)
-                      setSelectedDatacall(dc.datacall)
-                    }
+                    if (dc) setSelectedDatacall(dc)
+                  }}
+                  renderOption={(props, option) => {
+                    const isCurrent = option.datacallid === latestDataCallId
+                    const isClosed = new Date() > new Date(option.deadline)
+                    const { key, ...rest } = props
+                    const deadlineLabel = new Date(
+                      option.deadline
+                    ).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })
+                    return (
+                      <li key={key} {...rest}>
+                        <Box sx={{ width: '100%' }}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              width: '100%',
+                              gap: 1,
+                            }}
+                          >
+                            <Typography variant="body2">
+                              {option.datacall}
+                            </Typography>
+                            {isCurrent && (
+                              <Chip
+                                label="Current"
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                                sx={{ height: 18, fontSize: '0.65rem' }}
+                              />
+                            )}
+                          </Box>
+                          <Typography
+                            variant="caption"
+                            sx={{ color: 'text.secondary' }}
+                          >
+                            {isClosed ? 'Closed' : 'Active'} · deadline{' '}
+                            {deadlineLabel}
+                          </Typography>
+                        </Box>
+                      </li>
+                    )
                   }}
                   disableClearable
                   sx={{ minWidth: 260 }}
@@ -406,8 +454,7 @@ export default function Title() {
                   userInfo,
                   latestDataCallId,
                   latestDatacall,
-                  selectedDataCallId,
-                  setSelectedDataCallId,
+                  latestDeadline,
                   selectedDatacall,
                   setSelectedDatacall,
                   showDecommissioned,
