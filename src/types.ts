@@ -281,7 +281,7 @@ export type ScoreDiffSide = {
   functionoptionid: number
   optionname: string
   score: number
-  notes: string
+  notes: string | null
 }
 
 export type ScoreDiffEntry = {

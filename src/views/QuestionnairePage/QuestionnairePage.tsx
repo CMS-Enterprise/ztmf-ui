@@ -731,6 +731,7 @@ export default function QuestionnarePage() {
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
+        selectedDataCallId={selectedDataCallId}
       />
     </>
   )
