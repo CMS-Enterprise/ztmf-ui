@@ -196,7 +196,7 @@ export default function QuestionnarePage() {
     setQuestionId(index)
   }
 
-  const saveResponse = () => {
+  const saveResponse = async () => {
     if (
       !shouldPersistResponse({
         selectQuestionOption,
@@ -207,41 +207,28 @@ export default function QuestionnarePage() {
     ) {
       return
     }
-    if (scoreid) {
-      axiosInstance
-        .put(`scores/${scoreid}`, {
+    try {
+      if (scoreid) {
+        await axiosInstance.put(`scores/${scoreid}`, {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
         })
-        .then(() => {
-          // checkValidResponse(res.status)
-          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error updating score:', error)
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
-        })
-    } else {
-      axiosInstance
-        .post(`scores`, {
+      } else {
+        await axiosInstance.post(`scores`, {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
         })
-        .then(() => {
-          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error posting score:', error)
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
-        })
+      }
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      fetchQuestionScores(system, setQuestionScores)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error('Error saving score:', error)
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
     }
   }
 
@@ -273,22 +260,22 @@ export default function QuestionnarePage() {
             )
             activeDataCallId = latestDataCallId
           }
-          await axiosInstance
-            .get(`/fismasystems/${system}/questions`)
-            .then((response) => {
-              // Decommissioned systems join to zero functions, so the questions
-              // endpoint returns no rows. The Go backend serializes a nil
-              // slice as JSON null, so the response can be either { data: null }
-              // or { data: [] } depending on driver behavior - treat both as
-              // the empty-state signal. Surface a friendly message instead of
-              // crashing on categoriesData[0] below.
-              const data = response.data?.data
-              if (!data || (Array.isArray(data) && data.length === 0)) {
-                questionsEmpty = true
-                setNoQuestions(true)
-                setLoadingQuestion(false)
-                return
-              }
+          try {
+            const response = await axiosInstance.get(
+              `/fismasystems/${system}/questions`
+            )
+            // Decommissioned systems join to zero functions, so the questions
+            // endpoint returns no rows. The Go backend serializes a nil
+            // slice as JSON null, so the response can be either { data: null }
+            // or { data: [] } depending on driver behavior - treat both as
+            // the empty-state signal. Surface a friendly message instead of
+            // crashing on categoriesData[0] below.
+            const data = response.data?.data
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+              questionsEmpty = true
+              setNoQuestions(true)
+              setLoadingQuestion(false)
+            } else {
               const organizedData: Record<string, FismaQuestion[]> = {}
               const questionData: Record<number, Question> = {}
               data.forEach((question: FismaQuestion) => {
@@ -344,36 +331,31 @@ export default function QuestionnarePage() {
               setQuestion(questionData[sortedFuncId[0]].question) // set the first question value to the page
               setDescription(questionData[sortedFuncId[0]].description)
               setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              notify(ERROR_MESSAGES.tryAgain, 'error')
-            })
+            }
+          } catch (error) {
+            if (isAuthHandled(error)) return
+            notify(ERROR_MESSAGES.tryAgain, 'error')
+            return
+          }
           if (questionsEmpty) {
             return
           }
-          await axiosInstance
-            .get(
+          try {
+            const res = await axiosInstance.get(
               `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`
             )
-            .then((res) => {
-              const hashTable: questionScoreMap = Object.assign(
-                {},
-                ...res.data.data.map((item: QuestionScores) => ({
-                  [item.functionoptionid]: item,
-                }))
-              )
-              // res.data.data.map((item: any) => {
-              //   questionScoreMap[item.functionoptionid] = item
-              //   funcScoreTable
-              // })
-              setQuestionScores(hashTable)
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              console.error('Error fetching question scores:', error)
-              notify(ERROR_MESSAGES.tryAgain, 'error')
-            })
+            const hashTable: questionScoreMap = Object.assign(
+              {},
+              ...res.data.data.map((item: QuestionScores) => ({
+                [item.functionoptionid]: item,
+              }))
+            )
+            setQuestionScores(hashTable)
+          } catch (error) {
+            if (isAuthHandled(error)) return
+            console.error('Error fetching question scores:', error)
+            notify(ERROR_MESSAGES.tryAgain, 'error')
+          }
         } catch (error) {
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
@@ -398,8 +380,9 @@ export default function QuestionnarePage() {
       setInitQuestionChoice(-1)
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
-      try {
-        axiosInstance.get(`functions/${questionId}/options`).then((res) => {
+      async function fetchOptions() {
+        try {
+          const res = await axiosInstance.get(`functions/${questionId}/options`)
           res.data.data.forEach((item: QuestionOption) => {
             const choiceOpt: QuestionChoice = {
               label: item.description,
@@ -426,11 +409,12 @@ export default function QuestionnarePage() {
           setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
           setOptions(choices ? choices : [])
           setLoadingQuestion(false)
-        })
-      } catch (error) {
-        if (isAuthHandled(error)) return
-        console.error('Error fetching data:', error)
+        } catch (error) {
+          if (isAuthHandled(error)) return
+          console.error('Error fetching data:', error)
+        }
       }
+      fetchOptions()
     }
   }, [questionId, questionScores, questions])
   const breadcrumbSegmentLabels = fismaacronym

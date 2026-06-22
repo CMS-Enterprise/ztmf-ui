@@ -79,18 +79,18 @@ export default function Title() {
       const url = decommissioned
         ? '/fismasystems?decommissioned=true'
         : '/fismasystems'
-      await axiosInstance
-        .get(url)
-        .then((res) => {
-          setFismaSystems(res.data.data)
-        })
-        .catch((error) => {
-          console.error(
-            'Fetch systems error:',
-            error.response?.status,
-            error.response?.data
-          )
-        })
+      try {
+        const res = await axiosInstance.get(url)
+        setFismaSystems(res.data.data)
+      } catch (error) {
+        console.error(
+          'Fetch systems error:',
+          (error as { response?: { status?: number; data?: unknown } }).response
+            ?.status,
+          (error as { response?: { status?: number; data?: unknown } }).response
+            ?.data
+        )
+      }
     },
     []
   )
@@ -102,23 +102,21 @@ export default function Title() {
   useEffect(() => {
     if (loaderData.serverError) return
     async function fetchDatacalls() {
-      await axiosInstance
-        .get('/datacalls')
-        .then((res) => {
-          const sorted: datacall[] = [...res.data.data].sort(
-            (a: datacall, b: datacall) => b.datacallid - a.datacallid
-          )
-          setDatacalls(sorted)
-          if (sorted.length > 0) {
-            setLatestDataCallId(sorted[0].datacallid)
-            setLatestDatacall(sorted[0].datacall)
-            setLatestDeadline(sorted[0].deadline)
-            setSelectedDatacall(sorted[0])
-          }
-        })
-        .catch((error) => {
-          console.error('Fetch latest datacall error:', error)
-        })
+      try {
+        const res = await axiosInstance.get('/datacalls')
+        const sorted: datacall[] = [...res.data.data].sort(
+          (a: datacall, b: datacall) => b.datacallid - a.datacallid
+        )
+        setDatacalls(sorted)
+        if (sorted.length > 0) {
+          setLatestDataCallId(sorted[0].datacallid)
+          setLatestDatacall(sorted[0].datacall)
+          setLatestDeadline(sorted[0].deadline)
+          setSelectedDatacall(sorted[0])
+        }
+      } catch (error) {
+        console.error('Fetch latest datacall error:', error)
+      }
     }
     fetchDatacalls()
   }, [loaderData.serverError])
