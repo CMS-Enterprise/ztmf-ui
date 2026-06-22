@@ -384,44 +384,46 @@ export default function QuestionnarePage() {
     // footer does not flash the previous question's editor during the
     // refetch window.
     setInitQuestionChoice(-1)
-    const choices: QuestionChoice[] = []
-    let funcOptId: number = 0
-    try {
-      axiosInstance
-        .get(`functions/${questionId}/options`, { signal: controller.signal })
-        .then((res) => {
-          res.data.data.forEach((item: QuestionOption) => {
-            const choiceOpt: QuestionChoice = {
-              label: item.description,
-              value: item.functionoptionid,
-            }
-            if (item.functionoptionid in questionScores) {
-              funcOptId = item.functionoptionid
-              choiceOpt.defaultChecked = true
-            }
-            choices.push(choiceOpt)
-          })
-          // Foundation of question
-          setDescription(questionId ? questions[questionId].description : '')
-          setQuestion(questionId ? questions[questionId].question : '')
-          setNotePrompt(questionId ? questions[questionId].notesprompt : '')
-
-          // Notes
-          setNotes(funcOptId ? questionScores[funcOptId].notes : '')
-          setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
-
-          // Question options
-          setSelectQuestionOption(funcOptId ? funcOptId : -1)
-          setInitQuestionChoice(funcOptId ? funcOptId : -1)
-          setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
-          setOptions(choices ? choices : [])
-          setLoadingQuestion(false)
+    async function load() {
+      const choices: QuestionChoice[] = []
+      let funcOptId: number = 0
+      try {
+        const res = await axiosInstance.get(`functions/${questionId}/options`, {
+          signal: controller.signal,
         })
-    } catch (error) {
-      if (controller.signal.aborted) return
-      if (isAuthHandled(error)) return
-      console.error('Error fetching data:', error)
+        res.data.data.forEach((item: QuestionOption) => {
+          const choiceOpt: QuestionChoice = {
+            label: item.description,
+            value: item.functionoptionid,
+          }
+          if (item.functionoptionid in questionScores) {
+            funcOptId = item.functionoptionid
+            choiceOpt.defaultChecked = true
+          }
+          choices.push(choiceOpt)
+        })
+        // Foundation of question
+        setDescription(questionId ? questions[questionId].description : '')
+        setQuestion(questionId ? questions[questionId].question : '')
+        setNotePrompt(questionId ? questions[questionId].notesprompt : '')
+
+        // Notes
+        setNotes(funcOptId ? questionScores[funcOptId].notes : '')
+        setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
+
+        // Question options
+        setSelectQuestionOption(funcOptId ? funcOptId : -1)
+        setInitQuestionChoice(funcOptId ? funcOptId : -1)
+        setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
+        setOptions(choices ? choices : [])
+        setLoadingQuestion(false)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        console.error('Error fetching data:', error)
+      }
     }
+    load()
     return () => {
       controller.abort()
     }

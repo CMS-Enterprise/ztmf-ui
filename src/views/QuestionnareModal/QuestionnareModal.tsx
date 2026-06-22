@@ -357,53 +357,51 @@ export default function QuestionnareModal({
   React.useEffect(() => {
     if (!questionId) return
     const controller = new AbortController()
-    try {
-      axiosInstance
-        .get(`functions/${questionId}/options`, { signal: controller.signal })
-        .then((res) => {
-          setOptions(res.data.data)
-          let isValidOption: boolean = false
-          let funcOptId: number = 0
-          res.data.data.forEach((item: QuestionOption) => {
-            if (item.functionoptionid in questionScores) {
-              isValidOption = true
-              funcOptId = item.functionoptionid
-            }
-          })
-          if (!isValidOption) {
-            setSelectQuestionOption(0)
-            setScoreId(0)
-            setNotes('')
-            setLoadedSelectQuestionOption(0)
-            setLoadedNotes('')
-            setSavedLastEditedAt(null)
-            setSavedLastEditedBy(null)
-          } else {
-            const id = questionScores[funcOptId].scoreid
-            const notes = questionScores[funcOptId].notes
-            setSelectQuestionOption(funcOptId)
-            setScoreId(id)
-            setNotes(notes)
-            // Snapshot the loaded answer so handleQuestionnareNext can
-            // detect "no real change" and skip the PUT. Without this the
-            // backend's no-op guard still preserves history, but we
-            // would still pay a wasted roundtrip on every Next click.
-            setLoadedSelectQuestionOption(funcOptId)
-            setLoadedNotes(notes)
-            setSavedLastEditedAt(
-              questionScores[funcOptId].last_edited_at ?? null
-            )
-            setSavedLastEditedBy(
-              questionScores[funcOptId].last_edited_by ?? null
-            )
-          }
-          setLoadingQuestion(false)
+    async function load() {
+      try {
+        const res = await axiosInstance.get(`functions/${questionId}/options`, {
+          signal: controller.signal,
         })
-    } catch (error) {
-      if (controller.signal.aborted) return
-      if (isAuthHandled(error)) return
-      console.error('Error fetching data:', error)
+        setOptions(res.data.data)
+        let isValidOption: boolean = false
+        let funcOptId: number = 0
+        res.data.data.forEach((item: QuestionOption) => {
+          if (item.functionoptionid in questionScores) {
+            isValidOption = true
+            funcOptId = item.functionoptionid
+          }
+        })
+        if (!isValidOption) {
+          setSelectQuestionOption(0)
+          setScoreId(0)
+          setNotes('')
+          setLoadedSelectQuestionOption(0)
+          setLoadedNotes('')
+          setSavedLastEditedAt(null)
+          setSavedLastEditedBy(null)
+        } else {
+          const id = questionScores[funcOptId].scoreid
+          const notes = questionScores[funcOptId].notes
+          setSelectQuestionOption(funcOptId)
+          setScoreId(id)
+          setNotes(notes)
+          // Snapshot the loaded answer so handleQuestionnareNext can
+          // detect "no real change" and skip the PUT. Without this the
+          // backend's no-op guard still preserves history, but we
+          // would still pay a wasted roundtrip on every Next click.
+          setLoadedSelectQuestionOption(funcOptId)
+          setLoadedNotes(notes)
+          setSavedLastEditedAt(questionScores[funcOptId].last_edited_at ?? null)
+          setSavedLastEditedBy(questionScores[funcOptId].last_edited_by ?? null)
+        }
+        setLoadingQuestion(false)
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        console.error('Error fetching data:', error)
+      }
     }
+    load()
     return () => {
       controller.abort()
     }
