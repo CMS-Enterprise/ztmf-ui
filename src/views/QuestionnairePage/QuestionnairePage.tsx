@@ -742,13 +742,16 @@ export default function QuestionnarePage() {
           />
         </Grid>
       </Container>
+      {/* selectedDataCallId seeds the "To" picker default in ScoreDiffModal.
+          #417 renamed selectedDataCallId → selectedDatacall (datacall object)
+          on context; use the id off the object now that #408 has landed. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
-        selectedDataCallId={selectedDataCallId}
+        selectedDataCallId={selectedDatacall?.datacallid}
       />
     </>
   )
