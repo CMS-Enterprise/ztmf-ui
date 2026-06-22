@@ -286,7 +286,9 @@ export default function QuestionnarePage() {
             setDatacallID(latestDataCallId)
             datacall = latestDatacall.replaceAll(' ', '_')
             setDatacall(datacall)
-            setIsPastDeadline(new Date() > new Date(latestDeadline))
+            setIsPastDeadline(
+              latestDeadline ? new Date() > new Date(latestDeadline) : true
+            )
             activeDataCallId = latestDataCallId
           }
           await axiosInstance
