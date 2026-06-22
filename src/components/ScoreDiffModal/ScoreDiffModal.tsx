@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react'
+import React, { useState, useEffect, useRef, useMemo } from 'react'
 import {
   Dialog,
   DialogTitle,
@@ -20,19 +20,29 @@ import {
   TextField,
   Chip,
   Divider,
-  Tooltip,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import axiosInstance from '@/axiosConfig'
 import { isAuthHandled } from '@/utils/notify'
-import type { datacall, ScoreDiffEntry } from '@/types'
+import { PILLAR_ORDER, PILLAR_FUNCTION_MAP } from '@/constants'
+import type {
+  datacall,
+  ScoreDiffEntry,
+  FismaQuestion,
+  questionPillar,
+} from '@/types'
 
 const datacallsCache: { data: datacall[] | null; timestamp: number | null } = {
   data: null,
   timestamp: null,
 }
+
+const questionsCache = new Map<
+  number,
+  { data: FismaQuestion[]; timestamp: number }
+>()
 const CACHE_DURATION = 10 * 60 * 1000
 
 interface ScoreDiffModalProps {
@@ -54,6 +64,9 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   const [fromDatacall, setFromDatacall] = useState<datacall | null>(null)
   const [toDatacall, setToDatacall] = useState<datacall | null>(null)
   const [diffResults, setDiffResults] = useState<ScoreDiffEntry[]>([])
+  const [functionPillarMap, setFunctionPillarMap] = useState<
+    Map<number, questionPillar>
+  >(new Map())
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
@@ -99,6 +112,84 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     }
     fetchDatacalls()
   }, [open])
+
+  // Fetch function→pillar map for the current system (used to group diff rows)
+  useEffect(() => {
+    if (!open || !fismasystemid) return
+    const fetchQuestions = async () => {
+      try {
+        const now = Date.now()
+        const cached = questionsCache.get(fismasystemid)
+        let questions: FismaQuestion[]
+        if (cached && now - cached.timestamp < CACHE_DURATION) {
+          questions = cached.data
+        } else {
+          const res = await axiosInstance.get(
+            `/fismasystems/${fismasystemid}/questions`
+          )
+          questions = res.data?.data ?? []
+          questionsCache.set(fismasystemid, { data: questions, timestamp: now })
+        }
+        const map = new Map<number, questionPillar>()
+        questions.forEach((q: FismaQuestion) => {
+          if (!map.has(q.function.functionid)) {
+            map.set(q.function.functionid, q.pillar)
+          }
+        })
+        setFunctionPillarMap(map)
+      } catch (err) {
+        if (isAuthHandled(err)) return
+        console.error('Error fetching questions for pillar grouping:', err)
+      }
+    }
+    fetchQuestions()
+  }, [open, fismasystemid])
+
+  // Group and sort diff results by pillar order.
+  // Falls back to a flat list under a single group when pillar info
+  // is not yet available (e.g. questions fetch still in-flight).
+  const groupedResults = useMemo(() => {
+    if (diffResults.length === 0) return []
+    type PillarGroup = { pillar: questionPillar; entries: ScoreDiffEntry[] }
+    const groups = new Map<number, PillarGroup>()
+    const uncategorized: ScoreDiffEntry[] = []
+    diffResults.forEach((entry) => {
+      const pillar = functionPillarMap.get(entry.functionid)
+      if (!pillar) {
+        uncategorized.push(entry)
+        return
+      }
+      if (!groups.has(pillar.pillarid)) {
+        groups.set(pillar.pillarid, { pillar, entries: [] })
+      }
+      groups.get(pillar.pillarid)!.entries.push(entry)
+    })
+    const pillarRank = (name: string) => {
+      const i = PILLAR_ORDER.indexOf(name)
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i
+    }
+    const fnRank = (pillarName: string, fnName: string) => {
+      const i = (PILLAR_FUNCTION_MAP[pillarName] ?? []).indexOf(fnName)
+      return i === -1 ? Number.MAX_SAFE_INTEGER : i
+    }
+    const sorted = Array.from(groups.values()).sort(
+      (a, b) => pillarRank(a.pillar.pillar) - pillarRank(b.pillar.pillar)
+    )
+    sorted.forEach((group) => {
+      group.entries.sort(
+        (a, b) =>
+          fnRank(group.pillar.pillar, a.function) -
+          fnRank(group.pillar.pillar, b.function)
+      )
+    })
+    if (uncategorized.length > 0) {
+      sorted.push({
+        pillar: { pillar: 'Other', pillarid: -1, order: 999 },
+        entries: uncategorized,
+      })
+    }
+    return sorted
+  }, [diffResults, functionPillarMap])
 
   // Fetch diff whenever both pickers are set and different
   useEffect(() => {
@@ -170,13 +261,9 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
 
   const latestId = datacalls[0]?.datacallid ?? -1
 
-  const renderSide = (side: ScoreDiffEntry['from'], label: string) => {
+  const renderSide = (side: ScoreDiffEntry['from']) => {
     if (!side) {
-      return (
-        <em style={{ color: '#666' }}>
-          {label === 'from' ? 'Not answered' : 'Removed'}
-        </em>
-      )
+      return <em style={{ color: '#666' }}>{'No answer'}</em>
     }
     return (
       <>
@@ -184,27 +271,16 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
         <Typography variant="caption" sx={{ color: 'text.secondary' }}>
           score {side.score}/5
         </Typography>
+        {side.notes && (
+          <Typography
+            variant="caption"
+            display="block"
+            sx={{ color: 'text.secondary', fontStyle: 'italic', mt: 0.5 }}
+          >
+            {side.notes}
+          </Typography>
+        )}
       </>
-    )
-  }
-
-  const renderNotes = (entry: ScoreDiffEntry) => {
-    const fromNotes = entry.from?.notes ?? ''
-    const toNotes = entry.to?.notes ?? ''
-    if (fromNotes === toNotes) return '—'
-    return (
-      <Box>
-        {fromNotes && (
-          <Typography variant="caption" display="block">
-            From: {fromNotes}
-          </Typography>
-        )}
-        {toNotes && (
-          <Typography variant="caption" display="block">
-            To: {toNotes}
-          </Typography>
-        )}
-      </Box>
     )
   }
 
@@ -261,94 +337,100 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
           </Typography>
         </Box>
 
-        {/* Picker row */}
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-            mb: 2,
-            flexWrap: 'wrap',
-          }}
-        >
-          <Box sx={{ flex: 1, minWidth: 220 }}>
-            <Typography
-              variant="caption"
-              sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}
-            >
-              From
-            </Typography>
-            <Autocomplete
-              size="small"
-              options={datacalls}
-              getOptionLabel={(dc) => dc.datacall}
-              isOptionEqualToValue={(opt, val) =>
-                opt.datacallid === val.datacallid
-              }
-              getOptionDisabled={(opt) =>
-                opt.datacallid === toDatacall?.datacallid
-              }
-              value={fromDatacall ?? undefined}
-              onChange={(_, dc) => {
-                if (dc) setFromDatacall(dc)
-              }}
-              renderOption={(props, option) =>
-                renderOption(props, option, latestId)
-              }
-              disableClearable
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  inputProps={{
-                    ...params.inputProps,
-                    'aria-label': 'From datacall',
-                  }}
-                />
-              )}
-            />
+        {/* Picker row — hidden behind a spinner until datacalls are loaded */}
+        {datacalls.length === 0 ? (
+          <Box display="flex" justifyContent="center" py={2}>
+            <CircularProgress size={24} aria-label="Loading datacalls" />
           </Box>
+        ) : (
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 2,
+              mb: 2,
+              flexWrap: 'wrap',
+            }}
+          >
+            <Box sx={{ flex: 1, minWidth: 220 }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}
+              >
+                From
+              </Typography>
+              <Autocomplete
+                size="small"
+                options={datacalls}
+                getOptionLabel={(dc) => dc.datacall}
+                isOptionEqualToValue={(opt, val) =>
+                  opt.datacallid === val.datacallid
+                }
+                getOptionDisabled={(opt) =>
+                  opt.datacallid === toDatacall?.datacallid
+                }
+                value={fromDatacall ?? undefined}
+                onChange={(_, dc) => {
+                  if (dc) setFromDatacall(dc)
+                }}
+                renderOption={(props, option) =>
+                  renderOption(props, option, latestId)
+                }
+                disableClearable
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    size="small"
+                    inputProps={{
+                      ...params.inputProps,
+                      'aria-label': 'From datacall',
+                    }}
+                  />
+                )}
+              />
+            </Box>
 
-          <ArrowForwardIcon sx={{ mt: 2.5, color: 'text.secondary' }} />
+            <ArrowForwardIcon sx={{ mt: 2.5, color: 'text.secondary' }} />
 
-          <Box sx={{ flex: 1, minWidth: 220 }}>
-            <Typography
-              variant="caption"
-              sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}
-            >
-              To
-            </Typography>
-            <Autocomplete
-              size="small"
-              options={datacalls}
-              getOptionLabel={(dc) => dc.datacall}
-              isOptionEqualToValue={(opt, val) =>
-                opt.datacallid === val.datacallid
-              }
-              getOptionDisabled={(opt) =>
-                opt.datacallid === fromDatacall?.datacallid
-              }
-              value={toDatacall ?? undefined}
-              onChange={(_, dc) => {
-                if (dc) setToDatacall(dc)
-              }}
-              renderOption={(props, option) =>
-                renderOption(props, option, latestId)
-              }
-              disableClearable
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  size="small"
-                  inputProps={{
-                    ...params.inputProps,
-                    'aria-label': 'To datacall',
-                  }}
-                />
-              )}
-            />
+            <Box sx={{ flex: 1, minWidth: 220 }}>
+              <Typography
+                variant="caption"
+                sx={{ fontWeight: 600, mb: 0.5, display: 'block' }}
+              >
+                To
+              </Typography>
+              <Autocomplete
+                size="small"
+                options={datacalls}
+                getOptionLabel={(dc) => dc.datacall}
+                isOptionEqualToValue={(opt, val) =>
+                  opt.datacallid === val.datacallid
+                }
+                getOptionDisabled={(opt) =>
+                  opt.datacallid === fromDatacall?.datacallid
+                }
+                value={toDatacall ?? undefined}
+                onChange={(_, dc) => {
+                  if (dc) setToDatacall(dc)
+                }}
+                renderOption={(props, option) =>
+                  renderOption(props, option, latestId)
+                }
+                disableClearable
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    size="small"
+                    inputProps={{
+                      ...params.inputProps,
+                      'aria-label': 'To datacall',
+                    }}
+                  />
+                )}
+              />
+            </Box>
           </Box>
-        </Box>
+        )}
 
         <Divider sx={{ mb: 2 }} />
 
@@ -398,9 +480,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
                     To answer
                   </TableCell>
                   <TableCell sx={{ color: '#fff', fontWeight: 700 }}>
-                    Notes
-                  </TableCell>
-                  <TableCell sx={{ color: '#fff', fontWeight: 700 }}>
                     Changed by
                   </TableCell>
                   <TableCell sx={{ color: '#fff', fontWeight: 700 }}>
@@ -409,57 +488,68 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
                 </TableRow>
               </TableHead>
               <TableBody>
-                {diffResults.map((entry) => (
-                  <TableRow
-                    key={entry.functionid}
-                    sx={{
-                      '&:nth-of-type(even)': { backgroundColor: '#f5f5f5' },
-                    }}
-                  >
-                    <TableCell component="th" scope="row">
-                      <Typography variant="body2" fontWeight={500}>
-                        {entry.function}
-                      </Typography>
-                    </TableCell>
-                    <TableCell sx={{ maxWidth: 240 }}>
-                      <Tooltip title={entry.question} placement="top">
-                        <Typography
-                          variant="body2"
-                          sx={{
-                            overflow: 'hidden',
-                            textOverflow: 'ellipsis',
-                            whiteSpace: 'nowrap',
-                            maxWidth: 240,
-                            cursor: 'default',
-                          }}
-                        >
-                          {entry.question}
-                        </Typography>
-                      </Tooltip>
-                    </TableCell>
-                    <TableCell>{renderSide(entry.from, 'from')}</TableCell>
-                    <TableCell>{renderSide(entry.to, 'to')}</TableCell>
-                    <TableCell sx={{ maxWidth: 200 }}>
-                      {renderNotes(entry)}
-                    </TableCell>
-                    <TableCell>
-                      {entry.changed_by
-                        ? `${entry.changed_by.name} (${entry.changed_by.role})`
-                        : 'Unknown'}
-                    </TableCell>
-                    <TableCell>
-                      {entry.changed_at
-                        ? new Date(entry.changed_at).toLocaleDateString(
-                            'en-US',
-                            {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            }
-                          )
-                        : '—'}
-                    </TableCell>
-                  </TableRow>
+                {groupedResults.map(({ pillar, entries }) => (
+                  <React.Fragment key={pillar.pillarid}>
+                    <TableRow>
+                      <TableCell
+                        colSpan={6}
+                        sx={{
+                          backgroundColor: '#e8edf7',
+                          fontWeight: 700,
+                          fontSize: '0.8rem',
+                          letterSpacing: '0.05em',
+                          textTransform: 'uppercase',
+                          color: '#004297',
+                          py: 0.75,
+                          borderTop: '2px solid #b3c2e8',
+                        }}
+                      >
+                        {pillar.pillar}
+                      </TableCell>
+                    </TableRow>
+                    {entries.map((entry) => (
+                      <TableRow
+                        key={entry.functionid}
+                        sx={{
+                          '&:nth-of-type(even)': {
+                            backgroundColor: '#f5f5f5',
+                          },
+                        }}
+                      >
+                        <TableCell component="th" scope="row">
+                          <Typography variant="body2" fontWeight={500}>
+                            {entry.function}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>
+                          <Typography variant="body2">
+                            {entry.question}
+                          </Typography>
+                        </TableCell>
+                        <TableCell>{renderSide(entry.from)}</TableCell>
+                        <TableCell>{renderSide(entry.to)}</TableCell>
+                        <TableCell>
+                          {entry.changed_by
+                            ? `${entry.changed_by.name} (${entry.changed_by.role})`
+                            : 'Unknown'}
+                        </TableCell>
+                        <TableCell>
+                          {entry.changed_at
+                            ? new Date(entry.changed_at).toLocaleString(
+                                'en-US',
+                                {
+                                  month: 'short',
+                                  day: 'numeric',
+                                  year: 'numeric',
+                                  hour: 'numeric',
+                                  minute: '2-digit',
+                                }
+                              )
+                            : '—'}
+                        </TableCell>
+                      </TableRow>
+                    ))}
+                  </React.Fragment>
                 ))}
               </TableBody>
             </Table>
