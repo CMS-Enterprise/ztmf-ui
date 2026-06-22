@@ -101,9 +101,12 @@ export default function Title() {
 
   useEffect(() => {
     if (loaderData.serverError) return
+    const controller = new AbortController()
     async function fetchDatacalls() {
       try {
-        const res = await axiosInstance.get('/datacalls')
+        const res = await axiosInstance.get('/datacalls', {
+          signal: controller.signal,
+        })
         const sorted: datacall[] = [...res.data.data].sort(
           (a: datacall, b: datacall) => b.datacallid - a.datacallid
         )
@@ -115,10 +118,14 @@ export default function Title() {
           setSelectedDatacall(sorted[0])
         }
       } catch (error) {
+        if (controller.signal.aborted) return
         console.error('Fetch latest datacall error:', error)
       }
     }
     fetchDatacalls()
+    return () => {
+      controller.abort()
+    }
   }, [loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)

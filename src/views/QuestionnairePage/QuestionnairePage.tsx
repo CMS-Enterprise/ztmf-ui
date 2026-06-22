@@ -234,6 +234,7 @@ export default function QuestionnarePage() {
 
   React.useEffect(() => {
     if (system) {
+      const controller = new AbortController()
       // Reset the empty-questionnaire flag so a previous decommissioned-system
       // view does not bleed into the next render when system changes.
       setNoQuestions(false)
@@ -262,7 +263,8 @@ export default function QuestionnarePage() {
           }
           try {
             const response = await axiosInstance.get(
-              `/fismasystems/${system}/questions`
+              `/fismasystems/${system}/questions`,
+              { signal: controller.signal }
             )
             // Decommissioned systems join to zero functions, so the questions
             // endpoint returns no rows. The Go backend serializes a nil
@@ -333,6 +335,7 @@ export default function QuestionnarePage() {
               setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
             }
           } catch (error) {
+            if (controller.signal.aborted) return
             if (isAuthHandled(error)) return
             notify(ERROR_MESSAGES.tryAgain, 'error')
             return
@@ -342,7 +345,8 @@ export default function QuestionnarePage() {
           }
           try {
             const res = await axiosInstance.get(
-              `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`
+              `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`,
+              { signal: controller.signal }
             )
             const hashTable: questionScoreMap = Object.assign(
               {},
@@ -352,16 +356,19 @@ export default function QuestionnarePage() {
             )
             setQuestionScores(hashTable)
           } catch (error) {
+            if (controller.signal.aborted) return
             if (isAuthHandled(error)) return
             console.error('Error fetching question scores:', error)
             notify(ERROR_MESSAGES.tryAgain, 'error')
           }
         } catch (error) {
+          if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
         }
       }
       fetchData()
+      return () => controller.abort()
     }
   }, [
     system,
@@ -374,6 +381,7 @@ export default function QuestionnarePage() {
   ])
   React.useEffect(() => {
     if (questionId) {
+      const controller = new AbortController()
       // Clear saved-state markers before async load so the last-edited
       // footer does not flash the previous question's editor during the
       // refetch window.
@@ -382,7 +390,10 @@ export default function QuestionnarePage() {
       let funcOptId: number = 0
       async function fetchOptions() {
         try {
-          const res = await axiosInstance.get(`functions/${questionId}/options`)
+          const res = await axiosInstance.get(
+            `functions/${questionId}/options`,
+            { signal: controller.signal }
+          )
           res.data.data.forEach((item: QuestionOption) => {
             const choiceOpt: QuestionChoice = {
               label: item.description,
@@ -408,13 +419,16 @@ export default function QuestionnarePage() {
           setInitQuestionChoice(funcOptId ? funcOptId : -1)
           setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
           setOptions(choices ? choices : [])
-          setLoadingQuestion(false)
         } catch (error) {
+          if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
+        } finally {
+          setLoadingQuestion(false)
         }
       }
       fetchOptions()
+      return () => controller.abort()
     }
   }, [questionId, questionScores, questions])
   const breadcrumbSegmentLabels = fismaacronym

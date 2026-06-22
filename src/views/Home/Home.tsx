@@ -17,11 +17,13 @@ export default function HomePageContainer() {
   const { latestDataCallId, selectedDatacall } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   useEffect(() => {
+    const controller = new AbortController()
     async function fetchScores() {
       if (activeDataCallId !== 0) {
         try {
           const res = await axiosInstance.get(
-            `/scores/aggregate?datacallid=${activeDataCallId}`
+            `/scores/aggregate?datacallid=${activeDataCallId}`,
+            { signal: controller.signal }
           )
           const scoresMap: Record<number, SystemScoreEntry> = {}
           for (const obj of res.data.data as ScoreAggregate[]) {
@@ -32,13 +34,17 @@ export default function HomePageContainer() {
           }
           setScoreMap(scoresMap)
         } catch (error) {
+          if (controller.signal.aborted) return
           console.error('Error fetching scores:', error)
         } finally {
-          setLoading(false)
+          if (!controller.signal.aborted) setLoading(false)
         }
       }
     }
     fetchScores()
+    return () => {
+      controller.abort()
+    }
   }, [activeDataCallId])
 
   if (loading) {

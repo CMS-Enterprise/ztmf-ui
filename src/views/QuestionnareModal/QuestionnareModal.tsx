@@ -256,9 +256,12 @@ export default function QuestionnareModal({
   }
   React.useEffect(() => {
     if (open && system) {
+      const controller = new AbortController()
       const fetchData = async () => {
         try {
-          const latestRes = await axiosInstance.get(`/datacalls/latest`)
+          const latestRes = await axiosInstance.get(`/datacalls/latest`, {
+            signal: controller.signal,
+          })
           const latestDataCallId = latestRes.data.data.datacallid
           setDatacallID(latestDataCallId)
           if (new Date() > new Date(latestRes.data.data.deadline)) {
@@ -266,7 +269,8 @@ export default function QuestionnareModal({
           }
 
           const questionsRes = await axiosInstance.get(
-            `/fismasystems/${system.fismasystemid}/questions`
+            `/fismasystems/${system.fismasystemid}/questions`,
+            { signal: controller.signal }
           )
           const data = questionsRes.data.data
           const organizedData: Record<string, FismaQuestion[]> = {}
@@ -287,7 +291,8 @@ export default function QuestionnareModal({
           }
 
           const scoresRes = await axiosInstance.get(
-            `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`
+            `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`,
+            { signal: controller.signal }
           )
           const hashTable: questionScoreMap = Object.assign(
             {},
@@ -297,18 +302,24 @@ export default function QuestionnareModal({
           )
           setQuestionScores(hashTable)
         } catch (error) {
+          if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
         }
       }
       fetchData()
+      return () => controller.abort()
     }
   }, [open, system])
   React.useEffect(() => {
     if (questionId) {
+      const controller = new AbortController()
       async function fetchOptions() {
         try {
-          const res = await axiosInstance.get(`functions/${questionId}/options`)
+          const res = await axiosInstance.get(
+            `functions/${questionId}/options`,
+            { signal: controller.signal }
+          )
           setOptions(res.data.data)
           let isValidOption: boolean = false
           let funcOptId: number = 0
@@ -345,13 +356,16 @@ export default function QuestionnareModal({
               questionScores[funcOptId].last_edited_by ?? null
             )
           }
-          setLoadingQuestion(false)
         } catch (error) {
+          if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
+        } finally {
+          setLoadingQuestion(false)
         }
       }
       fetchOptions()
+      return () => controller.abort()
     }
   }, [questionId, questionScores])
   const renderRadioGroup = (options: QuestionOption[]) => {
