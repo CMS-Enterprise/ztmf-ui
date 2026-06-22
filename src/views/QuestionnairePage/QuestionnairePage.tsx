@@ -33,7 +33,9 @@ import {
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
+import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
@@ -98,8 +100,10 @@ export default function QuestionnarePage() {
     latestDataCallId,
     latestDatacall,
     latestDeadline,
+    fismaSystems,
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
+  const [diffModalOpen, setDiffModalOpen] = React.useState(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
@@ -182,6 +186,8 @@ export default function QuestionnarePage() {
   // location.state. Optional-chain instead of crashing on first render; the
   // missing-system path is handled by an early render guard below.
   const system = location.state?.fismasystemid as number | undefined
+  const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
+  const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -463,7 +469,23 @@ export default function QuestionnarePage() {
   }
   return (
     <>
-      <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => setDiffModalOpen(true)}
+          sx={{ whiteSpace: 'nowrap' }}
+        >
+          Compare Datacalls
+        </Button>
+      </Box>
       {isPastDeadline && !isReadOnly && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           This datacall has closed. Changes will be recorded as post-deadline.
@@ -720,6 +742,17 @@ export default function QuestionnarePage() {
           />
         </Grid>
       </Container>
+      {/* selectedDataCallId seeds the "To" picker default in ScoreDiffModal.
+          #417 renamed selectedDataCallId → selectedDatacall (datacall object)
+          on context; use the id off the object now that #408 has landed. */}
+      <ScoreDiffModal
+        open={diffModalOpen}
+        onClose={() => setDiffModalOpen(false)}
+        fismasystemid={system ?? 0}
+        systemName={systemName}
+        systemAcronym={fismaacronym ?? ''}
+        selectedDataCallId={selectedDatacall?.datacallid}
+      />
     </>
   )
 }
