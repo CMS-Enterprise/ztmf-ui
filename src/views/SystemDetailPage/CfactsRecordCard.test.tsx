@@ -94,3 +94,40 @@ test('500 renders the failed-to-load message', async () => {
     await screen.findByText(/failed to load ztmf insights data/i)
   ).toBeInTheDocument()
 })
+
+test('formats a timestamp-format ATO expiration date instead of "Invalid Date"', async () => {
+  mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(200, {
+    data: {
+      fisma_uuid: FISMA_UID,
+      payload: {
+        authorization_package_name: 'Test Package',
+        ato_expiration_date: '2026-12-13 00:00:00.000',
+      },
+      synced_at: '2026-01-01T00:00:00Z',
+    },
+  })
+
+  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+
+  expect(await screen.findByText('Test Package')).toBeInTheDocument()
+  expect(screen.getByText('12/13/2026')).toBeInTheDocument()
+  expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
+})
+
+test('renders the placeholder when no ATO expiration date is present', async () => {
+  mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(200, {
+    data: {
+      fisma_uuid: FISMA_UID,
+      payload: {
+        authorization_package_name: 'Test Package',
+        ato_expiration_date: null,
+      },
+      synced_at: '2026-01-01T00:00:00Z',
+    },
+  })
+
+  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+
+  expect(await screen.findByText('Test Package')).toBeInTheDocument()
+  expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
+})
