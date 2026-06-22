@@ -15,9 +15,10 @@ export interface ResponseState {
  * last_edited_at, corrupting the audit trail (see issue #412).
  */
 export const shouldPersistResponse = (s: ResponseState): boolean => {
-  const isDirty =
-    (s.selectQuestionOption !== -1 &&
-      s.initQuestionChoice !== s.selectQuestionOption) ||
-    s.initNotes !== s.notes
-  return isDirty && s.selectQuestionOption !== -1
+  // No answer selected: never persist. `-1` is the sentinel and the backend
+  // cannot store a score without a real functionoptionid.
+  if (s.selectQuestionOption === -1) return false
+  return (
+    s.selectQuestionOption !== s.initQuestionChoice || s.notes !== s.initNotes
+  )
 }
