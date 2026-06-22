@@ -51,6 +51,7 @@ interface ScoreDiffModalProps {
   fismasystemid: number
   systemName: string
   systemAcronym: string
+  selectedDataCallId?: number
 }
 
 const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
@@ -59,6 +60,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   fismasystemid,
   systemName,
   systemAcronym,
+  selectedDataCallId,
 }) => {
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [fromDatacall, setFromDatacall] = useState<datacall | null>(null)
@@ -67,6 +69,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   const [functionPillarMap, setFunctionPillarMap] = useState<
     Map<number, questionPillar>
   >(new Map())
+  const [diffKey, setDiffKey] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
@@ -78,6 +81,18 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
         initialFocusRef.current?.focus()
       }, 100)
       return () => clearTimeout(timer)
+    }
+  }, [open])
+
+  // Reset transient state on close; bump diffKey on open so the diff
+  // re-fetches even when picker references haven't changed (cached datacalls).
+  useEffect(() => {
+    if (open) {
+      setDiffKey((k) => k + 1)
+    } else {
+      setDiffResults([])
+      setFunctionPillarMap(new Map())
+      setError(null)
     }
   }, [open])
 
@@ -103,15 +118,21 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
           datacallsCache.timestamp = now
         }
         setDatacalls(sorted)
-        setToDatacall(sorted[0] ?? null)
-        setFromDatacall(sorted[1] ?? null)
+        const toId = selectedDataCallId
+        const toDefault =
+          sorted.find((dc) => dc.datacallid === toId) ?? sorted[0] ?? null
+        const fromDefault =
+          sorted.find((dc) => dc.datacallid < (toDefault?.datacallid ?? 0)) ??
+          null
+        setToDatacall(toDefault)
+        setFromDatacall(fromDefault)
       } catch (err) {
         if (isAuthHandled(err)) return
         console.error('Error fetching datacalls:', err)
       }
     }
     fetchDatacalls()
-  }, [open])
+  }, [open, selectedDataCallId])
 
   // Fetch function→pillar map for the current system (used to group diff rows)
   useEffect(() => {
@@ -214,7 +235,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
       .finally(() => {
         setLoading(false)
       })
-  }, [fromDatacall, toDatacall, fismasystemid])
+  }, [fromDatacall, toDatacall, fismasystemid, diffKey])
 
   const renderOption = (
     props: React.HTMLAttributes<HTMLLIElement> & { key?: React.Key },
@@ -507,13 +528,11 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
                         {pillar.pillar}
                       </TableCell>
                     </TableRow>
-                    {entries.map((entry) => (
+                    {entries.map((entry, i) => (
                       <TableRow
                         key={entry.functionid}
                         sx={{
-                          '&:nth-of-type(even)': {
-                            backgroundColor: '#f5f5f5',
-                          },
+                          backgroundColor: i % 2 === 1 ? '#f5f5f5' : 'inherit',
                         }}
                       >
                         <TableCell component="th" scope="row">
