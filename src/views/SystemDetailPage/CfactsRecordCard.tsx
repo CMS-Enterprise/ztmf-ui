@@ -55,7 +55,7 @@ function BooleanChip({
 }
 
 function parseDateOnly(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number)
+  const [year, month, day] = dateStr.split(/[ T]/)[0].split('-').map(Number)
   return new Date(year, month - 1, day)
 }
 
@@ -79,7 +79,9 @@ function parseDate(dateStr: string): Date {
 
 function formatDate(dateStr: string | null): string | null {
   if (!dateStr) return null
-  return parseDate(dateStr).toLocaleDateString()
+  const date = parseDate(dateStr)
+  if (isNaN(date.getTime())) return null
+  return date.toLocaleDateString()
 }
 
 export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
@@ -118,10 +120,12 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
               }
             : null
         )
-      } catch (error: any) {
+      } catch (error) {
         if (controller.signal.aborted) return
-        if (error.response?.status === 404 || error.response?.status === 403) {
-          if (error.response?.status === 403) {
+        const status = (error as { response?: { status?: number } }).response
+          ?.status
+        if (status === 404 || status === 403) {
+          if (status === 403) {
             console.warn('ZTMF Insights 403 for fismaUid:', fismaUid)
           }
           setNotFound(true)

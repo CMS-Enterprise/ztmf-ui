@@ -59,6 +59,7 @@ export default function AssignSystemModal({
         setFismaSystems(systemIds)
       } catch (error) {
         if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
         console.error('Error fetching assigned systems:', error)
       }
     }
@@ -67,20 +68,20 @@ export default function AssignSystemModal({
       controller.abort()
     }
   }, [open, userid, fismaSystemMap])
-  const handleConfirmUnassign = (confirm: boolean) => {
+  const handleConfirmUnassign = async (confirm: boolean) => {
     const target = pendingUnassign
     setPendingUnassign(null)
     if (!confirm || !target) return
-    axiosInstance
-      .delete(`/users/${userid}/assignedfismasystems/${target.systemid}`)
-      .then(() => {
-        setAssignedSystems(target.nextValue)
-        notify('Saved - unassigned system', 'success')
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 1500 })
-      })
+    try {
+      await axiosInstance.delete(
+        `/users/${userid}/assignedfismasystems/${target.systemid}`
+      )
+      setAssignedSystems(target.nextValue)
+      notify('Saved - unassigned system', 'success')
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 1500 })
+    }
   }
 
   return (
@@ -125,7 +126,7 @@ export default function AssignSystemModal({
               )
             }}
             value={assignedSystems}
-            onChange={(_event, newValue) => {
+            onChange={async (_event, newValue) => {
               const added = newValue.filter(
                 (item) => !assignedSystems.includes(item)
               )
@@ -133,20 +134,19 @@ export default function AssignSystemModal({
                 (item) => !newValue.includes(item)
               )
               if (added.length) {
-                axiosInstance
-                  .post(`/users/${userid}/assignedfismasystems`, {
-                    fismasystemid: added[0],
+                try {
+                  await axiosInstance.post(
+                    `/users/${userid}/assignedfismasystems`,
+                    { fismasystemid: added[0] }
+                  )
+                  setAssignedSystems(newValue)
+                  notify('Saved - assign system', 'success')
+                } catch (error) {
+                  if (isAuthHandled(error)) return
+                  notify(ERROR_MESSAGES.tryAgain, 'error', {
+                    autoHideDuration: 1500,
                   })
-                  .then(() => {
-                    setAssignedSystems(newValue)
-                    notify('Saved - assign system', 'success')
-                  })
-                  .catch((error) => {
-                    if (isAuthHandled(error)) return
-                    notify(ERROR_MESSAGES.tryAgain, 'error', {
-                      autoHideDuration: 1500,
-                    })
-                  })
+                }
               } else if (removed.length) {
                 setPendingUnassign({
                   systemid: removed[0],

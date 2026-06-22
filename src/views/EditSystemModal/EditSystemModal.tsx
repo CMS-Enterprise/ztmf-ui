@@ -220,52 +220,48 @@ export default function EditSystemModal({
   }
   const handleSave = async () => {
     if (mode === 'edit') {
-      await axiosInstance
-        .put(`fismasystems/${editedFismaSystem.fismasystemid}`, {
-          fismauid: editedFismaSystem.fismauid,
-          fismaacronym: editedFismaSystem.fismaacronym,
-          fismaname: editedFismaSystem.fismaname,
-          fismasubsystem: editedFismaSystem.fismasubsystem,
-          component: editedFismaSystem.component,
-          groupacronym: editedFismaSystem.groupacronym,
-          groupname: editedFismaSystem.groupname,
-          divisionname: editedFismaSystem.divisionname,
-          datacenterenvironment: editedFismaSystem.datacenterenvironment,
-          datacallcontact: editedFismaSystem.datacallcontact,
-          issoemail: editedFismaSystem.issoemail,
-          sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
-        })
-        .then(() => {
-          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-          onClose(editedFismaSystem)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          const parsed = parseApiError(error)
-          // Backend 400 with a field map: render each reason inline under
-          // its input via formValid + formValidErrorText. The 'Not Saved'
-          // toast is a status flag, not the detail.
-          if (parsed.fieldErrors) {
-            Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-              setFormValid((prevState) => ({
-                ...prevState,
-                [key]: false,
-              }))
-              setFormValidErrorText((prevState) => ({
-                ...prevState,
-                [key]: message,
-              }))
-            })
-            notify(STATUS_MESSAGES.notSaved, 'error', {
-              autoHideDuration: 1500,
-            })
-            return
+      try {
+        await axiosInstance.put(
+          `fismasystems/${editedFismaSystem.fismasystemid}`,
+          {
+            fismauid: editedFismaSystem.fismauid,
+            fismaacronym: editedFismaSystem.fismaacronym,
+            fismaname: editedFismaSystem.fismaname,
+            fismasubsystem: editedFismaSystem.fismasubsystem,
+            component: editedFismaSystem.component,
+            groupacronym: editedFismaSystem.groupacronym,
+            groupname: editedFismaSystem.groupname,
+            divisionname: editedFismaSystem.divisionname,
+            datacenterenvironment: editedFismaSystem.datacenterenvironment,
+            datacallcontact: editedFismaSystem.datacallcontact,
+            issoemail: editedFismaSystem.issoemail,
+            sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           }
-          notify(parsed.message, 'error')
-        })
+        )
+        notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+        onClose(editedFismaSystem)
+      } catch (error) {
+        if (isAuthHandled(error)) return
+        const parsed = parseApiError(error)
+        // Backend 400 with a field map: render each reason inline under
+        // its input via formValid + formValidErrorText. The 'Not Saved'
+        // toast is a status flag, not the detail.
+        if (parsed.fieldErrors) {
+          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+            setFormValid((prevState) => ({ ...prevState, [key]: false }))
+            setFormValidErrorText((prevState) => ({
+              ...prevState,
+              [key]: message,
+            }))
+          })
+          notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
+          return
+        }
+        notify(parsed.message, 'error')
+      }
     } else if (mode === 'create') {
-      await axiosInstance
-        .post(`fismasystems`, {
+      try {
+        await axiosInstance.post(`fismasystems`, {
           fismauid: editedFismaSystem.fismauid,
           fismaacronym: editedFismaSystem.fismaacronym,
           fismaname: editedFismaSystem.fismaname,
@@ -279,36 +275,29 @@ export default function EditSystemModal({
           issoemail: editedFismaSystem.issoemail,
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
         })
-        .then(() => {
-          notify(STATUS_MESSAGES.created, 'success', {
+        notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
+        onClose(editedFismaSystem)
+      } catch (error) {
+        if (isAuthHandled(error)) return
+        const parsed = parseApiError(error)
+        // Backend 400 with a field map: render each reason inline under
+        // its input via formValid + formValidErrorText. The 'Not Created'
+        // toast is a status flag, not the detail.
+        if (parsed.fieldErrors) {
+          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+            setFormValid((prevState) => ({ ...prevState, [key]: false }))
+            setFormValidErrorText((prevState) => ({
+              ...prevState,
+              [key]: message,
+            }))
+          })
+          notify(STATUS_MESSAGES.notCreated, 'error', {
             autoHideDuration: 1500,
           })
-          onClose(editedFismaSystem)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          const parsed = parseApiError(error)
-          // Backend 400 with a field map: render each reason inline under
-          // its input via formValid + formValidErrorText. The 'Not Created'
-          // toast is a status flag, not the detail.
-          if (parsed.fieldErrors) {
-            Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-              setFormValid((prevState) => ({
-                ...prevState,
-                [key]: false,
-              }))
-              setFormValidErrorText((prevState) => ({
-                ...prevState,
-                [key]: message,
-              }))
-            })
-            notify(STATUS_MESSAGES.notCreated, 'error', {
-              autoHideDuration: 1500,
-            })
-            return
-          }
-          notify(parsed.message, 'error')
-        })
+          return
+        }
+        notify(parsed.message, 'error')
+      }
     }
   }
   const validateDecommissionDate = (dateStr: string): boolean => {
@@ -353,76 +342,80 @@ export default function EditSystemModal({
     if (trimmedNotes) {
       body.notes = trimmedNotes
     }
-    await axiosInstance
-      .delete(`fismasystems/${editedFismaSystem.fismasystemid}`, {
-        data: body,
-      })
-      .then((res) => {
-        if (res.status === 200 || res.status === 204) {
-          notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
-            autoHideDuration: 2000,
-          })
-          const updatedSystem: FismaSystemType = res.data?.data || {
-            ...editedFismaSystem,
-            decommissioned: true,
-            decommissioned_date: isoDate,
-            decommissioned_notes: trimmedNotes || null,
-          }
-          onClose(updatedSystem)
+    try {
+      const res = await axiosInstance.delete(
+        `fismasystems/${editedFismaSystem.fismasystemid}`,
+        { data: body }
+      )
+      if (res.status === 200 || res.status === 204) {
+        notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
+          autoHideDuration: 2000,
+        })
+        const updatedSystem: FismaSystemType = res.data?.data || {
+          ...editedFismaSystem,
+          decommissioned: true,
+          decommissioned_date: isoDate,
+          decommissioned_notes: trimmedNotes || null,
         }
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        console.error(
-          'Decommission error:',
-          error.response?.status,
-          error.response?.data
-        )
-        const parsed = parseApiError(error)
-        if (parsed.status === 404) {
-          notify(ERROR_MESSAGES.systemNotFound, 'error', {
-            autoHideDuration: 2000,
-          })
-          return
-        }
-        notify(parsed.message, 'error')
-      })
+        onClose(updatedSystem)
+      }
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error(
+        'Decommission error:',
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.status,
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.data
+      )
+      const parsed = parseApiError(error)
+      if (parsed.status === 404) {
+        notify(ERROR_MESSAGES.systemNotFound, 'error', {
+          autoHideDuration: 2000,
+        })
+        return
+      }
+      notify(parsed.message, 'error')
+    }
   }
   const handleReactivate = async () => {
     setOpenReactivateAlert(false)
     const trimmedNotes = reactivationNotes.trim()
     const body = trimmedNotes ? { notes: trimmedNotes } : undefined
-    await axiosInstance
-      .put(`fismasystems/${editedFismaSystem.fismasystemid}/reactivate`, body)
-      .then((res) => {
-        if (res.status === 200) {
-          notify(STATUS_MESSAGES.systemReactivated, 'success', {
-            autoHideDuration: 2000,
-          })
-          const updatedSystem: FismaSystemType = res.data?.data || {
-            ...editedFismaSystem,
-            decommissioned: false,
-            reactivation_notes: trimmedNotes || null,
-          }
-          onClose(updatedSystem)
+    try {
+      const res = await axiosInstance.put(
+        `fismasystems/${editedFismaSystem.fismasystemid}/reactivate`,
+        body
+      )
+      if (res.status === 200) {
+        notify(STATUS_MESSAGES.systemReactivated, 'success', {
+          autoHideDuration: 2000,
+        })
+        const updatedSystem: FismaSystemType = res.data?.data || {
+          ...editedFismaSystem,
+          decommissioned: false,
+          reactivation_notes: trimmedNotes || null,
         }
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        console.error(
-          'Reactivate error:',
-          error.response?.status,
-          error.response?.data
-        )
-        const parsed = parseApiError(error)
-        if (parsed.status === 404) {
-          notify(ERROR_MESSAGES.systemNotFound, 'error', {
-            autoHideDuration: 2000,
-          })
-          return
-        }
-        notify(parsed.message, 'error')
-      })
+        onClose(updatedSystem)
+      }
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error(
+        'Reactivate error:',
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.status,
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.data
+      )
+      const parsed = parseApiError(error)
+      if (parsed.status === 404) {
+        notify(ERROR_MESSAGES.systemNotFound, 'error', {
+          autoHideDuration: 2000,
+        })
+        return
+      }
+      notify(parsed.message, 'error')
+    }
   }
   if (open && system) {
     if (loading) {

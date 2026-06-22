@@ -149,46 +149,32 @@ export default function QuestionnareModal({
       selectQuestionOption === loadedSelectQuestionOption &&
       (notes ?? '') === (loadedNotes ?? '')
     if (!isReadOnly && !isReadThrough) {
-      if (scoreid) {
-        axiosInstance
-          .put(`scores/${scoreid}`, {
-            fismasystemid: system?.fismasystemid,
-            notes: notes,
-            functionoptionid: selectQuestionOption,
-            datacallid: datacallID,
-          })
-          .then(() => {
+      async function saveScore() {
+        try {
+          if (scoreid) {
+            await axiosInstance.put(`scores/${scoreid}`, {
+              fismasystemid: system?.fismasystemid,
+              notes: notes,
+              functionoptionid: selectQuestionOption,
+              datacallid: datacallID,
+            })
             notify(STATUS_MESSAGES.saved, 'success')
-            fetchQuestionScores(
-              Number(system?.fismasystemid),
-              setQuestionScores
-            )
-            setLoadingQuestion(false)
-          })
-          .catch((error) => {
-            if (isAuthHandled(error)) return
-            console.error('Error updating score:', error)
-          })
-      } else {
-        axiosInstance
-          .post(`scores`, {
-            fismasystemid: system?.fismasystemid,
-            notes: notes,
-            functionoptionid: selectQuestionOption,
-            datacallid: datacallID,
-          })
-          .then(() => {
-            fetchQuestionScores(
-              Number(system?.fismasystemid),
-              setQuestionScores
-            )
-            setLoadingQuestion(false)
-          })
-          .catch((error) => {
-            if (isAuthHandled(error)) return
-            console.error('Error posting score:', error)
-          })
+          } else {
+            await axiosInstance.post(`scores`, {
+              fismasystemid: system?.fismasystemid,
+              notes: notes,
+              functionoptionid: selectQuestionOption,
+              datacallid: datacallID,
+            })
+          }
+          fetchQuestionScores(Number(system?.fismasystemid), setQuestionScores)
+          setLoadingQuestion(false)
+        } catch (error) {
+          if (isAuthHandled(error)) return
+          console.error('Error saving score:', error)
+        }
       }
+      saveScore()
     }
     let nextCategoryIndex = activeCategoryIndex
     let nextStepIndex = activeStepIndex + 1
@@ -269,141 +255,117 @@ export default function QuestionnareModal({
     return str
   }
   React.useEffect(() => {
-    if (!open || !system) return
-    const controller = new AbortController()
-    const fetchData = async () => {
-      try {
-        const latestDataCallId = await axiosInstance
-          .get(`/datacalls/latest`, { signal: controller.signal })
-          .then((res) => {
-            setDatacallID(res.data.data.datacallid)
-            if (new Date() > new Date(res.data.data.deadline)) {
-              setIsPastDeadline(true)
-            }
-            return res.data.data.datacallid
-          })
-          .catch((error) => {
-            if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
-            console.error('Error fetching latest datacall:', error)
-          })
-
-        await axiosInstance
-          .get(`/fismasystems/${system.fismasystemid}/questions`, {
+    if (open && system) {
+      const controller = new AbortController()
+      const fetchData = async () => {
+        try {
+          const latestRes = await axiosInstance.get(`/datacalls/latest`, {
             signal: controller.signal,
           })
-          .then((response) => {
-            const data = response.data.data
-            const organizedData: Record<string, FismaQuestion[]> = {}
-            data.forEach((question: FismaQuestion) => {
-              if (!organizedData[question.pillar.pillar]) {
-                organizedData[question.pillar.pillar] = []
-              }
-              organizedData[question.pillar.pillar].push(question)
-            })
-            const sortedPillars = sortPillars(Object.keys(organizedData))
-            const categoriesData: Category[] = sortedPillars.map((pillar) => ({
-              name: pillar,
-              steps: sortFunctions(pillar, organizedData[pillar]),
-            }))
-            // const categoriesData: Category[] = sortedPillars.map(
-            //   (pillar) => ({
-            //     name: pillar,
-            //     steps: organizedData[pillar],
-            //   })
-            // )
-            // console.log(categoriesData)
-            setCategories(categoriesData)
-            if (data.length > 0) {
-              // console.log(categoriesData)
-              setQuestionId(categoriesData[0]['steps'][0].function.functionid)
+          const latestDataCallId = latestRes.data.data.datacallid
+          setDatacallID(latestDataCallId)
+          if (new Date() > new Date(latestRes.data.data.deadline)) {
+            setIsPastDeadline(true)
+          }
+
+          const questionsRes = await axiosInstance.get(
+            `/fismasystems/${system.fismasystemid}/questions`,
+            { signal: controller.signal }
+          )
+          const data = questionsRes.data.data
+          const organizedData: Record<string, FismaQuestion[]> = {}
+          data.forEach((question: FismaQuestion) => {
+            if (!organizedData[question.pillar.pillar]) {
+              organizedData[question.pillar.pillar] = []
             }
+            organizedData[question.pillar.pillar].push(question)
           })
-          .catch((error) => {
-            if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
-            console.error('Error fetching questions:', error)
-          })
-        await axiosInstance
-          .get(
+          const sortedPillars = sortPillars(Object.keys(organizedData))
+          const categoriesData: Category[] = sortedPillars.map((pillar) => ({
+            name: pillar,
+            steps: sortFunctions(pillar, organizedData[pillar]),
+          }))
+          setCategories(categoriesData)
+          if (data.length > 0) {
+            setQuestionId(categoriesData[0]['steps'][0].function.functionid)
+          }
+
+          const scoresRes = await axiosInstance.get(
             `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`,
             { signal: controller.signal }
           )
-          .then((res) => {
-            const hashTable: questionScoreMap = Object.assign(
-              {},
-              ...res.data.data.map((item: QuestionScores) => ({
-                [item.functionoptionid]: item,
-              }))
-            )
-            setQuestionScores(hashTable)
-          })
-          .catch((error) => {
-            if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
-            console.error('Error fetching question scores:', error)
-          })
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Error fetching data:', error)
+          const hashTable: questionScoreMap = Object.assign(
+            {},
+            ...scoresRes.data.data.map((item: QuestionScores) => ({
+              [item.functionoptionid]: item,
+            }))
+          )
+          setQuestionScores(hashTable)
+        } catch (error) {
+          if (controller.signal.aborted) return
+          if (isAuthHandled(error)) return
+          console.error('Error fetching data:', error)
+        }
       }
-    }
-    fetchData()
-    return () => {
-      controller.abort()
+      fetchData()
+      return () => controller.abort()
     }
   }, [open, system])
   React.useEffect(() => {
-    if (!questionId) return
-    const controller = new AbortController()
-    async function load() {
-      try {
-        const res = await axiosInstance.get(`functions/${questionId}/options`, {
-          signal: controller.signal,
-        })
-        setOptions(res.data.data)
-        let isValidOption: boolean = false
-        let funcOptId: number = 0
-        res.data.data.forEach((item: QuestionOption) => {
-          if (item.functionoptionid in questionScores) {
-            isValidOption = true
-            funcOptId = item.functionoptionid
+    if (questionId) {
+      const controller = new AbortController()
+      async function fetchOptions() {
+        try {
+          const res = await axiosInstance.get(
+            `functions/${questionId}/options`,
+            { signal: controller.signal }
+          )
+          setOptions(res.data.data)
+          let isValidOption: boolean = false
+          let funcOptId: number = 0
+          res.data.data.forEach((item: QuestionOption) => {
+            if (item.functionoptionid in questionScores) {
+              isValidOption = true
+              funcOptId = item.functionoptionid
+            }
+          })
+          if (!isValidOption) {
+            setSelectQuestionOption(0)
+            setScoreId(0)
+            setNotes('')
+            setLoadedSelectQuestionOption(0)
+            setLoadedNotes('')
+            setSavedLastEditedAt(null)
+            setSavedLastEditedBy(null)
+          } else {
+            const id = questionScores[funcOptId].scoreid
+            const notes = questionScores[funcOptId].notes
+            setSelectQuestionOption(funcOptId)
+            setScoreId(id)
+            setNotes(notes)
+            // Snapshot the loaded answer so handleQuestionnareNext can
+            // detect "no real change" and skip the PUT. Without this the
+            // backend's no-op guard still preserves history, but we
+            // would still pay a wasted roundtrip on every Next click.
+            setLoadedSelectQuestionOption(funcOptId)
+            setLoadedNotes(notes)
+            setSavedLastEditedAt(
+              questionScores[funcOptId].last_edited_at ?? null
+            )
+            setSavedLastEditedBy(
+              questionScores[funcOptId].last_edited_by ?? null
+            )
           }
-        })
-        if (!isValidOption) {
-          setSelectQuestionOption(0)
-          setScoreId(0)
-          setNotes('')
-          setLoadedSelectQuestionOption(0)
-          setLoadedNotes('')
-          setSavedLastEditedAt(null)
-          setSavedLastEditedBy(null)
-        } else {
-          const id = questionScores[funcOptId].scoreid
-          const notes = questionScores[funcOptId].notes
-          setSelectQuestionOption(funcOptId)
-          setScoreId(id)
-          setNotes(notes)
-          // Snapshot the loaded answer so handleQuestionnareNext can
-          // detect "no real change" and skip the PUT. Without this the
-          // backend's no-op guard still preserves history, but we
-          // would still pay a wasted roundtrip on every Next click.
-          setLoadedSelectQuestionOption(funcOptId)
-          setLoadedNotes(notes)
-          setSavedLastEditedAt(questionScores[funcOptId].last_edited_at ?? null)
-          setSavedLastEditedBy(questionScores[funcOptId].last_edited_by ?? null)
+        } catch (error) {
+          if (controller.signal.aborted) return
+          if (isAuthHandled(error)) return
+          console.error('Error fetching data:', error)
+        } finally {
+          setLoadingQuestion(false)
         }
-        setLoadingQuestion(false)
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Error fetching data:', error)
       }
-    }
-    load()
-    return () => {
-      controller.abort()
+      fetchOptions()
+      return () => controller.abort()
     }
   }, [questionId, questionScores])
   const renderRadioGroup = (options: QuestionOption[]) => {

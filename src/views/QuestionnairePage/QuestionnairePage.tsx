@@ -37,6 +37,7 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
+import { shouldPersistResponse } from './saveGuard'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -91,7 +92,13 @@ const addSpace = (str: string) => {
   return str
 }
 export default function QuestionnarePage() {
-  const { userInfo, selectedDataCallId, selectedDatacall } = useContextProp()
+  const {
+    userInfo,
+    selectedDatacall,
+    latestDataCallId,
+    latestDatacall,
+    latestDeadline,
+  } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
@@ -189,86 +196,76 @@ export default function QuestionnarePage() {
     setQuestionId(index)
   }
 
-  const saveResponse = () => {
-    if (scoreid) {
-      axiosInstance
-        .put(`scores/${scoreid}`, {
+  const saveResponse = async () => {
+    if (
+      !shouldPersistResponse({
+        selectQuestionOption,
+        initQuestionChoice,
+        notes,
+        initNotes,
+      })
+    ) {
+      return
+    }
+    try {
+      if (scoreid) {
+        await axiosInstance.put(`scores/${scoreid}`, {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
         })
-        .then(() => {
-          // checkValidResponse(res.status)
-          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error updating score:', error)
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
-        })
-    } else {
-      axiosInstance
-        .post(`scores`, {
+      } else {
+        await axiosInstance.post(`scores`, {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
         })
-        .then(() => {
-          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error posting score:', error)
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
-        })
+      }
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      fetchQuestionScores(system, setQuestionScores)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error('Error saving score:', error)
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
     }
   }
 
   React.useEffect(() => {
-    if (!system) return
-    const controller = new AbortController()
-    // Reset the empty-questionnaire flag so a previous decommissioned-system
-    // view does not bleed into the next render when system changes.
-    setNoQuestions(false)
-    const fetchData = async () => {
-      try {
-        let questionsEmpty = false
-        let datacall = ''
-        const latestDataCallId = await axiosInstance
-          .get(`/datacalls/latest`, { signal: controller.signal })
-          .then((res) => {
-            const latestId = res.data.data.datacallid
-            const isHistorical =
-              selectedDataCallId > 0 && selectedDataCallId !== latestId
-            if (isHistorical) {
-              setDatacallID(selectedDataCallId)
-              datacall = selectedDatacall.replaceAll(' ', '_')
-              setDatacall(datacall)
-              setIsPastDeadline(true)
-            } else {
-              setDatacallID(latestId)
-              datacall = res.data.data.datacall.replaceAll(' ', '_')
-              setDatacall(datacall)
-              setIsPastDeadline(new Date() > new Date(res.data.data.deadline))
-            }
-            return isHistorical ? selectedDataCallId : latestId
-          })
-          .catch((error) => {
-            if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
-            notify(ERROR_MESSAGES.tryAgain, 'error', {
-              autoHideDuration: 2500,
-            })
-          })
-        await axiosInstance
-          .get(`/fismasystems/${system}/questions`, {
-            signal: controller.signal,
-          })
-          .then((response) => {
+    if (system) {
+      const controller = new AbortController()
+      // Reset the empty-questionnaire flag so a previous decommissioned-system
+      // view does not bleed into the next render when system changes.
+      setNoQuestions(false)
+      const fetchData = async () => {
+        try {
+          let questionsEmpty = false
+          let datacall = ''
+          const isHistorical =
+            selectedDatacall !== null &&
+            selectedDatacall.datacallid !== latestDataCallId
+          let activeDataCallId: number
+          if (isHistorical && selectedDatacall) {
+            setDatacallID(selectedDatacall.datacallid)
+            datacall = selectedDatacall.datacall.replaceAll(' ', '_')
+            setDatacall(datacall)
+            setIsPastDeadline(true)
+            activeDataCallId = selectedDatacall.datacallid
+          } else {
+            setDatacallID(latestDataCallId)
+            datacall = latestDatacall.replaceAll(' ', '_')
+            setDatacall(datacall)
+            setIsPastDeadline(
+              latestDeadline ? new Date() > new Date(latestDeadline) : true
+            )
+            activeDataCallId = latestDataCallId
+          }
+          try {
+            const response = await axiosInstance.get(
+              `/fismasystems/${system}/questions`,
+              { signal: controller.signal }
+            )
             // Decommissioned systems join to zero functions, so the questions
             // endpoint returns no rows. The Go backend serializes a nil
             // slice as JSON null, so the response can be either { data: null }
@@ -280,152 +277,158 @@ export default function QuestionnarePage() {
               questionsEmpty = true
               setNoQuestions(true)
               setLoadingQuestion(false)
-              return
-            }
-            const organizedData: Record<string, FismaQuestion[]> = {}
-            const questionData: Record<number, Question> = {}
-            data.forEach((question: FismaQuestion) => {
-              if (!organizedData[question.pillar.pillar]) {
-                organizedData[question.pillar.pillar] = []
-              }
-              questionData[question.function.functionid] = {
-                question: question.question,
-                notesprompt: question.notesprompt,
-                description: question.function.description,
-                pillar: question.pillar.pillar,
-                function: question.function.function,
-              }
-              organizedData[question.pillar.pillar].push(question)
-            })
-            setQuestions(questionData)
-            const sortedPillars = sortPillars(Object.keys(organizedData))
-            let sortedFuncId: number[] = []
-            const categoriesData: Category[] = sortedPillars.map((pillar) => {
-              const sortedSteps = sortFunctions(pillar, organizedData[pillar])
-              const sortedStepFuncId = sortedSteps.map(
-                (d) => d.function.functionid
+            } else {
+              const organizedData: Record<string, FismaQuestion[]> = {}
+              const questionData: Record<number, Question> = {}
+              data.forEach((question: FismaQuestion) => {
+                if (!organizedData[question.pillar.pillar]) {
+                  organizedData[question.pillar.pillar] = []
+                }
+                questionData[question.function.functionid] = {
+                  question: question.question,
+                  notesprompt: question.notesprompt,
+                  description: question.function.description,
+                  pillar: question.pillar.pillar,
+                  function: question.function.function,
+                }
+                organizedData[question.pillar.pillar].push(question)
+              })
+              setQuestions(questionData)
+              const sortedPillars = sortPillars(Object.keys(organizedData))
+              let sortedFuncId: number[] = []
+              const categoriesData: Category[] = sortedPillars.map((pillar) => {
+                const sortedSteps = sortFunctions(pillar, organizedData[pillar])
+                const sortedStepFuncId = sortedSteps.map(
+                  (d) => d.function.functionid
+                )
+                sortedFuncId = [...sortedFuncId, ...sortedStepFuncId]
+                return {
+                  name: pillar,
+                  steps: sortedSteps,
+                }
+              })
+              const funcIdToIdx = sortedFuncId.reduce(
+                (
+                  acc: { [key: number]: number },
+                  num: number,
+                  index: number
+                ) => {
+                  acc[num] = index
+                  return acc
+                },
+                {}
               )
-              sortedFuncId = [...sortedFuncId, ...sortedStepFuncId]
-              return {
-                name: pillar,
-                steps: sortedSteps,
-              }
-            })
-            const funcIdToIdx = sortedFuncId.reduce(
-              (acc: { [key: number]: number }, num: number, index: number) => {
-                acc[num] = index
-                return acc
-              },
-              {}
-            )
-            setFunctionIdIdx(funcIdToIdx) // set a map of functionid -> index in sortedFunctId
-            setQuestionId(sortedFuncId[0]) // sets the questionid(functionid) to the first value in the array
-            setStepFunctionId(sortedFuncId) // contains an array of all functionid in order of render
-            setCategories(categoriesData)
-            navigate(
-              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
-              {
-                state: { fismasystemid: system },
-                replace: true,
-              }
-            )
-            setSelectedIndex(sortedFuncId[0]) // set the first selected item in the list (rendered) to be selected(highlighted)
-            setQuestion(questionData[sortedFuncId[0]].question) // set the first question value to the page
-            setDescription(questionData[sortedFuncId[0]].description)
-            setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
-          })
-          .catch((error) => {
+              setFunctionIdIdx(funcIdToIdx) // set a map of functionid -> index in sortedFunctId
+              setQuestionId(sortedFuncId[0]) // sets the questionid(functionid) to the first value in the array
+              setStepFunctionId(sortedFuncId) // contains an array of all functionid in order of render
+              setCategories(categoriesData)
+              navigate(
+                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
+                {
+                  state: { fismasystemid: system },
+                  replace: true,
+                }
+              )
+              setSelectedIndex(sortedFuncId[0]) // set the first selected item in the list (rendered) to be selected(highlighted)
+              setQuestion(questionData[sortedFuncId[0]].question) // set the first question value to the page
+              setDescription(questionData[sortedFuncId[0]].description)
+              setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
+            }
+          } catch (error) {
             if (controller.signal.aborted) return
             if (isAuthHandled(error)) return
             notify(ERROR_MESSAGES.tryAgain, 'error')
-          })
-        if (questionsEmpty) {
-          return
-        }
-        await axiosInstance
-          .get(
-            `scores?datacallid=${latestDataCallId}&fismasystemid=${system}&include=functionoption`,
-            { signal: controller.signal }
-          )
-          .then((res) => {
+            return
+          }
+          if (questionsEmpty) {
+            return
+          }
+          try {
+            const res = await axiosInstance.get(
+              `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`,
+              { signal: controller.signal }
+            )
             const hashTable: questionScoreMap = Object.assign(
               {},
               ...res.data.data.map((item: QuestionScores) => ({
                 [item.functionoptionid]: item,
               }))
             )
-            // res.data.data.map((item: any) => {
-            //   questionScoreMap[item.functionoptionid] = item
-            //   funcScoreTable
-            // })
             setQuestionScores(hashTable)
-          })
-          .catch((error) => {
+          } catch (error) {
             if (controller.signal.aborted) return
             if (isAuthHandled(error)) return
             console.error('Error fetching question scores:', error)
             notify(ERROR_MESSAGES.tryAgain, 'error')
-          })
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Error fetching data:', error)
+          }
+        } catch (error) {
+          if (controller.signal.aborted) return
+          if (isAuthHandled(error)) return
+          console.error('Error fetching data:', error)
+        }
       }
+      fetchData()
+      return () => controller.abort()
     }
-    fetchData()
-    return () => {
-      controller.abort()
-    }
-  }, [system, navigate, fismaacronym, selectedDataCallId, selectedDatacall])
+  }, [
+    system,
+    navigate,
+    fismaacronym,
+    selectedDatacall,
+    latestDataCallId,
+    latestDatacall,
+    latestDeadline,
+  ])
   React.useEffect(() => {
-    if (!questionId) return
-    const controller = new AbortController()
-    // Clear saved-state markers before async load so the last-edited
-    // footer does not flash the previous question's editor during the
-    // refetch window.
-    setInitQuestionChoice(-1)
-    async function load() {
+    if (questionId) {
+      const controller = new AbortController()
+      // Clear saved-state markers before async load so the last-edited
+      // footer does not flash the previous question's editor during the
+      // refetch window.
+      setInitQuestionChoice(-1)
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
-      try {
-        const res = await axiosInstance.get(`functions/${questionId}/options`, {
-          signal: controller.signal,
-        })
-        res.data.data.forEach((item: QuestionOption) => {
-          const choiceOpt: QuestionChoice = {
-            label: item.description,
-            value: item.functionoptionid,
-          }
-          if (item.functionoptionid in questionScores) {
-            funcOptId = item.functionoptionid
-            choiceOpt.defaultChecked = true
-          }
-          choices.push(choiceOpt)
-        })
-        // Foundation of question
-        setDescription(questionId ? questions[questionId].description : '')
-        setQuestion(questionId ? questions[questionId].question : '')
-        setNotePrompt(questionId ? questions[questionId].notesprompt : '')
+      async function fetchOptions() {
+        try {
+          const res = await axiosInstance.get(
+            `functions/${questionId}/options`,
+            { signal: controller.signal }
+          )
+          res.data.data.forEach((item: QuestionOption) => {
+            const choiceOpt: QuestionChoice = {
+              label: item.description,
+              value: item.functionoptionid,
+            }
+            if (item.functionoptionid in questionScores) {
+              funcOptId = item.functionoptionid
+              choiceOpt.defaultChecked = true
+            }
+            choices.push(choiceOpt)
+          })
+          // Foundation of question
+          setDescription(questionId ? questions[questionId].description : '')
+          setQuestion(questionId ? questions[questionId].question : '')
+          setNotePrompt(questionId ? questions[questionId].notesprompt : '')
 
-        // Notes
-        setNotes(funcOptId ? questionScores[funcOptId].notes : '')
-        setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
+          // Notes
+          setNotes(funcOptId ? questionScores[funcOptId].notes : '')
+          setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
 
-        // Question options
-        setSelectQuestionOption(funcOptId ? funcOptId : -1)
-        setInitQuestionChoice(funcOptId ? funcOptId : -1)
-        setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
-        setOptions(choices ? choices : [])
-        setLoadingQuestion(false)
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Error fetching data:', error)
+          // Question options
+          setSelectQuestionOption(funcOptId ? funcOptId : -1)
+          setInitQuestionChoice(funcOptId ? funcOptId : -1)
+          setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
+          setOptions(choices ? choices : [])
+        } catch (error) {
+          if (controller.signal.aborted) return
+          if (isAuthHandled(error)) return
+          console.error('Error fetching data:', error)
+        } finally {
+          setLoadingQuestion(false)
+        }
       }
-    }
-    load()
-    return () => {
-      controller.abort()
+      fetchOptions()
+      return () => controller.abort()
     }
   }, [questionId, questionScores, questions])
   const breadcrumbSegmentLabels = fismaacronym

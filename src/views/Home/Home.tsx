@@ -14,8 +14,8 @@ import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
-  const { latestDataCallId, selectedDataCallId } = useContextProp()
-  const activeDataCallId = selectedDataCallId || latestDataCallId
+  const { latestDataCallId, selectedDatacall } = useContextProp()
+  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   useEffect(() => {
     const controller = new AbortController()
     async function fetchScores() {
