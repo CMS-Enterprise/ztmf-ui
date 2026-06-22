@@ -1,10 +1,10 @@
-import { Container, Typography } from '@mui/material'
-import { useLoaderData, useNavigate } from 'react-router-dom'
+import { Container, Typography, Autocomplete, TextField } from '@mui/material'
+import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData, UserRole } from '@/types'
+import { userData, UserRole, datacall } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -22,7 +22,6 @@ import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
-import { ERROR_MESSAGES } from '@/constants'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
@@ -48,14 +47,20 @@ type PromiseType = {
   serverError?: boolean
 }
 export default function Title() {
-  const navigate = useNavigate()
+  const location = useLocation()
   const loaderData = useLoaderData() as PromiseType
   const [openDataCallModal, setOpenDataCallModal] = useState<boolean>(false)
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
+  // Determine wether we are on the sign-in page or not
+  const normalizedPath = location.pathname.toLowerCase().replace(/\/$/, '')
+  const isSignInRoute = normalizedPath === Routes.SIGNIN.toLowerCase()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
+  const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
+  const [selectedDataCallId, setSelectedDataCallId] = useState<number>(0)
+  const [selectedDatacall, setSelectedDatacall] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -77,17 +82,9 @@ export default function Title() {
             error.response?.status,
             error.response?.data
           )
-          if (error.response?.status === 401) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.login,
-              },
-            })
-          }
         })
     },
-    [navigate]
+    []
   )
 
   useEffect(() => {
@@ -96,26 +93,27 @@ export default function Title() {
 
   useEffect(() => {
     if (loaderData.serverError) return
-    async function fetchLatestDatacall() {
+    async function fetchDatacalls() {
       await axiosInstance
-        .get('/datacalls/latest')
+        .get('/datacalls')
         .then((res) => {
-          setLatestDataCallId(res.data.data.datacallid)
-          setLatestDatacall(res.data.data.datacall)
-        })
-        .catch((error) => {
-          if (error.response?.status == 401) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
+          const sorted: datacall[] = [...res.data.data].sort(
+            (a: datacall, b: datacall) => b.datacallid - a.datacallid
+          )
+          setDatacalls(sorted)
+          if (sorted.length > 0) {
+            setLatestDataCallId(sorted[0].datacallid)
+            setLatestDatacall(sorted[0].datacall)
+            setSelectedDataCallId(sorted[0].datacallid)
+            setSelectedDatacall(sorted[0].datacall)
           }
         })
+        .catch((error) => {
+          console.error('Fetch latest datacall error:', error)
+        })
     }
-    fetchLatestDatacall()
-  }, [navigate, loaderData.serverError])
+    fetchDatacalls()
+  }, [loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -126,6 +124,15 @@ export default function Title() {
   const handleClose = () => {
     setAnchorEl(null)
   }
+  // Display name for the IdP that minted the user's session. Surfaced
+  // as a small badge next to the name so support can debug "I logged
+  // in but the dashboard looks wrong" without DevTools.
+  const idpBadge =
+    userInfo.identity_provider === 'entra'
+      ? 'Entra'
+      : userInfo.identity_provider === 'okta'
+        ? 'Okta'
+        : ''
   const handleCloseModal = (newRowData: FismaSystemType) => {
     if (!_.isEqual(EMPTY_SYSTEM, newRowData)) {
       setFismaSystems((prevFismSystems) => [...prevFismSystems, newRowData])
@@ -141,6 +148,7 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
+  const isSystemDetail = location.pathname.startsWith('/systems/')
   // Single source of truth for header logo sizing; divider scales with it
   // so the mark, divider, and wordmark stay vertically centered on resize.
   const LOGO_HEIGHT = 55
@@ -152,159 +160,176 @@ export default function Title() {
   return (
     <>
       <UsaBanner />
-      {/* Branded header bar */}
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
-          py: 1.5,
-          borderBottom: '1px solid rgba(0,0,0,0.12)',
-          minWidth: 800,
-        }}
-      >
-        {/* left: ZTMF mark + wordmark */}
-        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-          <img
-            src={ztmfLogo}
-            alt="ZTMF"
-            style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
-          />
-          <Box
-            sx={{
-              width: '1px',
-              height: Math.round(LOGO_HEIGHT * 0.7),
-              backgroundColor: 'rgba(0,0,0,0.12)',
-              flexShrink: 0,
-              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-            }}
-          />
-          <Box
-            sx={{
-              lineHeight: 1.15,
-              transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-            }}
-          >
-            <Typography
+      {/* Branded header bar (hidden on signin so it does not contradict the
+          "please sign in" prompt) */}
+      {!isSignInRoute && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+            py: 1.5,
+            borderBottom: '1px solid rgba(0,0,0,0.12)',
+            minWidth: 800,
+          }}
+        >
+          {/* left: ZTMF mark + wordmark */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+            <img
+              src={ztmfLogo}
+              alt="ZTMF"
+              style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
+            />
+            <Box
               sx={{
-                fontSize: 17,
-                fontWeight: 700,
-                color: '#102B52',
-                letterSpacing: '0.2px',
+                width: '1px',
+                height: Math.round(LOGO_HEIGHT * 0.7),
+                backgroundColor: 'rgba(0,0,0,0.12)',
+                flexShrink: 0,
+                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
+              }}
+            />
+            <Box
+              sx={{
                 lineHeight: 1.15,
+                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
               }}
             >
-              Zero Trust Maturity Framework
-            </Typography>
-            <Typography
-              sx={{
-                fontSize: 12,
-                fontWeight: 600,
-                color: '#7997AF',
-                letterSpacing: '2px',
-                textTransform: 'uppercase',
-                lineHeight: 1.15,
-              }}
-            >
-              Scoring Tool
-            </Typography>
-          </Box>
-        </Box>
-
-        {/* right: account chip (shown when logged in) */}
-        {loaderData.status == 200 && (
-          <Box sx={{ display: 'flex', alignItems: 'center' }}>
-            <AccountCircleIcon fontSize={'large'} />
-            {userInfo.fullname && (
-              <span
-                style={{ verticalAlign: '13px' }}
-                className="ds-text-body--md"
+              <Typography
+                sx={{
+                  fontSize: 17,
+                  fontWeight: 700,
+                  color: '#102B52',
+                  letterSpacing: '0.2px',
+                  lineHeight: 1.15,
+                }}
               >
-                {userInfo.fullname}
-              </span>
-            )}
-            {hasAdminRead && (
-              <>
-                <IconButton
-                  aria-label="more"
-                  aria-controls="long-menu"
-                  aria-haspopup="true"
-                  onClick={handleClick}
+                Zero Trust Maturity Framework
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 600,
+                  color: '#7997AF',
+                  letterSpacing: '2px',
+                  textTransform: 'uppercase',
+                  lineHeight: 1.15,
+                }}
+              >
+                Scoring Tool
+              </Typography>
+            </Box>
+          </Box>
+
+          {/* right: account chip (shown when logged in) */}
+          {loaderData.status == 200 && (
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+              <AccountCircleIcon fontSize={'large'} />
+              {userInfo.fullname && (
+                <span
+                  style={{ verticalAlign: '13px' }}
+                  className="ds-text-body--md"
                 >
-                  <MoreVertIcon />
-                </IconButton>
-                <Menu
-                  id="long-menu"
-                  anchorEl={anchorEl}
-                  keepMounted
-                  open={Boolean(anchorEl)}
-                  onClose={handleClose}
-                >
-                  <Link
-                    to={Routes.ROOT}
-                    style={{ textDecoration: 'none', color: 'black' }}
-                  >
-                    <MenuItem onClick={() => handleOption()}>
-                      Dashboard
-                    </MenuItem>
-                  </Link>
-                  {hasAdminRead && (
-                    <Link
-                      to={Routes.USERS}
-                      style={{ textDecoration: 'none', color: 'black' }}
+                  {userInfo.fullname}
+                  {idpBadge && (
+                    <Typography
+                      component="span"
+                      sx={{
+                        color: 'text.secondary',
+                        ml: 0.5,
+                        fontSize: '0.85em',
+                      }}
                     >
-                      <MenuItem onClick={() => handleOption()}>Users</MenuItem>
-                    </Link>
+                      ({idpBadge})
+                    </Typography>
                   )}
-                  {userInfo.role === 'OWNER' && (
+                </span>
+              )}
+              {hasAdminRead && (
+                <>
+                  <IconButton
+                    aria-label="more"
+                    aria-controls="long-menu"
+                    aria-haspopup="true"
+                    onClick={handleClick}
+                  >
+                    <MoreVertIcon />
+                  </IconButton>
+                  <Menu
+                    id="long-menu"
+                    anchorEl={anchorEl}
+                    keepMounted
+                    open={Boolean(anchorEl)}
+                    onClose={handleClose}
+                  >
                     <Link
-                      to={Routes.ADMIN_OPDIVS}
+                      to={Routes.ROOT}
                       style={{ textDecoration: 'none', color: 'black' }}
                     >
                       <MenuItem onClick={() => handleOption()}>
-                        Manage OpDivs
+                        Dashboard
                       </MenuItem>
                     </Link>
-                  )}
-                  {isAdmin && (
-                    <MenuItem
-                      onClick={() => {
-                        setAnchorEl(null)
-                        setOpenModal(true)
-                      }}
-                    >
-                      Add Fisma System
-                    </MenuItem>
-                  )}
-                  {isUnscopedWriteAdmin(userInfo) && (
-                    <MenuItem
-                      onClick={() => {
-                        setAnchorEl(null)
-                        setOpenEmailModal(true)
-                      }}
-                    >
-                      {'Email Users'}
-                    </MenuItem>
-                  )}
-                  {isAdmin && (
-                    <MenuItem
-                      onClick={() => {
-                        handleClose()
-                        setOpenDataCallModal(true)
-                      }}
-                    >
-                      Create Datacall
-                    </MenuItem>
-                  )}
-                </Menu>
-              </>
-            )}
-          </Box>
-        )}
-      </Box>
-      {/* Datacall sub-bar (shown when logged in) */}
-      {loaderData.status == 200 && (
+                    {hasAdminRead && (
+                      <Link
+                        to={Routes.USERS}
+                        style={{ textDecoration: 'none', color: 'black' }}
+                      >
+                        <MenuItem onClick={() => handleOption()}>
+                          Users
+                        </MenuItem>
+                      </Link>
+                    )}
+                    {userInfo.role === 'OWNER' && (
+                      <Link
+                        to={Routes.ADMIN_OPDIVS}
+                        style={{ textDecoration: 'none', color: 'black' }}
+                      >
+                        <MenuItem onClick={() => handleOption()}>
+                          Manage OpDivs
+                        </MenuItem>
+                      </Link>
+                    )}
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => {
+                          setAnchorEl(null)
+                          setOpenModal(true)
+                        }}
+                      >
+                        Add Fisma System
+                      </MenuItem>
+                    )}
+                    {isUnscopedWriteAdmin(userInfo) && (
+                      <MenuItem
+                        onClick={() => {
+                          setAnchorEl(null)
+                          setOpenEmailModal(true)
+                        }}
+                      >
+                        {'Email Users'}
+                      </MenuItem>
+                    )}
+                    {isAdmin && (
+                      <MenuItem
+                        onClick={() => {
+                          handleClose()
+                          setOpenDataCallModal(true)
+                        }}
+                      >
+                        Create Datacall
+                      </MenuItem>
+                    )}
+                  </Menu>
+                </>
+              )}
+            </Box>
+          )}
+        </Box>
+      )}
+      {/* Datacall sub-bar (shown when logged in, hidden on signin) */}
+      {loaderData.status == 200 && !isSignInRoute && (
         <Box
           sx={{
             display: 'flex',
@@ -317,10 +342,47 @@ export default function Title() {
             minWidth: 800,
           }}
         >
-          <Typography variant="subtitle1">
-            <span className="ds-u-font-weight--semibold">Datacall:</span>{' '}
-            {latestDatacall}
-          </Typography>
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Typography
+              variant="subtitle1"
+              component="span"
+              sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
+            >
+              Datacall:
+            </Typography>
+            {isSystemDetail ? (
+              <Typography variant="subtitle1" component="span">
+                {latestDatacall}
+              </Typography>
+            ) : (
+              datacalls.length > 0 && (
+                <Autocomplete
+                  size="small"
+                  options={datacalls}
+                  getOptionLabel={(dc) => dc.datacall}
+                  isOptionEqualToValue={(option, value) =>
+                    option.datacallid === value.datacallid
+                  }
+                  value={
+                    datacalls.find(
+                      (dc) => dc.datacallid === selectedDataCallId
+                    ) ?? datacalls[0]
+                  }
+                  onChange={(_, dc) => {
+                    if (dc) {
+                      setSelectedDataCallId(dc.datacallid)
+                      setSelectedDatacall(dc.datacall)
+                    }
+                  }}
+                  disableClearable
+                  sx={{ minWidth: 260 }}
+                  renderInput={(params) => (
+                    <TextField {...params} size="small" />
+                  )}
+                />
+              )
+            )}
+          </Box>
         </Box>
       )}
       <Container
@@ -344,6 +406,10 @@ export default function Title() {
                   userInfo,
                   latestDataCallId,
                   latestDatacall,
+                  selectedDataCallId,
+                  setSelectedDataCallId,
+                  selectedDatacall,
+                  setSelectedDatacall,
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,

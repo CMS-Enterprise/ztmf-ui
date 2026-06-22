@@ -1,5 +1,4 @@
 import React from 'react'
-import { useNavigate } from 'react-router-dom'
 import {
   Button as CmsButton,
   TextField as CMSTextField,
@@ -17,16 +16,13 @@ import {
   // FormControl,
 } from '@mui/material'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
-import { useSnackbar } from 'notistack'
 import { datacallModalProps } from '@/types'
 import './DatacallModal.css'
 import axiosInstance from '@/axiosConfig'
-import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
+import { parseApiError } from '@/utils/apiErrors'
+import { isAuthHandled, notify } from '@/utils/notify'
 
 export default function DataCallModal({ open, onClose }: datacallModalProps) {
-  const { enqueueSnackbar } = useSnackbar()
-  const navigate = useNavigate()
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
@@ -74,42 +70,24 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
         deadline: new Date(deadline).toISOString(),
       })
       .then(() => {
-        enqueueSnackbar(`Datacall has successfully been created`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
+        notify('Datacall has successfully been created', 'success', {
           autoHideDuration: 2500,
         })
       })
       .catch((error) => {
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
+        if (isAuthHandled(error)) return
+        const parsed = parseApiError(error)
+        // Backend 400 with a field map: route each reason to the matching
+        // field's error setter. No toast on this branch, the inline errors
+        // are the user feedback.
+        if (parsed.fieldErrors) {
+          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+            if (key === 'datacall') setDatacallError(message)
+            else if (key === 'deadline') setDeadlineError(message)
           })
-        } else if (error.response.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
+          return
         }
+        notify(parsed.message, 'error', { autoHideDuration: 2500 })
       })
   }
   return (

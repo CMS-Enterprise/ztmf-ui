@@ -1,5 +1,4 @@
 import * as React from 'react'
-import { useNavigate } from 'react-router-dom'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import {
   Alert,
@@ -28,12 +27,11 @@ import {
 import LastEditedFooter from '../QuestionnairePage/LastEditedFooter'
 import axiosInstance from '@/axiosConfig'
 import CircularProgress from '@mui/material/CircularProgress'
-import { useSnackbar } from 'notistack'
-import { Routes } from '@/router/constants'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
-import { ERROR_MESSAGES, MAX_QUESTIONNAIRE_NOTES_LENGTH } from '@/constants'
+import { MAX_QUESTIONNAIRE_NOTES_LENGTH, STATUS_MESSAGES } from '@/constants'
+import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
@@ -79,27 +77,6 @@ export default function QuestionnareModal({
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
-  const checkValidResponse = (status: number) => {
-    if (status !== 200 && status.toString()[0] === '4') {
-      navigate(Routes.SIGNIN, {
-        replace: true,
-        state: {
-          message: ERROR_MESSAGES.notSaved,
-        },
-      })
-    }
-    return
-  }
-  const routeToSignIn = () => {
-    navigate(Routes.SIGNIN, {
-      replace: true,
-      state: {
-        message: ERROR_MESSAGES.expired,
-      },
-    })
-  }
-  const { enqueueSnackbar } = useSnackbar()
-  const navigate = useNavigate()
   const [activeCategoryIndex, setActiveCategoryIndex] =
     React.useState<number>(0)
   const [activeStepIndex, setActiveStepIndex] = React.useState<number>(0)
@@ -145,7 +122,6 @@ export default function QuestionnareModal({
       const response = await axiosInstance.get(
         `scores?datacallid=${datacallID}&fismasystemid=${systemId}`
       )
-      checkValidResponse(response.status)
       const hashTable: questionScoreMap = Object.assign(
         {},
         ...response.data.data.map((item: QuestionScores) => ({
@@ -154,8 +130,8 @@ export default function QuestionnareModal({
       )
       setQuestionScores(hashTable)
     } catch (error) {
+      if (isAuthHandled(error)) return
       console.error('Error fetching question scores:', error)
-      routeToSignIn()
     }
   }
   const handleQuestionnareNext = () => {
@@ -181,15 +157,8 @@ export default function QuestionnareModal({
             functionoptionid: selectQuestionOption,
             datacallid: datacallID,
           })
-          .then((res) => {
-            checkValidResponse(res.status)
-            enqueueSnackbar(`Saved`, {
-              variant: 'success',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-            })
+          .then(() => {
+            notify(STATUS_MESSAGES.saved, 'success')
             fetchQuestionScores(
               Number(system?.fismasystemid),
               setQuestionScores
@@ -197,8 +166,8 @@ export default function QuestionnareModal({
             setLoadingQuestion(false)
           })
           .catch((error) => {
+            if (isAuthHandled(error)) return
             console.error('Error updating score:', error)
-            routeToSignIn()
           })
       } else {
         axiosInstance
@@ -208,8 +177,7 @@ export default function QuestionnareModal({
             functionoptionid: selectQuestionOption,
             datacallid: datacallID,
           })
-          .then((res) => {
-            checkValidResponse(res.status)
+          .then(() => {
             fetchQuestionScores(
               Number(system?.fismasystemid),
               setQuestionScores
@@ -217,8 +185,8 @@ export default function QuestionnareModal({
             setLoadingQuestion(false)
           })
           .catch((error) => {
+            if (isAuthHandled(error)) return
             console.error('Error posting score:', error)
-            routeToSignIn()
           })
       }
     }
@@ -314,30 +282,13 @@ export default function QuestionnareModal({
               return res.data.data.datacallid
             })
             .catch((error) => {
-              if (error.response?.status === 401) {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              }
+              if (isAuthHandled(error)) return
+              console.error('Error fetching latest datacall:', error)
             })
 
           await axiosInstance
             .get(`/fismasystems/${system.fismasystemid}/questions`)
             .then((response) => {
-              if (
-                response.status !== 200 &&
-                response.status.toString()[0] === '4'
-              ) {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              }
               const data = response.data.data
               const organizedData: Record<string, FismaQuestion[]> = {}
               data.forEach((question: FismaQuestion) => {
@@ -367,27 +318,14 @@ export default function QuestionnareModal({
               }
             })
             .catch((error) => {
-              console.error('Error fetching data:', error)
-              navigate(Routes.SIGNIN, {
-                replace: true,
-                state: {
-                  message: ERROR_MESSAGES.error,
-                },
-              })
+              if (isAuthHandled(error)) return
+              console.error('Error fetching questions:', error)
             })
           await axiosInstance
             .get(
               `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`
             )
             .then((res) => {
-              if (res.status !== 200 && res.status.toString()[0] === '4') {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              }
               const hashTable: questionScoreMap = Object.assign(
                 {},
                 ...res.data.data.map((item: QuestionScores) => ({
@@ -397,27 +335,17 @@ export default function QuestionnareModal({
               setQuestionScores(hashTable)
             })
             .catch((error) => {
-              console.error('Error fetching ´question scores:', error)
-              navigate(Routes.SIGNIN, {
-                replace: true,
-                state: {
-                  message: ERROR_MESSAGES.error,
-                },
-              })
+              if (isAuthHandled(error)) return
+              console.error('Error fetching question scores:', error)
             })
         } catch (error) {
+          if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
-          })
         }
       }
       fetchData()
     }
-  }, [open, system, navigate])
+  }, [open, system])
   React.useEffect(() => {
     if (questionId) {
       try {
@@ -425,14 +353,6 @@ export default function QuestionnareModal({
           setOptions(res.data.data)
           let isValidOption: boolean = false
           let funcOptId: number = 0
-          if (res.status !== 200 && res.status.toString()[0] === '4') {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
           res.data.data.forEach((item: QuestionOption) => {
             if (item.functionoptionid in questionScores) {
               isValidOption = true
@@ -469,16 +389,11 @@ export default function QuestionnareModal({
           setLoadingQuestion(false)
         })
       } catch (error) {
+        if (isAuthHandled(error)) return
         console.error('Error fetching data:', error)
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.error,
-          },
-        })
       }
     }
-  }, [questionId, questionScores, navigate])
+  }, [questionId, questionScores])
   const renderRadioGroup = (options: QuestionOption[]) => {
     return (
       <FormControl component="fieldset">

@@ -15,7 +15,6 @@ import {
   Hint,
 } from '@cmsgov/design-system'
 import SentEmailsModal from './SentEmailsModal'
-import { useSnackbar } from 'notistack'
 import TextField from '@mui/material/TextField'
 import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import { EmailModalProps } from '@/types'
@@ -23,8 +22,7 @@ import './EmailModal.css'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { ERROR_MESSAGES } from '@/constants'
-import { useNavigate } from 'react-router-dom'
-import { Routes } from '@/router/constants'
+import { isAuthHandled, notify } from '@/utils/notify'
 
 const CssTextField = styled(TextField)({
   '& .MuiInputBase-root': {
@@ -58,8 +56,6 @@ const CssTextField = styled(TextField)({
 })
 
 export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
-  const { enqueueSnackbar } = useSnackbar()
-  const navigate = useNavigate()
   const [sentToEmails, setSentToEmails] = React.useState<string[]>([])
   const [openSentEmailsDialog, setOpenSentEmailsDialog] =
     React.useState<boolean>(false)
@@ -87,43 +83,16 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
       })
       .then((res) => {
         setSentGroup(groupValue)
-        enqueueSnackbar(`Emails have successfully been sent`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
+        notify('Emails have successfully been sent', 'success', {
           autoHideDuration: 2500,
         })
         setSentToEmails(res.data.data)
       })
       .catch((error) => {
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
-          })
-        } else if (error.response.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2500,
-          })
-        }
+        if (isAuthHandled(error)) return
+        notify(ERROR_MESSAGES.tryAgain, 'error', {
+          autoHideDuration: 2500,
+        })
       })
   }
 
@@ -136,6 +105,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const handleBodyChange = (value: string) => {
     setBody(value)
   }
+
   return (
     <>
       <Dialog

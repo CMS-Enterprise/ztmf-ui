@@ -67,3 +67,6 @@ src/__generated__/**
 
 public/build/p-*
 CFACTS_ISSO_ACCESS.md
+
+# Serena MCP local tool dir (never commit)
+.serena/

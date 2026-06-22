@@ -21,21 +21,23 @@ import {
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
-import { useSnackbar } from 'notistack'
 import { useNavigate, useLocation } from 'react-router-dom'
-import { Routes, RouteNames } from '@/router/constants'
+import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
+  STATUS_MESSAGES,
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   CONFIRMATION_MESSAGE_QUESTION,
 } from '@/constants'
+import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
+import { shouldPersistResponse } from './saveGuard'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -90,7 +92,7 @@ const addSpace = (str: string) => {
   return str
 }
 export default function QuestionnarePage() {
-  const { userInfo } = useContextProp()
+  const { userInfo, selectedDataCallId, selectedDatacall } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
@@ -104,7 +106,6 @@ export default function QuestionnarePage() {
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
-  // const { latestDatacall, latestDatacallId } = useContextProp()
   const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
   const [noQuestions, setNoQuestions] = React.useState<boolean>(false)
   const [categories, setCategories] = React.useState<Category[]>([])
@@ -137,8 +138,8 @@ export default function QuestionnarePage() {
       )
       setQuestionScores(hashTable)
     } catch (error) {
+      if (isAuthHandled(error)) return
       console.error('Error fetching question scores:', error)
-      routeToSignIn()
     }
   }
   const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -167,15 +168,6 @@ export default function QuestionnarePage() {
     )
   }
 
-  const routeToSignIn = () => {
-    navigate(Routes.SIGNIN, {
-      replace: true,
-      state: {
-        message: ERROR_MESSAGES.expired,
-      },
-    })
-  }
-  const { enqueueSnackbar } = useSnackbar()
   const navigate = useNavigate()
   const location = useLocation()
   const { fismaacronym } = useParams()
@@ -199,6 +191,16 @@ export default function QuestionnarePage() {
   }
 
   const saveResponse = () => {
+    if (
+      !shouldPersistResponse({
+        selectQuestionOption,
+        initQuestionChoice,
+        notes,
+        initNotes,
+      })
+    ) {
+      return
+    }
     if (scoreid) {
       axiosInstance
         .put(`scores/${scoreid}`, {
@@ -209,41 +211,13 @@ export default function QuestionnarePage() {
         })
         .then(() => {
           // checkValidResponse(res.status)
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
+          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
           fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
+          if (isAuthHandled(error)) return
           console.error('Error updating score:', error)
-          if (error.status === 401) {
-            routeToSignIn()
-            return
-          }
-          if (error.response?.status === 403) {
-            enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
-              variant: 'error',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-              autoHideDuration: 2500,
-            })
-          } else {
-            enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-              variant: 'error',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-              autoHideDuration: 2500,
-            })
-          }
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         })
     } else {
       axiosInstance
@@ -254,39 +228,13 @@ export default function QuestionnarePage() {
           datacallid: datacallID,
         })
         .then(() => {
-          enqueueSnackbar(`Saved`, {
-            variant: 'success',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 1500,
-          })
+          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
           fetchQuestionScores(system, setQuestionScores)
         })
         .catch((error) => {
+          if (isAuthHandled(error)) return
           console.error('Error posting score:', error)
-          if (error.response?.status === 401) {
-            routeToSignIn()
-          } else if (error.response?.status === 403) {
-            enqueueSnackbar(ERROR_MESSAGES.outOfScope, {
-              variant: 'error',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-              autoHideDuration: 2500,
-            })
-          } else {
-            enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-              variant: 'error',
-              anchorOrigin: {
-                vertical: 'top',
-                horizontal: 'left',
-              },
-              autoHideDuration: 2500,
-            })
-          }
+          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
         })
     }
   }
@@ -303,44 +251,27 @@ export default function QuestionnarePage() {
           const latestDataCallId = await axiosInstance
             .get(`/datacalls/latest`)
             .then((res) => {
-              setDatacallID(res.data.data.datacallid)
-              datacall = res.data.data.datacall.replaceAll(' ', '_')
-              setDatacall(datacall)
-              if (new Date() > new Date(res.data.data.deadline)) {
+              const latestId = res.data.data.datacallid
+              const isHistorical =
+                selectedDataCallId > 0 && selectedDataCallId !== latestId
+              if (isHistorical) {
+                setDatacallID(selectedDataCallId)
+                datacall = selectedDatacall.replaceAll(' ', '_')
+                setDatacall(datacall)
                 setIsPastDeadline(true)
+              } else {
+                setDatacallID(latestId)
+                datacall = res.data.data.datacall.replaceAll(' ', '_')
+                setDatacall(datacall)
+                setIsPastDeadline(new Date() > new Date(res.data.data.deadline))
               }
-              return res.data.data.datacallid
+              return isHistorical ? selectedDataCallId : latestId
             })
             .catch((error) => {
-              if (error.response.status === 401) {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              } else if (error.status === 403) {
-                enqueueSnackbar(
-                  `You don't have permission to get the datacall`,
-                  {
-                    variant: 'error',
-                    anchorOrigin: {
-                      vertical: 'top',
-                      horizontal: 'left',
-                    },
-                    autoHideDuration: 2500,
-                  }
-                )
-              } else {
-                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                  variant: 'error',
-                  anchorOrigin: {
-                    vertical: 'top',
-                    horizontal: 'left',
-                  },
-                  autoHideDuration: 2500,
-                })
-              }
+              if (isAuthHandled(error)) return
+              notify(ERROR_MESSAGES.tryAgain, 'error', {
+                autoHideDuration: 2500,
+              })
             })
           await axiosInstance
             .get(`/fismasystems/${system}/questions`)
@@ -415,35 +346,8 @@ export default function QuestionnarePage() {
               setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
             })
             .catch((error) => {
-              if (error.status === 401) {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              } else if (error.status === 403) {
-                enqueueSnackbar(
-                  `You don't have permission to the questions of this fismasystem`,
-                  {
-                    variant: 'error',
-                    anchorOrigin: {
-                      vertical: 'top',
-                      horizontal: 'left',
-                    },
-                    autoHideDuration: 3000,
-                  }
-                )
-              } else {
-                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                  variant: 'error',
-                  anchorOrigin: {
-                    vertical: 'top',
-                    horizontal: 'left',
-                  },
-                  autoHideDuration: 3000,
-                })
-              }
+              if (isAuthHandled(error)) return
+              notify(ERROR_MESSAGES.tryAgain, 'error')
             })
           if (questionsEmpty) {
             return
@@ -466,50 +370,18 @@ export default function QuestionnarePage() {
               setQuestionScores(hashTable)
             })
             .catch((error) => {
-              console.error('Error fetching ´question scores:', error)
-              if (error.response.status === 401) {
-                navigate(Routes.SIGNIN, {
-                  replace: true,
-                  state: {
-                    message: ERROR_MESSAGES.expired,
-                  },
-                })
-              } else if (error.response.status === 403) {
-                enqueueSnackbar(
-                  `You don't have permission get the scores for this system`,
-                  {
-                    variant: 'error',
-                    anchorOrigin: {
-                      vertical: 'top',
-                      horizontal: 'left',
-                    },
-                    autoHideDuration: 3000,
-                  }
-                )
-              } else {
-                enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-                  variant: 'error',
-                  anchorOrigin: {
-                    vertical: 'top',
-                    horizontal: 'left',
-                  },
-                  autoHideDuration: 3000,
-                })
-              }
+              if (isAuthHandled(error)) return
+              console.error('Error fetching question scores:', error)
+              notify(ERROR_MESSAGES.tryAgain, 'error')
             })
         } catch (error) {
+          if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.expired,
-            },
-          })
         }
       }
       fetchData()
     }
-  }, [system, navigate, fismaacronym, enqueueSnackbar])
+  }, [system, navigate, fismaacronym, selectedDataCallId, selectedDatacall])
   React.useEffect(() => {
     if (questionId) {
       // Clear saved-state markers before async load so the last-edited
@@ -520,14 +392,6 @@ export default function QuestionnarePage() {
       let funcOptId: number = 0
       try {
         axiosInstance.get(`functions/${questionId}/options`).then((res) => {
-          if (res.status !== 200 && res.status === 401) {
-            navigate(Routes.SIGNIN, {
-              replace: true,
-              state: {
-                message: ERROR_MESSAGES.expired,
-              },
-            })
-          }
           res.data.data.forEach((item: QuestionOption) => {
             const choiceOpt: QuestionChoice = {
               label: item.description,
@@ -556,16 +420,11 @@ export default function QuestionnarePage() {
           setLoadingQuestion(false)
         })
       } catch (error) {
+        if (isAuthHandled(error)) return
         console.error('Error fetching data:', error)
-        navigate(Routes.SIGNIN, {
-          replace: true,
-          state: {
-            message: ERROR_MESSAGES.error,
-          },
-        })
       }
     }
-  }, [questionId, questionScores, questions, navigate])
+  }, [questionId, questionScores, questions])
   const breadcrumbSegmentLabels = fismaacronym
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
     : undefined
