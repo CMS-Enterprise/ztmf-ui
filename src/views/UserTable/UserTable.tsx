@@ -39,15 +39,15 @@ import {
 import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
+import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
-import { useSnackbar } from 'notistack'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
 import OpDivGrantModal from '../OpDivGrantModal/OpDivGrantModal'
 import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
-import { ERROR_MESSAGES } from '@/constants'
+import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
@@ -129,7 +129,6 @@ function validateEmail(email: string) {
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
-  const { enqueueSnackbar } = useSnackbar()
   const { userInfo, fismaSystems } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
   // admins may view the table but every mutating control is withheld. The
@@ -143,23 +142,13 @@ export default function UserTable() {
       navigate(Routes.ROOT, { replace: true })
     }
   }, [userInfo.role, canRead, navigate])
-  //TODO: add these to a file to be imported and used in multiple places
-  const checkValidResponse = (status: number) => {
-    if (status == 401) {
-      navigate(Routes.SIGNIN, {
-        replace: true,
-        state: {
-          message: ERROR_MESSAGES.notSaved,
-        },
-      })
-    }
-    return
-  }
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const [open, setOpen] = useState<boolean>(false)
-  const [snackBarText, setSnackBarText] = useState<string>('Saved')
+  const [snackBarText, setSnackBarText] = useState<string>(
+    STATUS_MESSAGES.saved
+  )
   const [snackBarSeverity, setSnackBarSeverity] = useState<
     'success' | 'error' | 'warning' | 'info'
   >('success')
@@ -184,8 +173,10 @@ export default function UserTable() {
   const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
   // opdiv_id -> code, for rendering the OpDivs membership column.
   const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
-  // userid -> granted opdiv ids. The list endpoint omits grants (always null),
-  // so these are fetched per user from the detail endpoint after the list loads.
+  // userid -> granted opdiv ids, used as a refresh override after the grant modal
+  // closes. The list now returns grants inline (assignedopdivids); this map only
+  // holds rows refreshed since load, plus a one-time backfill against older
+  // backends that omit the inline grants (see the load effect).
   const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
@@ -193,17 +184,6 @@ export default function UserTable() {
   ) => {
     if (params.reason === GridRowEditStopReasons.rowFocusOut) {
       event.defaultMuiPrevented = true
-    }
-  }
-  const handleUnautherized = (errorStatus: number) => {
-    if (errorStatus === 403) {
-      enqueueSnackbar(ERROR_MESSAGES.permission, {
-        variant: 'error',
-        anchorOrigin: {
-          vertical: 'top',
-          horizontal: 'left',
-        },
-      })
     }
   }
   const handleEditClick = (id: GridRowId) => () => {
@@ -269,10 +249,7 @@ export default function UserTable() {
           `Failed to refresh OpDiv grants for user ${userid}`,
           error
         )
-        enqueueSnackbar(ERROR_MESSAGES.refresh, {
-          variant: 'warning',
-          anchorOrigin: { vertical: 'top', horizontal: 'left' },
-        })
+        notify(ERROR_MESSAGES.refresh, 'warning')
       })
     axiosInstance
       .get(`/users/${userid}`)
@@ -326,18 +303,13 @@ export default function UserTable() {
           ])
           apiRef.current.updateRows([updatedRow])
           setSnackBarSeverity('success')
-          setSnackBarText('Saved')
+          setSnackBarText(STATUS_MESSAGES.saved)
           setOpen(true)
         })
         .catch((error) => {
+          if (isAuthHandled(error)) return
           console.error('Error updating score:', error)
-          if (error.response.status === 401) {
-            checkValidResponse(error.response.status)
-          } else if (error.response.status === 403) {
-            handleUnautherized(error.response.status)
-          } else {
-            setSaveError(error)
-          }
+          setSaveError(error)
         })
     } else {
       // const updatedRow = { ...newRow } as users
@@ -347,20 +319,14 @@ export default function UserTable() {
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
         })
-        .then((res) => {
-          checkValidResponse(res.status)
+        .then(() => {
           setSnackBarSeverity('success')
-          setSnackBarText('Saved')
+          setSnackBarText(STATUS_MESSAGES.saved)
           setOpen(true)
         })
         .catch((error) => {
-          if (error.response.status === 401) {
-            checkValidResponse(error.response.status)
-          } else if (error.response.status === 403) {
-            handleUnautherized(error.response.status)
-          } else {
-            setSaveError(error)
-          }
+          if (isAuthHandled(error)) return
+          setSaveError(error)
         })
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
@@ -399,30 +365,13 @@ export default function UserTable() {
       .delete(`/users/${target.userid}`)
       .then(() => {
         setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        enqueueSnackbar(`Saved - Delete User ${target.fullname}`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
+        notify(`Saved - Delete User ${target.fullname}`, 'success', {
           autoHideDuration: 2000,
         })
       })
       .catch((error) => {
-        if (error.response?.status === 401) {
-          checkValidResponse(error.response.status)
-        } else if (error.response?.status === 403) {
-          handleUnautherized(error.response.status)
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        }
+        if (isAuthHandled(error)) return
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
       })
   }
   const handleRestoreClick = (id: GridRowId) => () => {
@@ -438,30 +387,13 @@ export default function UserTable() {
       .put(`/users/${target.userid}/restore`)
       .then(() => {
         setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        enqueueSnackbar(`Saved - Restore User ${target.fullname}`, {
-          variant: 'success',
-          anchorOrigin: {
-            vertical: 'top',
-            horizontal: 'left',
-          },
+        notify(`Saved - Restore User ${target.fullname}`, 'success', {
           autoHideDuration: 2000,
         })
       })
       .catch((error) => {
-        if (error.response?.status === 401) {
-          checkValidResponse(error.response.status)
-        } else if (error.response?.status === 403) {
-          handleUnautherized(error.response.status)
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-            autoHideDuration: 2000,
-          })
-        }
+        if (isAuthHandled(error)) return
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
       })
   }
   // TODO: Custom hook for fetching data
@@ -490,58 +422,56 @@ export default function UserTable() {
             }
           }
           setFismaSystemsMap(map)
-          // Grants are omitted from the list response, so resolve each user's
-          // OpDivs from the detail endpoint in parallel for the OpDivs column.
-          Promise.all(
-            data.map((u: users) =>
-              fetchUserOpDivs(u.userid)
-                .then((ids) => [u.userid, ids] as [string, number[]])
-                .catch(() => [u.userid, []] as [string, number[]])
+          // Grants now arrive inline on each list row (assignedopdivids), so the
+          // OpDivs column reads them directly with no per-user calls. Fall back to
+          // the per-user detail endpoint only against an older backend that omits
+          // them, keeping this safe to ship before or after the backend deploys.
+          // Distinguish "old backend omitted the field" (key absent -> backfill)
+          // from "new backend, user simply has zero grants" (key present, value
+          // null/[] -> no backfill). A value check would misfire on every
+          // zero-grant user and re-introduce the N+1.
+          const missingInlineGrants = data.some(
+            (u: users) => !('assignedopdivids' in u)
+          )
+          if (missingInlineGrants) {
+            Promise.all(
+              data.map((u: users) =>
+                fetchUserOpDivs(u.userid)
+                  .then((ids) => [u.userid, ids] as [string, number[]])
+                  .catch(() => [u.userid, []] as [string, number[]])
+              )
             )
-          ).then((entries) => {
-            if (ignore) return
-            // Merge rather than replace so an in-flight per-user refresh
-            // (e.g. from closing the grant modal) is not clobbered.
-            setUserOpDivMap((prev) => ({
-              ...prev,
-              ...Object.fromEntries(entries),
-            }))
-          })
+              .then((entries) => {
+                if (ignore) return
+                // Merge rather than replace so an in-flight per-user refresh
+                // (e.g. from closing the grant modal) is not clobbered.
+                setUserOpDivMap((prev) => ({
+                  ...prev,
+                  ...Object.fromEntries(entries),
+                }))
+              })
+              .catch((error) => {
+                if (ignore) return
+                // The per-user catches above already default to [], so this only
+                // trips on an unexpected failure. Surface it rather than leaving
+                // the OpDivs column silently blank.
+                console.error('Failed to backfill OpDiv grants', error)
+                notify(ERROR_MESSAGES.tryAgain, 'warning')
+              })
+          }
         } else {
           return
         }
       })
       .catch((error) => {
-        console.log(error)
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.notSaved,
-            },
-          })
-        } else if (error.response.status === 403) {
-          enqueueSnackbar(ERROR_MESSAGES.permission, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-          })
-        } else {
-          enqueueSnackbar(ERROR_MESSAGES.tryAgain, {
-            variant: 'error',
-            anchorOrigin: {
-              vertical: 'top',
-              horizontal: 'left',
-            },
-          })
-        }
+        if (isAuthHandled(error)) return
+        console.error('Fetch users error:', error)
+        notify(ERROR_MESSAGES.tryAgain, 'error')
       })
     return () => {
       ignore = true
     }
-  }, [canRead, fismaSystems, navigate, enqueueSnackbar, showDeleted])
+  }, [canRead, fismaSystems, navigate, showDeleted])
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
   // own OpDivs, so narrow the option set to their own grants; the server
@@ -631,7 +561,10 @@ export default function UserTable() {
       sortable: false,
       filterable: false,
       renderCell: (params) => {
-        const ids = userOpDivMap[params.row.userid] ?? []
+        // Refresh override (post grant-modal) wins; otherwise use the grants the
+        // list returned inline on the row.
+        const ids =
+          userOpDivMap[params.row.userid] ?? params.row.assignedopdivids ?? []
         if (!ids.length) {
           return (
             <Typography variant="body2" color="text.secondary">

@@ -119,6 +119,7 @@
     "@types/react-helmet": "^6.1.11",
     "@types/react-is": "^19",
     "@vitejs/plugin-react-swc": "^4.3.0",
+    "axios-mock-adapter": "^2.1.0",
     "babel-plugin-transform-import-meta": "^2.2.1",
     "camelcase": "^6.3.0",
     "conventional-changelog-conventionalcommits": "^7.0.2",
@@ -256,6 +257,6 @@
     "brace-expansion": "^1.1.13",
     "@tootallnate/once": "^3.0.1",
     "follow-redirects": "^1.16.0",
-    "ws": "^8.20.0"
+    "ws": "^8.21.0"
   }
 }

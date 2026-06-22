@@ -16,7 +16,16 @@ const emptyUser: userData = {
 }
 const authLoader = async () => {
   try {
-    const axiosUser = await axiosInstance.get('/users/current')
+    // skipAuthHandling: the centralized 401-redirect interceptor would
+    // hijack this call's 401 with router.navigate('/signin'), which
+    // re-runs this loader on the new route and creates an infinite
+    // redirect loop. authLoader is the OWNER of the session-expired
+    // decision: a 401 here means "render LoginPage as a child route"
+    // (via the { ok: false, response: emptyUser } return below), not
+    // "redirect away."
+    const axiosUser = await axiosInstance.get('/users/current', {
+      skipAuthHandling: true,
+    })
     if (axiosUser.status != 200) {
       return { ok: false, response: emptyUser }
     }

@@ -53,6 +53,7 @@ interface PillarScoresModalProps {
   systemName: string
   systemAcronym: string
   scores: ScoreAggregate[]
+  selectedDataCallId: number
 }
 
 // Background color used when the API has not (yet) returned a tier
@@ -66,16 +67,19 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   systemName,
   systemAcronym,
   scores,
+  selectedDataCallId,
 }) => {
   const [datacalls, setDatacalls] = useState<DataCall[]>([])
   const [showDataTable, setShowDataTable] = useState(false)
   const dialogRef = useRef<HTMLDivElement>(null)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
 
-  // Get the latest datacall (highest datacallid)
+  // Use the selected datacall if it exists in the scores, otherwise fall back
+  // to the highest datacallid (e.g. when modal is opened before context loads).
   const latestScore =
     scores.length > 0
-      ? scores.reduce((latest, current) =>
+      ? scores.find((s) => s.datacallid === selectedDataCallId) ??
+        scores.reduce((latest, current) =>
           current.datacallid > latest.datacallid ? current : latest
         )
       : null
@@ -91,7 +95,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     if (!hasValidData || !latestScore?.pillarscores) return []
 
     const previousDatacall = scores
-      .filter((s) => s.datacallid !== latestScore.datacallid)
+      .filter((s) => s.datacallid < latestScore.datacallid)
       .sort((a, b) => b.datacallid - a.datacallid)[0]
 
     return latestScore.pillarscores.map((pillar) => {
@@ -309,7 +313,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   {(() => {
                     // Find previous system score for trend calculation
                     const previousSystemScore = scores
-                      .filter((s) => s.datacallid !== latestScore.datacallid)
+                      .filter((s) => s.datacallid < latestScore.datacallid)
                       .sort(
                         (a, b) => b.datacallid - a.datacallid
                       )[0]?.systemscore
@@ -340,7 +344,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                 {(() => {
                   // Show previous score and change information
                   const previousSystemScore = scores
-                    .filter((s) => s.datacallid !== latestScore.datacallid)
+                    .filter((s) => s.datacallid < latestScore.datacallid)
                     .sort((a, b) => b.datacallid - a.datacallid)[0]?.systemscore
 
                   if (latestScore.systemscore && previousSystemScore) {
@@ -398,13 +402,13 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               gutterBottom
               sx={{ mt: 3, mb: 1.5, textAlign: 'center', fontSize: '1.25rem' }}
             >
-              Pillar Scores - {getQuarterName(latestScore.datacallid)} (Latest)
+              Pillar Scores - {getQuarterName(latestScore.datacallid)}
             </Typography>
             <Grid container spacing={2}>
               {(latestScore.pillarscores ?? []).map((pillar) => {
                 // Find previous score for this pillar
                 const previousDatacall = scores
-                  .filter((s) => s.datacallid !== latestScore.datacallid)
+                  .filter((s) => s.datacallid < latestScore.datacallid)
                   .sort((a, b) => b.datacallid - a.datacallid)[0]
 
                 const previousPillarScore =
@@ -712,7 +716,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         {latestScore?.pillarscores?.map((pillar) => {
                           const previousDatacall = scores
                             .filter(
-                              (s) => s.datacallid !== latestScore.datacallid
+                              (s) => s.datacallid < latestScore.datacallid
                             )
                             .sort((a, b) => b.datacallid - a.datacallid)[0]
 

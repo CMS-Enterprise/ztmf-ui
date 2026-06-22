@@ -24,11 +24,24 @@ export const ERROR_MESSAGES = {
   error:
     'An error occurred. Please log in and try again. If the error persists, please contact support.',
   permission: 'You do not have permission to do this action.',
-  outOfScope:
-    'This item is outside your OpDiv, so you cannot make changes to it.',
   tryAgain: 'An error occurred, please try again later',
   refresh:
     'Could not refresh the latest data. The information shown may be out of date.',
+  systemNotFound: 'System not found',
+}
+
+// Short UI status strings for snackbar toasts on save/create flows. Distinct
+// from ERROR_MESSAGES because these are not errors — they are user-facing
+// status indicators returned by the operation. Keeping them grouped avoids
+// the naming collision with ERROR_MESSAGES.notSaved (which is the long-form
+// session-expired warning).
+export const STATUS_MESSAGES = {
+  saved: 'Saved',
+  notSaved: 'Not Saved',
+  created: 'Created',
+  notCreated: 'Not Created',
+  systemDecommissioned: 'System decommissioned successfully',
+  systemReactivated: 'System reactivated successfully',
 }
 export const EMPTY_USER: userData = {
   userid: '',

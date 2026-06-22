@@ -217,6 +217,7 @@ export type QuestionChoice = {
 }
 export type users = {
   assignedfismasystems: number[]
+  assignedopdivids?: number[] | null
   email: string
   fullname: string
   role: UserRole
@@ -243,7 +244,6 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, SystemScoreEntry>
-  latestDataCallId: number
 }
 
 export type ThemeColor =

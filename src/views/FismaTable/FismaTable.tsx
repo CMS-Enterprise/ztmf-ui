@@ -23,8 +23,9 @@ import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { useNavigate, Link } from 'react-router-dom'
-import { RouteNames, Routes } from '@/router/constants'
+import { RouteNames } from '@/router/constants'
 import { ERROR_MESSAGES } from '../../constants'
+import { isAuthHandled } from '@/utils/notify'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import BarChartIcon from '@mui/icons-material/BarChart'
@@ -39,7 +40,7 @@ declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
-    latestDataCallId: number
+    activeDataCallId: number
     scores: Record<number, SystemScoreEntry>
   }
 }
@@ -52,27 +53,20 @@ export function CustomFooterSaveComponent(
     'success' | 'error' | 'warning' | 'info'
   >('error')
   const [errorMessage, setErrorMessage] = useState<string>('')
-  const navigate = useNavigate()
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
   }
   const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${props.latestDataCallId}/export`
-    if (
-      props.selectedRows &&
-      props.fismaSystems &&
-      props.selectedRows.length < props.fismaSystems.length
-    ) {
+    let exportUrl = `/datacalls/${props.activeDataCallId}/export`
+    if (props.selectedRows && props.selectedRows.length > 0) {
       exportUrl += '?'
       let idString: string = ''
-      if (props.selectedRows) {
-        props.selectedRows.forEach((id, index) => {
-          idString += 'fsids=' + id
-          if (index < (props.selectedRows ?? []).length - 1) {
-            idString += '&'
-          }
-        })
-      }
+      props.selectedRows.forEach((id, index) => {
+        idString += 'fsids=' + id
+        if (props.selectedRows && index < props.selectedRows.length - 1) {
+          idString += '&'
+        }
+      })
       exportUrl += idString
     }
     return await axiosInstance
@@ -95,22 +89,10 @@ export function CustomFooterSaveComponent(
         window.URL.revokeObjectURL(url)
       })
       .catch((error) => {
-        if (error.response.status === 401) {
-          navigate(Routes.SIGNIN, {
-            replace: true,
-            state: {
-              message: ERROR_MESSAGES.error,
-            },
-          })
-        } else if (error.response.status === 403) {
-          setErrorMessage(ERROR_MESSAGES.permission)
-          setSnackBarSeverity('warning')
-          setOpenSnackbar(true)
-        } else {
-          setErrorMessage(ERROR_MESSAGES.tryAgain)
-          setSnackBarSeverity('warning')
-          setOpenSnackbar(true)
-        }
+        if (isAuthHandled(error)) return
+        setErrorMessage(ERROR_MESSAGES.tryAgain)
+        setSnackBarSeverity('warning')
+        setOpenSnackbar(true)
       })
   }
   return (
@@ -232,7 +214,9 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId, userInfo } = useContextProp()
+  const { fismaSystems, latestDataCallId, selectedDataCallId, userInfo } =
+    useContextProp()
+  const activeDataCallId = selectedDataCallId || latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
@@ -481,7 +465,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems, latestDataCallId, scores },
+          footer: { selectedRows, fismaSystems, activeDataCallId, scores },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
@@ -536,6 +520,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
         systemName={pillarScoresModal.systemName}
         systemAcronym={pillarScoresModal.systemAcronym}
         scores={pillarScoresModal.scores}
+        selectedDataCallId={activeDataCallId}
       />
     </Box>
   )
