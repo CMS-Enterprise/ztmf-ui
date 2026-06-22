@@ -77,7 +77,7 @@ test('success path fires the success snackbar and surfaces sent emails', async (
   expect(mockedNavigate).not.toHaveBeenCalled()
 })
 
-test('401 redirects to sign-in with the expired-session message', async () => {
+test('401 redirects to sign-in with the expired-session message and reason', async () => {
   mock.onPost('/massemails').reply(401)
 
   renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
@@ -86,7 +86,7 @@ test('401 redirects to sign-in with the expired-session message', async () => {
   await waitFor(() => {
     expect(mockedNavigate).toHaveBeenCalledWith(Routes.SIGNIN, {
       replace: true,
-      state: { message: ERROR_MESSAGES.expired },
+      state: { message: ERROR_MESSAGES.expired, reason: 'EXPIRED' },
     })
   })
   // No generic fallback snackbar fires on top of the redirect.

@@ -24,6 +24,7 @@ import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { useState, useEffect, useCallback } from 'react'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
+import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import LoginPage from '../LoginPage/LoginPage'
@@ -47,14 +48,9 @@ const emptyUser: userData = {
   assignedfismasystems: [],
 }
 
-type PromiseType = {
-  status: boolean | number
-  response: userData
-  serverError?: boolean
-}
 export default function Title() {
   const location = useLocation()
-  const loaderData = useLoaderData() as PromiseType
+  const loaderData = useLoaderData() as AuthLoaderData
   const [openDataCallModal, setOpenDataCallModal] = useState<boolean>(false)
   const userInfo: userData =
     loaderData.status != 200 ? emptyUser : loaderData.response
@@ -95,12 +91,19 @@ export default function Title() {
     []
   )
 
+  // Both of the effects below gate on loaderData.status === 200 (an active
+  // app session) rather than only on serverError. When the user is not
+  // logged in or has no app account, the loader returns { ok: false } with
+  // no status field, and these calls would 401. Those 401s do not use
+  // skipAuthHandling, so the centralized interceptor catches them and
+  // redirects to /signin with the "session expired" message - misleading
+  // for the never-logged-in case and noisy on every cold load.
   useEffect(() => {
-    if (!loaderData.serverError) fetchFismaSystems(showDecommissioned)
-  }, [showDecommissioned, fetchFismaSystems, loaderData.serverError])
+    if (loaderData.status === 200) fetchFismaSystems(showDecommissioned)
+  }, [showDecommissioned, fetchFismaSystems, loaderData.status])
 
   useEffect(() => {
-    if (loaderData.serverError) return
+    if (loaderData.status !== 200) return
     const controller = new AbortController()
     async function fetchDatacalls() {
       try {
@@ -126,7 +129,7 @@ export default function Title() {
     return () => {
       controller.abort()
     }
-  }, [loaderData.serverError])
+  }, [loaderData.status])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -177,9 +180,11 @@ export default function Title() {
   return (
     <>
       <UsaBanner />
-      {/* Branded header bar (hidden on signin so it does not contradict the
-          "please sign in" prompt) */}
-      {!isSignInRoute && (
+      {/* Branded header bar. Hidden on the /signin route AND any time
+          LoginPage is rendered as the body (loaderData.status !== 200),
+          so the header never sits above a "please sign in" prompt at any
+          URL, not just /signin. Matches the datacall sub-bar's gate. */}
+      {!isSignInRoute && loaderData.status === 200 && (
         <Box
           sx={{
             display: 'flex',

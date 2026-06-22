@@ -5,10 +5,19 @@ import { Navigate, useLocation, useRouteLoaderData } from 'react-router-dom'
 import CONFIG from '@/utils/config'
 import { RouteIds, Routes } from '@/router/constants'
 import { lookupIdpForEmail } from '@/utils/authLookup'
+import { SignInReasons, type SignInReason } from '@/utils/authCodes'
+import type { AuthLoaderData } from '@/router/authLoader'
 import ztmfLogo from '@/assets/ztmf-logo-login.png'
 
 const UNKNOWN_EMAIL_MESSAGE =
   "We can't determine an identity provider for that email. Contact your ZTMF administrator."
+
+// Fallback copy when the BE didn't send a message body (or the user
+// landed here without one passing through). The BE message is preferred
+// because it differentiates "no account" from "account deactivated" -
+// this string covers both since the FE UX is identical.
+const NO_ACCOUNT_FALLBACK_MESSAGE =
+  'Your ZTMF account is not set up. Contact your ZTMF administrator for access.'
 
 /**
  * Basic shape check. The backend is the source of truth for whether the
@@ -26,26 +35,64 @@ function isValidEmailFormat(value: string): boolean {
  * Okta-only behavior so prod-style deployments without the multi-IdP
  * rollout are unchanged.
  *
- * Rendered by Title.tsx when loaderData.status !== 200 (no active session).
+ * Rendered by Title.tsx when loaderData.status !== 200 (no active session)
+ * and as the /signin route's element when the interceptor redirects here.
  */
 export default function LoginPage() {
   const location = useLocation()
-  const sessionMessage = location.state?.message || ''
-
-  // Read the root route's authLoader payload and edirect to the dashboard
-  // so /signin never appears as a dead-end "log in again" prompt for an
-  // already-authenticated user.
   const rootLoaderData = useRouteLoaderData(RouteIds.ROOT) as
-    | { status?: number }
+    | AuthLoaderData
     | undefined
+
+  // Active-session redirect: bounces an already-authenticated user away
+  // from /signin so it never appears as a dead-end "log in again" prompt.
   if (rootLoaderData?.status === 200) {
     return <Navigate to={Routes.ROOT} replace />
   }
 
-  if (!CONFIG.IDP_ENABLED) {
-    return <LegacyOktaLogin sessionMessage={sessionMessage} />
+  // Reason can come from two places: the interceptor's redirect carries
+  // it on location.state for subsequent API failures; the authLoader's
+  // discriminated return carries it for the initial cold load. Prefer
+  // location.state - if the interceptor just fired, that signal is the
+  // most recent.
+  const locationState = location.state as {
+    message?: string
+    reason?: SignInReason
+  } | null
+  const reason: SignInReason | undefined =
+    locationState?.reason ?? rootLoaderData?.reason
+  const incomingMessage =
+    locationState?.message ?? rootLoaderData?.message ?? ''
+
+  if (reason === SignInReasons.NO_ACCOUNT) {
+    return <NoAccountTerminal message={incomingMessage} />
   }
-  return <IdpLookupLogin sessionMessage={sessionMessage} />
+
+  if (!CONFIG.IDP_ENABLED) {
+    return <LegacyOktaLogin sessionMessage={incomingMessage} />
+  }
+  return <IdpLookupLogin sessionMessage={incomingMessage} />
+}
+
+/**
+ * Terminal state for an authenticated identity with no ZTMF account
+ * (or a soft-deleted one). Renders the BE-provided message verbatim
+ * and intentionally exposes NO retry affordance - the user has to
+ * contact an administrator out-of-band, and a Sign in button here
+ * would just loop them back through the IdP -> 403 cycle.
+ */
+function NoAccountTerminal({ message }: { message: string }) {
+  return (
+    <LoginShell>
+      <Typography
+        variant="body1"
+        role="alert"
+        sx={{ color: 'error.main', fontWeight: 600 }}
+      >
+        {message || NO_ACCOUNT_FALLBACK_MESSAGE}
+      </Typography>
+    </LoginShell>
+  )
 }
 
 /**
@@ -158,9 +205,6 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
           </Typography>
         )}
       </Box>
-      <Typography variant="body2" sx={{ color: 'text.secondary', mt: 2 }}>
-        Having trouble? Contact the ZTMF support team.
-      </Typography>
     </LoginShell>
   )
 }
