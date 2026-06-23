@@ -158,21 +158,26 @@ describe('LoginPage EXPIRED / default state', () => {
     expect(screen.getByLabelText(/enter your email/i)).toBeInTheDocument()
   })
 
-  it('renders the BE expired message from the loader (cold-load 401 path)', () => {
+  it('shows no session-expired copy on cold-load EXPIRED (loader path)', () => {
+    // A loader-path 401 is ambiguous (expired session vs first visit),
+    // so LoginPage stays quiet here. Real expiry copy comes from the
+    // interceptor path.
     mutableConfig.IDP_ENABLED = true
     mockedUseLocation.mockReturnValue({ pathname: '/', state: null })
     mockedUseRouteLoaderData.mockReturnValue({
       ok: false,
       reason: SignInReasons.EXPIRED,
-      message: 'your session is missing or has expired',
       response: {},
     })
 
     render(<LoginPage />)
 
-    expect(
-      screen.getByText(/your session is missing or has expired/i)
-    ).toBeInTheDocument()
     expect(screen.getByLabelText(/enter your email/i)).toBeInTheDocument()
+    expect(
+      screen.queryByText(/your session has expired/i)
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/your session is missing/i)
+    ).not.toBeInTheDocument()
   })
 })
