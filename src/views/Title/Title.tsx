@@ -1,4 +1,10 @@
-import { Container, Typography, Autocomplete, TextField } from '@mui/material'
+import {
+  Container,
+  Typography,
+  Autocomplete,
+  TextField,
+  Chip,
+} from '@mui/material'
 import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
@@ -59,8 +65,10 @@ export default function Title() {
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
-  const [selectedDataCallId, setSelectedDataCallId] = useState<number>(0)
-  const [selectedDatacall, setSelectedDatacall] = useState<string>('')
+  const [selectedDatacall, setSelectedDatacall] = useState<datacall | null>(
+    null
+  )
+  const [latestDeadline, setLatestDeadline] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
@@ -71,18 +79,18 @@ export default function Title() {
       const url = decommissioned
         ? '/fismasystems?decommissioned=true'
         : '/fismasystems'
-      await axiosInstance
-        .get(url)
-        .then((res) => {
-          setFismaSystems(res.data.data)
-        })
-        .catch((error) => {
-          console.error(
-            'Fetch systems error:',
-            error.response?.status,
-            error.response?.data
-          )
-        })
+      try {
+        const res = await axiosInstance.get(url)
+        setFismaSystems(res.data.data)
+      } catch (error) {
+        console.error(
+          'Fetch systems error:',
+          (error as { response?: { status?: number; data?: unknown } }).response
+            ?.status,
+          (error as { response?: { status?: number; data?: unknown } }).response
+            ?.data
+        )
+      }
     },
     []
   )
@@ -93,26 +101,31 @@ export default function Title() {
 
   useEffect(() => {
     if (loaderData.serverError) return
+    const controller = new AbortController()
     async function fetchDatacalls() {
-      await axiosInstance
-        .get('/datacalls')
-        .then((res) => {
-          const sorted: datacall[] = [...res.data.data].sort(
-            (a: datacall, b: datacall) => b.datacallid - a.datacallid
-          )
-          setDatacalls(sorted)
-          if (sorted.length > 0) {
-            setLatestDataCallId(sorted[0].datacallid)
-            setLatestDatacall(sorted[0].datacall)
-            setSelectedDataCallId(sorted[0].datacallid)
-            setSelectedDatacall(sorted[0].datacall)
-          }
+      try {
+        const res = await axiosInstance.get('/datacalls', {
+          signal: controller.signal,
         })
-        .catch((error) => {
-          console.error('Fetch latest datacall error:', error)
-        })
+        const sorted: datacall[] = [...res.data.data].sort(
+          (a: datacall, b: datacall) => b.datacallid - a.datacallid
+        )
+        setDatacalls(sorted)
+        if (sorted.length > 0) {
+          setLatestDataCallId(sorted[0].datacallid)
+          setLatestDatacall(sorted[0].datacall)
+          setLatestDeadline(sorted[0].deadline)
+          setSelectedDatacall(sorted[0])
+        }
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error('Fetch latest datacall error:', error)
+      }
     }
     fetchDatacalls()
+    return () => {
+      controller.abort()
+    }
   }, [loaderData.serverError])
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
@@ -149,6 +162,10 @@ export default function Title() {
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
   const isSystemDetail = location.pathname.startsWith('/systems/')
+  const isHomeRoute = location.pathname === '/'
+  const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
+  const datacallContextNeeded =
+    isHomeRoute || isQuestionnaireRoute || isSystemDetail
   // Single source of truth for header logo sizing; divider scales with it
   // so the mark, divider, and wordmark stay vertically centered on resize.
   const LOGO_HEIGHT = 55
@@ -328,8 +345,8 @@ export default function Title() {
           )}
         </Box>
       )}
-      {/* Datacall sub-bar (shown when logged in, hidden on signin) */}
-      {loaderData.status == 200 && !isSignInRoute && (
+      {/* Datacall sub-bar (shown when datacall context needed, hidden everywhere else) */}
+      {loaderData.status == 200 && datacallContextNeeded && (
         <Box
           sx={{
             display: 'flex',
@@ -363,16 +380,56 @@ export default function Title() {
                   isOptionEqualToValue={(option, value) =>
                     option.datacallid === value.datacallid
                   }
-                  value={
-                    datacalls.find(
-                      (dc) => dc.datacallid === selectedDataCallId
-                    ) ?? datacalls[0]
-                  }
+                  value={selectedDatacall ?? datacalls[0]}
                   onChange={(_, dc) => {
-                    if (dc) {
-                      setSelectedDataCallId(dc.datacallid)
-                      setSelectedDatacall(dc.datacall)
-                    }
+                    if (dc) setSelectedDatacall(dc)
+                  }}
+                  renderOption={(props, option) => {
+                    const isCurrent = option.datacallid === latestDataCallId
+                    const isClosed = new Date() > new Date(option.deadline)
+                    const { key, ...rest } = props
+                    const deadlineLabel = new Date(
+                      option.deadline
+                    ).toLocaleDateString('en-US', {
+                      month: 'short',
+                      day: 'numeric',
+                      year: 'numeric',
+                    })
+                    return (
+                      <li key={key} {...rest}>
+                        <Box sx={{ width: '100%' }}>
+                          <Box
+                            sx={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              width: '100%',
+                              gap: 1,
+                            }}
+                          >
+                            <Typography variant="body2">
+                              {option.datacall}
+                            </Typography>
+                            {isCurrent && (
+                              <Chip
+                                label="Current"
+                                size="small"
+                                variant="outlined"
+                                color="primary"
+                                sx={{ height: 18, fontSize: '0.65rem' }}
+                              />
+                            )}
+                          </Box>
+                          <Typography
+                            variant="caption"
+                            sx={{ color: 'text.secondary' }}
+                          >
+                            {isClosed ? 'Closed' : 'Active'} · deadline{' '}
+                            {deadlineLabel}
+                          </Typography>
+                        </Box>
+                      </li>
+                    )
                   }}
                   disableClearable
                   sx={{ minWidth: 260 }}
@@ -406,8 +463,7 @@ export default function Title() {
                   userInfo,
                   latestDataCallId,
                   latestDatacall,
-                  selectedDataCallId,
-                  setSelectedDataCallId,
+                  latestDeadline,
                   selectedDatacall,
                   setSelectedDatacall,
                   showDecommissioned,

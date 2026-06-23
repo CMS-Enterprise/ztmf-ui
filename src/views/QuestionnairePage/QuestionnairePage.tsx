@@ -33,7 +33,9 @@ import {
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
+import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
@@ -92,8 +94,16 @@ const addSpace = (str: string) => {
   return str
 }
 export default function QuestionnarePage() {
-  const { userInfo, selectedDataCallId, selectedDatacall } = useContextProp()
+  const {
+    userInfo,
+    selectedDatacall,
+    latestDataCallId,
+    latestDatacall,
+    latestDeadline,
+    fismaSystems,
+  } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
+  const [diffModalOpen, setDiffModalOpen] = React.useState(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
@@ -176,6 +186,8 @@ export default function QuestionnarePage() {
   // location.state. Optional-chain instead of crashing on first render; the
   // missing-system path is handled by an early render guard below.
   const system = location.state?.fismasystemid as number | undefined
+  const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
+  const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -190,7 +202,7 @@ export default function QuestionnarePage() {
     setQuestionId(index)
   }
 
-  const saveResponse = () => {
+  const saveResponse = async () => {
     if (
       !shouldPersistResponse({
         selectQuestionOption,
@@ -201,46 +213,34 @@ export default function QuestionnarePage() {
     ) {
       return
     }
-    if (scoreid) {
-      axiosInstance
-        .put(`scores/${scoreid}`, {
+    try {
+      if (scoreid) {
+        await axiosInstance.put(`scores/${scoreid}`, {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
         })
-        .then(() => {
-          // checkValidResponse(res.status)
-          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error updating score:', error)
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
-        })
-    } else {
-      axiosInstance
-        .post(`scores`, {
+      } else {
+        await axiosInstance.post(`scores`, {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
         })
-        .then(() => {
-          notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-          fetchQuestionScores(system, setQuestionScores)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error posting score:', error)
-          notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
-        })
+      }
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      fetchQuestionScores(system, setQuestionScores)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error('Error saving score:', error)
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
     }
   }
 
   React.useEffect(() => {
     if (system) {
+      const controller = new AbortController()
       // Reset the empty-questionnaire flag so a previous decommissioned-system
       // view does not bleed into the next render when system changes.
       setNoQuestions(false)
@@ -248,47 +248,42 @@ export default function QuestionnarePage() {
         try {
           let questionsEmpty = false
           let datacall = ''
-          const latestDataCallId = await axiosInstance
-            .get(`/datacalls/latest`)
-            .then((res) => {
-              const latestId = res.data.data.datacallid
-              const isHistorical =
-                selectedDataCallId > 0 && selectedDataCallId !== latestId
-              if (isHistorical) {
-                setDatacallID(selectedDataCallId)
-                datacall = selectedDatacall.replaceAll(' ', '_')
-                setDatacall(datacall)
-                setIsPastDeadline(true)
-              } else {
-                setDatacallID(latestId)
-                datacall = res.data.data.datacall.replaceAll(' ', '_')
-                setDatacall(datacall)
-                setIsPastDeadline(new Date() > new Date(res.data.data.deadline))
-              }
-              return isHistorical ? selectedDataCallId : latestId
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              notify(ERROR_MESSAGES.tryAgain, 'error', {
-                autoHideDuration: 2500,
-              })
-            })
-          await axiosInstance
-            .get(`/fismasystems/${system}/questions`)
-            .then((response) => {
-              // Decommissioned systems join to zero functions, so the questions
-              // endpoint returns no rows. The Go backend serializes a nil
-              // slice as JSON null, so the response can be either { data: null }
-              // or { data: [] } depending on driver behavior - treat both as
-              // the empty-state signal. Surface a friendly message instead of
-              // crashing on categoriesData[0] below.
-              const data = response.data?.data
-              if (!data || (Array.isArray(data) && data.length === 0)) {
-                questionsEmpty = true
-                setNoQuestions(true)
-                setLoadingQuestion(false)
-                return
-              }
+          const isHistorical =
+            selectedDatacall !== null &&
+            selectedDatacall.datacallid !== latestDataCallId
+          let activeDataCallId: number
+          if (isHistorical && selectedDatacall) {
+            setDatacallID(selectedDatacall.datacallid)
+            datacall = selectedDatacall.datacall.replaceAll(' ', '_')
+            setDatacall(datacall)
+            setIsPastDeadline(true)
+            activeDataCallId = selectedDatacall.datacallid
+          } else {
+            setDatacallID(latestDataCallId)
+            datacall = latestDatacall.replaceAll(' ', '_')
+            setDatacall(datacall)
+            setIsPastDeadline(
+              latestDeadline ? new Date() > new Date(latestDeadline) : true
+            )
+            activeDataCallId = latestDataCallId
+          }
+          try {
+            const response = await axiosInstance.get(
+              `/fismasystems/${system}/questions`,
+              { signal: controller.signal }
+            )
+            // Decommissioned systems join to zero functions, so the questions
+            // endpoint returns no rows. The Go backend serializes a nil
+            // slice as JSON null, so the response can be either { data: null }
+            // or { data: [] } depending on driver behavior - treat both as
+            // the empty-state signal. Surface a friendly message instead of
+            // crashing on categoriesData[0] below.
+            const data = response.data?.data
+            if (!data || (Array.isArray(data) && data.length === 0)) {
+              questionsEmpty = true
+              setNoQuestions(true)
+              setLoadingQuestion(false)
+            } else {
               const organizedData: Record<string, FismaQuestion[]> = {}
               const questionData: Record<number, Question> = {}
               data.forEach((question: FismaQuestion) => {
@@ -344,54 +339,67 @@ export default function QuestionnarePage() {
               setQuestion(questionData[sortedFuncId[0]].question) // set the first question value to the page
               setDescription(questionData[sortedFuncId[0]].description)
               setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              notify(ERROR_MESSAGES.tryAgain, 'error')
-            })
+            }
+          } catch (error) {
+            if (controller.signal.aborted) return
+            if (isAuthHandled(error)) return
+            notify(ERROR_MESSAGES.tryAgain, 'error')
+            return
+          }
           if (questionsEmpty) {
             return
           }
-          await axiosInstance
-            .get(
-              `scores?datacallid=${latestDataCallId}&fismasystemid=${system}&include=functionoption`
+          try {
+            const res = await axiosInstance.get(
+              `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`,
+              { signal: controller.signal }
             )
-            .then((res) => {
-              const hashTable: questionScoreMap = Object.assign(
-                {},
-                ...res.data.data.map((item: QuestionScores) => ({
-                  [item.functionoptionid]: item,
-                }))
-              )
-              // res.data.data.map((item: any) => {
-              //   questionScoreMap[item.functionoptionid] = item
-              //   funcScoreTable
-              // })
-              setQuestionScores(hashTable)
-            })
-            .catch((error) => {
-              if (isAuthHandled(error)) return
-              console.error('Error fetching question scores:', error)
-              notify(ERROR_MESSAGES.tryAgain, 'error')
-            })
+            const hashTable: questionScoreMap = Object.assign(
+              {},
+              ...res.data.data.map((item: QuestionScores) => ({
+                [item.functionoptionid]: item,
+              }))
+            )
+            setQuestionScores(hashTable)
+          } catch (error) {
+            if (controller.signal.aborted) return
+            if (isAuthHandled(error)) return
+            console.error('Error fetching question scores:', error)
+            notify(ERROR_MESSAGES.tryAgain, 'error')
+          }
         } catch (error) {
+          if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
         }
       }
       fetchData()
+      return () => controller.abort()
     }
-  }, [system, navigate, fismaacronym, selectedDataCallId, selectedDatacall])
+  }, [
+    system,
+    navigate,
+    fismaacronym,
+    selectedDatacall,
+    latestDataCallId,
+    latestDatacall,
+    latestDeadline,
+  ])
   React.useEffect(() => {
     if (questionId) {
+      const controller = new AbortController()
       // Clear saved-state markers before async load so the last-edited
       // footer does not flash the previous question's editor during the
       // refetch window.
       setInitQuestionChoice(-1)
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
-      try {
-        axiosInstance.get(`functions/${questionId}/options`).then((res) => {
+      async function fetchOptions() {
+        try {
+          const res = await axiosInstance.get(
+            `functions/${questionId}/options`,
+            { signal: controller.signal }
+          )
           res.data.data.forEach((item: QuestionOption) => {
             const choiceOpt: QuestionChoice = {
               label: item.description,
@@ -417,12 +425,16 @@ export default function QuestionnarePage() {
           setInitQuestionChoice(funcOptId ? funcOptId : -1)
           setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
           setOptions(choices ? choices : [])
+        } catch (error) {
+          if (controller.signal.aborted) return
+          if (isAuthHandled(error)) return
+          console.error('Error fetching data:', error)
+        } finally {
           setLoadingQuestion(false)
-        })
-      } catch (error) {
-        if (isAuthHandled(error)) return
-        console.error('Error fetching data:', error)
+        }
       }
+      fetchOptions()
+      return () => controller.abort()
     }
   }, [questionId, questionScores, questions])
   const breadcrumbSegmentLabels = fismaacronym
@@ -457,7 +469,23 @@ export default function QuestionnarePage() {
   }
   return (
     <>
-      <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+        }}
+      >
+        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <Button
+          variant="outlined"
+          size="small"
+          onClick={() => setDiffModalOpen(true)}
+          sx={{ whiteSpace: 'nowrap' }}
+        >
+          Compare Datacalls
+        </Button>
+      </Box>
       {isPastDeadline && !isReadOnly && (
         <Alert severity="warning" sx={{ mb: 2 }}>
           This datacall has closed. Changes will be recorded as post-deadline.
@@ -714,6 +742,17 @@ export default function QuestionnarePage() {
           />
         </Grid>
       </Container>
+      {/* selectedDataCallId seeds the "To" picker default in ScoreDiffModal.
+          #417 renamed selectedDataCallId → selectedDatacall (datacall object)
+          on context; use the id off the object now that #408 has landed. */}
+      <ScoreDiffModal
+        open={diffModalOpen}
+        onClose={() => setDiffModalOpen(false)}
+        fismasystemid={system ?? 0}
+        systemName={systemName}
+        systemAcronym={fismaacronym ?? ''}
+        selectedDataCallId={selectedDatacall?.datacallid}
+      />
     </>
   )
 }

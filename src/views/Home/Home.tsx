@@ -14,32 +14,37 @@ import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
-  const { latestDataCallId, selectedDataCallId } = useContextProp()
-  const activeDataCallId = selectedDataCallId || latestDataCallId
+  const { latestDataCallId, selectedDatacall } = useContextProp()
+  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   useEffect(() => {
+    const controller = new AbortController()
     async function fetchScores() {
       if (activeDataCallId !== 0) {
-        await axiosInstance
-          .get(`/scores/aggregate?datacallid=${activeDataCallId}`)
-          .then((res) => {
-            const scoresMap: Record<number, SystemScoreEntry> = {}
-            for (const obj of res.data.data as ScoreAggregate[]) {
-              scoresMap[obj.fismasystemid] = {
-                score: obj.systemscore ?? 0,
-                tier: obj.systemtier,
-              }
+        try {
+          const res = await axiosInstance.get(
+            `/scores/aggregate?datacallid=${activeDataCallId}`,
+            { signal: controller.signal }
+          )
+          const scoresMap: Record<number, SystemScoreEntry> = {}
+          for (const obj of res.data.data as ScoreAggregate[]) {
+            scoresMap[obj.fismasystemid] = {
+              score: obj.systemscore ?? 0,
+              tier: obj.systemtier,
             }
-            setScoreMap(scoresMap)
-          })
-          .catch((error) => {
-            console.error('Error fetching scores:', error)
-          })
-          .finally(() => {
-            setLoading(false)
-          })
+          }
+          setScoreMap(scoresMap)
+        } catch (error) {
+          if (controller.signal.aborted) return
+          console.error('Error fetching scores:', error)
+        } finally {
+          if (!controller.signal.aborted) setLoading(false)
+        }
       }
     }
     fetchScores()
+    return () => {
+      controller.abort()
+    }
   }, [activeDataCallId])
 
   if (loading) {

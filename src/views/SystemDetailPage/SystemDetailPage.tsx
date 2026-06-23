@@ -42,29 +42,30 @@ export default function SystemDetailPage() {
   const [retryingFetch, setRetryingFetch] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (fismaSystems.length > 0 && !system && !triedFetch.current) {
       triedFetch.current = true
       setRetryingFetch(true)
-      axiosInstance
-        .get(`fismasystems/${systemId}`)
-        .then((res) => {
-          if (!cancelled) {
-            const data = res.data?.data
-            if (data) {
-              setFismaSystems((prev) => [...prev, data])
-            }
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`fismasystems/${systemId}`, {
+            signal: controller.signal,
+          })
+          const data = res.data?.data
+          if (data) {
+            setFismaSystems((prev) => [...prev, data])
           }
-        })
-        .catch(() => {
+        } catch {
+          if (controller.signal.aborted) return
           // System truly doesn't exist
-        })
-        .finally(() => {
-          if (!cancelled) setRetryingFetch(false)
-        })
+        } finally {
+          if (!controller.signal.aborted) setRetryingFetch(false)
+        }
+      }
+      load()
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [fismaSystems, system, systemId, setFismaSystems])
 
@@ -135,52 +136,52 @@ export default function SystemDetailPage() {
 
   // Resolve decommissioned_by UUID to a human-readable name
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (system?.decommissioned && system?.decommissioned_by) {
       const userId = system.decommissioned_by
-      axiosInstance
-        .get(`users/${userId}`)
-        .then((res) => {
-          if (!cancelled) {
-            setDecommissionedByName(res.data?.data?.fullname || userId)
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            // User may have been removed — fall back to UUID
-            setDecommissionedByName(userId)
-          }
-        })
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`users/${userId}`, {
+            signal: controller.signal,
+          })
+          setDecommissionedByName(res.data?.data?.fullname || userId)
+        } catch {
+          if (controller.signal.aborted) return
+          // User may have been removed — fall back to UUID
+          setDecommissionedByName(userId)
+        }
+      }
+      load()
     } else {
       setDecommissionedByName('')
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [system])
 
   // Resolve reactivated_by UUID to a human-readable name
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     if (system?.reactivated_by) {
       const userId = system.reactivated_by
-      axiosInstance
-        .get(`users/${userId}`)
-        .then((res) => {
-          if (!cancelled) {
-            setReactivatedByName(res.data?.data?.fullname || userId)
-          }
-        })
-        .catch(() => {
-          if (!cancelled) {
-            setReactivatedByName(userId)
-          }
-        })
+      async function load() {
+        try {
+          const res = await axiosInstance.get(`users/${userId}`, {
+            signal: controller.signal,
+          })
+          setReactivatedByName(res.data?.data?.fullname || userId)
+        } catch {
+          if (controller.signal.aborted) return
+          setReactivatedByName(userId)
+        }
+      }
+      load()
     } else {
       setReactivatedByName('')
     }
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [system])
 
@@ -267,9 +268,8 @@ export default function SystemDetailPage() {
   const handleSave = async () => {
     if (!editedSystem) return
     setIsSaving(true)
-
-    await axiosInstance
-      .put(`fismasystems/${editedSystem.fismasystemid}`, {
+    try {
+      await axiosInstance.put(`fismasystems/${editedSystem.fismasystemid}`, {
         fismauid: editedSystem.fismauid,
         fismaacronym: editedSystem.fismaacronym,
         fismaname: editedSystem.fismaname,
@@ -283,39 +283,36 @@ export default function SystemDetailPage() {
         issoemail: editedSystem.issoemail,
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
       })
-      .then(() => {
-        notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-        setFismaSystems((prev) =>
-          prev.map((s) =>
-            s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
-          )
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      setFismaSystems((prev) =>
+        prev.map((s) =>
+          s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
         )
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        // Backend 400 with a field map: render each reason inline under its
-        // input via formValid + formValidErrorText. The 'Not Saved' toast
-        // is a status flag, not the detail.
-        if (parsed.fieldErrors) {
-          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-            setFormValid((prev) => ({ ...prev, [key]: false }))
-            setFormValidErrorText((prev) => ({ ...prev, [key]: message }))
-          })
-          notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
-          return
-        }
-        if (parsed.status === 404) {
-          notify(ERROR_MESSAGES.systemNotFound, 'error', {
-            autoHideDuration: 2000,
-          })
-          return
-        }
-        notify(parsed.message, 'error')
-      })
-      .finally(() => {
-        setIsSaving(false)
-      })
+      )
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      const parsed = parseApiError(error)
+      // Backend 400 with a field map: render each reason inline under its
+      // input via formValid + formValidErrorText. The 'Not Saved' toast
+      // is a status flag, not the detail.
+      if (parsed.fieldErrors) {
+        Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+          setFormValid((prev) => ({ ...prev, [key]: false }))
+          setFormValidErrorText((prev) => ({ ...prev, [key]: message }))
+        })
+        notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
+        return
+      }
+      if (parsed.status === 404) {
+        notify(ERROR_MESSAGES.systemNotFound, 'error', {
+          autoHideDuration: 2000,
+        })
+        return
+      }
+      notify(parsed.message, 'error')
+    } finally {
+      setIsSaving(false)
+    }
   }
 
   const handleDecommission = async () => {
@@ -334,48 +331,49 @@ export default function SystemDetailPage() {
       body.notes = trimmedNotes
     }
 
-    await axiosInstance
-      .delete(`fismasystems/${editedSystem.fismasystemid}`, { data: body })
-      .then((res) => {
-        if (res.status === 200 || res.status === 204) {
-          notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
-            autoHideDuration: 2000,
-          })
-          const updatedSystem: FismaSystemType = res.data?.data || {
-            ...editedSystem,
-            decommissioned: true,
-            decommissioned_date: isoDate,
-            decommissioned_by: userInfo.userid,
-            decommissioned_notes: trimmedNotes || null,
-          }
-          setFismaSystems((prev) =>
-            prev.map((s) =>
-              s.fismasystemid === updatedSystem.fismasystemid
-                ? updatedSystem
-                : s
-            )
+    try {
+      const res = await axiosInstance.delete(
+        `fismasystems/${editedSystem.fismasystemid}`,
+        { data: body }
+      )
+      if (res.status === 200 || res.status === 204) {
+        notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
+          autoHideDuration: 2000,
+        })
+        const updatedSystem: FismaSystemType = res.data?.data || {
+          ...editedSystem,
+          decommissioned: true,
+          decommissioned_date: isoDate,
+          decommissioned_by: userInfo.userid,
+          decommissioned_notes: trimmedNotes || null,
+        }
+        setFismaSystems((prev) =>
+          prev.map((s) =>
+            s.fismasystemid === updatedSystem.fismasystemid ? updatedSystem : s
           )
-          setDecommissionedByName(userInfo.fullname || userInfo.userid)
-          setIsEditing(false)
-          setEditedSystem(null)
-        }
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        console.error(
-          'Decommission error:',
-          error.response?.status,
-          error.response?.data
         )
-        const parsed = parseApiError(error)
-        if (parsed.status === 404) {
-          notify(ERROR_MESSAGES.systemNotFound, 'error', {
-            autoHideDuration: 2000,
-          })
-          return
-        }
-        notify(parsed.message, 'error')
-      })
+        setDecommissionedByName(userInfo.fullname || userInfo.userid)
+        setIsEditing(false)
+        setEditedSystem(null)
+      }
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error(
+        'Decommission error:',
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.status,
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.data
+      )
+      const parsed = parseApiError(error)
+      if (parsed.status === 404) {
+        notify(ERROR_MESSAGES.systemNotFound, 'error', {
+          autoHideDuration: 2000,
+        })
+        return
+      }
+      notify(parsed.message, 'error')
+    }
   }
 
   const handleReactivate = async () => {
@@ -385,48 +383,49 @@ export default function SystemDetailPage() {
     const trimmedNotes = reactivationNotes.trim()
     const body = trimmedNotes ? { notes: trimmedNotes } : undefined
 
-    await axiosInstance
-      .put(`fismasystems/${editedSystem.fismasystemid}/reactivate`, body)
-      .then((res) => {
-        if (res.status === 200) {
-          notify(STATUS_MESSAGES.systemReactivated, 'success', {
-            autoHideDuration: 2000,
-          })
-          const updatedSystem: FismaSystemType = res.data?.data || {
-            ...editedSystem,
-            decommissioned: false,
-            reactivated_by: userInfo.userid,
-            reactivated_date: new Date().toISOString(),
-            reactivation_notes: trimmedNotes || null,
-          }
-          setFismaSystems((prev) =>
-            prev.map((s) =>
-              s.fismasystemid === updatedSystem.fismasystemid
-                ? updatedSystem
-                : s
-            )
+    try {
+      const res = await axiosInstance.put(
+        `fismasystems/${editedSystem.fismasystemid}/reactivate`,
+        body
+      )
+      if (res.status === 200) {
+        notify(STATUS_MESSAGES.systemReactivated, 'success', {
+          autoHideDuration: 2000,
+        })
+        const updatedSystem: FismaSystemType = res.data?.data || {
+          ...editedSystem,
+          decommissioned: false,
+          reactivated_by: userInfo.userid,
+          reactivated_date: new Date().toISOString(),
+          reactivation_notes: trimmedNotes || null,
+        }
+        setFismaSystems((prev) =>
+          prev.map((s) =>
+            s.fismasystemid === updatedSystem.fismasystemid ? updatedSystem : s
           )
-          setReactivatedByName(userInfo.fullname || userInfo.userid)
-          setIsEditing(false)
-          setEditedSystem(null)
-        }
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        console.error(
-          'Reactivate error:',
-          error.response?.status,
-          error.response?.data
         )
-        const parsed = parseApiError(error)
-        if (parsed.status === 404) {
-          notify(ERROR_MESSAGES.systemNotFound, 'error', {
-            autoHideDuration: 2000,
-          })
-          return
-        }
-        notify(parsed.message, 'error')
-      })
+        setReactivatedByName(userInfo.fullname || userInfo.userid)
+        setIsEditing(false)
+        setEditedSystem(null)
+      }
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error(
+        'Reactivate error:',
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.status,
+        (error as { response?: { status?: number; data?: unknown } }).response
+          ?.data
+      )
+      const parsed = parseApiError(error)
+      if (parsed.status === 404) {
+        notify(ERROR_MESSAGES.systemNotFound, 'error', {
+          autoHideDuration: 2000,
+        })
+        return
+      }
+      notify(parsed.message, 'error')
+    }
   }
 
   // Build decommission confirmation text

@@ -55,7 +55,7 @@ function BooleanChip({
 }
 
 function parseDateOnly(dateStr: string): Date {
-  const [year, month, day] = dateStr.split('-').map(Number)
+  const [year, month, day] = dateStr.split(/[ T]/)[0].split('-').map(Number)
   return new Date(year, month - 1, day)
 }
 
@@ -79,7 +79,9 @@ function parseDate(dateStr: string): Date {
 
 function formatDate(dateStr: string | null): string | null {
   if (!dateStr) return null
-  return parseDate(dateStr).toLocaleDateString()
+  const date = parseDate(dateStr)
+  if (isNaN(date.getTime())) return null
+  return date.toLocaleDateString()
 }
 
 export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
@@ -89,7 +91,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
   const [hasError, setHasError] = useState(false)
 
   useEffect(() => {
-    let cancelled = false
+    const controller = new AbortController()
     setLoading(true)
     setNotFound(false)
     setHasError(false)
@@ -98,47 +100,46 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
     // an empty state. Bypass the cross-cutting auth handler so it does
     // not surface a permission snackbar over what is a normal absent-data
     // case.
-    axiosInstance
-      .get(`systemenrichment/${fismaUid}`, { skipAuthHandling: true })
-      .then((res) => {
-        if (!cancelled) {
-          // The endpoint returns { data: { fisma_uuid, payload, synced_at } }.
-          // The enrichment fields live in payload; fisma_uuid and synced_at are
-          // top-level siblings. Flatten into the existing shape so the rendering
-          // below is unchanged.
-          const record = res.data?.data
-          setCfacts(
-            record
-              ? {
-                  ...record.payload,
-                  fisma_uuid: record.fisma_uuid,
-                  synced_at: record.synced_at,
-                }
-              : null
-          )
-        }
-      })
-      .catch((error) => {
-        if (!cancelled) {
-          if (
-            error.response?.status === 404 ||
-            error.response?.status === 403
-          ) {
-            if (error.response?.status === 403) {
-              console.warn('ZTMF Insights 403 for fismaUid:', fismaUid)
-            }
-            setNotFound(true)
-          } else {
-            setHasError(true)
+    async function load() {
+      try {
+        const res = await axiosInstance.get(`systemenrichment/${fismaUid}`, {
+          signal: controller.signal,
+          skipAuthHandling: true,
+        })
+        // The endpoint returns { data: { fisma_uuid, payload, synced_at } }.
+        // The enrichment fields live in payload; fisma_uuid and synced_at are
+        // top-level siblings. Flatten into the existing shape so the rendering
+        // below is unchanged.
+        const record = res.data?.data
+        setCfacts(
+          record
+            ? {
+                ...record.payload,
+                fisma_uuid: record.fisma_uuid,
+                synced_at: record.synced_at,
+              }
+            : null
+        )
+      } catch (error) {
+        if (controller.signal.aborted) return
+        const status = (error as { response?: { status?: number } }).response
+          ?.status
+        if (status === 404 || status === 403) {
+          if (status === 403) {
+            console.warn('ZTMF Insights 403 for fismaUid:', fismaUid)
           }
+          setNotFound(true)
+        } else {
+          setHasError(true)
         }
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false)
-      })
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+    load()
 
     return () => {
-      cancelled = true
+      controller.abort()
     }
   }, [fismaUid])
 

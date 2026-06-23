@@ -113,34 +113,40 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 
   // Fetch datacalls when modal opens (with caching)
   useEffect(() => {
-    if (open) {
-      const fetchDatacalls = async () => {
-        try {
-          const now = Date.now()
-          const CACHE_DURATION = 10 * 60 * 1000 // 10 minutes for datacalls
+    if (!open) return
+    const controller = new AbortController()
+    const fetchDatacalls = async () => {
+      try {
+        const now = Date.now()
+        const CACHE_DURATION = 10 * 60 * 1000 // 10 minutes for datacalls
 
-          // Check if cache is still valid
-          if (
-            datacallsCache.data &&
-            datacallsCache.timestamp &&
-            now - datacallsCache.timestamp < CACHE_DURATION
-          ) {
-            setDatacalls(datacallsCache.data)
-          } else {
-            // Fetch fresh data
-            const response = await axiosInstance.get('/datacalls')
-            const datacallsData = response.data.data
-            setDatacalls(datacallsData)
+        // Check if cache is still valid
+        if (
+          datacallsCache.data &&
+          datacallsCache.timestamp &&
+          now - datacallsCache.timestamp < CACHE_DURATION
+        ) {
+          setDatacalls(datacallsCache.data)
+        } else {
+          // Fetch fresh data
+          const response = await axiosInstance.get('/datacalls', {
+            signal: controller.signal,
+          })
+          const datacallsData = response.data.data
+          setDatacalls(datacallsData)
 
-            // Update cache
-            datacallsCache.data = datacallsData
-            datacallsCache.timestamp = now
-          }
-        } catch (error) {
-          console.error('Error fetching datacalls:', error)
+          // Update cache
+          datacallsCache.data = datacallsData
+          datacallsCache.timestamp = now
         }
+      } catch (error) {
+        if (controller.signal.aborted) return
+        console.error('Error fetching datacalls:', error)
       }
-      fetchDatacalls()
+    }
+    fetchDatacalls()
+    return () => {
+      controller.abort()
     }
   }, [open])
 
