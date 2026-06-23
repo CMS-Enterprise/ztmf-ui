@@ -280,7 +280,7 @@ export default function UserTable() {
       setRows(rows.filter((row) => row.userid !== id))
     }
   }
-  const processRowUpdate = (newRow: GridRowModel) => {
+  const processRowUpdate = async (newRow: GridRowModel) => {
     const updatedRow = {
       ...selectedRow,
       ...newRow,
@@ -289,45 +289,38 @@ export default function UserTable() {
     } as users
     const curRowUserId = updatedRow.userid
     if (newRow.isNew) {
-      axiosInstance
-        .post('/users', {
+      try {
+        const res = await axiosInstance.post('/users', {
           email: updatedRow.email,
           fullname: updatedRow.fullname,
           role: updatedRow.role,
         })
-        .then((res) => {
-          newRow = res.data.data
-          updatedRow.userid = newRow.userid
-          apiRef.current.updateRows([
-            { userid: curRowUserId, _action: 'delete' },
-          ])
-          apiRef.current.updateRows([updatedRow])
-          setSnackBarSeverity('success')
-          setSnackBarText(STATUS_MESSAGES.saved)
-          setOpen(true)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          console.error('Error updating score:', error)
-          setSaveError(error)
-        })
+        newRow = res.data.data
+        updatedRow.userid = newRow.userid
+        apiRef.current.updateRows([{ userid: curRowUserId, _action: 'delete' }])
+        apiRef.current.updateRows([updatedRow])
+        setSnackBarSeverity('success')
+        setSnackBarText(STATUS_MESSAGES.saved)
+        setOpen(true)
+      } catch (error) {
+        if (isAuthHandled(error)) return updatedRow
+        console.error('Error updating score:', error)
+        setSaveError(error)
+      }
     } else {
-      // const updatedRow = { ...newRow } as users
-      axiosInstance
-        .put(`/users/${updatedRow?.userid}`, {
+      try {
+        await axiosInstance.put(`/users/${updatedRow?.userid}`, {
           email: updatedRow?.email,
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
         })
-        .then(() => {
-          setSnackBarSeverity('success')
-          setSnackBarText(STATUS_MESSAGES.saved)
-          setOpen(true)
-        })
-        .catch((error) => {
-          if (isAuthHandled(error)) return
-          setSaveError(error)
-        })
+        setSnackBarSeverity('success')
+        setSnackBarText(STATUS_MESSAGES.saved)
+        setOpen(true)
+      } catch (error) {
+        if (isAuthHandled(error)) return updatedRow
+        setSaveError(error)
+      }
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
     return updatedRow
@@ -357,119 +350,117 @@ export default function UserTable() {
     if (!curRow) return
     setPendingDeleteRow(curRow)
   }
-  const handleConfirmDelete = (confirm: boolean) => {
+  const handleConfirmDelete = async (confirm: boolean) => {
     const target = pendingDeleteRow
     setPendingDeleteRow(null)
     if (!confirm || !target) return
-    axiosInstance
-      .delete(`/users/${target.userid}`)
-      .then(() => {
-        setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        notify(`Saved - Delete User ${target.fullname}`, 'success', {
-          autoHideDuration: 2000,
-        })
+    try {
+      await axiosInstance.delete(`/users/${target.userid}`)
+      setRows((prev) => prev.filter((row) => row.userid !== target.userid))
+      notify(`Saved - Delete User ${target.fullname}`, 'success', {
+        autoHideDuration: 2000,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
-      })
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
+    }
   }
   const handleRestoreClick = (id: GridRowId) => () => {
     const curRow = apiRef.current.getRow(id) as users | undefined
     if (!curRow) return
     setPendingRestoreRow(curRow)
   }
-  const handleConfirmRestore = (confirm: boolean) => {
+  const handleConfirmRestore = async (confirm: boolean) => {
     const target = pendingRestoreRow
     setPendingRestoreRow(null)
     if (!confirm || !target) return
-    axiosInstance
-      .put(`/users/${target.userid}/restore`)
-      .then(() => {
-        setRows((prev) => prev.filter((row) => row.userid !== target.userid))
-        notify(`Saved - Restore User ${target.fullname}`, 'success', {
-          autoHideDuration: 2000,
-        })
+    try {
+      await axiosInstance.put(`/users/${target.userid}/restore`)
+      setRows((prev) => prev.filter((row) => row.userid !== target.userid))
+      notify(`Saved - Restore User ${target.fullname}`, 'success', {
+        autoHideDuration: 2000,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
-      })
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
+    }
   }
   // TODO: Custom hook for fetching data
   useEffect(() => {
     if (!canRead) return
-    // Guard against a superseded run (e.g. a fast Show Deleted toggle)
-    // resolving late and clobbering fresher grant state.
-    let ignore = false
-    axiosInstance
-      .get('/users', { params: { deleted: showDeleted } })
-      .then((res) => {
-        if (res.status === 200) {
-          if (ignore) return
-          const data = res.data.data.map((row: users) => ({
-            ...row,
-            role: row.role.trim(),
-          }))
-          setRows(data)
-          const map: Record<number, { name: string; acronym: string }> = {}
-          for (const obj of fismaSystems) {
-            map[obj.fismasystemid] = {
-              name: obj.fismasubsystem
-                ? obj.fismaname + ' - ' + obj.fismasubsystem
-                : obj.fismaname,
-              acronym: obj.fismaacronym,
-            }
+    const controller = new AbortController()
+    // backfillAborted guards the Promise.all per-user calls, which can't receive
+    // a signal since fetchUserOpDivs doesn't accept one.
+    let backfillAborted = false
+    async function load() {
+      try {
+        const res = await axiosInstance.get('/users', {
+          params: { deleted: showDeleted },
+          signal: controller.signal,
+        })
+        if (res.status !== 200) return
+        const data = res.data.data.map((row: users) => ({
+          ...row,
+          role: row.role.trim(),
+        }))
+        setRows(data)
+        const map: Record<number, { name: string; acronym: string }> = {}
+        for (const obj of fismaSystems) {
+          map[obj.fismasystemid] = {
+            name: obj.fismasubsystem
+              ? obj.fismaname + ' - ' + obj.fismasubsystem
+              : obj.fismaname,
+            acronym: obj.fismaacronym,
           }
-          setFismaSystemsMap(map)
-          // Grants now arrive inline on each list row (assignedopdivids), so the
-          // OpDivs column reads them directly with no per-user calls. Fall back to
-          // the per-user detail endpoint only against an older backend that omits
-          // them, keeping this safe to ship before or after the backend deploys.
-          // Distinguish "old backend omitted the field" (key absent -> backfill)
-          // from "new backend, user simply has zero grants" (key present, value
-          // null/[] -> no backfill). A value check would misfire on every
-          // zero-grant user and re-introduce the N+1.
-          const missingInlineGrants = data.some(
-            (u: users) => !('assignedopdivids' in u)
-          )
-          if (missingInlineGrants) {
-            Promise.all(
+        }
+        setFismaSystemsMap(map)
+        // Grants now arrive inline on each list row (assignedopdivids), so the
+        // OpDivs column reads them directly with no per-user calls. Fall back to
+        // the per-user detail endpoint only against an older backend that omits
+        // them, keeping this safe to ship before or after the backend deploys.
+        // Distinguish "old backend omitted the field" (key absent -> backfill)
+        // from "new backend, user simply has zero grants" (key present, value
+        // null/[] -> no backfill). A value check would misfire on every
+        // zero-grant user and re-introduce the N+1.
+        const missingInlineGrants = data.some(
+          (u: users) => !('assignedopdivids' in u)
+        )
+        if (missingInlineGrants) {
+          try {
+            const entries = await Promise.all(
               data.map((u: users) =>
                 fetchUserOpDivs(u.userid)
                   .then((ids) => [u.userid, ids] as [string, number[]])
                   .catch(() => [u.userid, []] as [string, number[]])
               )
             )
-              .then((entries) => {
-                if (ignore) return
-                // Merge rather than replace so an in-flight per-user refresh
-                // (e.g. from closing the grant modal) is not clobbered.
-                setUserOpDivMap((prev) => ({
-                  ...prev,
-                  ...Object.fromEntries(entries),
-                }))
-              })
-              .catch((error) => {
-                if (ignore) return
-                // The per-user catches above already default to [], so this only
-                // trips on an unexpected failure. Surface it rather than leaving
-                // the OpDivs column silently blank.
-                console.error('Failed to backfill OpDiv grants', error)
-                notify(ERROR_MESSAGES.tryAgain, 'warning')
-              })
+            if (backfillAborted) return
+            // Merge rather than replace so an in-flight per-user refresh
+            // (e.g. from closing the grant modal) is not clobbered.
+            setUserOpDivMap((prev) => ({
+              ...prev,
+              ...Object.fromEntries(entries),
+            }))
+          } catch (error) {
+            if (backfillAborted) return
+            // The per-user catches above already default to [], so this only
+            // trips on an unexpected failure. Surface it rather than leaving
+            // the OpDivs column silently blank.
+            console.error('Failed to backfill OpDiv grants', error)
+            notify(ERROR_MESSAGES.tryAgain, 'warning')
           }
-        } else {
-          return
         }
-      })
-      .catch((error) => {
+      } catch (error) {
+        if (controller.signal.aborted) return
         if (isAuthHandled(error)) return
         console.error('Fetch users error:', error)
         notify(ERROR_MESSAGES.tryAgain, 'error')
-      })
+      }
+    }
+    load()
     return () => {
-      ignore = true
+      controller.abort()
+      backfillAborted = true
     }
   }, [canRead, fismaSystems, navigate, showDeleted])
   // OpDiv options for the grant modal: assignable children only (the HHS
@@ -481,8 +472,9 @@ export default function UserTable() {
     // Pull the full list (incl. inactive/parent) so any granted id resolves to
     // a code in the OpDivs column; derive the assignable subset from the same
     // response for the grant modal.
-    fetchOpDivs(true)
-      .then((all) => {
+    async function loadOpDivs() {
+      try {
+        const all = await fetchOpDivs(true)
         const codeMap: Record<number, string> = {}
         all.forEach((od) => {
           codeMap[od.opdiv_id] = od.code
@@ -495,12 +487,13 @@ export default function UserTable() {
           assignable = assignable.filter((od) => own.has(od.opdiv_id))
         }
         setOpDivOptions(assignable)
-      })
-      .catch(() => {
+      } catch {
         // Non-fatal: the grant modal simply shows no options if this fails.
         setOpDivOptions([])
         setOpDivCodeMap({})
-      })
+      }
+    }
+    loadOpDivs()
   }, [isAdmin, userInfo])
   const columns: GridColDef[] = [
     {

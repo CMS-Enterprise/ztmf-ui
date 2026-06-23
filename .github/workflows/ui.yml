@@ -49,6 +49,9 @@ jobs:
       - name: LINT
         run: yarn lint
 
+      - name: TEST
+        run: yarn test:ci
+
       - name: BUILD
         # VITE_* vars are baked into the bundle at build time, so they must
         # be set on the build step itself, not on the deployed container.

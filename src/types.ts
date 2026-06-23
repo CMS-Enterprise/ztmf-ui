@@ -275,3 +275,27 @@ export type CfactsSystemType = {
   last_modified_date: string | null
   synced_at: string
 }
+
+export type ScoreDiffSide = {
+  scoreid: number
+  functionoptionid: number
+  optionname: string
+  score: number
+  notes: string | null
+}
+
+export type ScoreDiffEntry = {
+  fismasystemid: number
+  functionid: number
+  function: string
+  question: string
+  from: ScoreDiffSide | null
+  to: ScoreDiffSide | null
+  changed_at?: string
+  changed_by?: {
+    userid: string
+    name: string
+    email: string
+    role: string
+  }
+}

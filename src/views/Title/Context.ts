@@ -1,6 +1,6 @@
 import React from 'react'
 import { useOutletContext } from 'react-router-dom'
-import { FismaSystemType, userData } from '@/types'
+import { FismaSystemType, userData, datacall } from '@/types'
 
 type ContextType = {
   fismaSystems: FismaSystemType[] | []
@@ -8,10 +8,9 @@ type ContextType = {
   userInfo: userData
   latestDataCallId: number
   latestDatacall: string
-  selectedDataCallId: number
-  setSelectedDataCallId: React.Dispatch<React.SetStateAction<number>>
-  selectedDatacall: string
-  setSelectedDatacall: React.Dispatch<React.SetStateAction<string>>
+  latestDeadline: string
+  selectedDatacall: datacall | null
+  setSelectedDatacall: React.Dispatch<React.SetStateAction<datacall | null>>
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
   fetchFismaSystems: (decommissioned?: boolean) => Promise<void>

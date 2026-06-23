@@ -69,31 +69,29 @@ export function CustomFooterSaveComponent(
       })
       exportUrl += idString
     }
-    return await axiosInstance
-      .get(exportUrl, {
+    try {
+      const response = await axiosInstance.get(exportUrl, {
         responseType: 'blob',
       })
-      .then((response) => {
-        const [, filename] =
-          response.headers['content-disposition'].split('filename=')
-        const contentType = response.headers['content-type']
-        const data = new Blob([response.data], {
-          type: typeof contentType === 'string' ? contentType : undefined,
-        })
-        const url = window.URL.createObjectURL(data)
-        const tempLink = document.createElement('a')
-        tempLink.href = url
-        tempLink.setAttribute('download', filename)
-        tempLink.setAttribute('target', '_blank')
-        tempLink.click()
-        window.URL.revokeObjectURL(url)
+      const [, filename] =
+        response.headers['content-disposition'].split('filename=')
+      const contentType = response.headers['content-type']
+      const data = new Blob([response.data], {
+        type: typeof contentType === 'string' ? contentType : undefined,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        setErrorMessage(ERROR_MESSAGES.tryAgain)
-        setSnackBarSeverity('warning')
-        setOpenSnackbar(true)
-      })
+      const url = window.URL.createObjectURL(data)
+      const tempLink = document.createElement('a')
+      tempLink.href = url
+      tempLink.setAttribute('download', filename)
+      tempLink.setAttribute('target', '_blank')
+      tempLink.click()
+      window.URL.revokeObjectURL(url)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      setErrorMessage(ERROR_MESSAGES.tryAgain)
+      setSnackBarSeverity('warning')
+      setOpenSnackbar(true)
+    }
   }
   return (
     <>
@@ -214,9 +212,9 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId, selectedDataCallId, userInfo } =
+  const { fismaSystems, latestDataCallId, selectedDatacall, userInfo } =
     useContextProp()
-  const activeDataCallId = selectedDataCallId || latestDataCallId
+  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)

@@ -64,31 +64,29 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
   }
   const submitDatacall = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault()
-    await axiosInstance
-      .post(`/datacalls`, {
+    try {
+      await axiosInstance.post(`/datacalls`, {
         datacall: datacall.toUpperCase(),
         deadline: new Date(deadline).toISOString(),
       })
-      .then(() => {
-        notify('Datacall has successfully been created', 'success', {
-          autoHideDuration: 2500,
+      notify('Datacall has successfully been created', 'success', {
+        autoHideDuration: 2500,
+      })
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      const parsed = parseApiError(error)
+      // Backend 400 with a field map: route each reason to the matching
+      // field's error setter. No toast on this branch, the inline errors
+      // are the user feedback.
+      if (parsed.fieldErrors) {
+        Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+          if (key === 'datacall') setDatacallError(message)
+          else if (key === 'deadline') setDeadlineError(message)
         })
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        // Backend 400 with a field map: route each reason to the matching
-        // field's error setter. No toast on this branch, the inline errors
-        // are the user feedback.
-        if (parsed.fieldErrors) {
-          Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-            if (key === 'datacall') setDatacallError(message)
-            else if (key === 'deadline') setDeadlineError(message)
-          })
-          return
-        }
-        notify(parsed.message, 'error', { autoHideDuration: 2500 })
-      })
+        return
+      }
+      notify(parsed.message, 'error', { autoHideDuration: 2500 })
+    }
   }
   return (
     <Dialog
