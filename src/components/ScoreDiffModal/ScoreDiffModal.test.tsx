@@ -197,7 +197,9 @@ describe('ScoreDiffModal', () => {
   it('shows empty-state message when diff returns no entries', async () => {
     setupMocks([])
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
-    await screen.findByText('No changes between these two datacalls.')
+    expect(
+      await screen.findByText('No changes between these two datacalls.')
+    ).toBeInTheDocument()
   })
 
   it('shows an error alert when the diff fetch fails', async () => {
@@ -209,7 +211,9 @@ describe('ScoreDiffModal', () => {
       return Promise.reject(new Error('Network error'))
     })
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
-    await screen.findByText('Failed to load diff. Please try again.')
+    expect(
+      await screen.findByText('Failed to load diff. Please try again.')
+    ).toBeInTheDocument()
   })
 
   it('renders function, question, both answer sides, and attribution', async () => {
@@ -229,7 +233,7 @@ describe('ScoreDiffModal', () => {
     setupMocks()
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
     // to.notes = 'Improved this cycle', from.notes = null → only one notes line
-    await screen.findByText('Improved this cycle')
+    expect(await screen.findByText('Improved this cycle')).toBeInTheDocument()
   })
 
   it('renders "No answer" for a null side', async () => {
