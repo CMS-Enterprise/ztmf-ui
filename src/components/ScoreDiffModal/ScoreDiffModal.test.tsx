@@ -188,7 +188,8 @@ describe('ScoreDiffModal', () => {
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
     await waitFor(() =>
       expect(mockGet).toHaveBeenCalledWith(
-        '/scores/diff?from=4&to=5&fismasystemid=1001'
+        '/scores/diff?from=4&to=5&fismasystemid=1001',
+        expect.objectContaining({ signal: expect.anything() })
       )
     )
   })
@@ -267,7 +268,8 @@ describe('ScoreDiffModal', () => {
     const { rerender } = render(<ScoreDiffModal {...DEFAULT_PROPS} />)
     await waitFor(() =>
       expect(mockGet).toHaveBeenCalledWith(
-        expect.stringContaining('/scores/diff')
+        expect.stringContaining('/scores/diff'),
+        expect.objectContaining({ signal: expect.anything() })
       )
     )
     const firstCount = mockGet.mock.calls.filter(([u]: [string]) =>
