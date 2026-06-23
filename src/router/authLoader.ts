@@ -78,12 +78,10 @@ const authLoader = async (): Promise<AuthLoaderData> => {
       }
     }
     if (status === 401) {
-      return {
-        ok: false,
-        reason: SignInReasons.EXPIRED,
-        message: err?.response?.data?.error,
-        response: emptyUser,
-      }
+      // A 401 here might be an expired session, or just a first-time
+      // visit with no session yet. We can't tell which, so no message.
+      // The interceptor handles the real "session expired" case.
+      return { ok: false, reason: SignInReasons.EXPIRED, response: emptyUser }
     }
     console.error('Error:', error)
   }
