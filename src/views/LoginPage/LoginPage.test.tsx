@@ -157,4 +157,22 @@ describe('LoginPage EXPIRED / default state', () => {
 
     expect(screen.getByLabelText(/enter your email/i)).toBeInTheDocument()
   })
+
+  it('renders the BE expired message from the loader (cold-load 401 path)', () => {
+    mutableConfig.IDP_ENABLED = true
+    mockedUseLocation.mockReturnValue({ pathname: '/', state: null })
+    mockedUseRouteLoaderData.mockReturnValue({
+      ok: false,
+      reason: SignInReasons.EXPIRED,
+      message: 'your session is missing or has expired',
+      response: {},
+    })
+
+    render(<LoginPage />)
+
+    expect(
+      screen.getByText(/your session is missing or has expired/i)
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText(/enter your email/i)).toBeInTheDocument()
+  })
 })

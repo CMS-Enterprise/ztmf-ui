@@ -78,7 +78,12 @@ const authLoader = async (): Promise<AuthLoaderData> => {
       }
     }
     if (status === 401) {
-      return { ok: false, reason: SignInReasons.EXPIRED, response: emptyUser }
+      return {
+        ok: false,
+        reason: SignInReasons.EXPIRED,
+        message: err?.response?.data?.error,
+        response: emptyUser,
+      }
     }
     console.error('Error:', error)
   }
