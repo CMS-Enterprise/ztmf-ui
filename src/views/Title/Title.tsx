@@ -162,6 +162,10 @@ export default function Title() {
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
   const isSystemDetail = location.pathname.startsWith('/systems/')
+  const isHomeRoute = location.pathname === '/'
+  const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
+  const datacallContextNeeded =
+    isHomeRoute || isQuestionnaireRoute || isSystemDetail
   // Single source of truth for header logo sizing; divider scales with it
   // so the mark, divider, and wordmark stay vertically centered on resize.
   const LOGO_HEIGHT = 55
@@ -341,8 +345,8 @@ export default function Title() {
           )}
         </Box>
       )}
-      {/* Datacall sub-bar (shown when logged in, hidden on signin) */}
-      {loaderData.status == 200 && !isSignInRoute && (
+      {/* Datacall sub-bar (shown when datacall context needed, hidden everywhere else) */}
+      {loaderData.status == 200 && datacallContextNeeded && (
         <Box
           sx={{
             display: 'flex',
