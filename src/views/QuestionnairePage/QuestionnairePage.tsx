@@ -32,6 +32,7 @@ import {
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
+import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -300,7 +301,10 @@ export default function QuestionnarePage() {
                 organizedData[question.pillar.pillar].push(question)
               })
               setQuestions(questionData)
-              const sortedPillars = sortPillars(Object.keys(organizedData))
+              const sortedPillars = filterPillarsForSystem(
+                sortPillars(Object.keys(organizedData)),
+                systemInfo?.datacenterenvironment
+              )
               let sortedFuncId: number[] = []
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
                 const sortedSteps = sortFunctions(pillar, organizedData[pillar])
@@ -384,6 +388,7 @@ export default function QuestionnarePage() {
     latestDataCallId,
     latestDatacall,
     latestDeadline,
+    systemInfo?.datacenterenvironment,
   ])
   React.useEffect(() => {
     if (questionId) {

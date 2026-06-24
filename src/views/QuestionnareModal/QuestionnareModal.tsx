@@ -33,6 +33,7 @@ import Tooltip from '@mui/material/Tooltip'
 import { MAX_QUESTIONNAIRE_NOTES_LENGTH, STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
+import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
@@ -280,7 +281,10 @@ export default function QuestionnareModal({
             }
             organizedData[question.pillar.pillar].push(question)
           })
-          const sortedPillars = sortPillars(Object.keys(organizedData))
+          const sortedPillars = filterPillarsForSystem(
+            sortPillars(Object.keys(organizedData)),
+            system?.datacenterenvironment
+          )
           const categoriesData: Category[] = sortedPillars.map((pillar) => ({
             name: pillar,
             steps: sortFunctions(pillar, organizedData[pillar]),
