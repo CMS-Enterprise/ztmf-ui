@@ -33,11 +33,14 @@ import { users, OpDiv } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
+  hasUnscopedRead,
   isOpDivTier,
   selectableRoles,
 } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
-import { fetchUserOpDivs } from '@/utils/userOpdivs'
+import { fetchUserOpDivs, grantOpDiv } from '@/utils/userOpdivs'
+import CONFIG from '@/utils/config'
+import EditOpDivCell from './EditOpDivCell'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -67,7 +70,13 @@ function EditToolbar(props: EditToolbarProps) {
     const userid = Math.floor(Math.random() * 1000) + 1
     setRows((oldRows) => [
       ...oldRows,
-      { userid, fullname: '', email: '', role: '', isNew: true },
+      {
+        userid,
+        fullname: '',
+        email: '',
+        role: '',
+        isNew: true,
+      },
     ])
     setRowModesModel((oldModel) => ({
       ...oldModel,
@@ -137,6 +146,7 @@ export default function UserTable() {
   const canRead = hasAdminRead(userInfo)
   // Roles this admin may assign; also the valid option set for the role editor.
   const assignableRoles = selectableRoles(userInfo.role)
+  const showIdpSelector = CONFIG.IDP_ENABLED && hasUnscopedRead(userInfo)
   useEffect(() => {
     if (userInfo.role && !canRead) {
       navigate(Routes.ROOT, { replace: true })
@@ -290,21 +300,67 @@ export default function UserTable() {
     const curRowUserId = updatedRow.userid
     if (newRow.isNew) {
       try {
-        const res = await axiosInstance.post('/users', {
+        const idpValue = newRow.identity_provider
+        const body = {
           email: updatedRow.email,
           fullname: updatedRow.fullname,
           role: updatedRow.role,
-        })
-        newRow = res.data.data
-        updatedRow.userid = newRow.userid
+          ...(showIdpSelector &&
+            (idpValue === 'okta' || idpValue === 'entra') && {
+              identity_provider: idpValue,
+            }),
+        }
+
+        const res = await axiosInstance.post('/users', body)
+        const createdUser = res.data.data
+        updatedRow.userid = createdUser.userid
+
+        const opdivIdsToGrant = (newRow.opdivs as number[] | undefined) ?? []
+        const grantResults = await Promise.allSettled(
+          opdivIdsToGrant.map((opdivId) =>
+            grantOpDiv(createdUser.userid, opdivId)
+          )
+        )
+
+        if (
+          grantResults.some(
+            (r) => r.status === 'rejected' && isAuthHandled(r.reason)
+          )
+        ) {
+          return updatedRow
+        }
+
+        const succeededIds = opdivIdsToGrant.filter(
+          (_, i) => grantResults[i].status === 'fulfilled'
+        )
+        setUserOpDivMap((prev) => ({
+          ...prev,
+          [createdUser.userid]: succeededIds,
+        }))
+        updatedRow.assignedopdivids = succeededIds
+
+        if (opdivIdsToGrant.length > 0) {
+          // Backend recomputes identity_provider after OpDiv grants — leave blank
+          // until refreshUserRow returns the authoritative value.
+          refreshUserRow(createdUser.userid)
+        } else {
+          updatedRow.identity_provider = createdUser.identity_provider ?? ''
+        }
+
         apiRef.current.updateRows([{ userid: curRowUserId, _action: 'delete' }])
         apiRef.current.updateRows([updatedRow])
-        setSnackBarSeverity('success')
-        setSnackBarText(STATUS_MESSAGES.saved)
+
+        const failCount = opdivIdsToGrant.length - succeededIds.length
+        setSnackBarSeverity(failCount > 0 ? 'warning' : 'success')
+        setSnackBarText(
+          failCount > 0
+            ? `User created, but ${failCount} OpDiv grant(s) failed. Use Assign OpDivs to retry.`
+            : STATUS_MESSAGES.saved
+        )
         setOpen(true)
       } catch (error) {
         if (isAuthHandled(error)) return updatedRow
-        console.error('Error updating score:', error)
+        console.error('Error creating user:', error)
         setSaveError(error)
       }
     } else {
@@ -319,6 +375,7 @@ export default function UserTable() {
         setOpen(true)
       } catch (error) {
         if (isAuthHandled(error)) return updatedRow
+        console.error('Error saving user:', error)
         setSaveError(error)
       }
     }
@@ -553,6 +610,10 @@ export default function UserTable() {
       flex: 1,
       sortable: false,
       filterable: false,
+      editable: isAdmin,
+      renderEditCell: (params) => (
+        <EditOpDivCell {...params} opdivOptions={opdivOptions} />
+      ),
       renderCell: (params) => {
         // Refresh override (post grant-modal) wins; otherwise use the grants the
         // list returned inline on the row.
@@ -578,11 +639,13 @@ export default function UserTable() {
       field: 'identity_provider',
       headerName: 'IdP',
       flex: 0.5,
-      editable: false,
-      // Display-only. The backend derives this from the user's OpDiv, with an
-      // OWNER-only override handled server-side; the UI never sends it. Show
-      // the resolved value, or '—' until the backend has populated it.
-      valueGetter: (params) => params.row.identity_provider ?? '—',
+      editable: showIdpSelector,
+      type: 'singleSelect',
+      valueOptions: ['okta', 'entra'],
+      // renderCell controls view-mode display; shows '—' for unset values.
+      // HHS-wide admins can set this on new rows; for existing rows the backend
+      // derives it from OpDiv membership.
+      renderCell: (params) => params.row.identity_provider || '—',
     },
     {
       field: 'actions',
@@ -710,17 +773,28 @@ export default function UserTable() {
           rows={rows}
           apiRef={apiRef}
           columns={columns}
-          // Don't let an admin edit a role they can't assign: if a row's
-          // current role is above this admin's tier, lock the role cell so it
-          // can't be blanked or downgraded on save. New rows (blank role,
-          // mid-create) stay editable - valueOptions already limits the choices
-          // to the admin's assignable set. The server enforces this too.
-          isCellEditable={(params) =>
-            params.field !== 'role' ||
-            params.row.isNew ||
-            !params.row.role ||
-            assignableRoles.includes(params.row.role)
-          }
+          // Cell-level edit gates (defense-in-depth; server enforces the same rules):
+          // - role: locked on existing rows whose current role is outside this
+          //   admin's assignable tier, preventing unauthorized role changes.
+          // - opdivs / identity_provider: locked to new rows only — existing
+          //   users' OpDiv memberships and derived IdP are managed via the
+          //   Assign OpDivs action, not inline editing.
+          isCellEditable={(params) => {
+            if (params.field === 'role') {
+              return (
+                params.row.isNew ||
+                !params.row.role ||
+                assignableRoles.includes(params.row.role)
+              )
+            }
+            if (
+              params.field === 'opdivs' ||
+              params.field === 'identity_provider'
+            ) {
+              return !!params.row.isNew
+            }
+            return true
+          }}
           editMode="row"
           getRowId={(row) => row.userid}
           initialState={{
