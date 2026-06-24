@@ -57,6 +57,17 @@ export const CONFIRMATION_MESSAGE_QUESTION =
   'Your changes will not be saved! Are you sure you want to leave question without saving your changes?'
 
 /**
+ * Pillars hidden on the questionnaire for SaaS systems. Names must match the API's
+ * `question.pillar.pillar` value exactly.
+ */
+export const SAAS_EXCLUDED_PILLARS = ['Devices', 'Applications'] as const
+
+// If we wanted to filter out some pillars for other environments, we could add them here.
+// For now, only SaaS triggers any filtering.
+
+// ---------
+
+/**
  * The fixed order for pillars on the questionnaire, no matter what order the
  * API returns them in. Each name has to match the API's
  * `question.pillar.pillar` value exactly (same keys as {@link PILLAR_FUNCTION_MAP}).
