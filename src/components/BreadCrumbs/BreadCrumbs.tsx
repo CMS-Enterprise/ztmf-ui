@@ -69,10 +69,10 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
     )
   })
 
-  // On the dashboard the path is empty, so show "Home / Dashboard" explicitly.
+  // On the dashboard, show just "Dashboard" (no Home prefix). Elsewhere the
+  // trail starts at Home and then walks the path.
   const trail = isHome
     ? [
-        home,
         <Typography
           key="dashboard"
           sx={{ fontSize: 12, fontWeight: 500, color: colors.neutral500 }}
@@ -85,7 +85,16 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
   return (
     <Breadcrumbs
       aria-label="breadcrumb"
-      sx={{ '& .MuiBreadcrumbs-separator': { mx: 0.75 } }}
+      sx={{
+        // The global stylesheet stacks list items; force a single horizontal
+        // row so the trail and its separators read left to right.
+        '& .MuiBreadcrumbs-ol': {
+          flexDirection: 'row',
+          flexWrap: 'nowrap',
+          alignItems: 'center',
+        },
+        '& .MuiBreadcrumbs-separator': { mx: 0.75 },
+      }}
       separator={
         <Typography
           component="span"
