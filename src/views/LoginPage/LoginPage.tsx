@@ -1,7 +1,7 @@
 import { useState, useRef, type FormEvent, type ChangeEvent } from 'react'
-import { Box, TextField, Typography } from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
+import { Box, TextField, Typography, Button } from '@mui/material'
 import { Navigate, useLocation, useRouteLoaderData } from 'react-router-dom'
+import { colors } from '@/theme/tokens'
 import CONFIG from '@/utils/config'
 import { RouteIds, Routes } from '@/router/constants'
 import { lookupIdpForEmail } from '@/utils/authLookup'
@@ -104,9 +104,16 @@ function LegacyOktaLogin({ sessionMessage }: { sessionMessage: string }) {
   return (
     <LoginShell>
       {sessionMessage && <SessionMessage text={sessionMessage} />}
-      <CmsButton href="/login" size="big">
+      <Button
+        component="a"
+        href="/login"
+        variant="contained"
+        color="primary"
+        size="large"
+        fullWidth
+      >
         Sign in
-      </CmsButton>
+      </Button>
     </LoginShell>
   )
 }
@@ -191,9 +198,17 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
           }}
           InputLabelProps={{ sx: { marginTop: 0 } }}
         />
-        <CmsButton type="submit" disabled={!canSubmit} aria-busy={isSubmitting}>
+        <Button
+          type="submit"
+          variant="contained"
+          color="primary"
+          size="large"
+          fullWidth
+          disabled={!canSubmit}
+          aria-busy={isSubmitting}
+        >
           {isSubmitting ? 'Checking...' : 'Continue'}
-        </CmsButton>
+        </Button>
         {lookupError && (
           <Typography
             id="login-lookup-error"
@@ -210,38 +225,102 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
 }
 
 /**
- * Shared outer layout for both the legacy and IdP-lookup variants. Pure
- * presentational shell so the two flows stay visually consistent.
+ * Shared outer layout for both the legacy and IdP-lookup variants. A two-panel
+ * card: a gradient brand panel on the left (decorative, hidden on small
+ * screens) and the sign-in content on the right. Pure presentational shell so
+ * the flows stay visually consistent.
  */
 function LoginShell({ children }: { children: React.ReactNode }) {
   return (
     <Box
-      flex={1}
       sx={{
         display: 'flex',
         justifyContent: 'center',
         alignItems: 'center',
-        minHeight: '54vh',
+        minHeight: '70vh',
+        py: 6,
       }}
     >
       <Box
         sx={{
-          display: 'flex',
-          flexDirection: 'column',
-          alignItems: 'center',
-          gap: 2.5,
-          maxWidth: 520,
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr 440px' },
           width: '100%',
-          textAlign: 'center',
-          px: 2,
+          maxWidth: 960,
+          minHeight: 540,
+          borderRadius: 2,
+          overflow: 'hidden',
+          border: `1px solid ${colors.neutral200}`,
+          boxShadow:
+            '0 1px 3px rgba(14,18,24,0.08), 0 8px 24px rgba(14,18,24,0.04)',
+          backgroundColor: colors.white,
         }}
       >
-        <img
-          src={ztmfLogo}
-          alt="ZTMF - Zero Trust Maturity Framework Scoring Tool"
-          style={{ width: 540, maxWidth: '100%', height: 'auto' }}
-        />
-        {children}
+        {/* left: brand panel */}
+        <Box
+          sx={{
+            display: { xs: 'none', md: 'flex' },
+            flexDirection: 'column',
+            justifyContent: 'center',
+            gap: 3,
+            p: 10,
+            color: colors.white,
+            background: `linear-gradient(135deg, ${colors.ink900} 0%, ${colors.primary} 100%)`,
+          }}
+        >
+          <Typography
+            sx={{
+              fontSize: 11,
+              fontWeight: 600,
+              letterSpacing: '0.18em',
+              textTransform: 'uppercase',
+              color: '#B9C7E6',
+            }}
+          >
+            Zero Trust Maturity Framework
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: 32,
+              fontWeight: 800,
+              lineHeight: 1.15,
+              letterSpacing: '-0.02em',
+            }}
+          >
+            Track your agency&apos;s zero-trust posture with confidence.
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: 14,
+              lineHeight: 1.55,
+              color: '#B9C7E6',
+              maxWidth: 380,
+            }}
+          >
+            A scoring tool used by CMS OpDivs to measure, compare, and report on
+            the seven pillars of the federal zero-trust architecture.
+          </Typography>
+        </Box>
+
+        {/* right: sign-in content */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexDirection: 'column',
+            justifyContent: 'center',
+            alignItems: 'center',
+            textAlign: 'center',
+            gap: 2.5,
+            p: { xs: 6, md: 10 },
+          }}
+        >
+          <img
+            src={ztmfLogo}
+            alt="ZTMF - Zero Trust Maturity Framework Scoring Tool"
+            style={{ width: 240, maxWidth: '100%', height: 'auto' }}
+          />
+          {children}
+        </Box>
       </Box>
     </Box>
   )

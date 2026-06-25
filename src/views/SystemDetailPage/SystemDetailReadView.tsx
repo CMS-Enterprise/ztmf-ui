@@ -10,6 +10,7 @@ import {
 import { FismaSystemType } from '@/types'
 import { SDL_SYNC_DESCRIPTION_ON, SDL_SYNC_DESCRIPTION_OFF } from '@/constants'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
+import StatusChip from '@/components/ds/StatusChip'
 
 interface SystemDetailReadViewProps {
   system: FismaSystemType
@@ -28,7 +29,7 @@ function FieldDisplay({
       <Typography variant="caption" color="text.secondary">
         {label}
       </Typography>
-      <Typography variant="body1">{value || '—'}</Typography>
+      <Typography variant="body1">{value || '-'}</Typography>
     </Box>
   )
 }
@@ -61,9 +62,9 @@ export default function SystemDetailReadView({
             titleTypographyProps={{ variant: 'h6' }}
             action={
               system.decommissioned ? (
-                <Chip label="Decommissioned" color="error" size="small" />
+                <StatusChip label="Decommissioned" kind="neutral" />
               ) : (
-                <Chip label="Active" color="success" size="small" />
+                <StatusChip label="Active" kind="active" />
               )
             }
             sx={{ pb: 0 }}

@@ -29,7 +29,7 @@ function FieldDisplay({
         {label}
       </Typography>
       <Typography variant="body1" sx={{ wordBreak: 'break-word' }}>
-        {value || '—'}
+        {value || '-'}
       </Typography>
     </Box>
   )
@@ -171,7 +171,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
 
   return (
     <Grid container spacing={3}>
-      {/* Row 1: Identity, Status, Organization — 3 across on md+ */}
+      {/* Row 1: Identity, Status, Organization - 3 across on md+ */}
       <Grid item xs={12} md={5}>
         <Card variant="outlined" sx={{ height: '100%' }}>
           <CardHeader
@@ -219,7 +219,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
                 variant="body1"
                 sx={atoColor ? { color: atoColor } : undefined}
               >
-                {formatDate(cfacts.ato_expiration_date) || '—'}
+                {formatDate(cfacts.ato_expiration_date) || '-'}
               </Typography>
             </Box>
             {cfacts.decommission_date && (
@@ -247,7 +247,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
         </Card>
       </Grid>
 
-      {/* Row 2: Contacts — full width, fields horizontal */}
+      {/* Row 2: Contacts - full width, fields horizontal */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader

@@ -6,7 +6,8 @@ import ListItemButton from '@mui/material/ListItemButton'
 import ListItemText from '@mui/material/ListItemText'
 import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
-import { Button as CmsButton, ChoiceList, Spinner } from '@cmsgov/design-system'
+import { ChoiceList, Spinner } from '@cmsgov/design-system'
+import { colors } from '@/theme/tokens'
 import Grid from '@mui/material/Grid'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -522,7 +523,7 @@ export default function QuestionnarePage() {
                   <ul>
                     <ListSubheader
                       sx={{
-                        backgroundColor: '#07124d',
+                        backgroundColor: colors.ink900,
                         color: 'white',
                         textAlign: 'center',
                       }}
@@ -645,7 +646,7 @@ export default function QuestionnarePage() {
                     justifyContent={'space-between'}
                     sx={{ mt: 1 }}
                   >
-                    <CmsButton
+                    <Button
                       onClick={() => {
                         if (
                           !isReadOnly &&
@@ -675,14 +676,17 @@ export default function QuestionnarePage() {
                           setSelectedIndex(id)
                         }
                       }}
+                      variant="outlined"
                       color="primary"
                       disabled={selectedIndex === stepFunctionId[0]}
-                      style={{ marginBottom: '8px', marginTop: '8px' }}
+                      sx={{ my: 1 }}
                     >
                       <ArrowIcon direction="left" />
                       {` Back`}
-                    </CmsButton>
-                    <CmsButton
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="primary"
                       onClick={() => {
                         const id =
                           selectedIndex ===
@@ -719,7 +723,7 @@ export default function QuestionnarePage() {
                         </Typography>
                       )}
                       {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
-                    </CmsButton>
+                    </Button>
                   </Box>
                   <LastEditedFooter
                     lastEditedAt={

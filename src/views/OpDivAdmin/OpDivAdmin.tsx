@@ -14,7 +14,6 @@ import {
   FormControlLabel,
   Switch,
   TextField,
-  Typography,
 } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import CustomDialogTitle from '@/components/DialogTitle/CustomDialogTitle'
@@ -27,6 +26,9 @@ import {
 } from '@mui/x-data-grid'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import PageHeader from '@/components/ds/PageHeader'
+import StatusChip, { CodeBadge } from '@/components/ds/StatusChip'
+import { colors } from '@/theme/tokens'
 import { useContextProp } from '../Title/Context'
 import { Routes } from '@/router/constants'
 import {
@@ -45,18 +47,10 @@ const NAME_MAX = 128
 type FormState = { code: string; name: string; is_parent: boolean }
 const EMPTY_FORM: FormState = { code: '', name: '', is_parent: false }
 
-function CreateToolbar({ onCreate }: { onCreate: () => void }) {
+function SearchToolbar() {
   return (
-    <GridToolbarContainer sx={{ justifyContent: 'space-between' }}>
+    <GridToolbarContainer sx={{ justifyContent: 'flex-start' }}>
       <GridToolbarQuickFilter debounceMs={250} />
-      <Button
-        color="primary"
-        startIcon={<AddIcon />}
-        onClick={onCreate}
-        sx={{ color: '#5666b8' }}
-      >
-        Create OpDiv
-      </Button>
     </GridToolbarContainer>
   )
 }
@@ -182,7 +176,14 @@ export default function OpDivAdmin() {
 
   const columns: GridColDef[] = useMemo(
     () => [
-      { field: 'code', headerName: 'Code', flex: 0.6 },
+      {
+        field: 'code',
+        headerName: 'Code',
+        flex: 0.6,
+        renderCell: (params) => (
+          <CodeBadge code={params.row.code} muted={!params.row.active} />
+        ),
+      },
       { field: 'name', headerName: 'Name', flex: 1.4 },
       {
         field: 'is_parent',
@@ -195,6 +196,12 @@ export default function OpDivAdmin() {
         headerName: 'Status',
         flex: 0.5,
         valueGetter: (params) => (params.row.active ? 'Active' : 'Inactive'),
+        renderCell: (params) =>
+          params.row.active ? (
+            <StatusChip label="Active" kind="active" />
+          ) : (
+            <StatusChip label="Deactivated" kind="neutral" />
+          ),
       },
       {
         field: 'actions',
@@ -239,11 +246,21 @@ export default function OpDivAdmin() {
   if (!isOwner) return null
 
   return (
-    <>
-      <BreadCrumbs />
-      <Typography variant="h3" sx={{ mb: 2 }}>
-        Manage OpDivs
-      </Typography>
+    <Box sx={{ py: 4 }}>
+      <PageHeader
+        title="Manage OpDivs"
+        breadcrumbs={<BreadCrumbs />}
+        actions={
+          <Button
+            variant="contained"
+            color="primary"
+            startIcon={<AddIcon />}
+            onClick={openCreate}
+          >
+            Create OpDiv
+          </Button>
+        }
+      />
       <Box sx={{ height: 600, width: '100%', mb: 2 }}>
         <DataGrid
           aria-label="Operating Divisions"
@@ -253,16 +270,12 @@ export default function OpDivAdmin() {
           initialState={{
             sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },
           }}
-          slots={{ toolbar: CreateToolbar }}
-          slotProps={{ toolbar: { onCreate: openCreate } }}
+          slots={{ toolbar: SearchToolbar }}
           disableColumnSelector
           sx={{
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: '#004297',
-              color: '#fff',
-            },
-            '& .MuiDataGrid-sortIcon': { color: '#fff' },
-            '& .MuiDataGrid-menuIconButton': { color: '#fff' },
+            border: `1px solid ${colors.neutral200}`,
+            borderRadius: 2.5,
+            backgroundColor: colors.white,
           }}
         />
       </Box>
@@ -341,6 +354,6 @@ export default function OpDivAdmin() {
         confirmClick={handleConfirmToggle}
         confirmLabel={pendingToggle?.active ? 'Deactivate' : 'Reactivate'}
       />
-    </>
+    </Box>
   )
 }

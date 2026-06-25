@@ -24,7 +24,7 @@ import {
   GridToolbarQuickFilter,
   useGridApiRef,
 } from '@mui/x-data-grid'
-import { Chip, FormControlLabel, Switch, Typography } from '@mui/material'
+import { FormControlLabel, Switch, Typography } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
@@ -35,6 +35,7 @@ import {
   hasAdminRead,
   isOpDivTier,
   selectableRoles,
+  roleLabel,
 } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs } from '@/utils/userOpdivs'
@@ -50,6 +51,9 @@ import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ds/PageHeader'
+import { CodeBadge } from '@/components/ds/StatusChip'
+import { colors } from '@/theme/tokens'
 interface EditToolbarProps {
   setRows: (newRows: (oldRows: GridRowsProp) => GridRowsProp) => void
   setRowModesModel: (
@@ -80,14 +84,14 @@ function EditToolbar(props: EditToolbarProps) {
         debounceMs={250}
         sx={{
           '& .MuiInputBase-input::placeholder': {
-            color: '#404040',
+            color: colors.neutral500,
             opacity: 0.8,
           },
           '& .MuiInputBase-root:after': {
-            borderBottomColor: '#5666b8',
+            borderBottomColor: colors.primary,
           },
           '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: '#5666b8',
+            borderBottomColor: colors.primary,
           },
         }}
       />
@@ -97,26 +101,18 @@ function EditToolbar(props: EditToolbarProps) {
             <Switch
               checked={showDeleted}
               onChange={(e) => setShowDeleted(e.target.checked)}
-              sx={{
-                '& .MuiSwitch-switchBase.Mui-checked': {
-                  color: '#004297',
-                },
-                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                  backgroundColor: '#004297',
-                },
-              }}
             />
           }
-          label="Show Deleted"
+          label="Show deleted"
         />
         {isAdmin && !showDeleted && (
           <Button
+            variant="contained"
             color="primary"
             startIcon={<AddIcon />}
             onClick={addUserRow}
-            sx={{ color: '#5666b8' }}
           >
-            Add User
+            Add user
           </Button>
         )}
       </Box>
@@ -544,8 +540,13 @@ export default function UserTable() {
       flex: 1,
       editable: isAdmin,
       // Native DataGrid dropdown, scoped to the roles this admin may assign.
+      // Options carry the raw enum as the stored value and a humanized label
+      // for display, so the table never surfaces a database constant.
       type: 'singleSelect',
-      valueOptions: assignableRoles,
+      valueOptions: assignableRoles.map((r) => ({
+        value: r,
+        label: roleLabel(r),
+      })),
     },
     {
       field: 'opdivs',
@@ -561,14 +562,14 @@ export default function UserTable() {
         if (!ids.length) {
           return (
             <Typography variant="body2" color="text.secondary">
-              —
+              -
             </Typography>
           )
         }
         return (
           <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', py: 0.5 }}>
             {ids.map((id) => (
-              <Chip key={id} size="small" label={opdivCodeMap[id] ?? id} />
+              <CodeBadge key={id} code={String(opdivCodeMap[id] ?? id)} />
             ))}
           </Box>
         )
@@ -581,8 +582,14 @@ export default function UserTable() {
       editable: false,
       // Display-only. The backend derives this from the user's OpDiv, with an
       // OWNER-only override handled server-side; the UI never sends it. Show
-      // the resolved value, or '—' until the backend has populated it.
-      valueGetter: (params) => params.row.identity_provider ?? '—',
+      // the resolved value with proper-noun casing (Okta / Entra), or a dash
+      // until the backend has populated it.
+      valueGetter: (params) => {
+        const idp = params.row.identity_provider
+        if (idp === 'okta') return 'Okta'
+        if (idp === 'entra') return 'Entra'
+        return idp ?? '-'
+      },
     },
     {
       field: 'actions',
@@ -690,8 +697,8 @@ export default function UserTable() {
   ]
 
   return (
-    <>
-      <BreadCrumbs />
+    <Box sx={{ py: 4 }}>
+      <PageHeader title="Users" breadcrumbs={<BreadCrumbs />} />
       <Box
         sx={{
           height: 600,
@@ -754,22 +761,9 @@ export default function UserTable() {
           }}
           disableColumnSelector
           sx={{
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: '#004297',
-              color: '#fff',
-            },
-            '& .MuiDataGrid-menuIconButton': {
-              color: '#fff',
-            },
-            '& .MuiDataGrid-menuIcon': {
-              color: '#fff',
-            },
-            '& .MuiDataGrid-sortIcon': {
-              color: '#fff',
-            },
-            // '& .MuiFormControl-root.MuiTextField-root': {
-            //   mt: 0,
-            // },
+            border: `1px solid ${colors.neutral200}`,
+            borderRadius: 2.5,
+            backgroundColor: colors.white,
             '& .MuiTablePagination-selectLabel': {
               mb: 2,
             },
@@ -825,6 +819,6 @@ export default function UserTable() {
         confirmClick={handleConfirmRestore}
         confirmLabel="Restore"
       />
-    </>
+    </Box>
   )
 }

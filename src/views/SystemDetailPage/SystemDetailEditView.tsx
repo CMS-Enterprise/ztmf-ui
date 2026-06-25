@@ -10,8 +10,8 @@ import {
   Checkbox,
   Typography,
   Chip,
+  Button,
 } from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
 import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
@@ -82,7 +82,7 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
         select
         required={field.required}
         label={field.label}
-        variant="standard"
+        variant="outlined"
         value={editedSystem[field.key] || ''}
         fullWidth
         error={!formValid[field.key]}
@@ -109,7 +109,7 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
       required={field.required}
       fullWidth
       margin="normal"
-      variant="standard"
+      variant="outlined"
       value={editedSystem[field.key] ?? ''}
       error={field.required && !formValid[field.key]}
       helperText={
@@ -351,19 +351,22 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                     </Box>
                   )}
                   <Box sx={{ display: 'flex', gap: 1, mt: '4px' }}>
-                    <CmsButton
+                    <Button
+                      variant="outlined"
+                      color="primary"
                       size="small"
                       onClick={() => onShowDecommissionForm(true)}
                     >
-                      Edit Decommission Details
-                    </CmsButton>
-                    <CmsButton
-                      variation="solid"
+                      Edit decommission details
+                    </Button>
+                    <Button
+                      variant="contained"
+                      color="primary"
                       size="small"
                       onClick={() => onShowReactivateForm(true)}
                     >
-                      Reactivate System
-                    </CmsButton>
+                      Reactivate system
+                    </Button>
                   </Box>
                 </>
               )}
@@ -371,8 +374,9 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                 <Box sx={{ mt: 1 }}>
                   <DecommissionDateNotesForm {...props} />
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <CmsButton
-                      variation="solid"
+                    <Button
+                      variant="contained"
+                      color="primary"
                       size="small"
                       onClick={() => {
                         if (validateDecommissionDate(decommissionDate)) {
@@ -381,13 +385,15 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                       }}
                     >
                       Update
-                    </CmsButton>
-                    <CmsButton
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="primary"
                       size="small"
                       onClick={() => onShowDecommissionForm(false)}
                     >
                       Cancel
-                    </CmsButton>
+                    </Button>
                   </Box>
                 </Box>
               )}
@@ -395,19 +401,22 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                 <Box sx={{ mt: 1 }}>
                   <ReactivateNotesForm {...props} />
                   <Box sx={{ display: 'flex', gap: 1 }}>
-                    <CmsButton
-                      variation="solid"
+                    <Button
+                      variant="contained"
+                      color="primary"
                       size="small"
                       onClick={onReactivateRequest}
                     >
                       Reactivate
-                    </CmsButton>
-                    <CmsButton
+                    </Button>
+                    <Button
+                      variant="outlined"
+                      color="primary"
                       size="small"
                       onClick={() => onShowReactivateForm(false)}
                     >
                       Cancel
-                    </CmsButton>
+                    </Button>
                   </Box>
                 </Box>
               )}
@@ -441,20 +450,18 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               {showDecommissionForm && (
                 <Box sx={{ ml: 4, mt: 1 }}>
                   <DecommissionDateNotesForm {...props} />
-                  <CmsButton
-                    variation="solid"
+                  <Button
+                    variant="contained"
+                    color="error"
                     onClick={() => {
                       if (validateDecommissionDate(decommissionDate)) {
                         onDecommissionRequest()
                       }
                     }}
-                    style={{
-                      marginTop: '12px',
-                      backgroundColor: '#d32f2f',
-                    }}
+                    sx={{ mt: 3 }}
                   >
                     Decommission
-                  </CmsButton>
+                  </Button>
                 </Box>
               )}
             </CardContent>
