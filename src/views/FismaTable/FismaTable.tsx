@@ -1,264 +1,249 @@
-import { FismaSystemType } from '@/types'
 import {
   DataGrid,
   GridColDef,
-  GridFooterContainer,
-  GridSlotsComponentsProps,
   GridRenderCellParams,
   GridActionsCellItem,
-  GridToolbarQuickFilter,
-  GridFooter,
-  GridRowId,
-  useGridApiRef,
-  GridRowParams,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
-import { Box, IconButton } from '@mui/material'
-import { useState } from 'react'
-import FormControlLabel from '@mui/material/FormControlLabel'
-import Switch from '@mui/material/Switch'
-import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
-import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
-import CustomSnackbar from '../Snackbar/Snackbar'
-import axiosInstance from '@/axiosConfig'
-import { useContextProp } from '../Title/Context'
+import {
+  Box,
+  InputBase,
+  TextField,
+  MenuItem,
+  Typography,
+  FormControlLabel,
+  Switch,
+} from '@mui/material'
+import { useEffect, useMemo, useState } from 'react'
+import SearchIcon from '@mui/icons-material/Search'
 import { useNavigate, Link } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
-import { ERROR_MESSAGES } from '../../constants'
-import { isAuthHandled } from '@/utils/notify'
+import { useContextProp } from '../Title/Context'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import BarChartIcon from '@mui/icons-material/BarChart'
-// import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { FismaTableProps } from '@/types'
-import type { SystemScoreEntry } from '@/types'
+import type { OpDiv } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
+import { fetchOpDivs } from '@/utils/opdivs'
 import ScoreDisplay from '@/components/ds/ScoreDisplay'
+import { CodeBadge, StatusChip } from '@/components/ds/StatusChip'
 import { colors } from '@/theme/tokens'
-type selectedRowsType = GridRowId[]
-declare module '@mui/x-data-grid' {
-  interface FooterPropsOverrides {
-    selectedRows: selectedRowsType
-    fismaSystems: FismaSystemType[]
-    activeDataCallId: number
-    scores: Record<number, SystemScoreEntry>
-  }
-}
 
-export function CustomFooterSaveComponent(
-  props: NonNullable<GridSlotsComponentsProps['footer']>
-) {
-  const [openSnackbar, setOpenSnackbar] = useState<boolean>(false)
-  const [snackBarSeverity, setSnackBarSeverity] = useState<
-    'success' | 'error' | 'warning' | 'info'
-  >('error')
-  const [errorMessage, setErrorMessage] = useState<string>('')
-  const handleCloseSnackbar = () => {
-    setOpenSnackbar(false)
-  }
-  const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${props.activeDataCallId}/export`
-    if (props.selectedRows && props.selectedRows.length > 0) {
-      exportUrl += '?'
-      let idString: string = ''
-      props.selectedRows.forEach((id, index) => {
-        idString += 'fsids=' + id
-        if (props.selectedRows && index < props.selectedRows.length - 1) {
-          idString += '&'
-        }
-      })
-      exportUrl += idString
-    }
-    try {
-      const response = await axiosInstance.get(exportUrl, {
-        responseType: 'blob',
-      })
-      const [, filename] =
-        response.headers['content-disposition'].split('filename=')
-      const contentType = response.headers['content-type']
-      const data = new Blob([response.data], {
-        type: typeof contentType === 'string' ? contentType : undefined,
-      })
-      const url = window.URL.createObjectURL(data)
-      const tempLink = document.createElement('a')
-      tempLink.href = url
-      tempLink.setAttribute('download', filename)
-      tempLink.setAttribute('target', '_blank')
-      tempLink.click()
-      window.URL.revokeObjectURL(url)
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      setErrorMessage(ERROR_MESSAGES.tryAgain)
-      setSnackBarSeverity('warning')
-      setOpenSnackbar(true)
-    }
-  }
-  return (
-    <>
-      <GridFooterContainer>
-        <Box
-          sx={{
-            display: 'flex',
-            justifyContent: 'flex-end',
-            alignItems: 'center',
-            gap: 1,
-            ml: 1,
-            position: 'relative',
-          }}
-        >
-          <Tooltip title="Download selected system answers">
-            <span role="presentation">
-              <IconButton
-                sx={{ color: 'primary.main' }}
-                onClick={saveSystemAnswers}
-                disabled={
-                  !props.selectedRows || props.selectedRows.length === 0
-                }
-                aria-label={`Download selected system answers${props.selectedRows && props.selectedRows.length > 0 ? ` (${props.selectedRows.length} selected)` : ' (no systems selected)'}`}
-              >
-                <FileDownloadSharpIcon />
-              </IconButton>
-            </span>
-          </Tooltip>
-          <span
-            role="status"
-            aria-live="polite"
-            style={{
-              position: 'absolute',
-              width: 1,
-              height: 1,
-              overflow: 'hidden',
-              clip: 'rect(0, 0, 0, 0)',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {props.selectedRows && props.selectedRows.length > 0
-              ? `${props.selectedRows.length} system${props.selectedRows.length === 1 ? '' : 's'} selected. Download button available.`
-              : ''}
-          </span>
-        </Box>
-        <GridFooter />
-      </GridFooterContainer>
-      <CustomSnackbar
-        open={openSnackbar}
-        handleClose={handleCloseSnackbar}
-        severity={snackBarSeverity}
-        text={errorMessage}
-        duration={4000}
-      />
-    </>
-  )
-}
-
-function QuickSearchToolbar() {
-  const { showDecommissioned, setShowDecommissioned } = useContextProp()
-
+/**
+ * Card header for the systems table: the title and count on the left, with the
+ * search box, OpDiv filter and decommissioned toggle on the right.
+ */
+function TableToolbar({
+  count,
+  search,
+  setSearch,
+  opdivs,
+  opdivFilter,
+  setOpDivFilter,
+  showDecommissioned,
+  setShowDecommissioned,
+}: {
+  count: number
+  search: string
+  setSearch: (value: string) => void
+  opdivs: OpDiv[]
+  opdivFilter: number | 'all'
+  setOpDivFilter: (value: number | 'all') => void
+  showDecommissioned: boolean
+  setShowDecommissioned: (value: boolean) => void
+}) {
   return (
     <Box
       sx={{
-        py: 0.5,
-        pl: 1,
         display: 'flex',
-        justifyContent: 'space-between',
         alignItems: 'center',
+        gap: 2,
+        px: 4,
+        py: 3,
+        borderBottom: `1px solid ${colors.neutral200}`,
+        flexWrap: 'wrap',
       }}
     >
-      <GridToolbarQuickFilter
-        debounceMs={250}
+      <Typography sx={{ fontSize: 15, fontWeight: 700 }}>
+        FISMA systems
+      </Typography>
+      <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+        {count} {count === 1 ? 'system' : 'systems'}
+      </Typography>
+      <Box
         sx={{
-          '& .MuiInputBase-input::placeholder': {
-            color: colors.neutral500,
-            opacity: 0.8, // MUI reduces placeholder opacity by default
-          },
-          '& .MuiInputBase-root:after': {
-            borderBottomColor: colors.primary,
-          },
-          '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: colors.primary,
-          },
+          marginLeft: 'auto',
+          display: 'flex',
+          alignItems: 'center',
+          gap: 2,
+          flexWrap: 'wrap',
         }}
-      />
-      <FormControlLabel
-        control={
-          <Switch
-            checked={showDecommissioned}
-            onChange={(e) => setShowDecommissioned(e.target.checked)}
+      >
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1,
+            px: 1.5,
+            py: 0.5,
+            border: `1px solid ${colors.neutral200}`,
+            borderRadius: 1.5,
+          }}
+        >
+          <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
+          <InputBase
+            placeholder="Search systems"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ fontSize: 13, width: 160 }}
+            inputProps={{ 'aria-label': 'Search systems' }}
           />
-        }
-        label="Show decommissioned"
-        sx={{ mr: 2 }}
-      />
+        </Box>
+        <TextField
+          select
+          size="small"
+          value={opdivFilter}
+          onChange={(e) =>
+            setOpDivFilter(
+              e.target.value === 'all' ? 'all' : Number(e.target.value)
+            )
+          }
+          sx={{ minWidth: 130 }}
+          aria-label="Filter by OpDiv"
+        >
+          <MenuItem value="all">All OpDivs</MenuItem>
+          {opdivs.map((od) => (
+            <MenuItem key={od.opdiv_id} value={od.opdiv_id}>
+              {od.code}
+            </MenuItem>
+          ))}
+        </TextField>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showDecommissioned}
+              onChange={(e) => setShowDecommissioned(e.target.checked)}
+            />
+          }
+          label={
+            <Typography sx={{ fontSize: 13 }}>Show decommissioned</Typography>
+          }
+        />
+      </Box>
     </Box>
   )
 }
+
+/**
+ * The FISMA systems table on the dashboard. Renders the systems list with a
+ * bar+value+tier score, OpDiv badge and status chip, plus row actions to open
+ * the questionnaire, pillar scores, and system detail. Search is shared with
+ * the header box; OpDiv and decommissioned filters narrow the rows.
+ * @param {FismaTableProps} props - Component props.
+ * @param {Record<number, SystemScoreEntry>} props.scores - Score map keyed by
+ *   fismasystemid.
+ * @returns {JSX.Element} The systems table card.
+ */
 export default function FismaTable({ scores }: FismaTableProps) {
-  const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId, selectedDatacall, userInfo } =
-    useContextProp()
-  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
+  const {
+    fismaSystems,
+    userInfo,
+    showDecommissioned,
+    setShowDecommissioned,
+    dashboardSearch,
+    setDashboardSearch,
+  } = useContextProp()
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
-  const [open, setOpen] = useState<boolean>(false)
-  const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
-  const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
   const navigate = useNavigate()
-  const handleCloseModal = () => {
-    setOpen(false)
-    setSelectedRow(null)
-  }
+  const [opdivs, setOpDivs] = useState<OpDiv[]>([])
+  const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
+
+  // OpDiv reference list, for both the filter dropdown and the code badges.
+  useEffect(() => {
+    let active = true
+    fetchOpDivs(true)
+      .then((list) => {
+        if (active) setOpDivs(list)
+      })
+      .catch(() => {
+        if (active) setOpDivs([])
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  const opdivCodeMap = useMemo(() => {
+    const map: Record<number, string> = {}
+    for (const od of opdivs) map[od.opdiv_id] = od.code
+    return map
+  }, [opdivs])
+
+  const rows = useMemo(
+    () =>
+      opdivFilter === 'all'
+        ? fismaSystems
+        : fismaSystems.filter((s) => s.opdiv_id === opdivFilter),
+    [fismaSystems, opdivFilter]
+  )
+
+  const quickFilterValues = dashboardSearch.trim()
+    ? dashboardSearch.trim().split(/\s+/)
+    : []
 
   const columns: GridColDef[] = [
     {
       field: 'fismaname',
-      headerName: 'System Name',
+      headerName: 'System',
       flex: 2,
-      minWidth: 300,
-      maxWidth: 450,
+      minWidth: 240,
       hideable: false,
       renderCell: (params: GridRenderCellParams) => (
-        <Link
-          to={`/systems/${params.row.fismasystemid}`}
-          style={{
-            color: colors.primary,
-            fontWeight: 600,
-            textDecoration: 'none',
-          }}
-          onClick={(e) => e.stopPropagation()}
-        >
-          {params.value}
-        </Link>
+        <Box sx={{ py: 1 }}>
+          <Link
+            to={`/systems/${params.row.fismasystemid}`}
+            style={{
+              color: colors.ink,
+              fontWeight: 600,
+              textDecoration: 'none',
+            }}
+            onClick={(e) => e.stopPropagation()}
+          >
+            {params.row.fismaname}
+          </Link>
+          {params.row.mission && (
+            <Typography
+              sx={{ fontSize: 12, color: colors.neutral500, mt: 0.25 }}
+            >
+              {params.row.mission}
+            </Typography>
+          )}
+        </Box>
       ),
     },
     {
-      field: 'fismaacronym',
-      headerName: 'Acronym',
-      flex: 0.8,
-      minWidth: 100,
+      field: 'fismauid',
+      headerName: 'FISMA ID',
+      flex: 0.9,
+      minWidth: 110,
+      renderCell: (params) => (
+        <Typography
+          sx={{ fontFamily: 'JetBrains Mono, monospace', fontSize: 13 }}
+        >
+          {params.row.fismauid}
+        </Typography>
+      ),
     },
     {
-      field: 'issoemail',
-      headerName: 'ISSO Name',
-      flex: 1.2,
-      minWidth: 120,
-      maxWidth: 240,
-      hideable: false,
-      valueGetter: (value) => {
-        const name = value.row.issoemail.split('@')
-        const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        return fullName.length > 1
-          ? `${fullName[0]} ${fullName[1]}`
-          : fullName[0]
-      },
-      renderCell: (params) => {
-        const name = params.row.issoemail.split('@')
-        const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        let firstName = ''
-        let lastName = ''
-        if (fullName.length > 1) {
-          firstName = fullName[0][0].toUpperCase() + fullName[0].slice(1)
-          lastName = fullName[1][0].toUpperCase() + fullName[1].slice(1)
-        }
-        return fullName.length > 1 ? `${firstName} ${lastName}` : fullName[0]
-      },
+      field: 'opdiv',
+      headerName: 'OpDiv',
+      flex: 0.8,
+      minWidth: 100,
+      valueGetter: (params) =>
+        params.row.opdiv_id ? opdivCodeMap[params.row.opdiv_id] ?? '' : '',
+      renderCell: (params) =>
+        params.value ? <CodeBadge code={String(params.value)} /> : null,
     },
     {
       field: 'Score',
@@ -270,34 +255,34 @@ export default function FismaTable({ scores }: FismaTableProps) {
       hideable: false,
       valueGetter: (value) => {
         const entry = scores[value.row.fismasystemid]
-        if (!entry || !entry.score) {
-          return 0
-        }
-        return entry.score.toFixed(2)
+        return entry?.score ?? 0
       },
       renderCell: (params) => {
         const entry = scores[params.row.fismasystemid]
-        // Tier comes from the backend on /scores/aggregate; do not derive
-        // it from the numeric score. A bar + value + tier name reads as a
-        // calculated result, not an editable input, and the bar plus tier
-        // word carry meaning without relying on color alone.
         return <ScoreDisplay score={entry?.score} tier={entry?.tier} />
       },
     },
     {
-      field: 'datacenterenvironment',
-      headerName: 'Data Center Environment',
-      flex: 1.5,
-      minWidth: 180,
-      hideable: false,
+      field: 'status',
+      headerName: 'Status',
+      flex: 0.8,
+      minWidth: 110,
+      valueGetter: (params) =>
+        params.row.decommissioned ? 'Decommissioned' : 'Active',
+      renderCell: (params) =>
+        params.row.decommissioned ? (
+          <StatusChip label="Decom." kind="neutral" />
+        ) : (
+          <StatusChip label="Active" kind="active" />
+        ),
     },
     {
       field: 'actions',
       headerName: 'Actions',
-      headerAlign: 'center',
-      align: 'center',
-      width: 140,
-      minWidth: 140,
+      headerAlign: 'right',
+      align: 'right',
+      width: 130,
+      minWidth: 130,
       hideable: false,
       sortable: false,
       disableColumnMenu: true,
@@ -306,31 +291,27 @@ export default function FismaTable({ scores }: FismaTableProps) {
           <Tooltip title="Questionnaire">
             <span>
               <GridActionsCellItem
-                icon={<QuestionAnswerOutlinedIcon />}
+                icon={<QuestionAnswerOutlinedIcon fontSize="small" />}
                 key={`question-${params.row.fismasystemid}`}
                 label={`View Questionnaire for ${params.row.fismaname}`}
-                className="textPrimary"
                 role="button"
                 onClick={(event) => {
                   event.stopPropagation()
                   navigate(
                     `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
-                    {
-                      state: { fismasystemid: params.row.fismasystemid },
-                    }
+                    { state: { fismasystemid: params.row.fismasystemid } }
                   )
                 }}
                 color="inherit"
               />
             </span>
           </Tooltip>
-          <Tooltip title="Pillar Scores">
+          <Tooltip title="Pillar scores">
             <span>
               <GridActionsCellItem
-                icon={<BarChartIcon />}
+                icon={<BarChartIcon fontSize="small" />}
                 key={`chart-${params.row.fismasystemid}`}
                 label={`View Pillar Scores for ${params.row.fismaname}`}
-                className="textPrimary"
                 role="button"
                 onClick={(event) => {
                   event.stopPropagation()
@@ -341,13 +322,12 @@ export default function FismaTable({ scores }: FismaTableProps) {
             </span>
           </Tooltip>
           {hasSystemDetailAccess && (
-            <Tooltip title="System Details">
+            <Tooltip title="System details">
               <span>
                 <GridActionsCellItem
-                  icon={<VisibilityIcon />}
+                  icon={<VisibilityIcon fontSize="small" />}
                   key={`view-${params.row.fismasystemid}`}
                   label={`View system details for ${params.row.fismaname}`}
-                  className="textPrimary"
                   role="button"
                   onClick={(event) => {
                     event.stopPropagation()
@@ -364,57 +344,49 @@ export default function FismaTable({ scores }: FismaTableProps) {
   ]
 
   return (
-    <Box sx={{ height: 600, width: '100%', mb: 2 }}>
-      <DataGrid
-        rows={fismaSystems}
-        isRowSelectable={(params: GridRowParams) =>
-          params.row.fismasystemid in scores
-        }
-        columns={columns}
-        checkboxSelection
-        apiRef={apiRef}
-        getRowId={(row) => row.fismasystemid}
-        onRowSelectionModelChange={(ids) => {
-          const selectedIDs = Array.from(ids)
-          setSelectedRows(selectedIDs)
-        }}
-        slotProps={{
-          footer: { selectedRows, fismaSystems, activeDataCallId, scores },
-          filterPanel: {
-            sx: {
-              '& .MuiFormLabel-root': {
-                marginTop: 1,
-              },
+    <Box
+      sx={{
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: 2.5,
+        overflow: 'hidden',
+      }}
+    >
+      <TableToolbar
+        count={rows.length}
+        search={dashboardSearch}
+        setSearch={setDashboardSearch}
+        opdivs={opdivs}
+        opdivFilter={opdivFilter}
+        setOpDivFilter={setOpDivFilter}
+        showDecommissioned={showDecommissioned}
+        setShowDecommissioned={setShowDecommissioned}
+      />
+      <Box sx={{ height: 560, width: '100%' }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          getRowId={(row) => row.fismasystemid}
+          getRowHeight={() => 'auto'}
+          disableRowSelectionOnClick
+          disableColumnSelector
+          filterModel={{ items: [], quickFilterValues }}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 25, page: 0 } },
+          }}
+          pageSizeOptions={[25, 50, 100]}
+          sx={{
+            border: 'none',
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: colors.neutral50,
             },
-          },
-        }}
-        slots={{
-          toolbar: QuickSearchToolbar,
-          footer: CustomFooterSaveComponent,
-        }}
-        disableColumnFilter
-        disableColumnSelector
-        disableDensitySelector
-        sx={{
-          border: `1px solid ${colors.neutral200}`,
-          borderRadius: 2.5,
-          backgroundColor: colors.white,
-          '& .MuiFormControl-root.MuiTextField-root': {
-            marginTop: 0,
-          },
-          '& .MuiTablePagination-selectLabel': {
-            marginBottom: 2,
-          },
-          '& .MuiTablePagination-displayedRows': {
-            marginBottom: 2,
-          },
-        }}
-      />
-      <QuestionnareModal
-        open={open}
-        onClose={handleCloseModal}
-        system={selectedRow}
-      />
+            '& .MuiDataGrid-cell': {
+              alignItems: 'center',
+              display: 'flex',
+            },
+          }}
+        />
+      </Box>
     </Box>
   )
 }

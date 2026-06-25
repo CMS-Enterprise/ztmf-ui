@@ -41,8 +41,11 @@ const expectations: FileExpectation[] = [
     ],
   },
   {
+    // FismaTable no longer makes direct API calls: the CSV export moved to the
+    // exportSystems util (its caller, Home, delegates to isAuthHandled) and the
+    // OpDiv list is fetched via the fetchOpDivs helper. So there is no per-view
+    // catch here to delegate; just keep the auth ladders out.
     filePath: 'src/views/FismaTable/FismaTable.tsx',
-    includes: ['if (isAuthHandled(error)) return'],
     excludes: ['ERROR_MESSAGES.permission', 'Routes.SIGNIN'],
   },
   {

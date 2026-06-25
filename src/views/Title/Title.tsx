@@ -8,7 +8,6 @@ import {
 import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
-import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData, UserRole, datacall } from '@/types'
 import {
@@ -16,11 +15,11 @@ import {
   hasAdminRead as checkHasAdminRead,
   isUnscopedWriteAdmin,
 } from '@/utils/userRoles'
-import { Box } from '@mui/material'
-import IconButton from '@mui/material/IconButton'
+import { Box, InputBase, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import MoreVertIcon from '@mui/icons-material/MoreVert'
+import SearchIcon from '@mui/icons-material/Search'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import { useState, useEffect, useCallback } from 'react'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
@@ -70,6 +69,7 @@ export default function Title() {
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
+  const [dashboardSearch, setDashboardSearch] = useState<string>('')
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -164,8 +164,18 @@ export default function Title() {
   const isSystemDetail = location.pathname.startsWith('/systems/')
   const isHomeRoute = location.pathname === '/'
   const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
-  const datacallContextNeeded =
-    isHomeRoute || isQuestionnaireRoute || isSystemDetail
+  // The dashboard renders its own datacall card in-body (matching the mock),
+  // so the slim sub-bar only shows on the questionnaire and system-detail
+  // routes that still need the datacall context inline.
+  const datacallContextNeeded = isQuestionnaireRoute || isSystemDetail
+  // Initials for the account avatar, from the user's name (or email).
+  const initials =
+    (userInfo.fullname || userInfo.email || '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || 'U'
   // Primary navigation, lifted out of the kebab into a visible header row.
   // Each item keeps the same role gating the old menu used. The kebab now
   // holds only genuine actions (create/email), never navigation.
@@ -184,18 +194,9 @@ export default function Title() {
       show: userInfo.role === 'OWNER',
     },
   ].filter((item) => item.show)
-  // The kebab only appears when the user actually has an action to take.
-  // Read-only admins have nav (above) but no create/email actions, so they
-  // no longer see an empty menu.
+  // The Admin dropdown only appears when the user actually has an action to
+  // take. Read-only admins have nav but no create/email actions.
   const hasHeaderActions = isAdmin || isUnscopedWriteAdmin(userInfo)
-  // Single source of truth for header logo sizing; divider scales with it
-  // so the mark, divider, and wordmark stay vertically centered on resize.
-  const LOGO_HEIGHT = 55
-  // The logo art is vertically asymmetric: the arrow tip extends well above the
-  // letter caps, so the PNG's bounding-box center sits above the wordmark's
-  // optical center. Shift the divider + text down by ~10% of the logo height so
-  // they align to the letters rather than the box. Scales with LOGO_HEIGHT.
-  const LOGO_OPTICAL_OFFSET = Math.round(LOGO_HEIGHT * 0.1)
   return (
     <>
       <UsaBanner />
@@ -215,54 +216,18 @@ export default function Title() {
             minWidth: 800,
           }}
         >
-          {/* left: ZTMF mark + wordmark + primary nav */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          {/* left: ZTMF mark + primary nav */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+            <Link
+              to={Routes.ROOT}
+              style={{ display: 'flex', textDecoration: 'none' }}
+            >
               <img
                 src={ztmfLogo}
                 alt="ZTMF"
-                style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
+                style={{ height: 30, width: 'auto', display: 'block' }}
               />
-              <Box
-                sx={{
-                  width: '1px',
-                  height: Math.round(LOGO_HEIGHT * 0.7),
-                  backgroundColor: 'rgba(0,0,0,0.12)',
-                  flexShrink: 0,
-                  transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-                }}
-              />
-              <Box
-                sx={{
-                  lineHeight: 1.15,
-                  transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-                }}
-              >
-                <Typography
-                  sx={{
-                    fontSize: 17,
-                    fontWeight: 700,
-                    color: '#102B52',
-                    letterSpacing: '0.2px',
-                    lineHeight: 1.15,
-                  }}
-                >
-                  Zero Trust Maturity Framework
-                </Typography>
-                <Typography
-                  sx={{
-                    fontSize: 12,
-                    fontWeight: 600,
-                    color: '#7997AF',
-                    letterSpacing: '2px',
-                    textTransform: 'uppercase',
-                    lineHeight: 1.15,
-                  }}
-                >
-                  Scoring Tool
-                </Typography>
-              </Box>
-            </Box>
+            </Link>
 
             {/* primary nav tabs */}
             <Box
@@ -297,43 +262,30 @@ export default function Title() {
                   </Box>
                 </Link>
               ))}
-            </Box>
-          </Box>
-
-          {/* right: account chip (shown when logged in) */}
-          {loaderData.status == 200 && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <AccountCircleIcon fontSize={'large'} />
-              {userInfo.fullname && (
-                <span
-                  style={{ verticalAlign: '13px' }}
-                  className="ds-text-body--md"
-                >
-                  {userInfo.fullname}
-                  {idpBadge && (
-                    <Typography
-                      component="span"
-                      sx={{
-                        color: 'text.secondary',
-                        ml: 0.5,
-                        fontSize: '0.85em',
-                      }}
-                    >
-                      ({idpBadge})
-                    </Typography>
-                  )}
-                </span>
-              )}
               {hasHeaderActions && (
                 <>
-                  <IconButton
-                    aria-label="actions"
+                  <Box
+                    role="button"
                     aria-controls="actions-menu"
                     aria-haspopup="true"
                     onClick={handleClick}
+                    sx={{
+                      px: 3.5,
+                      py: 2,
+                      borderRadius: 1.5,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.neutral700,
+                      cursor: 'pointer',
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 0.5,
+                      '&:hover': { backgroundColor: colors.neutral50 },
+                    }}
                   >
-                    <MoreVertIcon />
-                  </IconButton>
+                    Admin
+                    <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+                  </Box>
                   <Menu
                     id="actions-menu"
                     anchorEl={anchorEl}
@@ -374,6 +326,59 @@ export default function Title() {
                   </Menu>
                 </>
               )}
+            </Box>
+          </Box>
+
+          {/* right: search + account avatar */}
+          {loaderData.status == 200 && (
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box
+                sx={{
+                  display: { xs: 'none', md: 'flex' },
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 1.5,
+                  py: 0.75,
+                  minWidth: 240,
+                  border: `1px solid ${colors.neutral200}`,
+                  borderRadius: 1.5,
+                  backgroundColor: '#fff',
+                }}
+              >
+                <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
+                <InputBase
+                  placeholder="Search systems, users..."
+                  value={dashboardSearch}
+                  onChange={(e) => setDashboardSearch(e.target.value)}
+                  sx={{ fontSize: 13, flex: 1, color: colors.neutral700 }}
+                  inputProps={{ 'aria-label': 'Search systems and users' }}
+                />
+              </Box>
+              <Tooltip
+                title={
+                  userInfo.fullname
+                    ? `${userInfo.fullname}${idpBadge ? ` (${idpBadge})` : ''}`
+                    : 'Account'
+                }
+              >
+                <Box
+                  sx={{
+                    width: 32,
+                    height: 32,
+                    borderRadius: '50%',
+                    backgroundColor: colors.ink900,
+                    color: '#fff',
+                    fontSize: 12,
+                    fontWeight: 700,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    flexShrink: 0,
+                  }}
+                >
+                  {initials}
+                </Box>
+              </Tooltip>
             </Box>
           )}
         </Box>
@@ -500,11 +505,14 @@ export default function Title() {
                   latestDataCallId,
                   latestDatacall,
                   latestDeadline,
+                  datacalls,
                   selectedDatacall,
                   setSelectedDatacall,
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,
+                  dashboardSearch,
+                  setDashboardSearch,
                 }}
               />
             </Box>
