@@ -24,14 +24,7 @@ import {
   useGridApiContext,
   useGridApiRef,
 } from '@mui/x-data-grid'
-import {
-  FormControlLabel,
-  Switch,
-  Typography,
-  InputBase,
-  TextField,
-  MenuItem,
-} from '@mui/material'
+import { Typography, InputBase, TextField, MenuItem } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
@@ -60,6 +53,7 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ds/PageHeader'
 import { CodeBadge, StatusChip } from '@/components/ds/StatusChip'
 import DataGridPaginationFooter from '@/components/ds/DataGridPaginationFooter'
+import CompactSwitchLabel from '@/components/ds/CompactSwitchLabel'
 import { colors, radius } from '@/theme/tokens'
 
 /** Initials taken from a full name (or email local-part) - up to 2 letters. */
@@ -566,24 +560,13 @@ function UsersToolbar({
           </MenuItem>
         ))}
       </TextField>
-      <FormControlLabel
-        sx={{
-          marginLeft: 'auto',
-          m: 0,
-          height: 30,
-          '& .MuiSwitch-root': { padding: 0, width: 32, height: 18, mr: 1 },
-          '& .MuiSwitch-switchBase': { padding: 0.25 },
-          '& .MuiSwitch-thumb': { width: 14, height: 14 },
-          '& .MuiSwitch-track': { borderRadius: 999 },
-        }}
-        control={
-          <Switch
-            checked={showDeleted}
-            onChange={(e) => setShowDeleted(e.target.checked)}
-          />
-        }
-        label={<Typography sx={{ fontSize: 13 }}>Show deactivated</Typography>}
-      />
+      <Box sx={{ marginLeft: 'auto' }}>
+        <CompactSwitchLabel
+          checked={showDeleted}
+          onChange={setShowDeleted}
+          label="Show deactivated"
+        />
+      </Box>
     </Box>
   )
 }
