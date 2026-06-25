@@ -89,7 +89,7 @@ export default function PillarScoresPage() {
           sx={{
             backgroundColor: '#fff',
             border: '1px solid #E5E8EE',
-            borderRadius: 2.5,
+            borderRadius: 1.5,
             p: 4,
           }}
         >

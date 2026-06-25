@@ -209,7 +209,7 @@ export default function Title() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+            px: { xs: 2, sm: 4, md: 8, lg: 8, xl: 8 },
             py: 1.5,
             borderBottom: '1px solid rgba(0,0,0,0.12)',
             minWidth: 800,
@@ -371,7 +371,7 @@ export default function Title() {
             display: 'flex',
             alignItems: 'center',
             justifyContent: 'space-between',
-            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+            px: { xs: 2, sm: 4, md: 8, lg: 8, xl: 8 },
             py: 1,
             backgroundColor: '#fbfbfd',
             borderBottom: '1px solid rgba(0,0,0,0.12)',
@@ -464,14 +464,14 @@ export default function Title() {
       {loaderData.serverError ? (
         <Container
           maxWidth={false}
-          sx={{ px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 }, minWidth: 800 }}
+          sx={{ px: { xs: 2, sm: 4, md: 8, lg: 8, xl: 8 }, minWidth: 800 }}
         >
           <ServerErrorPage />
         </Container>
       ) : loaderData.status !== 200 ? (
         <Container
           maxWidth={false}
-          sx={{ px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 }, minWidth: 800 }}
+          sx={{ px: { xs: 2, sm: 4, md: 8, lg: 8, xl: 8 }, minWidth: 800 }}
         >
           <LoginPage />
         </Container>
@@ -483,7 +483,7 @@ export default function Title() {
           sx={{
             backgroundColor: colors.neutral50,
             minWidth: 800,
-            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+            px: { xs: 2, sm: 4, md: 8, lg: 8, xl: 8 },
           }}
         >
           <Outlet

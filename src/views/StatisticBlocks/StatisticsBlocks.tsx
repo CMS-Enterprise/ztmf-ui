@@ -33,7 +33,7 @@ function StatCard({
         minWidth: 180,
         backgroundColor: colors.white,
         border: `1px solid ${colors.neutral200}`,
-        borderRadius: 3,
+        borderRadius: 1.5,
         p: 4,
       }}
     >
