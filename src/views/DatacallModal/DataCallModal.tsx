@@ -1,42 +1,26 @@
 import React from 'react'
-import {
-  Button as CmsButton,
-  TextField as CMSTextField,
-  SingleInputDateField,
-} from '@cmsgov/design-system'
-import {
-  Box,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  DialogActions,
-  Typography,
-  // FormControlLabel,
-  // FormControl,
-} from '@mui/material'
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
+import { Box, Button, TextField, Typography } from '@mui/material'
+import Modal from '@/components/ds/Modal'
 import { datacallModalProps } from '@/types'
-import './DatacallModal.css'
 import axiosInstance from '@/axiosConfig'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { colors } from '@/theme/tokens'
 
+/**
+ * Create-datacall modal. Renders through the shared Modal shell so it matches
+ * every other dialog (rounded, X close top-right, Cancel beside the primary
+ * action). The validation and POST behavior are unchanged from the previous
+ * CMS Design System version.
+ * @param {datacallModalProps} props - Open state and close handler.
+ * @returns {JSX.Element} The create-datacall modal.
+ */
 export default function DataCallModal({ open, onClose }: datacallModalProps) {
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
   const [deadlineError, setDeadlineError] = React.useState<string>('')
-  const datacallHint = () => {
-    return (
-      <Typography>
-        Please use the format:{' '}
-        <span>
-          FY<i>XXXX</i> Q<i>X</i>
-        </span>
-      </Typography>
-    )
-  }
+
   function isValidFormat(input: string) {
     const pattern = /^FY\d{4} Q\d$/
     if (input.length != 9) {
@@ -62,8 +46,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       setDeadlineError('Invalid Deadline')
     }
   }
-  const submitDatacall = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+  const submitDatacall = async () => {
     try {
       await axiosInstance.post(`/datacalls`, {
         datacall: datacall.toUpperCase(),
@@ -88,95 +71,68 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       notify(parsed.message, 'error', { autoHideDuration: 2500 })
     }
   }
+
+  const canSubmit =
+    datacall.length === 9 &&
+    deadline.length === 10 &&
+    datacallError.length === 0 &&
+    deadlineError.length === 0
+
   return (
-    <Dialog
+    <Modal
       open={open}
       onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      sx={{
-        '& .MuiDialog-paper': {
-          borderRadius: 0,
-          boxShadow: '3px 3px 5px',
-        },
-      }}
-    >
-      <DialogTitle id="datacall-dialog-title">
-        <Box
-          sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}
-          className={'ds-u-font-size--2xl ds-u-font-weight--bold'}
-        >
-          {'Create a datacall'}
-          <IconButton
-            size="large"
-            sx={{
-              p: 0,
-              borderRadius: 0,
-              '&:hover': {
-                backgroundColor: 'white',
-              },
-            }}
-            onClick={() => {
-              // setTimeout(() => {
-              //   resetEmailInputs()
-              // }, 200)
-              onClose()
-            }}
-          >
-            <CloseRoundedIcon
-              fontSize="large"
-              sx={{ color: 'rgb(90, 90, 90)' }}
-            />
-          </IconButton>
-        </Box>
-      </DialogTitle>
-      <form onSubmit={submitDatacall}>
-        <DialogContent sx={{ pt: 0 }}>
-          <CMSTextField
-            label="Please enter a datacall name"
-            maxLength={9}
-            hint={datacallHint()}
-            name="datacall"
-            onChange={handleDatacallChange}
-            labelClassName="datacall-label"
-            errorMessage={datacallError}
-          />
-          <SingleInputDateField
-            label="Please enter a deadline date for this datacall"
-            hint={"Please include the '/'"}
-            name="deadline-date"
-            errorMessage={deadlineError}
-            maxLength={10}
-            onBlur={validateDeadline}
-            onChange={(e) => {
-              setDeadline(e)
-            }}
-            value=""
-          />
-        </DialogContent>
-        <DialogActions
-          sx={{
-            justifyContent: 'flex-start',
-            ml: 3,
-            mb: 1,
-          }}
-        >
-          <CmsButton
-            variation="solid"
-            type="submit"
-            disabled={
-              datacall.length === 9 &&
-              deadline.length === 10 &&
-              datacallError.length === 0 &&
-              deadlineError.length === 0
-                ? false
-                : true
-            }
+      title="Create datacall"
+      size="sm"
+      disableBackdropClose
+      footer={
+        <>
+          <Button variant="text" color="inherit" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!canSubmit}
+            onClick={submitDatacall}
           >
             Create
-          </CmsButton>
-        </DialogActions>
-      </form>
-    </Dialog>
+          </Button>
+        </>
+      }
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+        <Box>
+          <TextField
+            label="Datacall name"
+            required
+            fullWidth
+            name="datacall"
+            inputProps={{ maxLength: 9 }}
+            onChange={handleDatacallChange}
+            error={!!datacallError}
+            helperText={datacallError || undefined}
+          />
+          <Typography
+            variant="caption"
+            sx={{ color: colors.neutral500, mt: 0.5, display: 'block' }}
+          >
+            Use the format FYXXXX QX, for example FY2024 Q1.
+          </Typography>
+        </Box>
+        <TextField
+          label="Deadline"
+          required
+          fullWidth
+          type="date"
+          name="deadline-date"
+          InputLabelProps={{ shrink: true }}
+          onBlur={validateDeadline}
+          onChange={(e) => setDeadline(e.target.value)}
+          error={!!deadlineError}
+          helperText={deadlineError || undefined}
+        />
+      </Box>
+    </Modal>
   )
 }
