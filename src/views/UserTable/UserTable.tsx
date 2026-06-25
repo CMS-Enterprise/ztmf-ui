@@ -1,32 +1,37 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
+import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined'
+import SearchIcon from '@mui/icons-material/Search'
 import EditIcon from '@mui/icons-material/Edit'
-import ChecklistIcon from '@mui/icons-material/Checklist'
 import DomainIcon from '@mui/icons-material/Domain'
 import SaveIcon from '@mui/icons-material/Save'
 import CancelIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import {
-  GridRowsProp,
   GridRowModesModel,
   GridRowModes,
   DataGrid,
   GridColDef,
-  GridToolbarContainer,
   GridActionsCellItem,
   GridEventListener,
   GridRowId,
   GridRowModel,
   GridRenderEditCellParams,
   GridRowEditStopReasons,
-  GridToolbarQuickFilter,
   useGridApiRef,
 } from '@mui/x-data-grid'
-import { FormControlLabel, Switch, Typography } from '@mui/material'
+import {
+  FormControlLabel,
+  Switch,
+  Typography,
+  InputBase,
+  TextField,
+  MenuItem,
+} from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
-import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
 import { users, OpDiv } from '@/types'
@@ -52,71 +57,208 @@ import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ds/PageHeader'
-import { CodeBadge } from '@/components/ds/StatusChip'
-import { colors } from '@/theme/tokens'
-interface EditToolbarProps {
-  setRows: (newRows: (oldRows: GridRowsProp) => GridRowsProp) => void
-  setRowModesModel: (
-    newModel: (oldModel: GridRowModesModel) => GridRowModesModel
-  ) => void
-  isAdmin?: boolean
+import { CodeBadge, StatusChip } from '@/components/ds/StatusChip'
+import { colors, radius } from '@/theme/tokens'
+
+/** Initials taken from a full name (or email local-part) - up to 2 letters. */
+function initialsFor(fullname: string | undefined, email: string): string {
+  const source = (fullname || email.split('@')[0] || '').trim()
+  if (!source) return 'U'
+  return (
+    source
+      .split(/\s+|[._-]/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || 'U'
+  )
+}
+
+/**
+ * Deterministic avatar background pulled from a small accessible palette,
+ * indexed by a stable hash of the userid so each user keeps the same color
+ * across renders.
+ */
+const AVATAR_PALETTE = [
+  '#0F2E6E', // ink900
+  '#A34200', // down
+  '#0F5C4C', // up
+  '#663399', // tier traditional
+  '#39414E', // neutral700
+  '#1B4DAB', // primary
+] as const
+function avatarColor(userid: string): string {
+  let h = 0
+  for (let i = 0; i < userid.length; i += 1)
+    h = (h * 31 + userid.charCodeAt(i)) | 0
+  return AVATAR_PALETTE[Math.abs(h) % AVATAR_PALETTE.length]
+}
+
+/** Short descriptor shown under the role name (matches the redesign mock). */
+const ROLE_DESCRIPTOR: Record<string, string> = {
+  OWNER: 'Unscoped - write',
+  HHS_ADMIN: 'Unscoped - write',
+  HHS_READONLY_ADMIN: 'Unscoped - read',
+  OPDIV_ADMIN: 'OpDiv-scoped - write',
+  OPDIV_READONLY_ADMIN: 'OpDiv-scoped - read',
+  ISSO: 'System-scoped',
+  ISSM: 'System-scoped',
+  ADMIN: 'Unscoped - write',
+  READONLY_ADMIN: 'Unscoped - read',
+}
+
+/** Resolves the status pill kind/label from a user record. */
+function userStatus(row: { deleted?: boolean; identity_provider?: string }): {
+  label: string
+  kind: 'active' | 'warning' | 'neutral'
+} {
+  if (row.deleted) return { label: 'Deactivated', kind: 'neutral' }
+  if (!row.identity_provider) return { label: 'Invited', kind: 'warning' }
+  return { label: 'Active', kind: 'active' }
+}
+
+/** Display label for the identity_provider column. */
+function idpLabel(idp: string | undefined): string {
+  if (idp === 'okta') return 'Okta'
+  if (idp === 'entra') return 'Entra'
+  return '-'
+}
+interface UsersToolbarProps {
+  search: string
+  setSearch: (value: string) => void
+  roleFilter: string | 'all'
+  setRoleFilter: (value: string | 'all') => void
+  roleOptions: { value: string; label: string }[]
+  opdivFilter: number | 'all'
+  setOpDivFilter: (value: number | 'all') => void
+  opdivOptions: OpDiv[]
   showDeleted: boolean
   setShowDeleted: (value: boolean) => void
 }
 
-function EditToolbar(props: EditToolbarProps) {
-  const { setRows, setRowModesModel, isAdmin, showDeleted, setShowDeleted } =
-    props
-  const addUserRow = () => {
-    const userid = Math.floor(Math.random() * 1000) + 1
-    setRows((oldRows) => [
-      ...oldRows,
-      { userid, fullname: '', email: '', role: '', isNew: true },
-    ])
-    setRowModesModel((oldModel) => ({
-      ...oldModel,
-      [userid]: { mode: GridRowModes.Edit, fieldToFocus: 'fullname' },
-    }))
-  }
+/**
+ * Toolbar inside the Users table card. Mirrors the Dashboard FISMA-systems
+ * toolbar: search input, Role and OpDiv filter dropdowns, and a
+ * "Show deactivated" toggle, all sharing a uniform 30px row.
+ */
+function UsersToolbar({
+  search,
+  setSearch,
+  roleFilter,
+  setRoleFilter,
+  roleOptions,
+  opdivFilter,
+  setOpDivFilter,
+  opdivOptions,
+  showDeleted,
+  setShowDeleted,
+}: UsersToolbarProps) {
   return (
-    <GridToolbarContainer sx={{ justifyContent: 'space-between' }}>
-      <GridToolbarQuickFilter
-        debounceMs={250}
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        px: 2.25,
+        py: 1.5,
+        borderBottom: `1px solid ${colors.neutral200}`,
+      }}
+    >
+      <Box
         sx={{
-          '& .MuiInputBase-input::placeholder': {
-            color: colors.neutral500,
-            opacity: 0.8,
-          },
-          '& .MuiInputBase-root:after': {
-            borderBottomColor: colors.primary,
-          },
-          '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: colors.primary,
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1.5,
+          height: 30,
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: `${radius.md}px`,
+        }}
+      >
+        <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
+        <InputBase
+          placeholder="Search by name, email..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ fontSize: 13, width: 220 }}
+          inputProps={{ 'aria-label': 'Search users' }}
+        />
+      </Box>
+      <TextField
+        select
+        size="small"
+        value={roleFilter}
+        onChange={(e) => setRoleFilter(e.target.value as string | 'all')}
+        sx={{
+          minWidth: 110,
+          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
+          '& .MuiSelect-select': {
+            py: 0,
+            pl: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            height: '30px !important',
+            boxSizing: 'border-box',
           },
         }}
+        aria-label="Filter by role"
+      >
+        <MenuItem value="all">Role</MenuItem>
+        {roleOptions.map((opt) => (
+          <MenuItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </MenuItem>
+        ))}
+      </TextField>
+      <TextField
+        select
+        size="small"
+        value={opdivFilter}
+        onChange={(e) =>
+          setOpDivFilter(
+            e.target.value === 'all' ? 'all' : Number(e.target.value)
+          )
+        }
+        sx={{
+          minWidth: 110,
+          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
+          '& .MuiSelect-select': {
+            py: 0,
+            pl: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            height: '30px !important',
+            boxSizing: 'border-box',
+          },
+        }}
+        aria-label="Filter by OpDiv"
+      >
+        <MenuItem value="all">OpDiv</MenuItem>
+        {opdivOptions.map((od) => (
+          <MenuItem key={od.opdiv_id} value={od.opdiv_id}>
+            {od.code}
+          </MenuItem>
+        ))}
+      </TextField>
+      <FormControlLabel
+        sx={{
+          marginLeft: 'auto',
+          m: 0,
+          height: 30,
+          '& .MuiSwitch-root': { padding: 0, width: 32, height: 18, mr: 1 },
+          '& .MuiSwitch-switchBase': { padding: 0.25 },
+          '& .MuiSwitch-thumb': { width: 14, height: 14 },
+          '& .MuiSwitch-track': { borderRadius: 999 },
+        }}
+        control={
+          <Switch
+            checked={showDeleted}
+            onChange={(e) => setShowDeleted(e.target.checked)}
+          />
+        }
+        label={<Typography sx={{ fontSize: 13 }}>Show deactivated</Typography>}
       />
-      <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showDeleted}
-              onChange={(e) => setShowDeleted(e.target.checked)}
-            />
-          }
-          label="Show deleted"
-        />
-        {isAdmin && !showDeleted && (
-          <Button
-            variant="contained"
-            color="primary"
-            startIcon={<AddIcon />}
-            onClick={addUserRow}
-          >
-            Add user
-          </Button>
-        )}
-      </Box>
-    </GridToolbarContainer>
+    </Box>
   )
 }
 function validateEmail(email: string) {
@@ -160,6 +302,12 @@ export default function UserTable() {
     Record<number, { name: string; acronym: string }>
   >({})
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
+  // Toolbar filter state. Search applies as a controlled quick-filter on the
+  // DataGrid; role and OpDiv narrow the row set client-side so the existing
+  // /users response shape stays unchanged.
+  const [search, setSearch] = useState<string>('')
+  const [roleFilter, setRoleFilter] = useState<string | 'all'>('all')
+  const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
   const [assignModalUserName, setAssignModalUserName] = useState<string>('')
@@ -181,6 +329,29 @@ export default function UserTable() {
     if (params.reason === GridRowEditStopReasons.rowFocusOut) {
       event.defaultMuiPrevented = true
     }
+  }
+  /**
+   * Add an empty row to the grid and immediately open it in edit mode, focused
+   * on the name field. Mirrors the previous in-toolbar Add User flow but is
+   * now triggered from the page header's primary button.
+   */
+  const addUserRow = () => {
+    const userid = String(Math.floor(Math.random() * 1000) + 1)
+    setRows((oldRows) => [
+      ...oldRows,
+      {
+        userid,
+        fullname: '',
+        email: '',
+        role: '' as users['role'],
+        assignedfismasystems: [],
+        isNew: true,
+      } as users,
+    ])
+    setRowModesModel((oldModel) => ({
+      ...oldModel,
+      [userid]: { mode: GridRowModes.Edit, fieldToFocus: 'fullname' },
+    }))
   }
   const handleEditClick = (id: GridRowId) => () => {
     const curRow = rows.find((row) => row.userid === id)
@@ -494,8 +665,9 @@ export default function UserTable() {
   const columns: GridColDef[] = [
     {
       field: 'fullname',
-      headerName: 'Full Name',
-      flex: 1,
+      headerName: 'Name',
+      flex: 1.6,
+      minWidth: 220,
       hideable: false,
       renderEditCell: (params: GridRenderEditCellParams) => (
         <EditInputCell
@@ -512,12 +684,65 @@ export default function UserTable() {
         />
       ),
       editable: isAdmin,
+      // Avatar + name + email stacked, matching the redesign.
+      renderCell: (params) => (
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          <Box
+            sx={{
+              width: 32,
+              height: 32,
+              borderRadius: '50%',
+              flexShrink: 0,
+              backgroundColor: avatarColor(String(params.row.userid)),
+              color: colors.white,
+              fontSize: 12,
+              fontWeight: 700,
+              display: 'inline-flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+            }}
+          >
+            {initialsFor(params.row.fullname, params.row.email)}
+          </Box>
+          <Box sx={{ minWidth: 0 }}>
+            <Typography
+              sx={{
+                fontWeight: 600,
+                fontSize: 14,
+                color: colors.ink,
+                lineHeight: 1.3,
+              }}
+            >
+              {params.row.fullname || '-'}
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: colors.neutral500,
+                lineHeight: 1.3,
+                overflow: 'hidden',
+                textOverflow: 'ellipsis',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              {params.row.email}
+            </Typography>
+          </Box>
+        </Box>
+      ),
     },
     {
       field: 'email',
       headerName: 'Email',
-      flex: 1,
-      hideable: false,
+      // Email lives inside the Name cell; keep the column for inline-edit
+      // wiring but hide it from view.
+      flex: 0,
+      width: 0,
+      minWidth: 0,
+      hideable: true,
+      filterable: false,
+      sortable: false,
       renderEditCell: (params: GridRenderEditCellParams) => (
         <EditInputCell
           {...params}
@@ -533,11 +758,13 @@ export default function UserTable() {
         />
       ),
       editable: isAdmin,
+      renderCell: () => null,
     },
     {
       field: 'role',
       headerName: 'Role',
-      flex: 1,
+      flex: 1.4,
+      minWidth: 180,
       editable: isAdmin,
       // Native DataGrid dropdown, scoped to the roles this admin may assign.
       // Options carry the raw enum as the stored value and a humanized label
@@ -547,11 +774,32 @@ export default function UserTable() {
         value: r,
         label: roleLabel(r),
       })),
+      renderCell: (params) =>
+        params.row.role ? (
+          <Box>
+            <Typography
+              sx={{ fontWeight: 600, fontSize: 14, color: colors.ink }}
+            >
+              {roleLabel(params.row.role)}
+            </Typography>
+            <Typography
+              sx={{
+                fontSize: 12,
+                fontWeight: 500,
+                color: colors.neutral500,
+                mt: 0.25,
+              }}
+            >
+              {ROLE_DESCRIPTOR[params.row.role] ?? ''}
+            </Typography>
+          </Box>
+        ) : null,
     },
     {
       field: 'opdivs',
       headerName: 'OpDivs',
-      flex: 1,
+      flex: 1.4,
+      minWidth: 160,
       sortable: false,
       filterable: false,
       renderCell: (params) => {
@@ -566,36 +814,78 @@ export default function UserTable() {
             </Typography>
           )
         }
+        // Show first 2 codes inline; collapse the rest into a "+N" muted chip
+        // so the row stays at a uniform height when a user has many grants.
+        const visible = ids.slice(0, 2)
+        const overflow = ids.length - visible.length
         return (
-          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', py: 0.5 }}>
-            {ids.map((id) => (
+          <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
+            {visible.map((id) => (
               <CodeBadge key={id} code={String(opdivCodeMap[id] ?? id)} />
             ))}
+            {overflow > 0 && <CodeBadge code={`+${overflow}`} muted />}
           </Box>
         )
       },
     },
     {
       field: 'identity_provider',
-      headerName: 'IdP',
-      flex: 0.5,
+      headerName: 'Identity provider',
+      flex: 1,
+      minWidth: 130,
       editable: false,
-      // Display-only. The backend derives this from the user's OpDiv, with an
-      // OWNER-only override handled server-side; the UI never sends it. Show
-      // the resolved value with proper-noun casing (Okta / Entra), or a dash
-      // until the backend has populated it.
-      valueGetter: (params) => {
+      // Display-only with a proper-noun cased label and a small dot in front,
+      // matching the design's "● Okta / ● Entra" pattern. The backend derives
+      // this from the user's OpDiv (OWNER-only override server-side).
+      valueGetter: (params) => idpLabel(params.row.identity_provider),
+      renderCell: (params) => {
         const idp = params.row.identity_provider
-        if (idp === 'okta') return 'Okta'
-        if (idp === 'entra') return 'Entra'
-        return idp ?? '-'
+        if (!idp) {
+          return (
+            <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+              -
+            </Typography>
+          )
+        }
+        return (
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+            <Box
+              sx={{
+                width: 6,
+                height: 6,
+                borderRadius: '50%',
+                backgroundColor: colors.primary,
+              }}
+            />
+            <Typography sx={{ fontSize: 13, color: colors.ink }}>
+              {idpLabel(idp)}
+            </Typography>
+          </Box>
+        )
+      },
+    },
+    {
+      field: 'status',
+      headerName: 'Status',
+      flex: 0.9,
+      minWidth: 110,
+      sortable: false,
+      filterable: false,
+      valueGetter: (params) => userStatus(params.row).label,
+      renderCell: (params) => {
+        const { label, kind } = userStatus(params.row)
+        return <StatusChip label={label} kind={kind} />
       },
     },
     {
       field: 'actions',
       type: 'actions',
       headerName: 'Actions',
-      width: 140,
+      headerAlign: 'right',
+      align: 'right',
+      width: 130,
+      sortable: false,
+      filterable: false,
       cellClassName: 'actions',
       getActions: (params) => {
         // Read-only admins see the table but no mutating controls.
@@ -607,9 +897,7 @@ export default function UserTable() {
             <GridActionsCellItem
               icon={<SaveIcon />}
               label="Save"
-              sx={{
-                color: 'primary.main',
-              }}
+              sx={{ color: 'primary.main' }}
               key={`save-${params.id}`}
               onClick={handleSaveClick(params.id)}
             />,
@@ -633,145 +921,220 @@ export default function UserTable() {
 
         if (params.row.deleted) {
           return [
-            <Tooltip
-              title="Restore User"
-              key={`tooltip-restore-${params.id}`}
-              placement="right-start"
-            >
-              <GridActionsCellItem
-                icon={<RestoreIcon sx={{ color: 'black' }} />}
-                key={`restore-${params.id}`}
-                label="Restore"
-                onClick={handleRestoreClick(params.id)}
-                color="inherit"
-              />
-            </Tooltip>,
+            <GridActionsCellItem
+              icon={<RestoreIcon sx={{ color: colors.neutral700 }} />}
+              key={`restore-${params.id}`}
+              label="Restore user"
+              showInMenu={false}
+              onClick={handleRestoreClick(params.id)}
+              color="inherit"
+            />,
           ]
         }
 
+        // Active / Invited rows: Edit (icon) + a kebab menu with the
+        // assign / delete actions, matching the redesign mock.
         return [
           <GridActionsCellItem
-            icon={<EditIcon />}
+            icon={<EditIcon sx={{ fontSize: 16, color: colors.neutral700 }} />}
             key={`edit-${params.id}`}
-            label="Edit"
-            className="textPrimary"
+            label="Edit user"
             onClick={handleEditClick(params.id)}
             color="inherit"
           />,
-          <Tooltip
-            title={`Assign Fisma Systems`}
-            key={`tooltip-${params.id}`}
-            placement="right-start"
-          >
-            <GridActionsCellItem
-              icon={<ChecklistIcon sx={{ color: 'black' }} />}
-              key={`assignsystem-${params.id}`}
-              label="assignedSystems"
-              onClick={() => handleOpenModal(params.id)}
-              color="inherit"
-            />
-          </Tooltip>,
-          <Tooltip
-            title={`Assign OpDivs`}
-            key={`tooltip-opdiv-${params.id}`}
-            placement="right-start"
-          >
-            <GridActionsCellItem
-              icon={<DomainIcon sx={{ color: 'black' }} />}
-              key={`assignopdiv-${params.id}`}
-              label="assignedOpDivs"
-              onClick={() => handleOpenOpDivModal(params.id)}
-              color="inherit"
-            />
-          </Tooltip>,
+          <GridActionsCellItem
+            icon={
+              <MoreHorizIcon sx={{ fontSize: 18, color: colors.neutral700 }} />
+            }
+            key={`assign-${params.id}`}
+            label="Assign FISMA systems"
+            showInMenu
+            onClick={() => handleOpenModal(params.id)}
+          />,
+          <GridActionsCellItem
+            key={`assign-opdivs-${params.id}`}
+            icon={<DomainIcon sx={{ fontSize: 18 }} />}
+            label="Assign OpDivs"
+            showInMenu
+            onClick={() => handleOpenOpDivModal(params.id)}
+          />,
           <GridActionsCellItem
             key={`delete-${params.id}`}
-            icon={<DeleteIcon sx={{ color: 'black' }} />}
-            label="Delete"
+            icon={<DeleteIcon sx={{ fontSize: 18 }} />}
+            label="Delete user"
+            showInMenu
             onClick={handleDeleteClick(params.id)}
-            color="inherit"
           />,
         ]
       },
     },
   ]
 
+  // Subtitle counts for the page header.
+  const activeCount = rows.filter(
+    (r) => !r.deleted && r.identity_provider
+  ).length
+  const invitedCount = rows.filter(
+    (r) => !r.deleted && !r.identity_provider
+  ).length
+  const subtitleParts: string[] = []
+  if (activeCount > 0)
+    subtitleParts.push(
+      `${activeCount} active ${activeCount === 1 ? 'user' : 'users'}`
+    )
+  if (invitedCount > 0)
+    subtitleParts.push(
+      `${invitedCount} pending invitation${invitedCount === 1 ? '' : 's'}`
+    )
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : ''
+
+  // Role dropdown options derive from the roles currently present in the row
+  // set, humanized via roleLabel. Restricting to actual roles keeps the
+  // dropdown short and meaningful (no empty "no users with this role" picks).
+  const roleOptions = useMemo(() => {
+    const present = Array.from(
+      new Set(rows.map((r) => r.role).filter(Boolean))
+    ) as string[]
+    return present.sort().map((r) => ({ value: r, label: roleLabel(r) }))
+  }, [rows])
+
+  // Client-side filtered rows. Search is forwarded as quickFilterValues to the
+  // DataGrid (so it gets per-column matching for free); role + opdiv narrow
+  // the row set itself.
+  const filteredRows = useMemo(() => {
+    return rows.filter((row) => {
+      if (roleFilter !== 'all' && row.role !== roleFilter) return false
+      if (opdivFilter !== 'all') {
+        const ids =
+          userOpDivMap[row.userid] ?? row.assignedopdivids ?? ([] as number[])
+        if (!ids.includes(opdivFilter)) return false
+      }
+      return true
+    })
+  }, [rows, roleFilter, opdivFilter, userOpDivMap])
+
+  const quickFilterValues = search.trim()
+    ? search.trim().split(/\s+/)
+    : undefined
+
   return (
-    <Box sx={{ py: 4 }}>
-      <PageHeader title="Users" breadcrumbs={<BreadCrumbs />} />
+    <Box
+      sx={{
+        pt: 3,
+        pb: 4,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        boxSizing: 'border-box',
+      }}
+    >
+      <PageHeader
+        title="Users"
+        subtitle={subtitle || undefined}
+        breadcrumbs={<BreadCrumbs />}
+        actions={
+          isAdmin ? (
+            <>
+              <Button
+                variant="outlined"
+                color="primary"
+                startIcon={<EmailOutlinedIcon />}
+                onClick={() => {
+                  /* email-users entry lives in the avatar menu; future hook */
+                }}
+                disabled
+              >
+                Email users
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                startIcon={<AddIcon />}
+                onClick={addUserRow}
+                disabled={showDeleted}
+              >
+                Add user
+              </Button>
+            </>
+          ) : undefined
+        }
+      />
       <Box
         sx={{
-          height: 600,
-          width: '100%',
-          mb: 2,
-          '& .actions': {
-            color: 'text.secondary',
-          },
-          '& .textPrimary': {
-            color: 'text.primary',
-          },
+          backgroundColor: colors.white,
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: `${radius.card}px`,
+          overflow: 'hidden',
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+          '& .actions': { color: 'text.secondary' },
+          '& .textPrimary': { color: 'text.primary' },
         }}
       >
-        <DataGrid
-          aria-label="Users"
-          rows={rows}
-          apiRef={apiRef}
-          columns={columns}
-          // Don't let an admin edit a role they can't assign: if a row's
-          // current role is above this admin's tier, lock the role cell so it
-          // can't be blanked or downgraded on save. New rows (blank role,
-          // mid-create) stay editable - valueOptions already limits the choices
-          // to the admin's assignable set. The server enforces this too.
-          isCellEditable={(params) =>
-            params.field !== 'role' ||
-            params.row.isNew ||
-            !params.row.role ||
-            assignableRoles.includes(params.row.role)
-          }
-          editMode="row"
-          getRowId={(row) => row.userid}
-          initialState={{
-            sorting: {
-              sortModel: [{ field: 'role', sort: 'asc' }],
-            },
-          }}
-          rowModesModel={rowModesModel}
-          onRowModesModelChange={handleRowModesModelChange}
-          onProcessRowUpdateError={handleProcessRowUpdateError}
-          onRowEditStop={handleRowEditStop}
-          processRowUpdate={processRowUpdate}
-          slots={{
-            toolbar: EditToolbar,
-          }}
-          slotProps={{
-            toolbar: {
-              setRows,
-              setRowModesModel,
-              isAdmin,
-              showDeleted,
-              setShowDeleted,
-            },
-            filterPanel: {
-              sx: {
-                '& .MuiFormLabel-root': {
-                  marginTop: 1,
-                },
-              },
-            },
-          }}
-          disableColumnSelector
-          sx={{
-            border: `1px solid ${colors.neutral200}`,
-            borderRadius: 1.5,
-            backgroundColor: colors.white,
-            '& .MuiTablePagination-selectLabel': {
-              mb: 2,
-            },
-            '& .MuiTablePagination-displayedRows': {
-              mb: 2,
-            },
-          }}
+        <UsersToolbar
+          search={search}
+          setSearch={setSearch}
+          roleFilter={roleFilter}
+          setRoleFilter={setRoleFilter}
+          roleOptions={roleOptions}
+          opdivFilter={opdivFilter}
+          setOpDivFilter={setOpDivFilter}
+          opdivOptions={opdivOptions}
+          showDeleted={showDeleted}
+          setShowDeleted={setShowDeleted}
         />
+        <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex' }}>
+          <DataGrid
+            aria-label="Users"
+            rows={filteredRows}
+            apiRef={apiRef}
+            columns={columns}
+            getRowHeight={() => 64}
+            columnVisibilityModel={{ email: false }}
+            filterModel={{ items: [], quickFilterValues }}
+            // Don't let an admin edit a role they can't assign: if a row's
+            // current role is above this admin's tier, lock the role cell so it
+            // can't be blanked or downgraded on save. New rows (blank role,
+            // mid-create) stay editable - valueOptions already limits the choices
+            // to the admin's assignable set. The server enforces this too.
+            isCellEditable={(params) =>
+              params.field !== 'role' ||
+              params.row.isNew ||
+              !params.row.role ||
+              assignableRoles.includes(params.row.role)
+            }
+            editMode="row"
+            getRowId={(row) => row.userid}
+            initialState={{
+              sorting: {
+                sortModel: [{ field: 'role', sort: 'asc' }],
+              },
+            }}
+            rowModesModel={rowModesModel}
+            onRowModesModelChange={handleRowModesModelChange}
+            onProcessRowUpdateError={handleProcessRowUpdateError}
+            onRowEditStop={handleRowEditStop}
+            processRowUpdate={processRowUpdate}
+            disableColumnSelector
+            disableRowSelectionOnClick
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              border: 'none',
+              backgroundColor: colors.white,
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: colors.neutral50,
+              },
+              '& .MuiDataGrid-cell': {
+                borderBottom: `1px solid ${colors.neutral100}`,
+              },
+              '& .MuiTablePagination-selectLabel': { mb: 2 },
+              '& .MuiTablePagination-displayedRows': { mb: 2 },
+            }}
+          />
+        </Box>
       </Box>
       <CustomSnackbar
         open={open}
