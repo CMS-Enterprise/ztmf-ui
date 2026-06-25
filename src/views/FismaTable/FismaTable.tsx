@@ -5,15 +5,7 @@ import {
   GridActionsCellItem,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
-import {
-  Box,
-  InputBase,
-  TextField,
-  MenuItem,
-  Typography,
-  FormControlLabel,
-  Switch,
-} from '@mui/material'
+import { Box, InputBase, TextField, MenuItem, Typography } from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import SearchIcon from '@mui/icons-material/Search'
 import { useNavigate, Link } from 'react-router-dom'
@@ -29,6 +21,7 @@ import { fetchOpDivs } from '@/utils/opdivs'
 import ScoreDisplay from '@/components/ds/ScoreDisplay'
 import { CodeBadge, StatusChip } from '@/components/ds/StatusChip'
 import DataGridPaginationFooter from '@/components/ds/DataGridPaginationFooter'
+import CompactSwitchLabel from '@/components/ds/CompactSwitchLabel'
 import { colors, fonts, radius } from '@/theme/tokens'
 
 const ELLIPSIS = '…'
@@ -177,28 +170,10 @@ function TableToolbar({
             </MenuItem>
           ))}
         </TextField>
-        <FormControlLabel
-          // The MUI Switch carries 12px padding by default so its bounding box
-          // is ~38px tall - the toggle sits below the 30px inputs even with
-          // center alignment. Zero the wrapper margins and compact the switch
-          // so the row reads as one flush horizontal band.
-          sx={{
-            m: 0,
-            height: 30,
-            '& .MuiSwitch-root': { padding: 0, width: 32, height: 18, mr: 1 },
-            '& .MuiSwitch-switchBase': { padding: 0.25 },
-            '& .MuiSwitch-thumb': { width: 14, height: 14 },
-            '& .MuiSwitch-track': { borderRadius: 999 },
-          }}
-          control={
-            <Switch
-              checked={showDecommissioned}
-              onChange={(e) => setShowDecommissioned(e.target.checked)}
-            />
-          }
-          label={
-            <Typography sx={{ fontSize: 13 }}>Show decommissioned</Typography>
-          }
+        <CompactSwitchLabel
+          checked={showDecommissioned}
+          onChange={setShowDecommissioned}
+          label="Show decommissioned"
         />
       </Box>
     </Box>

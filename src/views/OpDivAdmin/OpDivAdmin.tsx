@@ -15,6 +15,7 @@ import {
 } from '@mui/material'
 import SearchIcon from '@mui/icons-material/Search'
 import Modal from '@/components/ds/Modal'
+import CompactSwitchLabel from '@/components/ds/CompactSwitchLabel'
 import { DataGrid, GridActionsCellItem, GridColDef } from '@mui/x-data-grid'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -119,24 +120,10 @@ function OpDivsToolbar({
         <MenuItem value="parent">Parent</MenuItem>
         <MenuItem value="child">Child</MenuItem>
       </TextField>
-      <FormControlLabel
-        // Match the Users / FISMA toggle: zero wrapper margins, compact the
-        // switch to a 32x18 thumb so its bounding box sits flush on the row.
-        sx={{
-          m: 0,
-          height: 30,
-          '& .MuiSwitch-root': { padding: 0, width: 32, height: 18, mr: 1 },
-          '& .MuiSwitch-switchBase': { padding: 0.25 },
-          '& .MuiSwitch-thumb': { width: 14, height: 14 },
-          '& .MuiSwitch-track': { borderRadius: 999 },
-        }}
-        control={
-          <Switch
-            checked={showDeactivated}
-            onChange={(e) => setShowDeactivated(e.target.checked)}
-          />
-        }
-        label={<Typography sx={{ fontSize: 13 }}>Show deactivated</Typography>}
+      <CompactSwitchLabel
+        checked={showDeactivated}
+        onChange={setShowDeactivated}
+        label="Show deactivated"
       />
     </Box>
   )
