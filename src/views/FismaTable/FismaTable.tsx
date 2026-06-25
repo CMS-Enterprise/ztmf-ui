@@ -3,11 +3,6 @@ import {
   GridColDef,
   GridRenderCellParams,
   GridActionsCellItem,
-  useGridApiContext,
-  useGridSelector,
-  gridPageCountSelector,
-  gridPaginationModelSelector,
-  gridFilteredTopLevelRowCountSelector,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
 import {
@@ -15,8 +10,6 @@ import {
   InputBase,
   TextField,
   MenuItem,
-  Select,
-  Pagination,
   Typography,
   FormControlLabel,
   Switch,
@@ -35,10 +28,10 @@ import { hasSystemAccess } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
 import ScoreDisplay from '@/components/ds/ScoreDisplay'
 import { CodeBadge, StatusChip } from '@/components/ds/StatusChip'
+import DataGridPaginationFooter from '@/components/ds/DataGridPaginationFooter'
 import { colors, fonts, radius } from '@/theme/tokens'
 
 const ELLIPSIS = '…'
-const EN_DASH = '–'
 const UUID_RE =
   /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
 
@@ -78,101 +71,6 @@ function formatOpDivCode(code: string): string {
 
 /** Page sizes offered in the pagination footer. */
 const PAGE_SIZES = [25, 50, 100]
-
-/**
- * Custom table footer: "Showing n-m of total" on the left, a rows-per-page
- * selector and numbered page buttons on the right, styled per the redesign.
- * @returns {JSX.Element} The pagination footer.
- */
-function TableFooter() {
-  const apiRef = useGridApiContext()
-  const model = useGridSelector(apiRef, gridPaginationModelSelector)
-  const pageCount = useGridSelector(apiRef, gridPageCountSelector)
-  const rowCount = useGridSelector(apiRef, gridFilteredTopLevelRowCountSelector)
-  const start = rowCount === 0 ? 0 : model.page * model.pageSize + 1
-  const end = Math.min((model.page + 1) * model.pageSize, rowCount)
-
-  return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        px: 2.25,
-        py: 1.5,
-        backgroundColor: colors.neutral50,
-        borderTop: `1px solid ${colors.neutral200}`,
-      }}
-    >
-      <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
-        Showing {start}
-        {EN_DASH}
-        {end} of {rowCount}
-      </Typography>
-      <Box
-        sx={{
-          marginLeft: 'auto',
-          display: 'flex',
-          alignItems: 'center',
-          gap: 1.5,
-        }}
-      >
-        <Typography sx={{ fontSize: 13, color: colors.neutral700 }}>
-          Rows
-        </Typography>
-        <Select
-          size="small"
-          value={model.pageSize}
-          onChange={(e) =>
-            apiRef.current.setPaginationModel({
-              page: 0,
-              pageSize: Number(e.target.value),
-            })
-          }
-          sx={{ fontSize: 13, '& .MuiSelect-select': { py: 0.75 } }}
-        >
-          {PAGE_SIZES.map((n) => (
-            <MenuItem key={n} value={n}>
-              {n}
-            </MenuItem>
-          ))}
-        </Select>
-        <Pagination
-          count={pageCount}
-          page={model.page + 1}
-          onChange={(_event, value) =>
-            apiRef.current.setPaginationModel({ ...model, page: value - 1 })
-          }
-          siblingCount={1}
-          sx={{
-            // The global stylesheet stacks ul items; force the pagination's
-            // ul into a single nowrap row so the buttons read left to right.
-            '& .MuiPagination-ul': {
-              flexDirection: 'row',
-              flexWrap: 'nowrap',
-              alignItems: 'center',
-              gap: 0.25,
-            },
-            '& .MuiPaginationItem-root': {
-              minWidth: 28,
-              height: 28,
-              margin: 0,
-              borderRadius: `${radius.button}px`,
-              border: `1px solid ${colors.neutral200}`,
-              fontSize: 13,
-            },
-            '& .MuiPaginationItem-root.Mui-selected': {
-              backgroundColor: colors.primary,
-              borderColor: colors.primary,
-              color: colors.white,
-              '&:hover': { backgroundColor: colors.primary },
-            },
-          }}
-        />
-      </Box>
-    </Box>
-  )
-}
 
 /**
  * Card header for the systems table: the title and count on the left, with the
@@ -580,7 +478,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
             pagination: { paginationModel: { pageSize: 25, page: 0 } },
           }}
           pageSizeOptions={PAGE_SIZES}
-          slots={{ footer: TableFooter }}
+          slots={{ footer: DataGridPaginationFooter }}
           sx={{
             // Grow into the flex parent so the grid's internal scroll
             // (not main's) handles row overflow.

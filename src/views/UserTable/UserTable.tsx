@@ -58,6 +58,7 @@ import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ds/PageHeader'
 import { CodeBadge, StatusChip } from '@/components/ds/StatusChip'
+import DataGridPaginationFooter from '@/components/ds/DataGridPaginationFooter'
 import { colors, radius } from '@/theme/tokens'
 
 /** Initials taken from a full name (or email local-part) - up to 2 letters. */
@@ -1117,6 +1118,8 @@ export default function UserTable() {
             onProcessRowUpdateError={handleProcessRowUpdateError}
             onRowEditStop={handleRowEditStop}
             processRowUpdate={processRowUpdate}
+            slots={{ footer: DataGridPaginationFooter }}
+            pageSizeOptions={[25, 50, 100]}
             disableColumnSelector
             disableRowSelectionOnClick
             sx={{
