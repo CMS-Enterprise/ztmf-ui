@@ -6,7 +6,14 @@ import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
-import { FormControlLabel, Switch, TextField } from '@mui/material'
+import {
+  FormControlLabel,
+  InputBase,
+  MenuItem,
+  Switch,
+  TextField,
+} from '@mui/material'
+import SearchIcon from '@mui/icons-material/Search'
 import Modal from '@/components/ds/Modal'
 import { DataGrid, GridActionsCellItem, GridColDef } from '@mui/x-data-grid'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -33,6 +40,85 @@ const NAME_MAX = 128
 type FormState = { code: string; name: string; is_parent: boolean }
 const EMPTY_FORM: FormState = { code: '', name: '', is_parent: false }
 
+type TypeFilter = 'all' | 'parent' | 'child'
+
+interface OpDivsToolbarProps {
+  search: string
+  setSearch: (value: string) => void
+  typeFilter: TypeFilter
+  setTypeFilter: (value: TypeFilter) => void
+}
+
+/**
+ * Toolbar inside the Manage OpDivs table card. Mirrors the Dashboard /
+ * Users table toolbars: search input on the left, Type filter dropdown
+ * pushed to the right, all sharing a uniform 30px row.
+ */
+function OpDivsToolbar({
+  search,
+  setSearch,
+  typeFilter,
+  setTypeFilter,
+}: OpDivsToolbarProps) {
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        px: 2.25,
+        py: 1.5,
+        borderBottom: `1px solid ${colors.neutral200}`,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1.5,
+          height: 30,
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: `${radius.md}px`,
+        }}
+      >
+        <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
+        <InputBase
+          placeholder="Search by code or name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ fontSize: 13, width: 220 }}
+          inputProps={{ 'aria-label': 'Search OpDivs' }}
+        />
+      </Box>
+      <TextField
+        select
+        size="small"
+        value={typeFilter}
+        onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+        sx={{
+          marginLeft: 'auto',
+          minWidth: 110,
+          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
+          '& .MuiSelect-select': {
+            py: 0,
+            pl: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            height: '30px !important',
+            boxSizing: 'border-box',
+          },
+        }}
+        aria-label="Filter by type"
+      >
+        <MenuItem value="all">Type</MenuItem>
+        <MenuItem value="parent">Parent</MenuItem>
+        <MenuItem value="child">Child</MenuItem>
+      </TextField>
+    </Box>
+  )
+}
+
 export default function OpDivAdmin() {
   const navigate = useNavigate()
   const { userInfo, fismaSystems } = useContextProp()
@@ -44,6 +130,11 @@ export default function OpDivAdmin() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pendingToggle, setPendingToggle] = useState<OpDiv | null>(null)
+  // Toolbar filter state: search threads into the DataGrid as a quick-filter,
+  // type narrows the row set client-side so the /opdivs response shape stays
+  // unchanged.
+  const [search, setSearch] = useState<string>('')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
 
   // OWNER is the tenant boundary - everyone else is bounced, mirroring the
   // redirect guard UserTable uses. The backend also returns 403.
@@ -162,6 +253,17 @@ export default function OpDivAdmin() {
     }
     return counts
   }, [fismaSystems])
+
+  // Client-side filter for Type. Search threads through DataGrid's quick
+  // filter so it can match Code, Name, Type and Systems uniformly.
+  const filteredRows = useMemo(() => {
+    if (typeFilter === 'all') return rows
+    const wantParent = typeFilter === 'parent'
+    return rows.filter((r) => r.is_parent === wantParent)
+  }, [rows, typeFilter])
+  const quickFilterValues = search.trim()
+    ? search.trim().split(/\s+/)
+    : undefined
 
   // Subtitle counts shown under the page title.
   const activeCount = rows.filter((r) => r.active).length
@@ -352,13 +454,20 @@ export default function OpDivAdmin() {
           flexDirection: 'column',
         }}
       >
+        <OpDivsToolbar
+          search={search}
+          setSearch={setSearch}
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
+        />
         <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex' }}>
           <DataGrid
             aria-label="Operating Divisions"
-            rows={rows}
+            rows={filteredRows}
             columns={columns}
             getRowId={(row) => row.opdiv_id}
             getRowHeight={() => 64}
+            filterModel={{ items: [], quickFilterValues }}
             initialState={{
               sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },
               pagination: { paginationModel: { pageSize: 25, page: 0 } },
