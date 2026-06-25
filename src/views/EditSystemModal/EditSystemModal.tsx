@@ -1,11 +1,7 @@
 import * as React from 'react'
 import TextField from '@mui/material/TextField'
-import Dialog from '@mui/material/Dialog'
-import DialogActions from '@mui/material/DialogActions'
-import DialogContent from '@mui/material/DialogContent'
-import CustomDialogTitle from '../../components/DialogTitle/CustomDialogTitle'
-import { Button as CmsButton } from '@cmsgov/design-system'
-import { Box, Grid } from '@mui/material'
+import Modal from '@/components/ds/Modal'
+import { Box, Button, Grid } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
@@ -59,6 +55,14 @@ export default function EditSystemModal({
   const isFormValid = (): boolean => {
     return Object.values(formValid).every((value) => value === true)
   }
+  // Fields the user has actually interacted with. Required-field errors only
+  // render once a field is touched, so opening the Add form no longer shows a
+  // wall of red before the user has typed anything (audit 4.1).
+  const [touched, setTouched] = React.useState<Record<string, boolean>>({})
+  const markTouched = (key: string) =>
+    setTouched((prev) => ({ ...prev, [key]: true }))
+  const showError = (key: keyof FormValidType): boolean =>
+    Boolean(touched[key]) && !formValid[key]
   const [loading, setLoading] = React.useState<boolean>(true)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [openDecommissionAlert, setOpenDecommissionAlert] =
@@ -99,6 +103,7 @@ export default function EditSystemModal({
     const value = e.target.value
     const isValid = value.length > 0
 
+    markTouched(key)
     setEditedFismaSystem((prevState) => ({
       ...prevState,
       [key]: value,
@@ -153,6 +158,7 @@ export default function EditSystemModal({
       setShowDecommissionForm(false)
       setReactivationNotes('')
       setShowReactivateForm(false)
+      setTouched({})
       setLoading(false)
     }
   }, [system, open])
@@ -249,6 +255,7 @@ export default function EditSystemModal({
         if (parsed.fieldErrors) {
           Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
             setFormValid((prevState) => ({ ...prevState, [key]: false }))
+            markTouched(key)
             setFormValidErrorText((prevState) => ({
               ...prevState,
               [key]: message,
@@ -286,6 +293,7 @@ export default function EditSystemModal({
         if (parsed.fieldErrors) {
           Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
             setFormValid((prevState) => ({ ...prevState, [key]: false }))
+            markTouched(key)
             setFormValidErrorText((prevState) => ({
               ...prevState,
               [key]: message,
@@ -434,242 +442,281 @@ export default function EditSystemModal({
     }
     return (
       <>
-        <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
-          <CustomDialogTitle title={`${title} Fisma System`} />
-          <DialogContent>
-            <Box sx={{ flexGrow: 1 }} component="form">
-              <Grid container spacing={2}>
-                <Grid item xs={7}>
-                  <TextField
-                    id="fismaname"
-                    label="Fisma Name"
-                    required
-                    fullWidth
-                    margin="normal"
-                    variant="standard"
-                    defaultValue={system?.fismaname || ''}
-                    error={!formValid.fismaname ? true : false}
-                    helperText={
-                      !formValid.fismaname ? formValidErrorText.fismaname : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'fismaname')
-                    }}
-                  />
-                  <TextField
-                    id="fismaacronym"
-                    label="Fisma Acronym"
-                    required
-                    variant="standard"
-                    margin="normal"
-                    defaultValue={system?.fismaacronym || ''}
-                    error={!formValid.fismaacronym ? true : false}
-                    helperText={
-                      !formValid.fismaacronym
-                        ? formValidErrorText.fismaacronym
-                        : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'fismaacronym')
-                    }}
-                  />
-                  <TextField
-                    id="groupacronym"
-                    label="Group Acronym"
-                    variant="standard"
-                    margin="normal"
-                    defaultValue={system?.groupacronym || ''}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    sx={{ ml: 2 }}
-                    onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        groupacronym: e.target.value,
-                      }))
-                    }}
-                  />
-                  <TextField
-                    id="component"
-                    label="Component"
-                    variant="standard"
-                    required
-                    margin="normal"
-                    defaultValue={system?.component || ''}
-                    error={!formValid.component ? true : false}
-                    helperText={
-                      !formValid.component ? formValidErrorText.component : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    sx={{ ml: 2 }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'component')
-                    }}
-                  />
-                  <TextField
-                    id="groupname"
-                    label="Group Name"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.groupname || ''}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        groupname: e.target.value,
-                      }))
-                    }}
-                  />
+        <Modal
+          open={open}
+          onClose={handleClose}
+          title={`${title} FISMA system`}
+          size="xl"
+          disableBackdropClose
+          footer={
+            <>
+              <Button variant="text" color="inherit" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleSave}
+                disabled={!isFormValid()}
+              >
+                {mode === 'edit' ? 'Save changes' : 'Create system'}
+              </Button>
+            </>
+          }
+        >
+          <Box sx={{ flexGrow: 1 }} component="form">
+            <Grid container spacing={2}>
+              <Grid item xs={7}>
+                <TextField
+                  id="fismaname"
+                  label="Fisma Name"
+                  required
+                  fullWidth
+                  margin="normal"
+                  variant="outlined"
+                  defaultValue={system?.fismaname || ''}
+                  error={showError('fismaname')}
+                  helperText={
+                    showError('fismaname') ? formValidErrorText.fismaname : ''
+                  }
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  onChange={(e) => {
+                    handleInputChange(e, 'fismaname')
+                  }}
+                />
+                <TextField
+                  id="fismaacronym"
+                  label="Fisma Acronym"
+                  required
+                  variant="outlined"
+                  margin="normal"
+                  defaultValue={system?.fismaacronym || ''}
+                  error={showError('fismaacronym')}
+                  helperText={
+                    showError('fismaacronym')
+                      ? formValidErrorText.fismaacronym
+                      : ''
+                  }
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  onChange={(e) => {
+                    handleInputChange(e, 'fismaacronym')
+                  }}
+                />
+                <TextField
+                  id="groupacronym"
+                  label="Group Acronym"
+                  variant="outlined"
+                  margin="normal"
+                  defaultValue={system?.groupacronym || ''}
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  sx={{ ml: 2 }}
+                  onChange={(e) => {
+                    setEditedFismaSystem((prevState) => ({
+                      ...prevState,
+                      groupacronym: e.target.value,
+                    }))
+                  }}
+                />
+                <TextField
+                  id="component"
+                  label="Component"
+                  variant="outlined"
+                  required
+                  margin="normal"
+                  defaultValue={system?.component || ''}
+                  error={showError('component')}
+                  helperText={
+                    showError('component') ? formValidErrorText.component : ''
+                  }
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  sx={{ ml: 2 }}
+                  onChange={(e) => {
+                    handleInputChange(e, 'component')
+                  }}
+                />
+                <TextField
+                  id="groupname"
+                  label="Group Name"
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  defaultValue={system?.groupname || ''}
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  onChange={(e) => {
+                    setEditedFismaSystem((prevState) => ({
+                      ...prevState,
+                      groupname: e.target.value,
+                    }))
+                  }}
+                />
 
-                  <TextField
-                    id="divisionname"
-                    label="Division Name"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.divisionname}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
+                <TextField
+                  id="divisionname"
+                  label="Division Name"
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  defaultValue={system?.divisionname}
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  onChange={(e) => {
+                    setEditedFismaSystem((prevState) => ({
+                      ...prevState,
+                      divisionname: e.target.value,
+                    }))
+                  }}
+                />
+                <TextField
+                  id="fismasubsystem"
+                  label="Fisma Subsystem"
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  defaultValue={system?.fismasubsystem}
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  onChange={(e) => {
+                    setEditedFismaSystem((prevState) => ({
+                      ...prevState,
+                      fismasubsystem: e.target.value,
+                    }))
+                  }}
+                />
+              </Grid>
+              <Grid item xs={5}>
+                <ValidatedTextField
+                  label="Data Call Contact"
+                  validator={emailValidator}
+                  dfValue={system?.datacallcontact || ''}
+                  isFullWidth={true}
+                  onChange={(isValid, newValue) => {
+                    setFormValid((prevState) => ({
+                      ...prevState,
+                      datacallcontact: isValid,
+                    }))
+                    if (isValid) {
                       setEditedFismaSystem((prevState) => ({
                         ...prevState,
-                        divisionname: e.target.value,
+                        datacallcontact: newValue,
                       }))
-                    }}
-                  />
-                  <TextField
-                    id="fismasubsystem"
-                    label="Fisma Subsystem"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.fismasubsystem}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
+                    }
+                  }}
+                />
+                <ValidatedTextField
+                  label="ISSO Email"
+                  validator={emailValidator}
+                  dfValue={system?.issoemail || ''}
+                  isFullWidth={true}
+                  onChange={(isValid, newValue) => {
+                    setFormValid((prevState) => ({
+                      ...prevState,
+                      issoemail: isValid,
+                    }))
+                    if (isValid) {
                       setEditedFismaSystem((prevState) => ({
                         ...prevState,
-                        fismasubsystem: e.target.value,
+                        issoemail: newValue,
                       }))
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={5}>
-                  <ValidatedTextField
-                    label="Data Call Contact"
-                    validator={emailValidator}
-                    dfValue={system?.datacallcontact || ''}
-                    isFullWidth={true}
-                    onChange={(isValid, newValue) => {
-                      setFormValid((prevState) => ({
-                        ...prevState,
-                        datacallcontact: isValid,
-                      }))
-                      if (isValid) {
-                        setEditedFismaSystem((prevState) => ({
-                          ...prevState,
-                          datacallcontact: newValue,
-                        }))
-                      }
-                    }}
-                  />
-                  <ValidatedTextField
-                    label="ISSO Email"
-                    validator={emailValidator}
-                    dfValue={system?.issoemail || ''}
-                    isFullWidth={true}
-                    onChange={(isValid, newValue) => {
-                      setFormValid((prevState) => ({
-                        ...prevState,
-                        issoemail: isValid,
-                      }))
-                      if (isValid) {
-                        setEditedFismaSystem((prevState) => ({
-                          ...prevState,
-                          issoemail: newValue,
-                        }))
-                      }
-                    }}
-                  />
+                    }
+                  }}
+                />
 
-                  <TextField
-                    id="fismauid"
-                    label="Fisma UID"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.fismauid || ''}
-                    error={!formValid.fismauid ? true : false}
-                    helperText={
-                      !formValid.fismauid ? formValidErrorText.fismauid : ''
+                <TextField
+                  id="fismauid"
+                  label="Fisma UID"
+                  variant="outlined"
+                  margin="normal"
+                  fullWidth
+                  defaultValue={system?.fismauid || ''}
+                  error={showError('fismauid')}
+                  helperText={
+                    showError('fismauid') ? formValidErrorText.fismauid : ''
+                  }
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  onChange={(e) => {
+                    handleInputChange(e, 'fismauid')
+                  }}
+                />
+                <TextField
+                  id="outlined-select-datacenterenvironment"
+                  required
+                  select
+                  label="Datacenter Environment"
+                  variant="outlined"
+                  defaultValue={system?.datacenterenvironment || ''}
+                  fullWidth
+                  error={showError('datacenterenvironment')}
+                  helperText={
+                    showError('datacenterenvironment')
+                      ? formValidErrorText.datacenterenvironment
+                      : ''
+                  }
+                  InputLabelProps={{
+                    sx: {
+                      marginTop: 0,
+                    },
+                  }}
+                  sx={{ mt: 2 }}
+                  onChange={(e) => {
+                    handleInputChange(e, 'datacenterenvironment')
+                  }}
+                >
+                  {datacenterenvironment.map((option) => (
+                    <MenuItem key={option.value} value={option.value}>
+                      {option.label}
+                    </MenuItem>
+                  ))}
+                </TextField>
+                <Box
+                  sx={{
+                    mt: 3,
+                    p: 2,
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                  }}
+                >
+                  <SdlSyncToggle
+                    checked={editedFismaSystem.sdl_sync_enabled ?? false}
+                    onChange={(checked) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        sdl_sync_enabled: checked,
+                      }))
                     }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'fismauid')
-                    }}
                   />
-                  <TextField
-                    id="outlined-select-datacenterenvironment"
-                    required
-                    select
-                    label="Datacenter Environment"
-                    variant="standard"
-                    defaultValue={system?.datacenterenvironment || ''}
-                    fullWidth
-                    error={!formValid.datacenterenvironment ? true : false}
-                    helperText={
-                      !formValid.datacenterenvironment
-                        ? formValidErrorText.datacenterenvironment
-                        : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    sx={{ mt: 2 }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'datacenterenvironment')
-                    }}
-                  >
-                    {datacenterenvironment.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
+                </Box>
+                {mode === 'edit' && (
                   <Box
                     sx={{
                       mt: 3,
@@ -679,407 +726,263 @@ export default function EditSystemModal({
                       borderRadius: 1,
                     }}
                   >
-                    <SdlSyncToggle
-                      checked={editedFismaSystem.sdl_sync_enabled ?? false}
-                      onChange={(checked) =>
-                        setEditedFismaSystem((prev) => ({
-                          ...prev,
-                          sdl_sync_enabled: checked,
-                        }))
-                      }
-                    />
-                  </Box>
-                  {mode === 'edit' && (
-                    <Box
-                      sx={{
-                        mt: 3,
-                        p: 2,
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                      }}
-                    >
-                      {system?.decommissioned ? (
-                        <>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 500, mb: 1 }}
-                          >
-                            System Decommissioned
-                          </Typography>
-                          {!showDecommissionForm && !showReactivateForm && (
-                            <>
-                              {system?.decommissioned_date && (
+                    {system?.decommissioned ? (
+                      <>
+                        <Typography
+                          variant="body2"
+                          sx={{ fontWeight: 500, mb: 1 }}
+                        >
+                          System Decommissioned
+                        </Typography>
+                        {!showDecommissionForm && !showReactivateForm && (
+                          <>
+                            {system?.decommissioned_date && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  display: 'block',
+                                  ml: 2,
+                                  color: 'text.secondary',
+                                }}
+                              >
+                                Date:{' '}
+                                {new Date(
+                                  system.decommissioned_date
+                                ).toLocaleDateString()}
+                              </Typography>
+                            )}
+                            {system?.decommissioned_by && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  display: 'block',
+                                  ml: 2,
+                                  color: 'text.secondary',
+                                }}
+                              >
+                                By:{' '}
+                                {decommissionedByName ||
+                                  system.decommissioned_by}
+                              </Typography>
+                            )}
+                            {system?.decommissioned_notes && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  display: 'block',
+                                  ml: 2,
+                                  mt: 0.5,
+                                  color: 'text.secondary',
+                                }}
+                              >
+                                Notes: {system.decommissioned_notes}
+                              </Typography>
+                            )}
+                            {system?.reactivated_date && (
+                              <Box sx={{ mt: 1 }}>
                                 <Typography
                                   variant="caption"
                                   sx={{
                                     display: 'block',
-                                    ml: 2,
+                                    fontStyle: 'italic',
                                     color: 'text.secondary',
                                   }}
                                 >
-                                  Date:{' '}
+                                  Previously reactivated on{' '}
                                   {new Date(
-                                    system.decommissioned_date
+                                    system.reactivated_date
                                   ).toLocaleDateString()}
+                                  {system?.reactivated_by &&
+                                    ` by ${reactivatedByName || system.reactivated_by}`}
+                                  {system?.reactivation_notes
+                                    ? ` (notes: ${system.reactivation_notes})`
+                                    : ''}
                                 </Typography>
-                              )}
-                              {system?.decommissioned_by && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: 'block',
-                                    ml: 2,
-                                    color: 'text.secondary',
-                                  }}
-                                >
-                                  By:{' '}
-                                  {decommissionedByName ||
-                                    system.decommissioned_by}
-                                </Typography>
-                              )}
-                              {system?.decommissioned_notes && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: 'block',
-                                    ml: 2,
-                                    mt: 0.5,
-                                    color: 'text.secondary',
-                                  }}
-                                >
-                                  Notes: {system.decommissioned_notes}
-                                </Typography>
-                              )}
-                              {system?.reactivated_date && (
-                                <Box sx={{ mt: 1 }}>
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      display: 'block',
-                                      fontStyle: 'italic',
-                                      color: 'text.secondary',
-                                    }}
-                                  >
-                                    Previously reactivated on{' '}
-                                    {new Date(
-                                      system.reactivated_date
-                                    ).toLocaleDateString()}
-                                    {system?.reactivated_by &&
-                                      ` by ${reactivatedByName || system.reactivated_by}`}
-                                    {system?.reactivation_notes
-                                      ? ` (notes: ${system.reactivation_notes})`
-                                      : ''}
-                                  </Typography>
-                                </Box>
-                              )}
-                              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                                <CmsButton
-                                  size="small"
-                                  onClick={() => {
-                                    if (system?.decommissioned_date) {
-                                      const d = new Date(
-                                        system.decommissioned_date
-                                      )
-                                      const yyyy = d.getFullYear()
-                                      const mm = String(
-                                        d.getMonth() + 1
-                                      ).padStart(2, '0')
-                                      const dd = String(d.getDate()).padStart(
-                                        2,
-                                        '0'
-                                      )
-                                      setDecommissionDate(`${yyyy}-${mm}-${dd}`)
-                                    }
-                                    setDecommissionNotes(
-                                      system?.decommissioned_notes || ''
+                              </Box>
+                            )}
+                            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
+                              <Button
+                                variant="outlined"
+                                color="primary"
+                                size="small"
+                                onClick={() => {
+                                  if (system?.decommissioned_date) {
+                                    const d = new Date(
+                                      system.decommissioned_date
                                     )
-                                    setShowDecommissionForm(true)
-                                  }}
-                                >
-                                  Edit Decommission Details
-                                </CmsButton>
-                                <CmsButton
-                                  variation="solid"
-                                  size="small"
-                                  onClick={() => {
-                                    setReactivationNotes('')
-                                    setShowReactivateForm(true)
-                                  }}
-                                >
-                                  Reactivate System
-                                </CmsButton>
-                              </Box>
-                            </>
-                          )}
-                          {showReactivateForm && (
-                            <Box sx={{ ml: 2, mt: 2 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{ mt: 0, mb: 0.5, fontWeight: 500 }}
-                              >
-                                Reactivation Notes (optional)
-                              </Typography>
-                              <textarea
-                                value={reactivationNotes}
-                                maxLength={500}
-                                rows={3}
-                                onChange={(e) =>
-                                  setReactivationNotes(e.target.value)
-                                }
-                                placeholder="Reason for reactivation..."
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                  fontFamily: 'inherit',
-                                  resize: 'vertical',
-                                }}
-                              />
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: 'text.secondary',
-                                  display: 'block',
-                                  mb: 1,
-                                }}
-                              >
-                                {reactivationNotes.length}/500
-                              </Typography>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <CmsButton
-                                  variation="solid"
-                                  size="small"
-                                  onClick={() => setOpenReactivateAlert(true)}
-                                >
-                                  Reactivate
-                                </CmsButton>
-                                <CmsButton
-                                  size="small"
-                                  onClick={() => setShowReactivateForm(false)}
-                                >
-                                  Cancel
-                                </CmsButton>
-                              </Box>
-                            </Box>
-                          )}
-                          {showDecommissionForm && (
-                            <Box sx={{ ml: 2, mt: 1 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{ mb: 0.5, fontWeight: 500 }}
-                              >
-                                Decommission Date
-                              </Typography>
-                              <input
-                                type="date"
-                                value={decommissionDate}
-                                max={getTodayISO()}
-                                onChange={(e) => {
-                                  setDecommissionDate(e.target.value)
-                                  if (decommissionDateError) {
-                                    validateDecommissionDate(e.target.value)
+                                    const yyyy = d.getFullYear()
+                                    const mm = String(
+                                      d.getMonth() + 1
+                                    ).padStart(2, '0')
+                                    const dd = String(d.getDate()).padStart(
+                                      2,
+                                      '0'
+                                    )
+                                    setDecommissionDate(`${yyyy}-${mm}-${dd}`)
                                   }
-                                }}
-                                onBlur={(e) => {
-                                  validateDecommissionDate(
-                                    e.currentTarget.value
+                                  setDecommissionNotes(
+                                    system?.decommissioned_notes || ''
                                   )
+                                  setShowDecommissionForm(true)
                                 }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: decommissionDateError
-                                    ? '1px solid #d32f2f'
-                                    : '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                }}
-                              />
-                              {decommissionDateError && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: '#d32f2f',
-                                    mt: 0.5,
-                                    display: 'block',
-                                  }}
-                                >
-                                  {decommissionDateError}
-                                </Typography>
-                              )}
-                              <Typography
-                                variant="body2"
-                                sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
                               >
-                                Notes (optional)
-                              </Typography>
-                              <textarea
-                                value={decommissionNotes}
-                                maxLength={500}
-                                rows={3}
-                                onChange={(e) =>
-                                  setDecommissionNotes(e.target.value)
-                                }
-                                placeholder="Reason for decommission..."
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                  fontFamily: 'inherit',
-                                  resize: 'vertical',
+                                Edit Decommission Details
+                              </Button>
+                              <Button
+                                variant="contained"
+                                color="primary"
+                                size="small"
+                                onClick={() => {
+                                  setReactivationNotes('')
+                                  setShowReactivateForm(true)
                                 }}
-                              />
+                              >
+                                Reactivate System
+                              </Button>
+                            </Box>
+                          </>
+                        )}
+                        {showReactivateForm && (
+                          <Box sx={{ ml: 2, mt: 2 }}>
+                            <Typography
+                              variant="body2"
+                              sx={{ mt: 0, mb: 0.5, fontWeight: 500 }}
+                            >
+                              Reactivation Notes (optional)
+                            </Typography>
+                            <textarea
+                              value={reactivationNotes}
+                              maxLength={500}
+                              rows={3}
+                              onChange={(e) =>
+                                setReactivationNotes(e.target.value)
+                              }
+                              placeholder="Reason for reactivation..."
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                fontSize: '14px',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                boxSizing: 'border-box',
+                                fontFamily: 'inherit',
+                                resize: 'vertical',
+                              }}
+                            />
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: 'text.secondary',
+                                display: 'block',
+                                mb: 1,
+                              }}
+                            >
+                              {reactivationNotes.length}/500
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Button
+                                variant="contained"
+                                color="primary"
+                                size="small"
+                                onClick={() => setOpenReactivateAlert(true)}
+                              >
+                                Reactivate
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="primary"
+                                size="small"
+                                onClick={() => setShowReactivateForm(false)}
+                              >
+                                Cancel
+                              </Button>
+                            </Box>
+                          </Box>
+                        )}
+                        {showDecommissionForm && (
+                          <Box sx={{ ml: 2, mt: 1 }}>
+                            <Typography
+                              variant="body2"
+                              sx={{ mb: 0.5, fontWeight: 500 }}
+                            >
+                              Decommission Date
+                            </Typography>
+                            <input
+                              type="date"
+                              value={decommissionDate}
+                              max={getTodayISO()}
+                              onChange={(e) => {
+                                setDecommissionDate(e.target.value)
+                                if (decommissionDateError) {
+                                  validateDecommissionDate(e.target.value)
+                                }
+                              }}
+                              onBlur={(e) => {
+                                validateDecommissionDate(e.currentTarget.value)
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                fontSize: '14px',
+                                border: decommissionDateError
+                                  ? '1px solid #d32f2f'
+                                  : '1px solid #ccc',
+                                borderRadius: '4px',
+                                boxSizing: 'border-box',
+                              }}
+                            />
+                            {decommissionDateError && (
                               <Typography
                                 variant="caption"
-                                sx={{
-                                  color: 'text.secondary',
-                                  display: 'block',
-                                  mb: 1,
-                                }}
-                              >
-                                {decommissionNotes.length}/500
-                              </Typography>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <CmsButton
-                                  variation="solid"
-                                  size="small"
-                                  onClick={() => {
-                                    if (
-                                      validateDecommissionDate(decommissionDate)
-                                    ) {
-                                      setOpenDecommissionAlert(true)
-                                    }
-                                  }}
-                                >
-                                  Update
-                                </CmsButton>
-                                <CmsButton
-                                  size="small"
-                                  onClick={() => setShowDecommissionForm(false)}
-                                >
-                                  Cancel
-                                </CmsButton>
-                              </Box>
-                            </Box>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={showDecommissionForm}
-                                onChange={(e) => {
-                                  setShowDecommissionForm(e.target.checked)
-                                }}
                                 sx={{
                                   color: '#d32f2f',
-                                  '&.Mui-checked': {
-                                    color: '#d32f2f',
-                                  },
-                                }}
-                              />
-                            }
-                            label={
-                              <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 500 }}
-                              >
-                                Decommission System
-                              </Typography>
-                            }
-                          />
-                          {showDecommissionForm && (
-                            <Box sx={{ ml: 4, mt: 1 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{ mb: 0.5, fontWeight: 500 }}
-                              >
-                                Decommission Date
-                              </Typography>
-                              <input
-                                type="date"
-                                value={decommissionDate}
-                                max={getTodayISO()}
-                                onChange={(e) => {
-                                  setDecommissionDate(e.target.value)
-                                  if (decommissionDateError) {
-                                    validateDecommissionDate(e.target.value)
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  validateDecommissionDate(
-                                    e.currentTarget.value
-                                  )
-                                }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: decommissionDateError
-                                    ? '1px solid #d32f2f'
-                                    : '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                }}
-                              />
-                              {decommissionDateError && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: '#d32f2f',
-                                    mt: 0.5,
-                                    display: 'block',
-                                  }}
-                                >
-                                  {decommissionDateError}
-                                </Typography>
-                              )}
-                              <Typography
-                                variant="body2"
-                                sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
-                              >
-                                Notes (optional)
-                              </Typography>
-                              <textarea
-                                value={decommissionNotes}
-                                maxLength={500}
-                                rows={3}
-                                onChange={(e) =>
-                                  setDecommissionNotes(e.target.value)
-                                }
-                                placeholder="Reason for decommission..."
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                  fontFamily: 'inherit',
-                                  resize: 'vertical',
-                                }}
-                              />
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: 'text.secondary',
+                                  mt: 0.5,
                                   display: 'block',
-                                  mb: 1,
                                 }}
                               >
-                                {decommissionNotes.length}/500
+                                {decommissionDateError}
                               </Typography>
-                              <CmsButton
-                                variation="solid"
+                            )}
+                            <Typography
+                              variant="body2"
+                              sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
+                            >
+                              Notes (optional)
+                            </Typography>
+                            <textarea
+                              value={decommissionNotes}
+                              maxLength={500}
+                              rows={3}
+                              onChange={(e) =>
+                                setDecommissionNotes(e.target.value)
+                              }
+                              placeholder="Reason for decommission..."
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                fontSize: '14px',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                boxSizing: 'border-box',
+                                fontFamily: 'inherit',
+                                resize: 'vertical',
+                              }}
+                            />
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: 'text.secondary',
+                                display: 'block',
+                                mb: 1,
+                              }}
+                            >
+                              {decommissionNotes.length}/500
+                            </Typography>
+                            <Box sx={{ display: 'flex', gap: 1 }}>
+                              <Button
+                                variant="contained"
+                                color="primary"
+                                size="small"
                                 onClick={() => {
                                   if (
                                     validateDecommissionDate(decommissionDate)
@@ -1087,36 +990,150 @@ export default function EditSystemModal({
                                     setOpenDecommissionAlert(true)
                                   }
                                 }}
-                                style={{
-                                  marginTop: '12px',
-                                  backgroundColor: '#d32f2f',
+                              >
+                                Update
+                              </Button>
+                              <Button
+                                variant="outlined"
+                                color="primary"
+                                size="small"
+                                onClick={() => setShowDecommissionForm(false)}
+                              >
+                                Cancel
+                              </Button>
+                            </Box>
+                          </Box>
+                        )}
+                      </>
+                    ) : (
+                      <>
+                        <FormControlLabel
+                          control={
+                            <Checkbox
+                              checked={showDecommissionForm}
+                              onChange={(e) => {
+                                setShowDecommissionForm(e.target.checked)
+                              }}
+                              sx={{
+                                color: '#d32f2f',
+                                '&.Mui-checked': {
+                                  color: '#d32f2f',
+                                },
+                              }}
+                            />
+                          }
+                          label={
+                            <Typography
+                              variant="body2"
+                              sx={{ fontWeight: 500 }}
+                            >
+                              Decommission System
+                            </Typography>
+                          }
+                        />
+                        {showDecommissionForm && (
+                          <Box sx={{ ml: 4, mt: 1 }}>
+                            <Typography
+                              variant="body2"
+                              sx={{ mb: 0.5, fontWeight: 500 }}
+                            >
+                              Decommission Date
+                            </Typography>
+                            <input
+                              type="date"
+                              value={decommissionDate}
+                              max={getTodayISO()}
+                              onChange={(e) => {
+                                setDecommissionDate(e.target.value)
+                                if (decommissionDateError) {
+                                  validateDecommissionDate(e.target.value)
+                                }
+                              }}
+                              onBlur={(e) => {
+                                validateDecommissionDate(e.currentTarget.value)
+                              }}
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                fontSize: '14px',
+                                border: decommissionDateError
+                                  ? '1px solid #d32f2f'
+                                  : '1px solid #ccc',
+                                borderRadius: '4px',
+                                boxSizing: 'border-box',
+                              }}
+                            />
+                            {decommissionDateError && (
+                              <Typography
+                                variant="caption"
+                                sx={{
+                                  color: '#d32f2f',
+                                  mt: 0.5,
+                                  display: 'block',
                                 }}
                               >
-                                Decommission
-                              </CmsButton>
-                            </Box>
-                          )}
-                        </>
-                      )}
-                    </Box>
-                  )}
-                </Grid>
+                                {decommissionDateError}
+                              </Typography>
+                            )}
+                            <Typography
+                              variant="body2"
+                              sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
+                            >
+                              Notes (optional)
+                            </Typography>
+                            <textarea
+                              value={decommissionNotes}
+                              maxLength={500}
+                              rows={3}
+                              onChange={(e) =>
+                                setDecommissionNotes(e.target.value)
+                              }
+                              placeholder="Reason for decommission..."
+                              style={{
+                                width: '100%',
+                                padding: '8px',
+                                fontSize: '14px',
+                                border: '1px solid #ccc',
+                                borderRadius: '4px',
+                                boxSizing: 'border-box',
+                                fontFamily: 'inherit',
+                                resize: 'vertical',
+                              }}
+                            />
+                            <Typography
+                              variant="caption"
+                              sx={{
+                                color: 'text.secondary',
+                                display: 'block',
+                                mb: 1,
+                              }}
+                            >
+                              {decommissionNotes.length}/500
+                            </Typography>
+                            <Button
+                              variant="contained"
+                              color="error"
+                              onClick={() => {
+                                if (
+                                  validateDecommissionDate(decommissionDate)
+                                ) {
+                                  setOpenDecommissionAlert(true)
+                                }
+                              }}
+                              sx={{ mt: 3 }}
+                            >
+                              Decommission
+                            </Button>
+                          </Box>
+                        )}
+                      </>
+                    )}
+                  </Box>
+                )}
               </Grid>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <CmsButton
-              variation="solid"
-              onClick={handleSave}
-              disabled={!isFormValid()}
-            >
-              {mode === 'edit' ? 'Save' : 'Create'}
-            </CmsButton>
-            <CmsButton onClick={handleClose} color="primary">
-              Close
-            </CmsButton>
-          </DialogActions>
-        </Dialog>
+            </Grid>
+          </Box>
+        </Modal>
         <ConfirmDialog
           confirmationText={CONFIRMATION_MESSAGE}
           open={openAlert}

@@ -1,60 +1,30 @@
 import React from 'react'
-import {
-  Box,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
-  IconButton,
-} from '@mui/material'
-import {
-  TextField as CMSTextField,
-  Dropdown,
-  Button as CMSButton,
-  Label,
-  Hint,
-} from '@cmsgov/design-system'
+import { Box, Button, TextField, Typography } from '@mui/material'
+import Modal from '@/components/ds/Modal'
 import SentEmailsModal from './SentEmailsModal'
-import TextField from '@mui/material/TextField'
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import { EmailModalProps } from '@/types'
 import './EmailModal.css'
-import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { colors } from '@/theme/tokens'
 
-const CssTextField = styled(TextField)({
-  '& .MuiInputBase-root': {
-    paddingTop: 0,
-    marginTop: 0,
-  },
-  '& .MuiOutlinedInput-root': {
-    // paddingTop: 0,
-    '& fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-    },
-    '&.Mui-focused fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-      boxShadow: '0px 0px 0px 3px #FFFFFF, 0px 0px 3px 6px #bd13b8',
-    },
-    '@supports (-moz-appearance:none)': {
-      '& .MuiInputBase-inputMultiline': {
-        paddingTop: '2rem',
-        height: '100%',
-        width: '100%',
-        scrollbarWidth: 'none',
-      },
-    },
-    '& .MuiInputBase-inputMultiline': {
-      msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
-      '&::-webkit-scrollbar': { display: 'none' },
-    },
-  },
-})
+const GROUP_OPTIONS = [
+  { label: 'ISSO', value: 'ISSO' },
+  { label: 'ISSM', value: 'ISSM' },
+  { label: 'ADMIN', value: 'ADMIN' },
+  { label: 'READONLY_ADMIN', value: 'READONLY_ADMIN' },
+  { label: 'DCC', value: 'DCC' },
+  { label: 'ALL', value: 'ALL' },
+]
 
+/**
+ * Email-users modal. Sends a mass email to a selected role group. Migrated to
+ * the shared Modal shell (rounded, X close, Cancel beside the primary action)
+ * while keeping the same fields and the same POST /massemails behavior.
+ * @param {EmailModalProps} props - Open state and close handler.
+ * @returns {JSX.Element} The email-users modal.
+ */
 export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const [sentToEmails, setSentToEmails] = React.useState<string[]>([])
   const [openSentEmailsDialog, setOpenSentEmailsDialog] =
@@ -72,14 +42,18 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     setSubject('')
     setSentToEmails([])
   }
-  const submitEmail = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
-    const formData = new FormData(e.currentTarget)
+  const handleClose = () => {
+    setTimeout(() => {
+      resetEmailInputs()
+    }, 200)
+    closeModal()
+  }
+  const submitEmail = async () => {
     try {
       const res = await axiosInstance.post('/massemails', {
-        group: formData.get('email_group'),
-        subject: formData.get('email_subject'),
-        body: formData.get('email_body'),
+        group: groupValue,
+        subject,
+        body,
       })
       setSentGroup(groupValue)
       notify('Emails have successfully been sent', 'success', {
@@ -92,158 +66,95 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     }
   }
 
-  const handleChange = (value: string) => {
-    setGroupValue(value)
-  }
-  const handleSubjectChange = (value: string) => {
-    setSubject(value)
-  }
-  const handleBodyChange = (value: string) => {
-    setBody(value)
-  }
-
   return (
     <>
-      <Dialog
+      <Modal
         open={openModal}
-        onClose={() => {
-          setTimeout(() => {
-            resetEmailInputs()
-          }, 200)
-          closeModal()
-        }}
-        maxWidth="md"
-        fullWidth
-        sx={{
-          '& .MuiDialog-paper': {
-            borderRadius: 0,
-            boxShadow: '3px 3px 5px',
-            // height: 725,
-            minHeight: '95vh',
-            maxHeight: '95vh',
-          },
-        }}
-      >
-        <DialogTitle id="email-dialog-title">
-          <Box
-            sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}
-            className={'ds-u-font-size--2xl ds-u-font-weight--bold'}
-          >
-            {'Email Users'}
-            <IconButton
-              size="large"
-              sx={{
-                p: 0,
-                borderRadius: 0,
-                '&:hover': {
-                  backgroundColor: 'white',
-                },
-              }}
-              onClick={() => {
-                setTimeout(() => {
-                  resetEmailInputs()
-                }, 200)
-                closeModal()
-              }}
-            >
-              <CloseRoundedIcon
-                fontSize="large"
-                sx={{ color: 'rgb(90, 90, 90)' }}
-              />
-            </IconButton>
-          </Box>
-        </DialogTitle>
-        <form onSubmit={submitEmail}>
-          <DialogContent sx={{ pt: 0, ml: 1 }}>
-            <Dropdown
-              label="Select the group to email"
-              name="email_group"
-              hint={'Required'}
-              labelClassName="group-label"
-              onChange={(e) => handleChange(e.target.value)}
-              options={[
-                {
-                  label: '- Select an option -',
-                  value: '',
-                },
-                {
-                  label: 'ISSO',
-                  value: 'ISSO',
-                },
-                {
-                  label: 'ISSM',
-                  value: 'ISSM',
-                },
-                {
-                  label: 'ADMIN',
-                  value: 'ADMIN',
-                },
-                {
-                  label: 'READONLY_ADMIN',
-                  value: 'READONLY_ADMIN',
-                },
-                {
-                  label: 'DCC',
-                  value: 'DCC',
-                },
-                {
-                  label: 'ALL',
-                  value: 'ALL',
-                },
-              ]}
-            />
-            <CMSTextField
-              label="Subject"
-              maxLength={100}
-              name="email_subject"
-              hint={'Required'}
-              onChange={(e) => handleSubjectChange(e.target.value)}
-              className="subject-label-text"
-              labelClassName="label"
-            />
-            <Label className="label">Body</Label>
-            <Hint
-              requirementLabel={'Required'}
-              id={'body-requirement'}
-              className="required-label"
-            />
-            <CssTextField
-              multiline
-              rows={13}
-              fullWidth
-              name="email_body"
-              margin="none"
-              inputProps={{ maxLength: 2000 }}
-              onChange={(e) => handleBodyChange(e.target.value)}
-            />
-          </DialogContent>
-          <DialogActions
-            sx={{
-              justifyContent: 'flex-start',
-              ml: 3,
-              mb: 1,
-            }}
-          >
-            <CMSButton
-              variation="solid"
-              type="submit"
-              disabled={subject && groupValue && body ? false : true}
-            >
-              Send
-            </CMSButton>
-            {sentToEmails.length !== 0 ? (
-              <CMSButton
-                variation="solid"
+        onClose={handleClose}
+        title="Email users"
+        size="md"
+        disableBackdropClose
+        footer={
+          <>
+            {sentToEmails.length !== 0 && (
+              <Button
+                variant="outlined"
+                color="primary"
+                sx={{ mr: 'auto' }}
                 onClick={() => setOpenSentEmailsDialog(true)}
               >
-                Emails sent to ...
-              </CMSButton>
-            ) : (
-              <></>
+                View recipients
+              </Button>
             )}
-          </DialogActions>
-        </form>
-      </Dialog>
+            <Button variant="text" color="inherit" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={!(subject && groupValue && body)}
+              onClick={submitEmail}
+            >
+              Send
+            </Button>
+          </>
+        }
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <TextField
+            select
+            label="Send to"
+            required
+            fullWidth
+            name="email_group"
+            value={groupValue}
+            onChange={(e) => setGroupValue(e.target.value)}
+            SelectProps={{ native: true }}
+            InputLabelProps={{ shrink: true }}
+          >
+            <option value="">- Select an option -</option>
+            {GROUP_OPTIONS.map((opt) => (
+              <option key={opt.value} value={opt.value}>
+                {opt.label}
+              </option>
+            ))}
+          </TextField>
+          <TextField
+            label="Subject"
+            required
+            fullWidth
+            name="email_subject"
+            value={subject}
+            inputProps={{ maxLength: 100 }}
+            onChange={(e) => setSubject(e.target.value)}
+          />
+          <Box>
+            <TextField
+              label="Message"
+              required
+              fullWidth
+              multiline
+              minRows={8}
+              name="email_body"
+              value={body}
+              inputProps={{ maxLength: 2000 }}
+              onChange={(e) => setBody(e.target.value)}
+            />
+            <Typography
+              variant="caption"
+              sx={{
+                color: colors.neutral500,
+                mt: 0.5,
+                display: 'block',
+                textAlign: 'right',
+                fontFamily: 'JetBrains Mono, monospace',
+              }}
+            >
+              {body.length} / 2000
+            </Typography>
+          </Box>
+        </Box>
+      </Modal>
       <SentEmailsModal
         openModal={openSentEmailsDialog}
         closeModal={closeSentEmailsDialog}

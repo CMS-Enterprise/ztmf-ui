@@ -7,16 +7,8 @@ import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
 import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
 import Tooltip from '@mui/material/Tooltip'
-import {
-  Dialog,
-  DialogActions,
-  DialogContent,
-  FormControlLabel,
-  Switch,
-  TextField,
-} from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
-import CustomDialogTitle from '@/components/DialogTitle/CustomDialogTitle'
+import { FormControlLabel, Switch, TextField } from '@mui/material'
+import Modal from '@/components/ds/Modal'
 import {
   DataGrid,
   GridActionsCellItem,
@@ -280,61 +272,57 @@ export default function OpDivAdmin() {
         />
       </Box>
 
-      <Dialog
+      <Modal
         open={dialogOpen}
         onClose={closeDialog}
-        maxWidth="sm"
-        fullWidth
-        aria-label={editing ? 'Edit OpDiv' : 'Create OpDiv'}
+        title={editing ? 'Edit OpDiv' : 'Create OpDiv'}
+        size="sm"
+        disableBackdropClose
+        footer={
+          <>
+            <Button variant="text" color="inherit" onClick={closeDialog}>
+              Cancel
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleSave}>
+              {editing ? 'Save changes' : 'Create OpDiv'}
+            </Button>
+          </>
+        }
       >
-        <CustomDialogTitle title={editing ? 'Edit OpDiv' : 'Create OpDiv'} />
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <TextField
-              label="Code"
-              required
-              fullWidth
-              variant="standard"
-              margin="normal"
-              value={form.code}
-              onChange={(e) => setForm({ ...form, code: e.target.value })}
-              error={!!fieldErrors.code}
-              helperText={fieldErrors.code ?? `1-${CODE_MAX} characters`}
-              inputProps={{ maxLength: CODE_MAX }}
-              InputLabelProps={{ sx: { marginTop: 0 } }}
-            />
-            <TextField
-              label="Name"
-              required
-              fullWidth
-              variant="standard"
-              margin="normal"
-              value={form.name}
-              onChange={(e) => setForm({ ...form, name: e.target.value })}
-              error={!!fieldErrors.name}
-              helperText={fieldErrors.name ?? `1-${NAME_MAX} characters`}
-              inputProps={{ maxLength: NAME_MAX }}
-              InputLabelProps={{ sx: { marginTop: 0 } }}
-            />
-            <FormControlLabel
-              sx={{ mt: 2 }}
-              control={
-                <Switch
-                  checked={form.is_parent}
-                  onChange={(e) =>
-                    setForm({ ...form, is_parent: e.target.checked })
-                  }
-                />
-              }
-              label="Parent (department) row"
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={closeDialog}>Cancel</CmsButton>
-          <CmsButton onClick={handleSave}>Save</CmsButton>
-        </DialogActions>
-      </Dialog>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+          <TextField
+            label="Code"
+            required
+            fullWidth
+            value={form.code}
+            onChange={(e) => setForm({ ...form, code: e.target.value })}
+            error={!!fieldErrors.code}
+            helperText={fieldErrors.code ?? `1-${CODE_MAX} characters`}
+            inputProps={{ maxLength: CODE_MAX }}
+          />
+          <TextField
+            label="Name"
+            required
+            fullWidth
+            value={form.name}
+            onChange={(e) => setForm({ ...form, name: e.target.value })}
+            error={!!fieldErrors.name}
+            helperText={fieldErrors.name ?? `1-${NAME_MAX} characters`}
+            inputProps={{ maxLength: NAME_MAX }}
+          />
+          <FormControlLabel
+            control={
+              <Switch
+                checked={form.is_parent}
+                onChange={(e) =>
+                  setForm({ ...form, is_parent: e.target.checked })
+                }
+              />
+            }
+            label="Parent (department) row"
+          />
+        </Box>
+      </Modal>
 
       <ConfirmDialog
         title={
