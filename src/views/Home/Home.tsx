@@ -194,7 +194,17 @@ export default function HomePageContainer() {
   }
 
   return (
-    <Box sx={{ pt: 3, pb: 4 }}>
+    <Box
+      sx={{
+        pt: 3,
+        pb: 4,
+        // Flex column so the FISMA table card can flex: 1 and fill the
+        // remaining vertical space inside the (scrolling) main element.
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100%',
+      }}
+    >
       <PageHeader
         title="Dashboard"
         subtitle={

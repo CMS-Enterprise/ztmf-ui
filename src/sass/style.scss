@@ -1,22 +1,30 @@
+// App-shell layout. The chrome (USA banner, header, CMS footer) stays
+// anchored to the viewport; the main content area is the scroll container,
+// so every view manages its own vertical overflow internally instead of
+// growing the document past the fold. Views can use flex: 1 + min-height: 0
+// on a child of main to make it fill the canvas (e.g. the dashboard table).
 html,
 body {
-  margin: 0; // remove default margin/padding
+  margin: 0;
   padding: 0;
-  min-height: 100%; // allow for full-page layouts
+  height: 100%;
 }
 
 #root {
   display: flex;
   flex-direction: column;
-  min-height: 100vh; // ensures the root container fills the screen
+  height: 100vh;
 }
 
-// The main content area can stretch
 main {
-  flex: 1; // "take up the leftover space"
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
-// The footer is then pushed to the bottom
+// Belt-and-suspenders: if a view doesn't fill main, keep the footer at the
+// bottom of the column. (With height: 100vh the column is already bounded,
+// so this only triggers when sibling content above main is shorter.)
 footer {
   margin-top: auto;
 }
