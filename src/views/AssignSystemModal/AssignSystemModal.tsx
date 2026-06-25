@@ -1,12 +1,6 @@
 import React from 'react'
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
-  Typography,
-} from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
+import { Button } from '@mui/material'
+import SideDrawer from '@/components/ds/SideDrawer'
 import { GridRowId } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
 import CustomSnackbar from '../Snackbar/Snackbar'
@@ -86,93 +80,88 @@ export default function AssignSystemModal({
 
   return (
     <>
-      <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
-        <DialogTitle align="center">
-          <div>
-            <Typography variant="h3">Assign Fisma Systems</Typography>
-          </div>
-        </DialogTitle>
-        <DialogContent sx={{ height: 500 }}>
-          <Autocomplete
-            multiple
-            disableCloseOnSelect
-            limitTags={2}
-            options={fismaSystems.slice().sort((a: number, b: number) => {
-              const acrA = fismaSystemMap[a]?.acronym || ''
-              const acrB = fismaSystemMap[b]?.acronym || ''
-              return acrA.localeCompare(acrB)
-            })}
-            disableClearable
-            getOptionLabel={(option: number) => {
-              const system = fismaSystemMap[option]
-              return system ? `${system.acronym} - ${system.name}` : ''
-            }}
-            renderOption={(props, option, { selected }) => {
-              const isAssigned = assignedSystems.includes(option)
-              return (
-                <li {...props}>
-                  <Checkbox
-                    icon={icon}
-                    key={option}
-                    checkedIcon={checkedIcon}
-                    style={{ marginRight: 8 }}
-                    checked={selected || isAssigned}
-                    disabled={isAssigned}
-                  />
-                  {fismaSystemMap[option]?.acronym}
-                  {' - '}
-                  {fismaSystemMap[option]?.name}
-                </li>
-              )
-            }}
-            value={assignedSystems}
-            onChange={async (_event, newValue) => {
-              const added = newValue.filter(
-                (item) => !assignedSystems.includes(item)
-              )
-              const removed = assignedSystems.filter(
-                (item) => !newValue.includes(item)
-              )
-              if (added.length) {
-                try {
-                  await axiosInstance.post(
-                    `/users/${userid}/assignedfismasystems`,
-                    { fismasystemid: added[0] }
-                  )
-                  setAssignedSystems(newValue)
-                  notify('Saved - assign system', 'success')
-                } catch (error) {
-                  if (isAuthHandled(error)) return
-                  notify(ERROR_MESSAGES.tryAgain, 'error', {
-                    autoHideDuration: 1500,
-                  })
-                }
-              } else if (removed.length) {
-                setPendingUnassign({
-                  systemid: removed[0],
-                  nextValue: newValue,
+      <SideDrawer
+        open={open}
+        onClose={handleClose}
+        title="Assign FISMA systems"
+        eyebrow={userName || undefined}
+        footer={
+          <Button variant="contained" color="primary" onClick={handleClose}>
+            Done
+          </Button>
+        }
+      >
+        <Autocomplete
+          multiple
+          disableCloseOnSelect
+          limitTags={2}
+          options={fismaSystems.slice().sort((a: number, b: number) => {
+            const acrA = fismaSystemMap[a]?.acronym || ''
+            const acrB = fismaSystemMap[b]?.acronym || ''
+            return acrA.localeCompare(acrB)
+          })}
+          disableClearable
+          getOptionLabel={(option: number) => {
+            const system = fismaSystemMap[option]
+            return system ? `${system.acronym} - ${system.name}` : ''
+          }}
+          renderOption={(props, option, { selected }) => {
+            const isAssigned = assignedSystems.includes(option)
+            return (
+              <li {...props}>
+                <Checkbox
+                  icon={icon}
+                  key={option}
+                  checkedIcon={checkedIcon}
+                  style={{ marginRight: 8 }}
+                  checked={selected || isAssigned}
+                  disabled={isAssigned}
+                />
+                {fismaSystemMap[option]?.acronym}
+                {' - '}
+                {fismaSystemMap[option]?.name}
+              </li>
+            )
+          }}
+          value={assignedSystems}
+          onChange={async (_event, newValue) => {
+            const added = newValue.filter(
+              (item) => !assignedSystems.includes(item)
+            )
+            const removed = assignedSystems.filter(
+              (item) => !newValue.includes(item)
+            )
+            if (added.length) {
+              try {
+                await axiosInstance.post(
+                  `/users/${userid}/assignedfismasystems`,
+                  { fismasystemid: added[0] }
+                )
+                setAssignedSystems(newValue)
+                notify('Saved - assign system', 'success')
+              } catch (error) {
+                if (isAuthHandled(error)) return
+                notify(ERROR_MESSAGES.tryAgain, 'error', {
+                  autoHideDuration: 1500,
                 })
               }
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Assign FISMA Systems"
-                variant="filled"
-                placeholder="FISMA Systems"
-                InputLabelProps={{
-                  sx: {
-                    marginTop: 0, // Remove the margin top of the label
-                  },
-                }}
-              />
-            )}
-          />
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={handleClose}>Close</CmsButton>
-        </DialogActions>
-      </Dialog>
+            } else if (removed.length) {
+              setPendingUnassign({
+                systemid: removed[0],
+                nextValue: newValue,
+              })
+            }
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Assign FISMA systems"
+              variant="outlined"
+              placeholder="Search FISMA systems"
+            />
+          )}
+        />
+      </SideDrawer>
       <CustomSnackbar
         open={openSnackBar}
         handleClose={() => setOpenSnackBar(false)}

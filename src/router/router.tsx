@@ -13,6 +13,7 @@ import UserTable from '@/views/UserTable/UserTable'
 import LoginPage from '@/views/LoginPage/LoginPage'
 import QuestionnarePage from '@/views/QuestionnairePage/QuestionnairePage'
 import SystemDetailPage from '@/views/SystemDetailPage/SystemDetailPage'
+import PillarScoresPage from '@/views/PillarScoresPage/PillarScoresPage'
 import OpDivAdmin from '@/views/OpDivAdmin/OpDivAdmin'
 /**
  * The hash router for the application that defines routes
@@ -50,6 +51,12 @@ const router = createHashRouter([
         path: Routes.SYSTEM_DETAIL,
         id: RouteIds.SYSTEM_DETAIL,
         element: <SystemDetailPage />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
+        path: Routes.PILLAR_SCORES,
+        id: RouteIds.PILLAR_SCORES,
+        element: <PillarScoresPage />,
         errorElement: <ErrorBoundary />,
       },
       {
