@@ -34,7 +34,8 @@ import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresMo
 import { FismaTableProps } from '@/types'
 import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
-import { cellStyleForTier } from '@/utils/tierStyles'
+import ScoreDisplay from '@/components/ds/ScoreDisplay'
+import { colors } from '@/theme/tokens'
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
@@ -109,7 +110,7 @@ export function CustomFooterSaveComponent(
           <Tooltip title="Download selected system answers">
             <span role="presentation">
               <IconButton
-                sx={{ color: '#004297' }}
+                sx={{ color: 'primary.main' }}
                 onClick={saveSystemAnswers}
                 disabled={
                   !props.selectedRows || props.selectedRows.length === 0
@@ -166,19 +167,15 @@ function QuickSearchToolbar() {
       <GridToolbarQuickFilter
         debounceMs={250}
         sx={{
-          // '& .MuiInputBase-root:before': {
-          //   borderBottomColor: '#5666b8',
-          //   borderBottomWidth: 2,
-          // },
           '& .MuiInputBase-input::placeholder': {
-            color: '#404040', // Change placeholder color to red
-            opacity: 0.8, // Ensure it is fully visible (MUI reduces opacity by default)
+            color: colors.neutral500,
+            opacity: 0.8, // MUI reduces placeholder opacity by default
           },
           '& .MuiInputBase-root:after': {
-            borderBottomColor: '#5666b8', // Changes the underline color when active
+            borderBottomColor: colors.primary,
           },
           '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: '#5666b8', // Changes the underline color on hover
+            borderBottomColor: colors.primary,
           },
         }}
       />
@@ -187,17 +184,9 @@ function QuickSearchToolbar() {
           <Switch
             checked={showDecommissioned}
             onChange={(e) => setShowDecommissioned(e.target.checked)}
-            sx={{
-              '& .MuiSwitch-switchBase.Mui-checked': {
-                color: '#004297',
-              },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: '#004297',
-              },
-            }}
           />
         }
-        label="Show Decommissioned"
+        label="Show decommissioned"
         sx={{ mr: 2 }}
       />
     </Box>
@@ -289,7 +278,11 @@ export default function FismaTable({ scores }: FismaTableProps) {
       renderCell: (params: GridRenderCellParams) => (
         <Link
           to={`/systems/${params.row.fismasystemid}`}
-          style={{ color: '#004297', textDecoration: 'none' }}
+          style={{
+            color: colors.primary,
+            fontWeight: 600,
+            textDecoration: 'none',
+          }}
           onClick={(e) => e.stopPropagation()}
         >
           {params.value}
@@ -332,9 +325,9 @@ export default function FismaTable({ scores }: FismaTableProps) {
       field: 'Score',
       headerName: 'Zero Trust Score',
       type: 'number',
-      width: 160,
-      align: 'center',
-      headerAlign: 'center',
+      width: 240,
+      align: 'left',
+      headerAlign: 'left',
       hideable: false,
       valueGetter: (value) => {
         const entry = scores[value.row.fismasystemid]
@@ -345,27 +338,11 @@ export default function FismaTable({ scores }: FismaTableProps) {
       },
       renderCell: (params) => {
         const entry = scores[params.row.fismasystemid]
-        const score = entry?.score ?? 0
         // Tier comes from the backend on /scores/aggregate; do not derive
-        // it from the numeric score. Cells without a tier render with no
-        // background fill so a transient deploy mismatch reads as
-        // "unknown" rather than a misleading color.
-        const backgroundColor =
-          cellStyleForTier(entry?.tier)?.backgroundColor ?? 'transparent'
-        return (
-          <Box
-            sx={{
-              border: 1,
-              p: 1,
-              px: 4,
-              borderRadius: 2,
-              borderColor: 'darkgray',
-              backgroundColor,
-            }}
-          >
-            {score.toFixed(2)}
-          </Box>
-        )
+        // it from the numeric score. A bar + value + tier name reads as a
+        // calculated result, not an editable input, and the bar plus tier
+        // word carry meaning without relying on color alone.
+        return <ScoreDisplay score={entry?.score} tier={entry?.tier} />
       },
     },
     {
@@ -480,19 +457,9 @@ export default function FismaTable({ scores }: FismaTableProps) {
         disableColumnSelector
         disableDensitySelector
         sx={{
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: '#004297',
-            color: '#fff',
-          },
-          '& .MuiDataGrid-menuIconButton': {
-            color: '#fff',
-          },
-          '& .MuiDataGrid-menuIcon': {
-            color: '#fff',
-          },
-          '& .MuiDataGrid-sortIcon': {
-            color: '#fff',
-          },
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: 2.5,
+          backgroundColor: colors.white,
           '& .MuiFormControl-root.MuiTextField-root': {
             marginTop: 0,
           },
@@ -501,9 +468,6 @@ export default function FismaTable({ scores }: FismaTableProps) {
           },
           '& .MuiTablePagination-displayedRows': {
             marginBottom: 2,
-          },
-          '& .MuiDataGrid-columnHeaders .MuiSvgIcon-root': {
-            color: 'white',
           },
         }}
       />

@@ -35,6 +35,7 @@ import _ from 'lodash'
 import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
 import ztmfLogo from '@/assets/ztmf-logo-color.png'
+import { colors } from '@/theme/tokens'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -133,10 +134,6 @@ export default function Title() {
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
-  const handleOption = () => {
-    // setTitlePage(option)
-    setAnchorEl(null)
-  }
   const handleClose = () => {
     setAnchorEl(null)
   }
@@ -169,6 +166,28 @@ export default function Title() {
   const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
   const datacallContextNeeded =
     isHomeRoute || isQuestionnaireRoute || isSystemDetail
+  // Primary navigation, lifted out of the kebab into a visible header row.
+  // Each item keeps the same role gating the old menu used. The kebab now
+  // holds only genuine actions (create/email), never navigation.
+  const navItems = [
+    { label: 'Dashboard', to: Routes.ROOT, active: isHomeRoute, show: true },
+    {
+      label: 'Users',
+      to: Routes.USERS,
+      active: location.pathname.startsWith('/users'),
+      show: hasAdminRead,
+    },
+    {
+      label: 'OpDivs',
+      to: Routes.ADMIN_OPDIVS,
+      active: location.pathname.startsWith('/admin/opdivs'),
+      show: userInfo.role === 'OWNER',
+    },
+  ].filter((item) => item.show)
+  // The kebab only appears when the user actually has an action to take.
+  // Read-only admins have nav (above) but no create/email actions, so they
+  // no longer see an empty menu.
+  const hasHeaderActions = isAdmin || isUnscopedWriteAdmin(userInfo)
   // Single source of truth for header logo sizing; divider scales with it
   // so the mark, divider, and wordmark stay vertically centered on resize.
   const LOGO_HEIGHT = 55
@@ -196,51 +215,88 @@ export default function Title() {
             minWidth: 800,
           }}
         >
-          {/* left: ZTMF mark + wordmark */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <img
-              src={ztmfLogo}
-              alt="ZTMF"
-              style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
-            />
+          {/* left: ZTMF mark + wordmark + primary nav */}
+          <Box sx={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+              <img
+                src={ztmfLogo}
+                alt="ZTMF"
+                style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
+              />
+              <Box
+                sx={{
+                  width: '1px',
+                  height: Math.round(LOGO_HEIGHT * 0.7),
+                  backgroundColor: 'rgba(0,0,0,0.12)',
+                  flexShrink: 0,
+                  transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
+                }}
+              />
+              <Box
+                sx={{
+                  lineHeight: 1.15,
+                  transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
+                }}
+              >
+                <Typography
+                  sx={{
+                    fontSize: 17,
+                    fontWeight: 700,
+                    color: '#102B52',
+                    letterSpacing: '0.2px',
+                    lineHeight: 1.15,
+                  }}
+                >
+                  Zero Trust Maturity Framework
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: 12,
+                    fontWeight: 600,
+                    color: '#7997AF',
+                    letterSpacing: '2px',
+                    textTransform: 'uppercase',
+                    lineHeight: 1.15,
+                  }}
+                >
+                  Scoring Tool
+                </Typography>
+              </Box>
+            </Box>
+
+            {/* primary nav tabs */}
             <Box
-              sx={{
-                width: '1px',
-                height: Math.round(LOGO_HEIGHT * 0.7),
-                backgroundColor: 'rgba(0,0,0,0.12)',
-                flexShrink: 0,
-                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-              }}
-            />
-            <Box
-              sx={{
-                lineHeight: 1.15,
-                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-              }}
+              component="nav"
+              sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
             >
-              <Typography
-                sx={{
-                  fontSize: 17,
-                  fontWeight: 700,
-                  color: '#102B52',
-                  letterSpacing: '0.2px',
-                  lineHeight: 1.15,
-                }}
-              >
-                Zero Trust Maturity Framework
-              </Typography>
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  color: '#7997AF',
-                  letterSpacing: '2px',
-                  textTransform: 'uppercase',
-                  lineHeight: 1.15,
-                }}
-              >
-                Scoring Tool
-              </Typography>
+              {navItems.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  style={{ textDecoration: 'none' }}
+                >
+                  <Box
+                    sx={{
+                      px: 3.5,
+                      py: 2,
+                      borderRadius: 1.5,
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: item.active ? colors.primary : colors.neutral700,
+                      backgroundColor: item.active
+                        ? colors.primary50
+                        : 'transparent',
+                      '&:hover': {
+                        backgroundColor: item.active
+                          ? colors.primary50
+                          : colors.neutral50,
+                      },
+                    }}
+                  >
+                    {item.label}
+                  </Box>
+                </Link>
+              ))}
             </Box>
           </Box>
 
@@ -268,51 +324,23 @@ export default function Title() {
                   )}
                 </span>
               )}
-              {hasAdminRead && (
+              {hasHeaderActions && (
                 <>
                   <IconButton
-                    aria-label="more"
-                    aria-controls="long-menu"
+                    aria-label="actions"
+                    aria-controls="actions-menu"
                     aria-haspopup="true"
                     onClick={handleClick}
                   >
                     <MoreVertIcon />
                   </IconButton>
                   <Menu
-                    id="long-menu"
+                    id="actions-menu"
                     anchorEl={anchorEl}
                     keepMounted
                     open={Boolean(anchorEl)}
                     onClose={handleClose}
                   >
-                    <Link
-                      to={Routes.ROOT}
-                      style={{ textDecoration: 'none', color: 'black' }}
-                    >
-                      <MenuItem onClick={() => handleOption()}>
-                        Dashboard
-                      </MenuItem>
-                    </Link>
-                    {hasAdminRead && (
-                      <Link
-                        to={Routes.USERS}
-                        style={{ textDecoration: 'none', color: 'black' }}
-                      >
-                        <MenuItem onClick={() => handleOption()}>
-                          Users
-                        </MenuItem>
-                      </Link>
-                    )}
-                    {userInfo.role === 'OWNER' && (
-                      <Link
-                        to={Routes.ADMIN_OPDIVS}
-                        style={{ textDecoration: 'none', color: 'black' }}
-                      >
-                        <MenuItem onClick={() => handleOption()}>
-                          Manage OpDivs
-                        </MenuItem>
-                      </Link>
-                    )}
                     {isAdmin && (
                       <MenuItem
                         onClick={() => {
@@ -320,7 +348,7 @@ export default function Title() {
                           setOpenModal(true)
                         }}
                       >
-                        Add Fisma System
+                        Add FISMA system
                       </MenuItem>
                     )}
                     {isUnscopedWriteAdmin(userInfo) && (
@@ -330,7 +358,7 @@ export default function Title() {
                           setOpenEmailModal(true)
                         }}
                       >
-                        {'Email Users'}
+                        Email users
                       </MenuItem>
                     )}
                     {isAdmin && (
@@ -340,7 +368,7 @@ export default function Title() {
                           setOpenDataCallModal(true)
                         }}
                       >
-                        Create Datacall
+                        Create datacall
                       </MenuItem>
                     )}
                   </Menu>
@@ -460,7 +488,10 @@ export default function Title() {
           <LoginPage />
         ) : (
           <>
-            <Box component="main">
+            <Box
+              component="main"
+              sx={{ backgroundColor: colors.neutral50, minHeight: '60vh' }}
+            >
               <Outlet
                 context={{
                   fismaSystems,
