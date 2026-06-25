@@ -463,6 +463,11 @@ export default function FismaTable({ scores }: FismaTableProps) {
           rowHeight={60}
           disableRowSelectionOnClick
           disableColumnSelector
+          // Each table already has its own search + filters in the toolbar.
+          // The DataGrid's per-column 3-dot menu adds nothing here and its
+          // built-in filter popup conflicts with the CMS DSG global styles
+          // (overlapping labels). Disable it on every column.
+          disableColumnMenu
           filterModel={{ items: [], quickFilterValues }}
           initialState={{
             pagination: { paginationModel: { pageSize: 25, page: 0 } },
