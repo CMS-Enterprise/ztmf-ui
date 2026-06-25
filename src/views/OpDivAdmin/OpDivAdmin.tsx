@@ -2,25 +2,19 @@ import { useCallback, useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
-import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
-import Tooltip from '@mui/material/Tooltip'
 import { FormControlLabel, Switch, TextField } from '@mui/material'
 import Modal from '@/components/ds/Modal'
-import {
-  DataGrid,
-  GridActionsCellItem,
-  GridColDef,
-  GridToolbarContainer,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid'
+import { DataGrid, GridActionsCellItem, GridColDef } from '@mui/x-data-grid'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import PageHeader from '@/components/ds/PageHeader'
 import StatusChip, { CodeBadge } from '@/components/ds/StatusChip'
-import { colors } from '@/theme/tokens'
+import DataGridPaginationFooter from '@/components/ds/DataGridPaginationFooter'
+import { colors, radius } from '@/theme/tokens'
 import { useContextProp } from '../Title/Context'
 import { Routes } from '@/router/constants'
 import {
@@ -39,17 +33,9 @@ const NAME_MAX = 128
 type FormState = { code: string; name: string; is_parent: boolean }
 const EMPTY_FORM: FormState = { code: '', name: '', is_parent: false }
 
-function SearchToolbar() {
-  return (
-    <GridToolbarContainer sx={{ justifyContent: 'flex-start' }}>
-      <GridToolbarQuickFilter debounceMs={250} />
-    </GridToolbarContainer>
-  )
-}
-
 export default function OpDivAdmin() {
   const navigate = useNavigate()
-  const { userInfo } = useContextProp()
+  const { userInfo, fismaSystems } = useContextProp()
   const isOwner = userInfo.role === 'OWNER'
 
   const [rows, setRows] = useState<OpDiv[]>([])
@@ -166,28 +152,100 @@ export default function OpDivAdmin() {
       })
   }
 
+  // Count of FISMA systems per OpDiv for the "Systems" column. Read directly
+  // off the systems list the root loader hydrates into context, so no extra
+  // fetch is needed.
+  const systemCountByOpDiv = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (const sys of fismaSystems) {
+      if (sys.opdiv_id) counts[sys.opdiv_id] = (counts[sys.opdiv_id] ?? 0) + 1
+    }
+    return counts
+  }, [fismaSystems])
+
+  // Subtitle counts shown under the page title.
+  const activeCount = rows.filter((r) => r.active).length
+  const deactivatedCount = rows.filter((r) => !r.active).length
+  const subtitleParts: string[] = []
+  if (activeCount > 0) subtitleParts.push(`${activeCount} active`)
+  if (deactivatedCount > 0)
+    subtitleParts.push(`${deactivatedCount} deactivated`)
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : ''
+
   const columns: GridColDef[] = useMemo(
     () => [
       {
         field: 'code',
         headerName: 'Code',
         flex: 0.6,
+        minWidth: 110,
         renderCell: (params) => (
           <CodeBadge code={params.row.code} muted={!params.row.active} />
         ),
       },
-      { field: 'name', headerName: 'Name', flex: 1.4 },
+      {
+        field: 'name',
+        headerName: 'Name',
+        flex: 1.4,
+        minWidth: 200,
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              fontWeight: 600,
+              fontSize: 14,
+              color: params.row.active ? colors.ink : colors.neutral500,
+            }}
+          >
+            {params.row.name}
+          </Typography>
+        ),
+      },
       {
         field: 'is_parent',
-        headerName: 'Parent',
-        flex: 0.4,
-        valueGetter: (params) => (params.row.is_parent ? 'Yes' : 'No'),
+        headerName: 'Type',
+        flex: 0.8,
+        minWidth: 130,
+        // Data model only has is_parent (boolean) - no parent_id reference -
+        // so "Child" is the best we can offer without a backend change. When
+        // parent_id lands we can show "Child of {parentCode}".
+        valueGetter: (params) => (params.row.is_parent ? 'Parent' : 'Child'),
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              fontSize: 13,
+              color: params.row.active ? colors.neutral700 : colors.neutral500,
+            }}
+          >
+            {params.row.is_parent ? 'Parent' : 'Child'}
+          </Typography>
+        ),
+      },
+      {
+        field: 'systems',
+        headerName: 'Systems',
+        flex: 0.7,
+        minWidth: 110,
+        valueGetter: (params) => systemCountByOpDiv[params.row.opdiv_id] ?? 0,
+        renderCell: (params) => {
+          const count = systemCountByOpDiv[params.row.opdiv_id] ?? 0
+          return (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: params.row.active ? colors.ink : colors.neutral500,
+              }}
+            >
+              {count} {count === 1 ? 'system' : 'systems'}
+            </Typography>
+          )
+        },
       },
       {
         field: 'active',
         headerName: 'Status',
-        flex: 0.5,
-        valueGetter: (params) => (params.row.active ? 'Active' : 'Inactive'),
+        flex: 0.7,
+        minWidth: 120,
+        valueGetter: (params) => (params.row.active ? 'Active' : 'Deactivated'),
         renderCell: (params) =>
           params.row.active ? (
             <StatusChip label="Active" kind="active" />
@@ -199,48 +257,77 @@ export default function OpDivAdmin() {
         field: 'actions',
         type: 'actions',
         headerName: 'Actions',
-        width: 120,
+        headerAlign: 'right',
+        align: 'right',
+        // Wider so a "Reactivate" text button fits on deactivated rows and
+        // the edit + deactivate icon pair still has breathing room on active.
+        width: 140,
         getActions: (params) => {
           const row = params.row as OpDiv
+          if (!row.active) {
+            // Deactivated row: show a single "Reactivate" outline button per
+            // the mock, matching the Resend pattern on invited users.
+            return [
+              <Button
+                key={`reactivate-${row.opdiv_id}`}
+                variant="outlined"
+                size="small"
+                sx={{
+                  minHeight: 28,
+                  py: 0.25,
+                  px: 1.5,
+                  fontSize: 13,
+                  color: colors.primary,
+                  borderColor: colors.neutral200,
+                }}
+                onClick={() => setPendingToggle(row)}
+              >
+                Reactivate
+              </Button>,
+            ]
+          }
           return [
             <GridActionsCellItem
               key={`edit-${row.opdiv_id}`}
-              icon={<EditIcon />}
-              label="Edit"
+              icon={
+                <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+              }
+              label="Edit OpDiv"
               onClick={() => openEdit(row)}
               color="inherit"
             />,
-            <Tooltip
-              key={`toggle-${row.opdiv_id}`}
-              title={row.active ? 'Deactivate' : 'Activate'}
-              placement="right-start"
-            >
-              <GridActionsCellItem
-                icon={
-                  row.active ? (
-                    <BlockIcon sx={{ color: 'black' }} />
-                  ) : (
-                    <RestoreIcon sx={{ color: 'black' }} />
-                  )
-                }
-                label={row.active ? 'Deactivate' : 'Activate'}
-                onClick={() => setPendingToggle(row)}
-                color="inherit"
-              />
-            </Tooltip>,
+            <GridActionsCellItem
+              key={`deactivate-${row.opdiv_id}`}
+              icon={
+                <BlockIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+              }
+              label="Deactivate OpDiv"
+              onClick={() => setPendingToggle(row)}
+              color="inherit"
+            />,
           ]
         },
       },
     ],
-    []
+    [systemCountByOpDiv]
   )
 
   if (!isOwner) return null
 
   return (
-    <Box sx={{ py: 4 }}>
+    <Box
+      sx={{
+        pt: 3,
+        pb: 4,
+        display: 'flex',
+        flexDirection: 'column',
+        height: '100%',
+        boxSizing: 'border-box',
+      }}
+    >
       <PageHeader
         title="Manage OpDivs"
+        subtitle={subtitle || undefined}
         breadcrumbs={<BreadCrumbs />}
         actions={
           <Button
@@ -253,23 +340,47 @@ export default function OpDivAdmin() {
           </Button>
         }
       />
-      <Box sx={{ height: 600, width: '100%', mb: 2 }}>
-        <DataGrid
-          aria-label="Operating Divisions"
-          rows={rows}
-          columns={columns}
-          getRowId={(row) => row.opdiv_id}
-          initialState={{
-            sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },
-          }}
-          slots={{ toolbar: SearchToolbar }}
-          disableColumnSelector
-          sx={{
-            border: `1px solid ${colors.neutral200}`,
-            borderRadius: 1.5,
-            backgroundColor: colors.white,
-          }}
-        />
+      <Box
+        sx={{
+          backgroundColor: colors.white,
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: `${radius.card}px`,
+          overflow: 'hidden',
+          flex: 1,
+          minHeight: 0,
+          display: 'flex',
+          flexDirection: 'column',
+        }}
+      >
+        <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex' }}>
+          <DataGrid
+            aria-label="Operating Divisions"
+            rows={rows}
+            columns={columns}
+            getRowId={(row) => row.opdiv_id}
+            getRowHeight={() => 64}
+            initialState={{
+              sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },
+              pagination: { paginationModel: { pageSize: 25, page: 0 } },
+            }}
+            pageSizeOptions={[25, 50, 100]}
+            slots={{ footer: DataGridPaginationFooter }}
+            disableColumnSelector
+            disableRowSelectionOnClick
+            sx={{
+              flex: 1,
+              minHeight: 0,
+              border: 'none',
+              backgroundColor: colors.white,
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: colors.neutral50,
+              },
+              '& .MuiDataGrid-cell': {
+                borderBottom: `1px solid ${colors.neutral100}`,
+              },
+            }}
+          />
+        </Box>
       </Box>
 
       <Modal
