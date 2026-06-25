@@ -40,7 +40,10 @@ function StatCard({
         backgroundColor: colors.white,
         border: `1px solid ${colors.neutral200}`,
         borderRadius: `${radius.card}px`,
-        p: 4,
+        p: 2,
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.75,
       }}
     >
       <Typography
@@ -54,7 +57,7 @@ function StatCard({
       >
         {label}
       </Typography>
-      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mt: 1.5 }}>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
         <Typography
           sx={{
             fontFamily: fonts.mono,
@@ -146,7 +149,7 @@ export default function StatisticsBlocks({
   const belowZero = stats.belowInitial === 0
 
   return (
-    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4 }}>
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
       <StatCard label="Total systems" value={stats.total} />
       <StatCard
         label="Avg ZT score"

@@ -968,8 +968,9 @@ theme = createTheme(theme, {
           borderBottom: `1px solid ${colors.neutral200}`,
         },
         columnHeader: {
-          // 10px x 18px per the redesign table-header spec.
-          padding: `${theme.spacing(2.5)} ${theme.spacing(4.5)}`,
+          // 10px x 18px per the redesign table-header spec (spacing unit is
+          // 8px app-wide, so 1.25 = 10px and 2.25 = 18px).
+          padding: `${theme.spacing(1.25)} ${theme.spacing(2.25)}`,
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
           fontSize: '0.6875rem',
@@ -988,14 +989,14 @@ theme = createTheme(theme, {
         cell: {
           color: theme.palette.text.primary,
           // 18px horizontal padding to match the header gutters.
-          padding: `${theme.spacing(0.5)} ${theme.spacing(4.5)}`,
+          padding: `${theme.spacing(0.5)} ${theme.spacing(2.25)}`,
 
           '&:focus': {
             outline: 'none',
           },
 
           '&:first-of-type': {
-            paddingLeft: theme.spacing(4.5),
+            paddingLeft: theme.spacing(2.25),
           },
 
           '&:nth-last-of-type(2)': {

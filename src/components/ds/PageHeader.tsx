@@ -31,14 +31,14 @@ export function PageHeader({
   actions,
 }: PageHeaderProps) {
   return (
-    <Box sx={{ mb: 5 }}>
-      {breadcrumbs && <Box sx={{ mb: 2.5 }}>{breadcrumbs}</Box>}
+    <Box sx={{ mb: 2.5 }}>
+      {breadcrumbs && <Box sx={{ mb: 1.25 }}>{breadcrumbs}</Box>}
       <Box
         sx={{
           display: 'flex',
           alignItems: 'flex-end',
           justifyContent: 'space-between',
-          gap: 6,
+          gap: 3,
           flexWrap: 'wrap',
         }}
       >
@@ -58,7 +58,7 @@ export function PageHeader({
           {subtitle && (
             <Typography
               sx={{
-                mt: 1,
+                mt: 0.5,
                 fontSize: 14,
                 fontWeight: 500,
                 color: colors.neutral500,
@@ -69,7 +69,7 @@ export function PageHeader({
           )}
         </Box>
         {actions && (
-          <Box sx={{ display: 'flex', gap: 2, flexShrink: 0 }}>{actions}</Box>
+          <Box sx={{ display: 'flex', gap: 1.5, flexShrink: 0 }}>{actions}</Box>
         )}
       </Box>
     </Box>
