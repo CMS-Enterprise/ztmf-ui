@@ -18,6 +18,7 @@ import {
 import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import { useState, useEffect, useCallback } from 'react'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
@@ -280,21 +281,41 @@ export default function Title() {
                   aria-label={`Account: ${userInfo.fullname || 'user'}`}
                   onClick={hasHeaderActions ? handleClick : undefined}
                   sx={{
-                    width: 32,
-                    height: 32,
-                    borderRadius: '50%',
-                    backgroundColor: colors.ink900,
-                    color: '#fff',
-                    fontSize: 12,
-                    fontWeight: 700,
                     display: 'inline-flex',
                     alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
+                    gap: 0.75,
+                    p: 0.5,
+                    pr: hasHeaderActions ? 1 : 0.5,
+                    borderRadius: 999,
                     cursor: hasHeaderActions ? 'pointer' : 'default',
+                    ...(hasHeaderActions && {
+                      border: `1px solid ${colors.neutral200}`,
+                      '&:hover': { backgroundColor: colors.neutral50 },
+                    }),
                   }}
                 >
-                  {initials}
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      backgroundColor: colors.ink900,
+                      color: '#fff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {initials}
+                  </Box>
+                  {hasHeaderActions && (
+                    <MoreHorizIcon
+                      sx={{ fontSize: 18, color: colors.neutral500 }}
+                    />
+                  )}
                 </Box>
               </Tooltip>
               {hasHeaderActions && (
