@@ -5,6 +5,7 @@ import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { Box, CircularProgress } from '@mui/material'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ds/PageHeader'
 import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 /**
  * Component that renders the contents of the Home view.
@@ -14,8 +15,10 @@ import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
-  const { latestDataCallId, selectedDatacall } = useContextProp()
+  const { latestDataCallId, selectedDatacall, fismaSystems } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
+  const datacallName = selectedDatacall?.datacall ?? ''
+  const systemCount = fismaSystems.length
   useEffect(() => {
     const controller = new AbortController()
     async function fetchScores() {
@@ -62,9 +65,19 @@ export default function HomePageContainer() {
     )
   }
   return (
-    <Box>
+    <Box sx={{ py: 4 }}>
+      <PageHeader
+        title="Dashboard"
+        subtitle={
+          datacallName
+            ? `Viewing ${datacallName} - ${systemCount} ${
+                systemCount === 1 ? 'system' : 'systems'
+              }`
+            : `${systemCount} ${systemCount === 1 ? 'system' : 'systems'}`
+        }
+        breadcrumbs={<BreadCrumbs />}
+      />
       <StatisticsBlocks scores={scoreMap} />
-      <BreadCrumbs />
       <FismaTable scores={scoreMap} />
     </Box>
   )

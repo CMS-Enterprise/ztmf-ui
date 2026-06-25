@@ -1,19 +1,87 @@
-import { useState, useEffect } from 'react'
+import { useState, useEffect, ReactNode } from 'react'
 import Box from '@mui/material/Box'
-import Paper from '@mui/material/Paper'
 import { Typography } from '@mui/material'
-import { styled } from '@mui/material/styles'
 import { useContextProp } from '../Title/Context'
 import type { SystemScoreEntry } from '@/types'
-const StatisticsPaper = styled(Paper)(({ theme }) => ({
-  width: 120,
-  height: 120,
-  padding: theme.spacing(2),
-  ...theme.typography.body2,
-  textAlign: 'center',
-  overflowWrap: 'break-word',
-  elevation: 3,
-}))
+import { colors, fonts } from '@/theme/tokens'
+
+/**
+ * A single dashboard statistic card: an uppercase eyebrow label above a large
+ * numeric value, with optional secondary context beneath.
+ * @param {object} props - Card content.
+ * @param {string} props.label - Uppercase eyebrow label.
+ * @param {ReactNode} props.value - The large numeric value.
+ * @param {ReactNode} [props.hint] - Optional secondary context line.
+ * @param {string} [props.valueColor] - Optional override for the value color.
+ * @returns {JSX.Element} A statistic card.
+ */
+function StatCard({
+  label,
+  value,
+  hint,
+  valueColor,
+}: {
+  label: string
+  value: ReactNode
+  hint?: ReactNode
+  valueColor?: string
+}) {
+  return (
+    <Box
+      sx={{
+        flex: '1 1 0',
+        minWidth: 200,
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: 3,
+        p: 4,
+      }}
+    >
+      <Typography
+        sx={{
+          fontSize: 11,
+          fontWeight: 600,
+          letterSpacing: '0.08em',
+          textTransform: 'uppercase',
+          color: colors.neutral500,
+        }}
+      >
+        {label}
+      </Typography>
+      <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 2, mt: 1.5 }}>
+        <Typography
+          sx={{
+            fontFamily: fonts.mono,
+            fontSize: 30,
+            fontWeight: 800,
+            lineHeight: 1,
+            color: valueColor ?? colors.ink,
+          }}
+        >
+          {value}
+        </Typography>
+        {hint && (
+          <Typography
+            sx={{ fontSize: 12, fontWeight: 600, color: colors.neutral500 }}
+          >
+            {hint}
+          </Typography>
+        )}
+      </Box>
+    </Box>
+  )
+}
+
+/**
+ * Row of dashboard statistic cards summarizing the systems in the active
+ * datacall: total count, average score, and the highest and lowest scoring
+ * systems. The metrics are computed from the same systems list and score map
+ * as before; only the visual treatment changed.
+ * @param {object} props - Component props.
+ * @param {Record<number, SystemScoreEntry>} props.scores - Score map keyed by
+ *   fismasystemid.
+ * @returns {JSX.Element} The statistics row.
+ */
 export default function StatisticsBlocks({
   scores,
 }: {
@@ -67,77 +135,28 @@ export default function StatisticsBlocks({
     return <p>Loading ...</p>
   }
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        flexWrap: 'wrap',
-        justifyContent: 'space-evenly',
-        '& > :not(style)': {
-          m: 1,
-          width: 270,
-          height: 128,
-          borderWidth: 2,
-        },
-      }}
-    >
-      <StatisticsPaper variant="outlined">
-        <Typography variant="h2" sx={{ color: '#004297', fontSize: '56px' }}>
-          {totalSystems}
-        </Typography>
-        <Typography
-          variant="body1"
-          sx={{ fontSize: '16px', overflowWrap: 'break-word' }}
-        >
-          Total Systems
-        </Typography>
-      </StatisticsPaper>
-      <StatisticsPaper variant="outlined">
-        <Typography variant="h2" sx={{ color: '#004297', fontSize: '56px' }}>
-          {avgSystemScore}
-        </Typography>
-        <Typography
-          variant="body1"
-          sx={{ fontSize: '16px', overflowWrap: 'break-word' }}
-        >
-          Average System Score
-        </Typography>
-      </StatisticsPaper>
-      <StatisticsPaper variant="outlined">
-        <Typography
-          variant="h2"
-          sx={{
-            color: '#128172',
-            fontSize: '50px',
-          }}
-        >
-          {maxSystemScore.toFixed(2)}
-        </Typography>
-        <Typography
-          variant="body1"
-          sx={{
-            fontSize: '16px',
-          }}
-        >
-          Highest System Score:
-          <br /> {maxSystemAcronym}
-        </Typography>
-      </StatisticsPaper>
-      <StatisticsPaper variant="outlined">
-        <Typography
-          variant="h2"
-          sx={{
-            color: '#960B91',
-            fontSize: '50px',
-          }}
-        >
-          {minSystemScore === Number.POSITIVE_INFINITY
+    <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4 }}>
+      <StatCard label="Total systems" value={totalSystems} />
+      <StatCard
+        label="Average system score"
+        value={avgSystemScore.toFixed(2)}
+      />
+      <StatCard
+        label="Highest system score"
+        value={maxSystemScore.toFixed(2)}
+        hint={maxSystemAcronym}
+        valueColor="#0F5C4C"
+      />
+      <StatCard
+        label="Lowest system score"
+        value={
+          minSystemScore === Number.POSITIVE_INFINITY
             ? '0.00'
-            : minSystemScore.toFixed(2)}
-        </Typography>
-        <Typography variant="body1" sx={{ fontSize: '16px' }}>
-          Lowest System Score: <br /> {minSystemAcronym}
-        </Typography>
-      </StatisticsPaper>
+            : minSystemScore.toFixed(2)
+        }
+        hint={minSystemAcronym}
+        valueColor="#A34200"
+      />
     </Box>
   )
 }
