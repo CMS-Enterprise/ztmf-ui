@@ -5,8 +5,6 @@ import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import EditIcon from '@mui/icons-material/Edit'
 import DomainIcon from '@mui/icons-material/Domain'
-import SaveIcon from '@mui/icons-material/Save'
-import CancelIcon from '@mui/icons-material/Close'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
@@ -21,6 +19,7 @@ import {
   GridRowModel,
   GridRenderEditCellParams,
   GridRowEditStopReasons,
+  useGridApiContext,
   useGridApiRef,
 } from '@mui/x-data-grid'
 import {
@@ -123,6 +122,157 @@ function idpLabel(idp: string | undefined): string {
   if (idp === 'okta') return 'Okta'
   if (idp === 'entra') return 'Entra'
   return '-'
+}
+
+/**
+ * Edit cell for the Name column. Renders the avatar + stacked Name and Email
+ * inputs (the email lives in a hidden column, edited here via the grid API so
+ * row-edit mode commits both fields together).
+ */
+function NameEditCell(props: GridRenderEditCellParams) {
+  const { id, value, row } = props
+  const apiRef = useGridApiContext()
+  const onNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    apiRef.current.setEditCellValue({
+      id,
+      field: 'fullname',
+      value: e.target.value,
+    })
+  }
+  const onEmailChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    apiRef.current.setEditCellValue({
+      id,
+      field: 'email',
+      value: e.target.value,
+    })
+  }
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 1.5,
+        width: '100%',
+        py: 0.5,
+      }}
+    >
+      <Box
+        sx={{
+          width: 32,
+          height: 32,
+          borderRadius: '50%',
+          flexShrink: 0,
+          backgroundColor: avatarColor(String(row.userid)),
+          color: colors.white,
+          fontSize: 12,
+          fontWeight: 700,
+          display: 'inline-flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+        }}
+      >
+        {initialsFor(row.fullname, row.email)}
+      </Box>
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          gap: 0.5,
+          flex: 1,
+          minWidth: 0,
+        }}
+      >
+        <InputBase
+          // Auto-focus the first input on inline edit (only fires on explicit
+          // user-triggered edit mode, matching the previous EditInputCell).
+          // eslint-disable-next-line jsx-a11y/no-autofocus
+          autoFocus
+          placeholder="Full name"
+          value={value ?? ''}
+          onChange={onNameChange}
+          sx={{
+            fontSize: 13,
+            fontWeight: 500,
+            height: 28,
+            px: 1,
+            border: `1px solid ${colors.border}`,
+            borderRadius: `${radius.sm}px`,
+            backgroundColor: colors.white,
+          }}
+        />
+        <InputBase
+          placeholder="Email"
+          value={row.email ?? ''}
+          onChange={onEmailChange}
+          sx={{
+            fontSize: 12,
+            fontWeight: 500,
+            height: 26,
+            px: 1,
+            border: `1px solid ${colors.border}`,
+            borderRadius: `${radius.sm}px`,
+            backgroundColor: colors.white,
+          }}
+        />
+      </Box>
+    </Box>
+  )
+}
+
+/**
+ * Edit cell for the Role column. Shows the native singleSelect dropdown with
+ * the short descriptor underneath, updating live as the user picks a role.
+ */
+function RoleEditCell({
+  options,
+  ...props
+}: GridRenderEditCellParams & { options: { value: string; label: string }[] }) {
+  const { id, value } = props
+  const apiRef = useGridApiContext()
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: 0.5,
+        width: '100%',
+        py: 0.5,
+      }}
+    >
+      <TextField
+        select
+        size="small"
+        value={value ?? ''}
+        onChange={(e) =>
+          apiRef.current.setEditCellValue({
+            id,
+            field: 'role',
+            value: e.target.value,
+          })
+        }
+        sx={{
+          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
+          '& .MuiSelect-select': {
+            py: 0,
+            pl: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            height: '30px !important',
+            boxSizing: 'border-box',
+          },
+        }}
+      >
+        {options.map((opt) => (
+          <MenuItem key={opt.value} value={opt.value}>
+            {opt.label}
+          </MenuItem>
+        ))}
+      </TextField>
+      <Typography sx={{ fontSize: 12, color: colors.neutral500, pl: 1.5 }}>
+        {ROLE_DESCRIPTOR[value as string] ?? ''}
+      </Typography>
+    </Box>
+  )
 }
 interface UsersToolbarProps {
   search: string
@@ -671,19 +821,10 @@ export default function UserTable() {
       flex: 1.6,
       minWidth: 220,
       hideable: false,
+      // Custom edit cell stacks the email input below the name input next to
+      // the avatar, matching the redesign inline-edit mock.
       renderEditCell: (params: GridRenderEditCellParams) => (
-        <EditInputCell
-          {...params}
-          getErrorValue={() => {
-            if (params?.value) {
-              if (params.value.length === 0) {
-                return true
-              }
-              return false
-            }
-            return true
-          }}
-        />
+        <NameEditCell {...params} />
       ),
       editable: isAdmin,
       // Avatar + name + email stacked, matching the redesign.
@@ -796,6 +937,17 @@ export default function UserTable() {
             </Typography>
           </Box>
         ) : null,
+      // Custom edit cell adds the live descriptor under the dropdown so the
+      // inline edit row mirrors the read view's stacked layout.
+      renderEditCell: (params: GridRenderEditCellParams) => (
+        <RoleEditCell
+          {...params}
+          options={assignableRoles.map((r) => ({
+            value: r,
+            label: roleLabel(r),
+          }))}
+        />
+      ),
     },
     {
       field: 'opdivs',
@@ -895,23 +1047,37 @@ export default function UserTable() {
         const isInEditMode =
           rowModesModel[params.id]?.mode === GridRowModes.Edit
         if (isInEditMode) {
+          // Text buttons (Save filled, Cancel outline) matching the redesign
+          // mock - the default floppy + X icons read as too small for an
+          // inline-edit save/cancel action.
           return [
-            <GridActionsCellItem
-              icon={<SaveIcon />}
-              label="Save"
-              sx={{ color: 'primary.main' }}
+            <Button
               key={`save-${params.id}`}
+              variant="contained"
+              color="primary"
+              size="small"
+              sx={{ minHeight: 28, py: 0.25, px: 1.5, fontSize: 13 }}
               onClick={handleSaveClick(params.id)}
-            />,
-            <GridActionsCellItem
-              icon={<CancelIcon />}
+            >
+              Save
+            </Button>,
+            <Button
               key={`cancel-${params.id}`}
-              label="Cancel"
-              className="textPrimary"
+              variant="outlined"
+              size="small"
+              sx={{
+                minHeight: 28,
+                py: 0.25,
+                px: 1.5,
+                fontSize: 13,
+                color: colors.neutral700,
+                borderColor: colors.neutral200,
+              }}
               onClick={handleCancelClick(params.id)}
-              color="inherit"
-            />,
-          ]
+            >
+              Cancel
+            </Button>,
+          ] as React.ReactElement[]
         }
 
         // Mirror the backend CanManageUser rule: an admin can only manage a
@@ -1109,6 +1275,11 @@ export default function UserTable() {
             apiRef={apiRef}
             columns={columns}
             getRowHeight={() => 64}
+            getRowClassName={(params) =>
+              rowModesModel[params.id]?.mode === GridRowModes.Edit
+                ? 'is-editing-row'
+                : ''
+            }
             columnVisibilityModel={{ email: false }}
             filterModel={{ items: [], quickFilterValues }}
             // Don't let an admin edit a role they can't assign: if a row's
@@ -1148,6 +1319,12 @@ export default function UserTable() {
               },
               '& .MuiDataGrid-cell': {
                 borderBottom: `1px solid ${colors.neutral100}`,
+              },
+              // Inline-edit row highlight: faint primary50 background + 3px
+              // primary left accent stripe, matching the redesign mock.
+              '& .MuiDataGrid-row.is-editing-row': {
+                backgroundColor: colors.surfaceAlt,
+                boxShadow: `inset 3px 0 0 0 ${colors.primary}`,
               },
               '& .MuiTablePagination-selectLabel': { mb: 2 },
               '& .MuiTablePagination-displayedRows': { mb: 2 },
