@@ -367,7 +367,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
           rows={rows}
           columns={columns}
           getRowId={(row) => row.fismasystemid}
-          getRowHeight={() => 'auto'}
+          rowHeight={64}
           disableRowSelectionOnClick
           disableColumnSelector
           filterModel={{ items: [], quickFilterValues }}
@@ -379,10 +379,6 @@ export default function FismaTable({ scores }: FismaTableProps) {
             border: 'none',
             '& .MuiDataGrid-columnHeaders': {
               backgroundColor: colors.neutral50,
-            },
-            '& .MuiDataGrid-cell': {
-              alignItems: 'center',
-              display: 'flex',
             },
           }}
         />
