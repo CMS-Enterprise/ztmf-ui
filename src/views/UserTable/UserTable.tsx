@@ -153,7 +153,10 @@ function NameEditCell(props: GridRenderEditCellParams) {
         alignItems: 'center',
         gap: 1.5,
         width: '100%',
-        py: 0.5,
+        // DataGrid strips its 18px cell padding in edit mode; add it back so
+        // the inputs aren't flush against the row's left edge.
+        px: 2.25,
+        py: 1,
       }}
     >
       <Box
@@ -236,7 +239,9 @@ function RoleEditCell({
         flexDirection: 'column',
         gap: 0.5,
         width: '100%',
-        py: 0.5,
+        // Match the cell padding the DataGrid strips in edit mode.
+        px: 2.25,
+        py: 1,
       }}
     >
       <TextField
@@ -268,7 +273,7 @@ function RoleEditCell({
           </MenuItem>
         ))}
       </TextField>
-      <Typography sx={{ fontSize: 12, color: colors.neutral500, pl: 1.5 }}>
+      <Typography sx={{ fontSize: 12, color: colors.neutral500, pl: 0.5 }}>
         {ROLE_DESCRIPTOR[value as string] ?? ''}
       </Typography>
     </Box>
@@ -1037,7 +1042,9 @@ export default function UserTable() {
       headerName: 'Actions',
       headerAlign: 'right',
       align: 'right',
-      width: 130,
+      // Wide enough to fit either "Save" + "Cancel" text buttons in edit mode
+      // or the edit-icon + kebab pair in read mode without clipping.
+      width: 170,
       sortable: false,
       filterable: false,
       cellClassName: 'actions',
@@ -1274,7 +1281,11 @@ export default function UserTable() {
             rows={filteredRows}
             apiRef={apiRef}
             columns={columns}
-            getRowHeight={() => 64}
+            // Editing rows grow taller so the stacked Name/Email inputs and
+            // the role descriptor have breathing room above and below.
+            getRowHeight={(params) =>
+              rowModesModel[params.id]?.mode === GridRowModes.Edit ? 88 : 64
+            }
             getRowClassName={(params) =>
               rowModesModel[params.id]?.mode === GridRowModes.Edit
                 ? 'is-editing-row'
