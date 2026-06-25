@@ -762,7 +762,7 @@ export default function UserTable() {
           disableColumnSelector
           sx={{
             border: `1px solid ${colors.neutral200}`,
-            borderRadius: 2.5,
+            borderRadius: 1.5,
             backgroundColor: colors.white,
             '& .MuiTablePagination-selectLabel': {
               mb: 2,

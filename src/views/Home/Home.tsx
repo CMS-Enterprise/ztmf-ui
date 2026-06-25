@@ -178,9 +178,9 @@ export default function HomePageContainer() {
           sx={{
             backgroundColor: colors.white,
             border: `1px solid ${colors.neutral200}`,
-            borderRadius: 2.5,
+            borderRadius: 1.5,
             px: 4,
-            py: 3,
+            py: 3.5,
             mb: 4,
             display: 'flex',
             alignItems: 'center',

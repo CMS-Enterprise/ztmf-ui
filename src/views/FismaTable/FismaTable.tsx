@@ -59,8 +59,8 @@ function TableToolbar({
         display: 'flex',
         alignItems: 'center',
         gap: 2,
-        px: 4,
-        py: 3,
+        px: 4.5,
+        py: 3.5,
         borderBottom: `1px solid ${colors.neutral200}`,
         flexWrap: 'wrap',
       }}
@@ -88,7 +88,7 @@ function TableToolbar({
             px: 1.5,
             py: 0.5,
             border: `1px solid ${colors.neutral200}`,
-            borderRadius: 1.5,
+            borderRadius: 1,
           }}
         >
           <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
@@ -348,7 +348,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
       sx={{
         backgroundColor: colors.white,
         border: `1px solid ${colors.neutral200}`,
-        borderRadius: 2.5,
+        borderRadius: 1.5,
         overflow: 'hidden',
       }}
     >
