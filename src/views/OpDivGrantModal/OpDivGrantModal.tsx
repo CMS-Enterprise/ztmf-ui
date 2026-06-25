@@ -1,12 +1,6 @@
 import React from 'react'
-import {
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
-  Typography,
-} from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
+import { Button } from '@mui/material'
+import SideDrawer from '@/components/ds/SideDrawer'
 import { GridRowId } from '@mui/x-data-grid'
 import Checkbox from '@mui/material/Checkbox'
 import TextField from '@mui/material/TextField'
@@ -108,79 +102,72 @@ export default function OpDivGrantModal({
 
   return (
     <>
-      <Dialog
+      <SideDrawer
         open={open}
         onClose={handleClose}
-        maxWidth="lg"
-        fullWidth
-        aria-label="Assign OpDivs"
+        title="Assign OpDivs"
+        eyebrow={userName || undefined}
+        footer={
+          <Button variant="contained" color="primary" onClick={handleClose}>
+            Done
+          </Button>
+        }
       >
-        <DialogTitle align="center">
-          <div>
-            <Typography variant="h3">Assign OpDivs</Typography>
-          </div>
-        </DialogTitle>
-        <DialogContent sx={{ height: 500 }}>
-          <Autocomplete
-            multiple
-            disableCloseOnSelect
-            limitTags={3}
-            options={sortedOptionIds}
-            disableClearable
-            getOptionLabel={optionLabel}
-            renderOption={(props, option, { selected }) => (
-              <li {...props} key={option}>
-                <Checkbox
-                  icon={icon}
-                  checkedIcon={checkedIcon}
-                  style={{ marginRight: 8 }}
-                  checked={selected}
-                />
-                {optionLabel(option)}
-              </li>
-            )}
-            value={assignedOpDivs}
-            onChange={(_event, newValue) => {
-              const added = newValue.filter(
-                (item) => !assignedOpDivs.includes(item)
-              )
-              const removed = assignedOpDivs.filter(
-                (item) => !newValue.includes(item)
-              )
-              // Grant every added OpDiv and reflect only what the server
-              // confirms - never trust the optimistic newValue wholesale.
-              added.forEach((opdivId) => {
-                grantOpDiv(String(userid), opdivId)
-                  .then(() => {
-                    setAssignedOpDivs((prev) =>
-                      prev.includes(opdivId) ? prev : [...prev, opdivId]
-                    )
-                    notify('Saved - granted OpDiv', 'success')
-                    onChanged?.(String(userid))
-                  })
-                  .catch((error) => handleError(error))
-              })
-              // Revocations confirm one at a time; the revoke handler computes
-              // the next value functionally from the id being removed.
-              if (removed.length) {
-                setPendingRevoke({ opdivId: removed[0] })
-              }
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Assign OpDivs"
-                variant="filled"
-                placeholder="OpDivs"
-                InputLabelProps={{ sx: { marginTop: 0 } }}
+        <Autocomplete
+          multiple
+          disableCloseOnSelect
+          limitTags={3}
+          options={sortedOptionIds}
+          disableClearable
+          getOptionLabel={optionLabel}
+          renderOption={(props, option, { selected }) => (
+            <li {...props} key={option}>
+              <Checkbox
+                icon={icon}
+                checkedIcon={checkedIcon}
+                style={{ marginRight: 8 }}
+                checked={selected}
               />
-            )}
-          />
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={handleClose}>Close</CmsButton>
-        </DialogActions>
-      </Dialog>
+              {optionLabel(option)}
+            </li>
+          )}
+          value={assignedOpDivs}
+          onChange={(_event, newValue) => {
+            const added = newValue.filter(
+              (item) => !assignedOpDivs.includes(item)
+            )
+            const removed = assignedOpDivs.filter(
+              (item) => !newValue.includes(item)
+            )
+            // Grant every added OpDiv and reflect only what the server
+            // confirms - never trust the optimistic newValue wholesale.
+            added.forEach((opdivId) => {
+              grantOpDiv(String(userid), opdivId)
+                .then(() => {
+                  setAssignedOpDivs((prev) =>
+                    prev.includes(opdivId) ? prev : [...prev, opdivId]
+                  )
+                  notify('Saved - granted OpDiv', 'success')
+                  onChanged?.(String(userid))
+                })
+                .catch((error) => handleError(error))
+            })
+            // Revocations confirm one at a time; the revoke handler computes
+            // the next value functionally from the id being removed.
+            if (removed.length) {
+              setPendingRevoke({ opdivId: removed[0] })
+            }
+          }}
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              label="Assign OpDivs"
+              variant="outlined"
+              placeholder="Search OpDivs"
+            />
+          )}
+        />
+      </SideDrawer>
       <ConfirmDialog
         title="Confirm Revoke OpDiv"
         confirmationText={

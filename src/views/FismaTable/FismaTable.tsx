@@ -29,10 +29,9 @@ import { isAuthHandled } from '@/utils/notify'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import BarChartIcon from '@mui/icons-material/BarChart'
-import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresModal'
 // import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { FismaTableProps } from '@/types'
-import type { ScoreAggregate, SystemScoreEntry } from '@/types'
+import type { SystemScoreEntry } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
 import ScoreDisplay from '@/components/ds/ScoreDisplay'
 import { colors } from '@/theme/tokens'
@@ -192,13 +191,6 @@ function QuickSearchToolbar() {
     </Box>
   )
 }
-// Cache for pillar scores to avoid repeated API calls
-interface CachedScore {
-  data: ScoreAggregate[]
-  timestamp: number
-}
-const pillarScoresCache = new Map<number, CachedScore>()
-
 export default function FismaTable({ scores }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const { fismaSystems, latestDataCallId, selectedDatacall, userInfo } =
@@ -209,64 +201,11 @@ export default function FismaTable({ scores }: FismaTableProps) {
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
   const navigate = useNavigate()
-  const [pillarScoresModal, setPillarScoresModal] = useState<{
-    open: boolean
-    systemName: string
-    systemAcronym: string
-    fismasystemid: number
-    scores: ScoreAggregate[]
-  }>({
-    open: false,
-    systemName: '',
-    systemAcronym: '',
-    fismasystemid: 0,
-    scores: [],
-  })
   const handleCloseModal = () => {
     setOpen(false)
     setSelectedRow(null)
   }
 
-  const handleOpenPillarScores = async (row: FismaSystemType) => {
-    try {
-      // Check cache first
-      const cached = pillarScoresCache.get(row.fismasystemid)
-      const now = Date.now()
-      const CACHE_DURATION = 5 * 60 * 1000 // 5 minutes
-
-      let scoresData
-      if (cached && now - cached.timestamp < CACHE_DURATION) {
-        // Use cached data
-        scoresData = cached.data
-      } else {
-        // Fetch fresh data
-        const response = await axiosInstance.get(
-          `/scores/aggregate?fismasystemid=${row.fismasystemid}&include_pillars=true`
-        )
-        scoresData = response.data.data
-
-        // Store in cache
-        pillarScoresCache.set(row.fismasystemid, {
-          data: scoresData,
-          timestamp: now,
-        })
-      }
-
-      setPillarScoresModal({
-        open: true,
-        systemName: row.fismaname,
-        systemAcronym: row.fismaacronym,
-        fismasystemid: row.fismasystemid,
-        scores: scoresData,
-      })
-    } catch (error) {
-      console.error('Error fetching pillar scores:', error)
-    }
-  }
-
-  const handleClosePillarScores = () => {
-    setPillarScoresModal((prev) => ({ ...prev, open: false }))
-  }
   const columns: GridColDef[] = [
     {
       field: 'fismaname',
@@ -395,7 +334,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
                 role="button"
                 onClick={(event) => {
                   event.stopPropagation()
-                  handleOpenPillarScores(params.row as FismaSystemType)
+                  navigate(`/systems/${params.row.fismasystemid}/pillar-scores`)
                 }}
                 color="inherit"
               />
@@ -475,14 +414,6 @@ export default function FismaTable({ scores }: FismaTableProps) {
         open={open}
         onClose={handleCloseModal}
         system={selectedRow}
-      />
-      <PillarScoresModal
-        open={pillarScoresModal.open}
-        onClose={handleClosePillarScores}
-        systemName={pillarScoresModal.systemName}
-        systemAcronym={pillarScoresModal.systemAcronym}
-        scores={pillarScoresModal.scores}
-        selectedDataCallId={activeDataCallId}
       />
     </Box>
   )
