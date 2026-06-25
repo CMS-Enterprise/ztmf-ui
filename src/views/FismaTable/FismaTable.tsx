@@ -548,6 +548,14 @@ export default function FismaTable({ scores }: FismaTableProps) {
         border: `1px solid ${colors.neutral200}`,
         borderRadius: `${radius.card}px`,
         overflow: 'hidden',
+        // Stretch into the remaining vertical space above the CMS footer so
+        // the table fills the gray canvas instead of leaving dead space. The
+        // DataGrid wrapper below uses flex: 1 + min-height: 0 so the grid's
+        // internal scroll absorbs overflow when rows exceed the viewport.
+        flex: 1,
+        minHeight: 0,
+        display: 'flex',
+        flexDirection: 'column',
       }}
     >
       <TableToolbar
@@ -560,7 +568,14 @@ export default function FismaTable({ scores }: FismaTableProps) {
         showDecommissioned={showDecommissioned}
         setShowDecommissioned={setShowDecommissioned}
       />
-      <Box sx={{ height: 560, width: '100%' }}>
+      <Box
+        sx={{
+          flex: 1,
+          minHeight: 0,
+          width: '100%',
+          display: 'flex',
+        }}
+      >
         <DataGrid
           rows={rows}
           columns={columns}
@@ -575,6 +590,10 @@ export default function FismaTable({ scores }: FismaTableProps) {
           pageSizeOptions={PAGE_SIZES}
           slots={{ footer: TableFooter }}
           sx={{
+            // Fill the flex container so the grid (and its internal scroll)
+            // stretches to whatever vertical space is left above the footer.
+            flex: 1,
+            minHeight: 0,
             border: 'none',
             '& .MuiDataGrid-columnHeaders': {
               backgroundColor: colors.neutral50,
