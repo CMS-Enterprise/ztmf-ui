@@ -495,6 +495,10 @@ export default function OpDivAdmin() {
             pageSizeOptions={[25, 50, 100]}
             slots={{ footer: DataGridPaginationFooter }}
             disableColumnSelector
+            // Table has its own search + filters in the toolbar; hide every
+            // per-column 3-dot menu (its filter popup overlaps with the CMS
+            // DSG global stylesheet too).
+            disableColumnMenu
             disableRowSelectionOnClick
             sx={{
               flex: 1,
