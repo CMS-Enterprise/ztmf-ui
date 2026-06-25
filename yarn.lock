@@ -1241,6 +1241,20 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@fontsource/jetbrains-mono@npm:^5.2.8":
+  version: 5.2.8
+  resolution: "@fontsource/jetbrains-mono@npm:5.2.8"
+  checksum: 10/a12d6cb2c32856685590acb08e107fd3aa9b3de2a11257e61a90d50f92e6efdc1e098812317fd7691f72f0b415d3cef7e925099cc4e526d918961e53f730c055
+  languageName: node
+  linkType: hard
+
+"@fontsource/public-sans@npm:^5.2.7":
+  version: 5.2.7
+  resolution: "@fontsource/public-sans@npm:5.2.7"
+  checksum: 10/1ef96fb510ed2c0c8c643850860039f77a3271850bb86110503b4adcbb164afe1b20d10f5421fb9669f423b7303d1371b661598fcb3ec4b6e736b044cd60c7d6
+  languageName: node
+  linkType: hard
+
 "@formatjs/ecma402-abstract@npm:1.18.2":
   version: 1.18.2
   resolution: "@formatjs/ecma402-abstract@npm:1.18.2"
@@ -18672,6 +18686,8 @@ __metadata:
     "@emotion/react": "npm:^11.11.3"
     "@emotion/styled": "npm:^11.11.0"
     "@eslint/js": "npm:^9.39.4"
+    "@fontsource/jetbrains-mono": "npm:^5.2.8"
+    "@fontsource/public-sans": "npm:^5.2.7"
     "@fortawesome/fontawesome-free": "npm:^6.5.1"
     "@hookform/resolvers": "npm:^3.3.4"
     "@mui/icons-material": "npm:^5.15.10"
