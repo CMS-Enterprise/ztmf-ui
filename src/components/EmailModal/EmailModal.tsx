@@ -7,7 +7,7 @@ import './EmailModal.css'
 import axiosInstance from '@/axiosConfig'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { colors } from '@/theme/tokens'
+import { colors, fonts } from '@/theme/tokens'
 
 const GROUP_OPTIONS = [
   { label: 'ISSO', value: 'ISSO' },
@@ -147,7 +147,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
                 mt: 0.5,
                 display: 'block',
                 textAlign: 'right',
-                fontFamily: 'JetBrains Mono, monospace',
+                fontFamily: fonts.mono,
               }}
             >
               {body.length} / 2000

@@ -1,10 +1,13 @@
 import Box from '@mui/material/Box'
 import type { ScoreTier } from '@/types'
-import { colors, fonts, tierDot } from '@/theme/tokens'
+import { colors, fonts, radius, tierDot } from '@/theme/tokens'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 
 /** Highest possible zero trust score; the bar fills relative to this. */
 const MAX_SCORE = 4
+
+/** Em-dash shown for the value when a system has not been assessed. */
+const EM_DASH = '—'
 
 /** Props for {@link ScoreDisplay}. */
 export type ScoreDisplayProps = {
@@ -23,7 +26,9 @@ export type ScoreDisplayProps = {
  *
  * This replaces the old table treatment where a bare numeric score sat in a
  * bordered cell that looked editable. The bar and tier word give a non-color
- * signal alongside the tier color so the meaning survives in greyscale.
+ * signal alongside the tier color so the meaning survives in greyscale. A
+ * not-assessed system renders a dashed empty track, an em-dash value, and
+ * muted text so the row visually recedes.
  * @param {ScoreDisplayProps} props - Score, tier and layout options.
  * @returns {JSX.Element} The score read-out.
  */
@@ -35,9 +40,11 @@ export function ScoreDisplay({
 }: ScoreDisplayProps) {
   const hasScore = typeof score === 'number'
   const resolvedTier: ScoreTier = tier ?? 'Not Assessed'
+  const notAssessed = resolvedTier === 'Not Assessed' || !hasScore
   const fill = hasScore ? Math.max(0, Math.min(1, score / MAX_SCORE)) : 0
-  const dotColor = tierDot[resolvedTier]
-  const tierText = TIER_CHIP_STYLES[resolvedTier].color
+  const tierText = notAssessed
+    ? colors.neutral400
+    : TIER_CHIP_STYLES[resolvedTier].color
 
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
@@ -45,20 +52,26 @@ export function ScoreDisplay({
         sx={{
           width: barWidth,
           height: 6,
-          borderRadius: 1.5,
-          backgroundColor: colors.neutral200,
-          overflow: 'hidden',
+          borderRadius: `${radius.sm}px`,
           flexShrink: 0,
+          ...(notAssessed
+            ? {
+                border: `1px dashed ${colors.neutral200}`,
+                boxSizing: 'border-box',
+              }
+            : { backgroundColor: colors.neutral200, overflow: 'hidden' }),
         }}
       >
-        <Box
-          sx={{
-            width: `${fill * 100}%`,
-            height: '100%',
-            borderRadius: 1.5,
-            backgroundColor: dotColor,
-          }}
-        />
+        {!notAssessed && (
+          <Box
+            sx={{
+              width: `${fill * 100}%`,
+              height: '100%',
+              borderRadius: `${radius.sm}px`,
+              backgroundColor: tierDot[resolvedTier],
+            }}
+          />
+        )}
       </Box>
       <Box
         component="span"
@@ -66,11 +79,11 @@ export function ScoreDisplay({
           fontFamily: fonts.mono,
           fontSize: 14,
           fontWeight: 600,
-          color: colors.ink,
+          color: notAssessed ? colors.neutral400 : colors.ink,
           minWidth: 34,
         }}
       >
-        {hasScore ? score.toFixed(2) : '--'}
+        {notAssessed ? EM_DASH : score.toFixed(2)}
       </Box>
       {showTier && (
         <Box

@@ -16,8 +16,8 @@ interface BreadCrumbsProps {
 }
 
 /**
- * Plain breadcrumb trail ("Dashboard / ..."), no background band. The root is
- * the Dashboard (the app home); subsequent segments derive from the path or
+ * Plain breadcrumb trail ("Home / ..."), no background band. The Home root
+ * always links to the dashboard; subsequent segments derive from the path or
  * the optional segmentLabels override.
  * @param {BreadCrumbsProps} props - Optional path-segment label overrides.
  * @returns {JSX.Element} The breadcrumb trail.
@@ -33,7 +33,7 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
       key="home"
       sx={{ fontSize: 12, fontWeight: 500, color: colors.primary }}
     >
-      Dashboard
+      Home
     </LinkRouter>
   )
 
@@ -69,10 +69,11 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
     )
   })
 
-  // On the dashboard, show just "Dashboard" (no Home prefix). Elsewhere the
-  // trail starts at Home and then walks the path.
+  // On the dashboard, show "Home / Dashboard" explicitly (the path is empty
+  // there). Elsewhere the trail starts at Home and walks the path.
   const trail = isHome
     ? [
+        home,
         <Typography
           key="dashboard"
           sx={{ fontSize: 12, fontWeight: 500, color: colors.neutral500 }}
@@ -98,7 +99,7 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
       separator={
         <Typography
           component="span"
-          sx={{ fontSize: 12, color: colors.neutral400 }}
+          sx={{ fontSize: 12, color: colors.neutral500 }}
         >
           /
         </Typography>

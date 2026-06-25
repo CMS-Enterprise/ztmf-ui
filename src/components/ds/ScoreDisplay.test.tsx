@@ -14,9 +14,9 @@ describe('ScoreDisplay', () => {
     expect(screen.getByText('Advanced')).toBeInTheDocument()
   })
 
-  it('shows a placeholder and Not Assessed when there is no score', () => {
+  it('shows an em-dash and Not Assessed when there is no score', () => {
     render(<ScoreDisplay />)
-    expect(screen.getByText('--')).toBeInTheDocument()
+    expect(screen.getByText('—')).toBeInTheDocument()
     expect(screen.getByText('Not Assessed')).toBeInTheDocument()
   })
 
