@@ -15,11 +15,9 @@ import {
   hasAdminRead as checkHasAdminRead,
   isUnscopedWriteAdmin,
 } from '@/utils/userRoles'
-import { Box, InputBase, Tooltip } from '@mui/material'
+import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import SearchIcon from '@mui/icons-material/Search'
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import { useState, useEffect, useCallback } from 'react'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
@@ -262,98 +260,12 @@ export default function Title() {
                   </Box>
                 </Link>
               ))}
-              {hasHeaderActions && (
-                <>
-                  <Box
-                    role="button"
-                    aria-controls="actions-menu"
-                    aria-haspopup="true"
-                    onClick={handleClick}
-                    sx={{
-                      px: 3.5,
-                      py: 2,
-                      borderRadius: 1.5,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: colors.neutral700,
-                      cursor: 'pointer',
-                      display: 'inline-flex',
-                      alignItems: 'center',
-                      gap: 0.5,
-                      '&:hover': { backgroundColor: colors.neutral50 },
-                    }}
-                  >
-                    Admin
-                    <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-                  </Box>
-                  <Menu
-                    id="actions-menu"
-                    anchorEl={anchorEl}
-                    keepMounted
-                    open={Boolean(anchorEl)}
-                    onClose={handleClose}
-                  >
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => {
-                          setAnchorEl(null)
-                          setOpenModal(true)
-                        }}
-                      >
-                        Add FISMA system
-                      </MenuItem>
-                    )}
-                    {isUnscopedWriteAdmin(userInfo) && (
-                      <MenuItem
-                        onClick={() => {
-                          setAnchorEl(null)
-                          setOpenEmailModal(true)
-                        }}
-                      >
-                        Email users
-                      </MenuItem>
-                    )}
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => {
-                          handleClose()
-                          setOpenDataCallModal(true)
-                        }}
-                      >
-                        Create datacall
-                      </MenuItem>
-                    )}
-                  </Menu>
-                </>
-              )}
             </Box>
           </Box>
 
-          {/* right: search + account avatar */}
+          {/* right: account avatar. For admins it opens the actions menu. */}
           {loaderData.status == 200 && (
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
-              <Box
-                sx={{
-                  display: { xs: 'none', md: 'flex' },
-                  alignItems: 'center',
-                  gap: 1,
-                  px: 1.5,
-                  py: 0.75,
-                  minWidth: 240,
-                  border: `1px solid ${colors.neutral200}`,
-                  borderRadius: 1.5,
-                  backgroundColor: '#fff',
-                }}
-              >
-                <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
-                <InputBase
-                  placeholder="Search systems, users..."
-                  value={dashboardSearch}
-                  onChange={(e) => setDashboardSearch(e.target.value)}
-                  sx={{ fontSize: 13, flex: 1, color: colors.neutral700 }}
-                  inputProps={{ 'aria-label': 'Search systems and users' }}
-                />
-              </Box>
+            <Box sx={{ display: 'flex', alignItems: 'center' }}>
               <Tooltip
                 title={
                   userInfo.fullname
@@ -362,6 +274,11 @@ export default function Title() {
                 }
               >
                 <Box
+                  role={hasHeaderActions ? 'button' : undefined}
+                  aria-controls={hasHeaderActions ? 'actions-menu' : undefined}
+                  aria-haspopup={hasHeaderActions ? 'true' : undefined}
+                  aria-label={`Account: ${userInfo.fullname || 'user'}`}
+                  onClick={hasHeaderActions ? handleClick : undefined}
                   sx={{
                     width: 32,
                     height: 32,
@@ -374,11 +291,54 @@ export default function Title() {
                     alignItems: 'center',
                     justifyContent: 'center',
                     flexShrink: 0,
+                    cursor: hasHeaderActions ? 'pointer' : 'default',
                   }}
                 >
                   {initials}
                 </Box>
               </Tooltip>
+              {hasHeaderActions && (
+                <Menu
+                  id="actions-menu"
+                  anchorEl={anchorEl}
+                  keepMounted
+                  open={Boolean(anchorEl)}
+                  onClose={handleClose}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+                >
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenModal(true)
+                      }}
+                    >
+                      Add FISMA system
+                    </MenuItem>
+                  )}
+                  {isUnscopedWriteAdmin(userInfo) && (
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenEmailModal(true)
+                      }}
+                    >
+                      Email users
+                    </MenuItem>
+                  )}
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        handleClose()
+                        setOpenDataCallModal(true)
+                      }}
+                    >
+                      Create datacall
+                    </MenuItem>
+                  )}
+                </Menu>
+              )}
             </Box>
           )}
         </Box>
