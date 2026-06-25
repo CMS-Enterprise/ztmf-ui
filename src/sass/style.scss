@@ -27,3 +27,15 @@ footer {
 .MuiButton-root {
   text-transform: none !important;
 }
+
+// The CMS DSG stylesheet sets `ul` items to display: list-item / column-stack,
+// which collapses every MUI component that renders as an inline horizontal ul
+// (Pagination, Breadcrumbs, Tabs, Stepper, etc.). Force row layout on those
+// component ULs so we don't have to patch each one inline.
+.MuiPagination-ul,
+.MuiBreadcrumbs-ol {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
