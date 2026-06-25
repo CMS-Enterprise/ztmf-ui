@@ -11,9 +11,9 @@ function renderAt(pathname: string, segmentLabels?: Record<string, string>) {
 }
 
 describe('BreadCrumbs', () => {
-  it('renders Home root link', () => {
+  it('renders Dashboard root link', () => {
     renderAt('/questionnaire/aco-ms')
-    expect(screen.getByText('Home')).toBeInTheDocument()
+    expect(screen.getByText('Dashboard')).toBeInTheDocument()
   })
 
   it('capitalizes lowercase segments and replaces hyphen with space by default', () => {
