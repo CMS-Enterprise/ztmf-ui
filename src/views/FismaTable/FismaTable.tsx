@@ -99,7 +99,7 @@ function TableFooter() {
         alignItems: 'center',
         gap: 1.5,
         px: 2.25,
-        py: 1.5,
+        py: 0,
         backgroundColor: colors.neutral50,
         borderTop: `1px solid ${colors.neutral200}`,
       }}
@@ -145,9 +145,18 @@ function TableFooter() {
           }
           siblingCount={1}
           sx={{
+            // The global stylesheet stacks ul items; force the pagination's
+            // ul into a single nowrap row so the buttons read left to right.
+            '& .MuiPagination-ul': {
+              flexDirection: 'row',
+              flexWrap: 'nowrap',
+              alignItems: 'center',
+              gap: 0.25,
+            },
             '& .MuiPaginationItem-root': {
               minWidth: 28,
               height: 28,
+              margin: 0,
               borderRadius: `${radius.button}px`,
               border: `1px solid ${colors.neutral200}`,
               fontSize: 13,
@@ -234,41 +243,41 @@ function TableToolbar({
             sx={{ fontSize: 13, width: 150 }}
             inputProps={{ 'aria-label': 'Search systems' }}
           />
+          <TextField
+            select
+            size="small"
+            value={opdivFilter}
+            onChange={(e) =>
+              setOpDivFilter(
+                e.target.value === 'all' ? 'all' : Number(e.target.value)
+              )
+            }
+            sx={{
+              minWidth: 130,
+              '& .MuiInputBase-root': { height: 30 },
+              '& .MuiSelect-select': { py: 0, fontSize: 13 },
+            }}
+            aria-label="Filter by OpDiv"
+          >
+            <MenuItem value="all">All OpDivs</MenuItem>
+            {opdivs.map((od) => (
+              <MenuItem key={od.opdiv_id} value={od.opdiv_id}>
+                {od.code}
+              </MenuItem>
+            ))}
+          </TextField>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showDecommissioned}
+                onChange={(e) => setShowDecommissioned(e.target.checked)}
+              />
+            }
+            label={
+              <Typography sx={{ fontSize: 13 }}>Show decommissioned</Typography>
+            }
+          />
         </Box>
-        <TextField
-          select
-          size="small"
-          value={opdivFilter}
-          onChange={(e) =>
-            setOpDivFilter(
-              e.target.value === 'all' ? 'all' : Number(e.target.value)
-            )
-          }
-          sx={{
-            minWidth: 130,
-            '& .MuiInputBase-root': { height: 30 },
-            '& .MuiSelect-select': { py: 0, fontSize: 13 },
-          }}
-          aria-label="Filter by OpDiv"
-        >
-          <MenuItem value="all">All OpDivs</MenuItem>
-          {opdivs.map((od) => (
-            <MenuItem key={od.opdiv_id} value={od.opdiv_id}>
-              {od.code}
-            </MenuItem>
-          ))}
-        </TextField>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showDecommissioned}
-              onChange={(e) => setShowDecommissioned(e.target.checked)}
-            />
-          }
-          label={
-            <Typography sx={{ fontSize: 13 }}>Show decommissioned</Typography>
-          }
-        />
       </Box>
     </Box>
   )
