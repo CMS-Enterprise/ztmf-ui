@@ -124,3 +124,29 @@ export const selectableRoles = (actorRole: string): UserRole[] => {
   if (actorRole === 'OPDIV_ADMIN') return [...OPDIV_ASSIGNABLE_ROLES]
   return []
 }
+
+// Human-readable labels for the backend role enums. The raw enum values
+// (HHS_READONLY_ADMIN, OPDIV_ADMIN, ...) are database constants and must
+// never surface verbatim in the UI. Any role column, dropdown or summary
+// renders roleLabel(role) instead.
+const ROLE_LABELS: Record<UserRole, string> = {
+  OWNER: 'Owner',
+  HHS_ADMIN: 'HHS Admin',
+  HHS_READONLY_ADMIN: 'HHS Read-only Admin',
+  OPDIV_ADMIN: 'OpDiv Admin',
+  OPDIV_READONLY_ADMIN: 'OpDiv Read-only Admin',
+  ISSO: 'ISSO',
+  ISSM: 'ISSM',
+  ADMIN: 'Admin',
+  READONLY_ADMIN: 'Read-only Admin',
+}
+
+/**
+ * Maps a backend role enum to a human-readable label for display.
+ * @param {UserRole | string | undefined} role - The raw role enum value.
+ * @returns {string} A friendly label, or the original value if unmapped.
+ */
+export const roleLabel = (role: UserRole | string | undefined): string => {
+  if (!role) return ''
+  return ROLE_LABELS[role as UserRole] ?? role
+}
