@@ -560,13 +560,11 @@ function UsersToolbar({
           </MenuItem>
         ))}
       </TextField>
-      <Box sx={{ marginLeft: 'auto' }}>
-        <CompactSwitchLabel
-          checked={showDeleted}
-          onChange={setShowDeleted}
-          label="Show deactivated"
-        />
-      </Box>
+      <CompactSwitchLabel
+        checked={showDeleted}
+        onChange={setShowDeleted}
+        label="Show deactivated"
+      />
     </Box>
   )
 }
