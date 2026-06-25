@@ -255,8 +255,20 @@ function TableToolbar({
           }
           sx={{
             minWidth: 130,
-            '& .MuiInputBase-root': { height: 30 },
-            '& .MuiSelect-select': { py: 0, fontSize: 13 },
+            // Lock the outer outlined input AND the inner select cell to 30px;
+            // small TextFields default to ~40px from the notched outline.
+            '& .MuiInputBase-root': {
+              height: 30,
+              fontSize: 13,
+            },
+            '& .MuiSelect-select': {
+              py: 0,
+              pl: 1.5,
+              display: 'flex',
+              alignItems: 'center',
+              height: '30px !important',
+              boxSizing: 'border-box',
+            },
           }}
           aria-label="Filter by OpDiv"
         >
@@ -268,6 +280,18 @@ function TableToolbar({
           ))}
         </TextField>
         <FormControlLabel
+          // The MUI Switch carries 12px padding by default so its bounding box
+          // is ~38px tall - the toggle sits below the 30px inputs even with
+          // center alignment. Zero the wrapper margins and compact the switch
+          // so the row reads as one flush horizontal band.
+          sx={{
+            m: 0,
+            height: 30,
+            '& .MuiSwitch-root': { padding: 0, width: 32, height: 18, mr: 1 },
+            '& .MuiSwitch-switchBase': { padding: 0.25 },
+            '& .MuiSwitch-thumb': { width: 14, height: 14 },
+            '& .MuiSwitch-track': { borderRadius: 999 },
+          }}
           control={
             <Switch
               checked={showDecommissioned}
