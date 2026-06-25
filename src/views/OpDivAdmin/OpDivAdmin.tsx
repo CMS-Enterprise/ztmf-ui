@@ -47,24 +47,29 @@ interface OpDivsToolbarProps {
   setSearch: (value: string) => void
   typeFilter: TypeFilter
   setTypeFilter: (value: TypeFilter) => void
+  showDeactivated: boolean
+  setShowDeactivated: (value: boolean) => void
 }
 
 /**
  * Toolbar inside the Manage OpDivs table card. Mirrors the Dashboard /
- * Users table toolbars: search input on the left, Type filter dropdown
- * pushed to the right, all sharing a uniform 30px row.
+ * Users table toolbars: search input + Type filter + "Show deactivated"
+ * toggle, all right-aligned and sharing a uniform 30px row.
  */
 function OpDivsToolbar({
   search,
   setSearch,
   typeFilter,
   setTypeFilter,
+  showDeactivated,
+  setShowDeactivated,
 }: OpDivsToolbarProps) {
   return (
     <Box
       sx={{
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'flex-end',
         gap: 1.5,
         px: 2.25,
         py: 1.5,
@@ -97,7 +102,6 @@ function OpDivsToolbar({
         value={typeFilter}
         onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
         sx={{
-          marginLeft: 'auto',
           minWidth: 110,
           '& .MuiInputBase-root': { height: 30, fontSize: 13 },
           '& .MuiSelect-select': {
@@ -115,6 +119,25 @@ function OpDivsToolbar({
         <MenuItem value="parent">Parent</MenuItem>
         <MenuItem value="child">Child</MenuItem>
       </TextField>
+      <FormControlLabel
+        // Match the Users / FISMA toggle: zero wrapper margins, compact the
+        // switch to a 32x18 thumb so its bounding box sits flush on the row.
+        sx={{
+          m: 0,
+          height: 30,
+          '& .MuiSwitch-root': { padding: 0, width: 32, height: 18, mr: 1 },
+          '& .MuiSwitch-switchBase': { padding: 0.25 },
+          '& .MuiSwitch-thumb': { width: 14, height: 14 },
+          '& .MuiSwitch-track': { borderRadius: 999 },
+        }}
+        control={
+          <Switch
+            checked={showDeactivated}
+            onChange={(e) => setShowDeactivated(e.target.checked)}
+          />
+        }
+        label={<Typography sx={{ fontSize: 13 }}>Show deactivated</Typography>}
+      />
     </Box>
   )
 }
@@ -132,9 +155,11 @@ export default function OpDivAdmin() {
   const [pendingToggle, setPendingToggle] = useState<OpDiv | null>(null)
   // Toolbar filter state: search threads into the DataGrid as a quick-filter,
   // type narrows the row set client-side so the /opdivs response shape stays
-  // unchanged.
+  // unchanged. showDeactivated swaps the visible set between active-only and
+  // deactivated-only, mirroring the Users / Dashboard toggles.
   const [search, setSearch] = useState<string>('')
   const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [showDeactivated, setShowDeactivated] = useState<boolean>(false)
 
   // OWNER is the tenant boundary - everyone else is bounced, mirroring the
   // redirect guard UserTable uses. The backend also returns 403.
@@ -254,13 +279,19 @@ export default function OpDivAdmin() {
     return counts
   }, [fismaSystems])
 
-  // Client-side filter for Type. Search threads through DataGrid's quick
-  // filter so it can match Code, Name, Type and Systems uniformly.
+  // Client-side filter: status (active vs deactivated) + Type. Search threads
+  // through DataGrid's quick filter so it can match Code, Name, Type and
+  // Systems uniformly.
   const filteredRows = useMemo(() => {
-    if (typeFilter === 'all') return rows
-    const wantParent = typeFilter === 'parent'
-    return rows.filter((r) => r.is_parent === wantParent)
-  }, [rows, typeFilter])
+    return rows.filter((r) => {
+      if (showDeactivated ? r.active : !r.active) return false
+      if (typeFilter !== 'all') {
+        const wantParent = typeFilter === 'parent'
+        if (r.is_parent !== wantParent) return false
+      }
+      return true
+    })
+  }, [rows, typeFilter, showDeactivated])
   const quickFilterValues = search.trim()
     ? search.trim().split(/\s+/)
     : undefined
@@ -459,6 +490,8 @@ export default function OpDivAdmin() {
           setSearch={setSearch}
           typeFilter={typeFilter}
           setTypeFilter={setTypeFilter}
+          showDeactivated={showDeactivated}
+          setShowDeactivated={setShowDeactivated}
         />
         <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex' }}>
           <DataGrid
