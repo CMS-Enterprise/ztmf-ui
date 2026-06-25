@@ -637,7 +637,7 @@ theme = createTheme(theme, {
           fontFamily: theme.typography.fontFamily,
           fontWeight: theme.typography.fontWeightMedium,
           textTransform: 'none',
-          borderRadius: theme.shape.borderRadius,
+          borderRadius: radius.button,
           lineHeight: 1.715,
           padding: '0.4375rem 0.75rem',
           '&.MuiButton-textPrimary:hover': {
@@ -968,7 +968,8 @@ theme = createTheme(theme, {
           borderBottom: `1px solid ${colors.neutral200}`,
         },
         columnHeader: {
-          padding: `${theme.spacing(1.5)} ${theme.spacing(3.5)}`,
+          // 10px x 18px per the redesign table-header spec.
+          padding: `${theme.spacing(2.5)} ${theme.spacing(4.5)}`,
           textTransform: 'uppercase',
           letterSpacing: '0.08em',
           fontSize: '0.6875rem',
@@ -986,14 +987,15 @@ theme = createTheme(theme, {
         },
         cell: {
           color: theme.palette.text.primary,
-          padding: `${theme.spacing(0.5)} calc(${theme.spacing(3.5)} + 2px)`,
+          // 18px horizontal padding to match the header gutters.
+          padding: `${theme.spacing(0.5)} ${theme.spacing(4.5)}`,
 
           '&:focus': {
             outline: 'none',
           },
 
           '&:first-of-type': {
-            paddingLeft: theme.spacing(3.5),
+            paddingLeft: theme.spacing(4.5),
           },
 
           '&:nth-last-of-type(2)': {

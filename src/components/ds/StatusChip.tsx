@@ -1,5 +1,5 @@
 import Box from '@mui/material/Box'
-import { colors, fonts, radius } from '@/theme/tokens'
+import { colors, fonts, radius, status } from '@/theme/tokens'
 
 /** Visual intent for a {@link StatusChip}. */
 export type StatusKind = 'active' | 'neutral' | 'warning' | 'danger'
@@ -8,10 +8,10 @@ const STATUS_COLORS: Record<
   StatusKind,
   { color: string; backgroundColor: string }
 > = {
-  active: { color: '#0F5C4C', backgroundColor: '#E8F8F6' },
-  neutral: { color: colors.neutral500, backgroundColor: '#F1F3F7' },
-  warning: { color: '#A34200', backgroundColor: '#FFF4E6' },
-  danger: { color: '#9B2E1E', backgroundColor: '#FEE7E3' },
+  active: { color: status.active.color, backgroundColor: status.active.bg },
+  neutral: { color: status.neutral.color, backgroundColor: status.neutral.bg },
+  warning: { color: status.warning.color, backgroundColor: status.warning.bg },
+  danger: { color: status.danger.color, backgroundColor: status.danger.bg },
 }
 
 /** Props for {@link StatusChip}. */
@@ -98,7 +98,7 @@ export function CodeBadge({ code, muted = false }: CodeBadgeProps) {
         py: 0.5,
         borderRadius: `${radius.sm}px`,
         color: muted ? colors.neutral500 : colors.ink900,
-        backgroundColor: muted ? '#F1F3F7' : colors.primary50,
+        backgroundColor: muted ? colors.neutral100 : colors.primary50,
       }}
     >
       {code}

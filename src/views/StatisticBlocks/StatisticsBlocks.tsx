@@ -3,16 +3,20 @@ import Box from '@mui/material/Box'
 import { Typography } from '@mui/material'
 import { useContextProp } from '../Title/Context'
 import type { SystemScoreEntry } from '@/types'
-import { colors, fonts } from '@/theme/tokens'
+import { colors, fonts, radius } from '@/theme/tokens'
+
+const ARROW_UP = '↑'
+const ARROW_DOWN = '↓'
 
 /**
  * A single dashboard statistic card: an uppercase eyebrow label above a large
- * numeric value, with optional secondary context beside it.
+ * numeric value, with an optional colored sub-label beside it.
  * @param {object} props - Card content.
  * @param {string} props.label - Uppercase eyebrow label.
  * @param {ReactNode} props.value - The large numeric value.
  * @param {ReactNode} [props.hint] - Optional secondary context line.
  * @param {string} [props.valueColor] - Optional override for the value color.
+ * @param {string} [props.hintColor] - Optional override for the hint color.
  * @returns {JSX.Element} A statistic card.
  */
 function StatCard({
@@ -20,11 +24,13 @@ function StatCard({
   value,
   hint,
   valueColor,
+  hintColor,
 }: {
   label: string
   value: ReactNode
   hint?: ReactNode
   valueColor?: string
+  hintColor?: string
 }) {
   return (
     <Box
@@ -33,7 +39,7 @@ function StatCard({
         minWidth: 180,
         backgroundColor: colors.white,
         border: `1px solid ${colors.neutral200}`,
-        borderRadius: 1.5,
+        borderRadius: `${radius.card}px`,
         p: 4,
       }}
     >
@@ -62,7 +68,11 @@ function StatCard({
         </Typography>
         {hint && (
           <Typography
-            sx={{ fontSize: 12, fontWeight: 600, color: colors.neutral500 }}
+            sx={{
+              fontSize: 12,
+              fontWeight: 600,
+              color: hintColor ?? colors.neutral500,
+            }}
           >
             {hint}
           </Typography>
@@ -72,21 +82,29 @@ function StatCard({
   )
 }
 
+/** Props for {@link StatisticsBlocks}. */
+export type StatisticsBlocksProps = {
+  /** Score map for the active datacall, keyed by fismasystemid. */
+  scores: Record<number, SystemScoreEntry>
+  /** Average system score for the prior datacall, when one exists. */
+  priorAvg?: number
+  /** Short label for the prior datacall, e.g. "FY22". */
+  priorLabel?: string
+}
+
 /**
- * Row of dashboard statistic cards: total systems, average zero-trust score,
- * how many systems are at Optimal or Advanced, and how many fall below the
- * Initial tier. Every value is derived from the systems list and the score map
- * (tiers come from the backend); nothing is fabricated.
- * @param {object} props - Component props.
- * @param {Record<number, SystemScoreEntry>} props.scores - Score map keyed by
- *   fismasystemid.
+ * Row of dashboard statistic cards: total systems, average zero-trust score
+ * (with a trend vs the prior datacall when available), how many systems are at
+ * Optimal or Advanced, and how many fall below the Initial tier. Every value is
+ * derived from real data (the systems list and the backend score tiers).
+ * @param {StatisticsBlocksProps} props - Score map and optional prior average.
  * @returns {JSX.Element} The statistics row.
  */
 export default function StatisticsBlocks({
   scores,
-}: {
-  scores: Record<number, SystemScoreEntry>
-}) {
+  priorAvg,
+  priorLabel,
+}: StatisticsBlocksProps) {
   const { fismaSystems } = useContextProp()
 
   const stats = useMemo(() => {
@@ -113,21 +131,40 @@ export default function StatisticsBlocks({
     return { total, avg, optimalAdvanced, belowInitial }
   }, [fismaSystems, scores])
 
+  // Average-score trend vs the prior datacall, when one is available.
+  const delta =
+    priorAvg !== undefined && priorLabel ? stats.avg - priorAvg : undefined
+  const avgHint =
+    delta !== undefined && Math.abs(delta) >= 0.005
+      ? `${delta > 0 ? ARROW_UP : ARROW_DOWN} ${Math.abs(delta).toFixed(
+          2
+        )} vs ${priorLabel}`
+      : undefined
+  const avgHintColor =
+    delta !== undefined && delta < 0 ? colors.down : colors.up
+
+  const belowZero = stats.belowInitial === 0
+
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 3, mb: 4 }}>
       <StatCard label="Total systems" value={stats.total} />
-      <StatCard label="Avg ZT score" value={stats.avg.toFixed(2)} />
+      <StatCard
+        label="Avg ZT score"
+        value={stats.avg.toFixed(2)}
+        hint={avgHint}
+        hintColor={avgHintColor}
+      />
       <StatCard
         label="Optimal / Advanced"
         value={stats.optimalAdvanced}
         hint={`of ${stats.total} systems`}
-        valueColor="#0F5C4C"
+        valueColor={colors.up}
       />
       <StatCard
         label="Below initial"
         value={stats.belowInitial}
-        hint="need attention"
-        valueColor="#A34200"
+        hint={belowZero ? 'nothing to worry about' : 'need attention'}
+        valueColor={belowZero ? colors.neutral500 : colors.down}
       />
     </Box>
   )

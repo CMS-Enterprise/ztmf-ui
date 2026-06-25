@@ -7,12 +7,13 @@ import {
   Box,
   Button,
   CircularProgress,
-  Autocomplete,
-  TextField,
+  Menu,
+  MenuItem,
   Typography,
 } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
+import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ds/PageHeader'
 import { StatusChip } from '@/components/ds/StatusChip'
@@ -22,9 +23,11 @@ import { exportSystemAnswers } from '@/utils/exportSystems'
 import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
-import { colors } from '@/theme/tokens'
+import { colors, radius } from '@/theme/tokens'
 import _ from 'lodash'
 import type { ScoreAggregate, SystemScoreEntry, FismaSystemType } from '@/types'
+
+const ARROW_RIGHT = '→'
 
 /** Formats an ISO date string as e.g. "May 1, 2026". */
 function formatDate(value: string | undefined): string {
@@ -38,6 +41,26 @@ function formatDate(value: string | undefined): string {
   })
 }
 
+/** Short fiscal-year label, e.g. "FY2022 ..." -> "FY22". Falls back to the name. */
+function shortFy(name: string | undefined): string {
+  if (!name) return ''
+  const match = name.match(/FY(\d{4})/i)
+  return match ? `FY${match[1].slice(2)}` : name
+}
+
+/** Average of the systemscore values in a score aggregate response. */
+function averageScore(aggregates: ScoreAggregate[]): number {
+  let sum = 0
+  let count = 0
+  for (const a of aggregates) {
+    if (a.systemscore) {
+      sum += a.systemscore
+      count += 1
+    }
+  }
+  return count > 0 ? sum / count : 0
+}
+
 /**
  * Dashboard view: page header with export/add actions, the datacall context
  * card, summary statistics, and the FISMA systems table.
@@ -48,6 +71,9 @@ export default function HomePageContainer() {
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
   const [exporting, setExporting] = useState<boolean>(false)
   const [addOpen, setAddOpen] = useState<boolean>(false)
+  const [priorAvg, setPriorAvg] = useState<number | undefined>(undefined)
+  const [priorLabel, setPriorLabel] = useState<string>('')
+  const [datacallAnchor, setDatacallAnchor] = useState<null | HTMLElement>(null)
   const {
     latestDataCallId,
     selectedDatacall,
@@ -92,6 +118,38 @@ export default function HomePageContainer() {
       controller.abort()
     }
   }, [activeDataCallId])
+
+  // Average score for the immediately-prior datacall, for the Avg ZT trend.
+  // datacalls arrives sorted by datacallid descending, so the prior one is the
+  // first with a smaller id than the active datacall.
+  useEffect(() => {
+    const prior = datacalls.find((dc) => dc.datacallid < activeDataCallId)
+    if (!prior) {
+      setPriorAvg(undefined)
+      setPriorLabel('')
+      return
+    }
+    const controller = new AbortController()
+    async function fetchPrior() {
+      try {
+        const res = await axiosInstance.get(
+          `/scores/aggregate?datacallid=${prior!.datacallid}`,
+          { signal: controller.signal }
+        )
+        setPriorAvg(averageScore(res.data.data as ScoreAggregate[]))
+        setPriorLabel(shortFy(prior!.datacall))
+      } catch {
+        if (controller.signal.aborted) return
+        // Non-fatal: the trend simply hides if the prior fetch fails.
+        setPriorAvg(undefined)
+        setPriorLabel('')
+      }
+    }
+    fetchPrior()
+    return () => {
+      controller.abort()
+    }
+  }, [activeDataCallId, datacalls])
 
   const handleExport = async () => {
     if (!activeDataCallId) return
@@ -140,11 +198,15 @@ export default function HomePageContainer() {
       <PageHeader
         title="Dashboard"
         subtitle={
-          datacallName
-            ? `Viewing ${datacallName} - ${systemCount} ${
-                systemCount === 1 ? 'system' : 'systems'
-              }`
-            : `${systemCount} ${systemCount === 1 ? 'system' : 'systems'}`
+          datacallName ? (
+            <>
+              Viewing{' '}
+              <strong style={{ color: colors.ink }}>{datacallName}</strong> ·{' '}
+              {systemCount} {systemCount === 1 ? 'system' : 'systems'}
+            </>
+          ) : (
+            `${systemCount} ${systemCount === 1 ? 'system' : 'systems'}`
+          )
         }
         breadcrumbs={<BreadCrumbs />}
         actions={
@@ -178,7 +240,7 @@ export default function HomePageContainer() {
           sx={{
             backgroundColor: colors.white,
             border: `1px solid ${colors.neutral200}`,
-            borderRadius: 1.5,
+            borderRadius: `${radius.card}px`,
             px: 4,
             py: 3.5,
             mb: 4,
@@ -199,29 +261,59 @@ export default function HomePageContainer() {
           >
             Datacall
           </Typography>
-          <Autocomplete
-            size="small"
-            options={datacalls}
-            getOptionLabel={(dc) => dc.datacall}
-            isOptionEqualToValue={(option, value) =>
-              option.datacallid === value.datacallid
-            }
-            value={selectedDatacall ?? datacalls[0]}
-            onChange={(_event, dc) => {
-              if (dc) setSelectedDatacall(dc)
+
+          {/* Pill-shaped datacall dropdown trigger */}
+          <Box
+            role="button"
+            aria-haspopup="true"
+            aria-label="Select datacall"
+            onClick={(e) => setDatacallAnchor(e.currentTarget)}
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 3,
+              py: 1.5,
+              borderRadius: `${radius.button}px`,
+              backgroundColor: colors.primary50,
+              color: colors.primary,
+              fontSize: 13,
+              fontWeight: 600,
+              cursor: 'pointer',
             }}
-            disableClearable
-            sx={{ minWidth: 300 }}
-            renderInput={(params) => <TextField {...params} size="small" />}
-          />
+          >
+            {datacallName}
+            <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
+          </Box>
+          <Menu
+            anchorEl={datacallAnchor}
+            open={Boolean(datacallAnchor)}
+            onClose={() => setDatacallAnchor(null)}
+          >
+            {datacalls.map((dc) => (
+              <MenuItem
+                key={dc.datacallid}
+                selected={dc.datacallid === activeDataCallId}
+                onClick={() => {
+                  setSelectedDatacall(dc)
+                  setDatacallAnchor(null)
+                }}
+              >
+                {dc.datacall}
+              </MenuItem>
+            ))}
+          </Menu>
+
           <StatusChip
             label={isClosed ? 'Closed' : 'Active'}
             kind={isClosed ? 'neutral' : 'active'}
           />
+
           <Box
             sx={{
               marginLeft: 'auto',
               display: 'flex',
+              alignItems: 'center',
               gap: 4,
               fontSize: 13,
               fontWeight: 500,
@@ -241,11 +333,27 @@ export default function HomePageContainer() {
                 {formatDate(selectedDatacall?.deadline)}
               </strong>
             </span>
+            <Box
+              component="a"
+              href="#compare-datacalls"
+              sx={{
+                color: colors.primary,
+                fontWeight: 600,
+                textDecoration: 'none',
+                whiteSpace: 'nowrap',
+              }}
+            >
+              Compare datacalls {ARROW_RIGHT}
+            </Box>
           </Box>
         </Box>
       )}
 
-      <StatisticsBlocks scores={scoreMap} />
+      <StatisticsBlocks
+        scores={scoreMap}
+        priorAvg={priorAvg}
+        priorLabel={priorLabel}
+      />
       <FismaTable scores={scoreMap} />
 
       <EditSystemModal

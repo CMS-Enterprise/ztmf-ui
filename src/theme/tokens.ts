@@ -27,11 +27,27 @@ export const colors = {
   neutral500: '#5B6473',
   neutral400: '#9AA3B2',
   neutral200: '#E5E8EE',
+  // Faint hairline / row-hover surface, lighter than neutral200.
+  neutral100: '#F1F3F7',
   neutral50: '#F7F8FA',
   // Input border and a faint blue-tinted surface used for highlighted rows.
   border: '#C7CCD6',
   surfaceAlt: '#FAFBFE',
   white: '#FFFFFF',
+  // Semantic trend / value colors (used for deltas and emphasized counts).
+  up: '#0F5C4C', // positive trend, "good" counts
+  down: '#A34200', // negative trend, "needs attention" counts
+} as const
+
+/**
+ * Status pill palettes (background + text), keyed by intent. Mirrors the
+ * StatusChip kinds; the leading dot uses currentColor so it inherits text.
+ */
+export const status = {
+  active: { color: '#0F5C4C', bg: '#E8F8F6' },
+  neutral: { color: '#5B6473', bg: '#F1F3F7' },
+  warning: { color: '#A34200', bg: '#FFF4E6' },
+  danger: { color: '#9B2E1E', bg: '#FEE7E3' },
 } as const
 
 /**
@@ -49,9 +65,11 @@ export const tierDot = {
 
 /** Corner radii. Pill is reserved for chips and badges only. */
 export const radius = {
-  sm: 4, // inputs, dense controls
-  md: 8, // buttons, cards, modals
-  lg: 12, // stat cards, hero panels
+  sm: 4, // chips, code badges, dense controls
+  button: 6, // buttons
+  md: 8, // inputs, search fields
+  card: 10, // cards, table cards, modals
+  lg: 12, // hero panels
   pill: 999, // chips and badges only
 } as const
 
@@ -84,5 +102,5 @@ export const modalWidth = {
   xl: 920,
 } as const
 
-const tokens = { colors, tierDot, radius, space, fonts, modalWidth }
+const tokens = { colors, status, tierDot, radius, space, fonts, modalWidth }
 export default tokens
