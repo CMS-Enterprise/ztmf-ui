@@ -159,6 +159,7 @@ function UsersToolbar({
       sx={{
         display: 'flex',
         alignItems: 'center',
+        justifyContent: 'end',
         gap: 1.5,
         px: 2.25,
         py: 1.5,
