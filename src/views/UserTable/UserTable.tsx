@@ -923,7 +923,7 @@ export default function UserTable() {
         if (params.row.deleted) {
           return [
             <GridActionsCellItem
-              icon={<RestoreIcon sx={{ color: colors.neutral700 }} />}
+              icon={<RestoreIcon fontSize="small" />}
               key={`restore-${params.id}`}
               label="Restore user"
               showInMenu={false}
@@ -934,19 +934,18 @@ export default function UserTable() {
         }
 
         // Active / Invited rows: Edit (icon) + a kebab menu with the
-        // assign / delete actions, matching the redesign mock.
+        // assign / delete actions, matching the redesign mock. Icons match
+        // the Dashboard row actions: fontSize="small" (~20px), inherit color.
         return [
           <GridActionsCellItem
-            icon={<EditIcon sx={{ fontSize: 16, color: colors.neutral700 }} />}
+            icon={<EditIcon fontSize="small" />}
             key={`edit-${params.id}`}
             label="Edit user"
             onClick={handleEditClick(params.id)}
             color="inherit"
           />,
           <GridActionsCellItem
-            icon={
-              <MoreHorizIcon sx={{ fontSize: 18, color: colors.neutral700 }} />
-            }
+            icon={<MoreHorizIcon fontSize="small" />}
             key={`assign-${params.id}`}
             label="Assign FISMA systems"
             showInMenu
@@ -954,14 +953,14 @@ export default function UserTable() {
           />,
           <GridActionsCellItem
             key={`assign-opdivs-${params.id}`}
-            icon={<DomainIcon sx={{ fontSize: 18 }} />}
+            icon={<DomainIcon fontSize="small" />}
             label="Assign OpDivs"
             showInMenu
             onClick={() => handleOpenOpDivModal(params.id)}
           />,
           <GridActionsCellItem
             key={`delete-${params.id}`}
-            icon={<DeleteIcon sx={{ fontSize: 18 }} />}
+            icon={<DeleteIcon fontSize="small" />}
             label="Delete user"
             showInMenu
             onClick={handleDeleteClick(params.id)}
