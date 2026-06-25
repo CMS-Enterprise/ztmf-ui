@@ -6,6 +6,7 @@ import { useContextProp } from '../Title/Context'
 import {
   Box,
   Button,
+  Chip,
   CircularProgress,
   Menu,
   MenuItem,
@@ -304,19 +305,64 @@ export default function HomePageContainer() {
             anchorEl={datacallAnchor}
             open={Boolean(datacallAnchor)}
             onClose={() => setDatacallAnchor(null)}
+            // Wider menu so the two-line title + meta row fits without
+            // wrapping the deadline label awkwardly.
+            slotProps={{ paper: { sx: { minWidth: 280 } } }}
           >
-            {datacalls.map((dc) => (
-              <MenuItem
-                key={dc.datacallid}
-                selected={dc.datacallid === activeDataCallId}
-                onClick={() => {
-                  setSelectedDatacall(dc)
-                  setDatacallAnchor(null)
-                }}
-              >
-                {dc.datacall}
-              </MenuItem>
-            ))}
+            {datacalls.map((dc) => {
+              const isCurrent = dc.datacallid === latestDataCallId
+              const isClosed = new Date() > new Date(dc.deadline)
+              const deadlineLabel = new Date(dc.deadline).toLocaleDateString(
+                'en-US',
+                { month: 'short', day: 'numeric', year: 'numeric' }
+              )
+              return (
+                <MenuItem
+                  key={dc.datacallid}
+                  selected={dc.datacallid === activeDataCallId}
+                  onClick={() => {
+                    setSelectedDatacall(dc)
+                    setDatacallAnchor(null)
+                  }}
+                  sx={{ alignItems: 'flex-start', py: 1 }}
+                >
+                  <Box sx={{ width: '100%' }}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        gap: 1,
+                      }}
+                    >
+                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                        {dc.datacall}
+                      </Typography>
+                      {isCurrent && (
+                        <Chip
+                          label="Current"
+                          size="small"
+                          variant="outlined"
+                          color="primary"
+                          sx={{
+                            height: 18,
+                            fontSize: '0.65rem',
+                            '& .MuiChip-label': { px: 0.75 },
+                          }}
+                        />
+                      )}
+                    </Box>
+                    <Typography
+                      variant="caption"
+                      sx={{ color: 'text.secondary' }}
+                    >
+                      {isClosed ? 'Closed' : 'Active'} · deadline{' '}
+                      {deadlineLabel}
+                    </Typography>
+                  </Box>
+                </MenuItem>
+              )
+            })}
           </Menu>
 
           <StatusChip
