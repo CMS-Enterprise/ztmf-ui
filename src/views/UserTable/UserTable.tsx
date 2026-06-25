@@ -6,6 +6,8 @@ import SearchIcon from '@mui/icons-material/Search'
 import EditIcon from '@mui/icons-material/Edit'
 import DomainIcon from '@mui/icons-material/Domain'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
+import CloseIcon from '@mui/icons-material/Close'
+import Menu from '@mui/material/Menu'
 import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import {
@@ -42,7 +44,7 @@ import {
   roleLabel,
 } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
-import { fetchUserOpDivs } from '@/utils/userOpdivs'
+import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -218,6 +220,173 @@ function NameEditCell(props: GridRenderEditCellParams) {
           }}
         />
       </Box>
+    </Box>
+  )
+}
+
+/**
+ * Inline OpDivs editor used in row-edit mode. Renders each granted code as a
+ * chip with a × remove button, plus a "+ Add" dashed pill that opens a menu
+ * of the OpDivs the user does not yet hold. Grants/revokes commit eagerly via
+ * the same grantOpDiv / revokeOpDiv helpers the OpDivGrantModal uses; this is
+ * deliberate so the OpDiv state stays in sync independent of the row save.
+ */
+function OpDivsEditCell({
+  userid,
+  ids,
+  opdivOptions,
+  opdivCodeMap,
+  onGrant,
+  onRevoke,
+}: {
+  userid: string
+  ids: number[]
+  opdivOptions: OpDiv[]
+  opdivCodeMap: Record<number, string>
+  onGrant: (userid: string, opdivId: number) => Promise<void>
+  onRevoke: (userid: string, opdivId: number) => Promise<void>
+}) {
+  const [addAnchor, setAddAnchor] = useState<null | HTMLElement>(null)
+  const granted = new Set(ids)
+  const available = opdivOptions.filter((od) => !granted.has(od.opdiv_id))
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        gap: 0.5,
+        flexWrap: 'wrap',
+        px: 2.25,
+        py: 1,
+        width: '100%',
+      }}
+    >
+      {ids.map((id) => (
+        <Box
+          key={id}
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            gap: 0.5,
+            pl: 1,
+            pr: 0.5,
+            py: 0.375,
+            borderRadius: `${radius.sm}px`,
+            backgroundColor: colors.primary50,
+            color: colors.ink900,
+            fontFamily: 'JetBrains Mono, monospace',
+            fontSize: 11,
+            fontWeight: 600,
+            letterSpacing: '0.04em',
+          }}
+        >
+          {opdivCodeMap[id] ?? id}
+          <Box
+            component="button"
+            type="button"
+            aria-label={`Remove ${opdivCodeMap[id] ?? id}`}
+            onClick={() => onRevoke(userid, id)}
+            sx={{
+              border: 'none',
+              background: 'transparent',
+              cursor: 'pointer',
+              p: 0,
+              ml: 0.25,
+              display: 'inline-flex',
+              alignItems: 'center',
+              color: colors.ink900,
+              opacity: 0.6,
+              '&:hover': { opacity: 1 },
+            }}
+          >
+            <CloseIcon sx={{ fontSize: 12 }} />
+          </Box>
+        </Box>
+      ))}
+      {available.length > 0 && (
+        <>
+          <Box
+            component="button"
+            type="button"
+            onClick={(e) => setAddAnchor(e.currentTarget)}
+            sx={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: 0.25,
+              px: 1,
+              py: 0.375,
+              borderRadius: `${radius.sm}px`,
+              border: `1px dashed ${colors.neutral400}`,
+              background: 'transparent',
+              cursor: 'pointer',
+              color: colors.neutral500,
+              fontSize: 11,
+              fontWeight: 600,
+            }}
+          >
+            + Add
+          </Box>
+          <Menu
+            anchorEl={addAnchor}
+            open={Boolean(addAnchor)}
+            onClose={() => setAddAnchor(null)}
+          >
+            {available.map((od) => (
+              <MenuItem
+                key={od.opdiv_id}
+                onClick={async () => {
+                  setAddAnchor(null)
+                  await onGrant(userid, od.opdiv_id)
+                }}
+              >
+                {od.code}
+              </MenuItem>
+            ))}
+          </Menu>
+        </>
+      )}
+    </Box>
+  )
+}
+
+/**
+ * Edit cell for the identity_provider column - a Select with Okta / Entra.
+ * The new value is committed via the grid API and picked up by
+ * processRowUpdate when the row is saved.
+ */
+function IdpEditCell(props: GridRenderEditCellParams) {
+  const { id, row } = props
+  const apiRef = useGridApiContext()
+  const value = (row.identity_provider as string | undefined) ?? ''
+  return (
+    <Box sx={{ px: 2.25, py: 1, width: '100%' }}>
+      <TextField
+        select
+        size="small"
+        value={value}
+        onChange={(e) =>
+          apiRef.current.setEditCellValue({
+            id,
+            field: 'identity_provider',
+            value: e.target.value,
+          })
+        }
+        fullWidth
+        sx={{
+          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
+          '& .MuiSelect-select': {
+            py: 0,
+            pl: 1.5,
+            display: 'flex',
+            alignItems: 'center',
+            height: '30px !important',
+            boxSizing: 'border-box',
+          },
+        }}
+      >
+        <MenuItem value="okta">Okta</MenuItem>
+        <MenuItem value="entra">Entra</MenuItem>
+      </TextField>
     </Box>
   )
 }
@@ -593,6 +762,41 @@ export default function UserTable() {
     setOpenOpDivModal(false)
     refreshUserRow(String(opdivModalUserId))
   }
+  /**
+   * Inline OpDiv grant from the edit-cell. Updates local state optimistically
+   * after the server confirms so the chip appears immediately, then refreshes
+   * the row (the backend may flip identity_provider as a side effect).
+   */
+  const handleInlineGrant = async (userid: string, opdivId: number) => {
+    try {
+      await grantOpDiv(userid, opdivId)
+      setUserOpDivMap((prev) => {
+        const current = prev[userid] ?? []
+        return current.includes(opdivId)
+          ? prev
+          : { ...prev, [userid]: [...current, opdivId] }
+      })
+      refreshUserRow(userid)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      const parsed = parseApiError(error)
+      notify(parsed.message, 'error')
+    }
+  }
+  const handleInlineRevoke = async (userid: string, opdivId: number) => {
+    try {
+      await revokeOpDiv(userid, opdivId)
+      setUserOpDivMap((prev) => ({
+        ...prev,
+        [userid]: (prev[userid] ?? []).filter((id) => id !== opdivId),
+      }))
+      refreshUserRow(userid)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      const parsed = parseApiError(error)
+      notify(parsed.message, 'error')
+    }
+  }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
       ...rowModesModel,
@@ -637,6 +841,10 @@ export default function UserTable() {
           email: updatedRow?.email,
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
+          // Send identity_provider when the inline IdP select changed it. The
+          // backend ignores the field for non-OWNER actors; for OWNER it acts
+          // as the override hook.
+          identity_provider: updatedRow?.identity_provider,
         })
         setSnackBarSeverity('success')
         setSnackBarText(STATUS_MESSAGES.saved)
@@ -962,10 +1170,27 @@ export default function UserTable() {
       sortable: false,
       filterable: false,
       renderCell: (params) => {
+        const isEditing = rowModesModel[params.id]?.mode === GridRowModes.Edit
         // Refresh override (post grant-modal) wins; otherwise use the grants the
         // list returned inline on the row.
         const ids =
           userOpDivMap[params.row.userid] ?? params.row.assignedopdivids ?? []
+        // While the row is in edit mode, switch to the inline chip editor
+        // (× to remove, "+ Add" menu). Grants/revokes commit eagerly, the
+        // same way the OpDivGrantModal does, since OpDiv membership is its
+        // own backend resource separate from the user PUT.
+        if (isEditing) {
+          return (
+            <OpDivsEditCell
+              userid={params.row.userid}
+              ids={ids}
+              opdivOptions={opdivOptions}
+              opdivCodeMap={opdivCodeMap}
+              onGrant={handleInlineGrant}
+              onRevoke={handleInlineRevoke}
+            />
+          )
+        }
         if (!ids.length) {
           return (
             <Typography variant="body2" color="text.secondary">
@@ -991,11 +1216,13 @@ export default function UserTable() {
       field: 'identity_provider',
       headerName: 'Identity provider',
       flex: 1,
-      minWidth: 130,
-      editable: false,
-      // Display-only with a proper-noun cased label and a small dot in front,
-      // matching the design's "● Okta / ● Entra" pattern. The backend derives
-      // this from the user's OpDiv (OWNER-only override server-side).
+      minWidth: 140,
+      // Editable for admins so the inline edit row can flip Okta <-> Entra.
+      // Read view stays as the dot + label pattern.
+      editable: isAdmin,
+      renderEditCell: (params: GridRenderEditCellParams) => (
+        <IdpEditCell {...params} />
+      ),
       valueGetter: (params) => idpLabel(params.row.identity_provider),
       renderCell: (params) => {
         const idp = params.row.identity_provider
@@ -1332,11 +1559,18 @@ export default function UserTable() {
                 borderBottom: `1px solid ${colors.neutral100}`,
               },
               // Inline-edit row highlight: faint primary50 background + 3px
-              // primary left accent stripe, matching the redesign mock.
-              '& .MuiDataGrid-row.is-editing-row': {
-                backgroundColor: colors.surfaceAlt,
-                boxShadow: `inset 3px 0 0 0 ${colors.primary}`,
-              },
+              // primary left accent stripe, matching the redesign mock. The
+              // background applies to every cell in the row so it shows
+              // through the DataGrid's cell layer; the stripe sits on the
+              // row's first cell so it isn't clipped by the row's overflow.
+              '& .MuiDataGrid-row.is-editing-row, & .MuiDataGrid-row.is-editing-row .MuiDataGrid-cell':
+                {
+                  backgroundColor: colors.surfaceAlt,
+                },
+              '& .MuiDataGrid-row.is-editing-row .MuiDataGrid-cell:first-of-type':
+                {
+                  borderLeft: `3px solid ${colors.primary}`,
+                },
               '& .MuiTablePagination-selectLabel': { mb: 2 },
               '& .MuiTablePagination-displayedRows': { mb: 2 },
             }}
