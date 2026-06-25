@@ -464,14 +464,28 @@ export default function Title() {
       {loaderData.serverError ? (
         <Container
           maxWidth={false}
-          sx={{ px: { xs: 2, sm: 4 }, minWidth: 800 }}
+          sx={{
+            px: { xs: 2, sm: 4 },
+            minWidth: 800,
+            // Match the authenticated <main> shell: fill the column and own
+            // the scroll so the CMS footer stays anchored at the viewport.
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+          }}
         >
           <ServerErrorPage />
         </Container>
       ) : loaderData.status !== 200 ? (
         <Container
           maxWidth={false}
-          sx={{ px: { xs: 2, sm: 4 }, minWidth: 800 }}
+          sx={{
+            px: { xs: 2, sm: 4 },
+            minWidth: 800,
+            flex: 1,
+            minHeight: 0,
+            overflowY: 'auto',
+          }}
         >
           <LoginPage />
         </Container>
