@@ -194,7 +194,18 @@ export default function HomePageContainer() {
   }
 
   return (
-    <Box sx={{ pt: 3, pb: 4 }}>
+    <Box
+      sx={{
+        pt: 3,
+        pb: 4,
+        // Flex-column so the table card can flex: 1 and fill the gray canvas
+        // above the CMS footer. min-height: 0 lets the inner DataGrid scroll
+        // internally instead of pushing the footer below the fold.
+        display: 'flex',
+        flexDirection: 'column',
+        minHeight: '100%',
+      }}
+    >
       <PageHeader
         title="Dashboard"
         subtitle={
