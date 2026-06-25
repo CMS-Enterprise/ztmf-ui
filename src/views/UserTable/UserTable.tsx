@@ -4,7 +4,6 @@ import AddIcon from '@mui/icons-material/Add'
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined'
 import SearchIcon from '@mui/icons-material/Search'
 import EditIcon from '@mui/icons-material/Edit'
-import DomainIcon from '@mui/icons-material/Domain'
 import DeleteIcon from '@mui/icons-material/DeleteOutlined'
 import CloseIcon from '@mui/icons-material/Close'
 import Menu from '@mui/material/Menu'
@@ -15,7 +14,6 @@ import {
   GridRowModes,
   DataGrid,
   GridColDef,
-  GridActionsCellItem,
   GridEventListener,
   GridRowId,
   GridRowModel,
@@ -24,7 +22,14 @@ import {
   useGridApiContext,
   useGridApiRef,
 } from '@mui/x-data-grid'
-import { Typography, InputBase, TextField, MenuItem } from '@mui/material'
+import {
+  Typography,
+  InputBase,
+  TextField,
+  MenuItem,
+  IconButton,
+  Tooltip,
+} from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
@@ -571,6 +576,95 @@ function UsersToolbar({
 function validateEmail(email: string) {
   return /^[a-zA-Z0-9._:$!%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+$/.test(email)
 }
+
+type ActionsCellProps = {
+  onEdit: () => void
+  onAssignSystems: () => void
+  onAssignOpDivs: () => void
+  onDelete: () => void
+}
+
+/**
+ * Read-mode actions cell for an active user row: Edit, an overflow menu
+ * (Assign FISMA systems / Assign OpDivs), and Delete - three icon buttons
+ * that mirror the Dashboard row-actions layout.
+ *
+ * Built by hand instead of using the DataGrid's `type: 'actions'` cell so
+ * every icon button can be wrapped in a Tooltip (the auto-generated kebab
+ * trigger from `showInMenu` exposes no tooltip slot) and so the broken
+ * MUI column-header filter popup never gets a chance to render against the
+ * CMS DSG global styles.
+ * @param {ActionsCellProps} props - Per-row callbacks.
+ * @returns {JSX.Element} The right-aligned icon row with a popover menu.
+ */
+function ActionsCell({
+  onEdit,
+  onAssignSystems,
+  onAssignOpDivs,
+  onDelete,
+}: ActionsCellProps) {
+  const [anchor, setAnchor] = useState<HTMLElement | null>(null)
+  const open = Boolean(anchor)
+  const closeMenu = () => setAnchor(null)
+  return (
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 0.5,
+        width: '100%',
+      }}
+    >
+      <Tooltip title="Edit user">
+        <IconButton size="small" onClick={onEdit} aria-label="Edit user">
+          <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="More actions">
+        <IconButton
+          size="small"
+          onClick={(e) => setAnchor(e.currentTarget)}
+          aria-label="More actions"
+          aria-haspopup="menu"
+          aria-expanded={open || undefined}
+        >
+          <MoreHorizIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+        </IconButton>
+      </Tooltip>
+      <Tooltip title="Delete user">
+        <IconButton size="small" onClick={onDelete} aria-label="Delete user">
+          <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+        </IconButton>
+      </Tooltip>
+      <Menu
+        anchorEl={anchor}
+        open={open}
+        onClose={closeMenu}
+        anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+        transformOrigin={{ vertical: 'top', horizontal: 'right' }}
+      >
+        <MenuItem
+          onClick={() => {
+            closeMenu()
+            onAssignSystems()
+          }}
+        >
+          Assign FISMA systems
+        </MenuItem>
+        <MenuItem
+          onClick={() => {
+            closeMenu()
+            onAssignOpDivs()
+          }}
+        >
+          Assign OpDivs
+        </MenuItem>
+      </Menu>
+    </Box>
+  )
+}
+
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
@@ -1181,14 +1275,24 @@ export default function UserTable() {
         }
         // Show first 2 codes inline; collapse the rest into a "+N" muted chip
         // so the row stays at a uniform height when a user has many grants.
+        // The overflow chip gets a tooltip listing the hidden codes so the
+        // information is not lost at a glance.
         const visible = ids.slice(0, 2)
-        const overflow = ids.length - visible.length
+        const hidden = ids.slice(2)
+        const overflow = hidden.length
+        const hiddenCodes = hidden.map((id) => String(opdivCodeMap[id] ?? id))
         return (
           <Box sx={{ display: 'flex', gap: 0.5, alignItems: 'center' }}>
             {visible.map((id) => (
               <CodeBadge key={id} code={String(opdivCodeMap[id] ?? id)} />
             ))}
-            {overflow > 0 && <CodeBadge code={`+${overflow}`} muted />}
+            {overflow > 0 && (
+              <Tooltip title={hiddenCodes.join(', ')}>
+                <Box component="span" sx={{ display: 'inline-flex' }}>
+                  <CodeBadge code={`+${overflow}`} muted />
+                </Box>
+              </Tooltip>
+            )}
           </Box>
         )
       },
@@ -1246,7 +1350,6 @@ export default function UserTable() {
     },
     {
       field: 'actions',
-      type: 'actions',
       headerName: 'Actions',
       headerAlign: 'right',
       align: 'right',
@@ -1255,44 +1358,51 @@ export default function UserTable() {
       width: 170,
       sortable: false,
       filterable: false,
-      cellClassName: 'actions',
-      getActions: (params) => {
+      renderCell: (params) => {
         // Read-only admins see the table but no mutating controls.
-        if (!isAdmin) return []
+        if (!isAdmin) return null
         const isInEditMode =
           rowModesModel[params.id]?.mode === GridRowModes.Edit
         if (isInEditMode) {
           // Text buttons (Save filled, Cancel outline) matching the redesign
           // mock - the default floppy + X icons read as too small for an
           // inline-edit save/cancel action.
-          return [
-            <Button
-              key={`save-${params.id}`}
-              variant="contained"
-              color="primary"
-              size="small"
-              sx={{ minHeight: 28, py: 0.25, px: 1.5, fontSize: 13 }}
-              onClick={handleSaveClick(params.id)}
-            >
-              Save
-            </Button>,
-            <Button
-              key={`cancel-${params.id}`}
-              variant="outlined"
-              size="small"
+          return (
+            <Box
               sx={{
-                minHeight: 28,
-                py: 0.25,
-                px: 1.5,
-                fontSize: 13,
-                color: colors.neutral700,
-                borderColor: colors.neutral200,
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                gap: 1,
+                width: '100%',
               }}
-              onClick={handleCancelClick(params.id)}
             >
-              Cancel
-            </Button>,
-          ] as React.ReactElement[]
+              <Button
+                variant="contained"
+                color="primary"
+                size="small"
+                sx={{ minHeight: 28, py: 0.25, px: 1.5, fontSize: 13 }}
+                onClick={handleSaveClick(params.id)}
+              >
+                Save
+              </Button>
+              <Button
+                variant="outlined"
+                size="small"
+                sx={{
+                  minHeight: 28,
+                  py: 0.25,
+                  px: 1.5,
+                  fontSize: 13,
+                  color: colors.neutral700,
+                  borderColor: colors.neutral200,
+                }}
+                onClick={handleCancelClick(params.id)}
+              >
+                Cancel
+              </Button>
+            </Box>
+          )
         }
 
         // Mirror the backend CanManageUser rule: an admin can only manage a
@@ -1300,70 +1410,45 @@ export default function UserTable() {
         // OpDiv-scoped server-side). Withhold edit/assign/delete/restore for
         // out-of-tier targets so they don't hit a 403. New rows (blank role,
         // mid-create) are handled by the edit-mode branch above.
-        if (!assignableRoles.includes(params.row.role)) return []
+        if (!assignableRoles.includes(params.row.role)) return null
 
         if (params.row.deleted) {
-          return [
-            <GridActionsCellItem
-              icon={
-                <RestoreIcon
-                  fontSize="small"
-                  sx={{ color: colors.neutral700 }}
-                />
-              }
-              key={`restore-${params.id}`}
-              label="Restore user"
-              showInMenu={false}
-              onClick={handleRestoreClick(params.id)}
-              color="inherit"
-            />,
-          ]
+          return (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'flex-end',
+                width: '100%',
+              }}
+            >
+              <Tooltip title="Restore user">
+                <IconButton
+                  size="small"
+                  onClick={handleRestoreClick(params.id)}
+                  aria-label="Restore user"
+                >
+                  <RestoreIcon
+                    fontSize="small"
+                    sx={{ color: colors.neutral700 }}
+                  />
+                </IconButton>
+              </Tooltip>
+            </Box>
+          )
         }
 
         // Active / Invited rows: Edit (icon) + a kebab menu with the assign /
-        // delete actions. Match the Dashboard row actions: fontSize="small"
-        // (~20px), neutral700 color so both tables read identically.
-        return [
-          <GridActionsCellItem
-            icon={
-              <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
-            }
-            key={`edit-${params.id}`}
-            label="Edit user"
-            onClick={handleEditClick(params.id)}
-            color="inherit"
-          />,
-          <GridActionsCellItem
-            icon={
-              <MoreHorizIcon
-                fontSize="small"
-                sx={{ color: colors.neutral700 }}
-              />
-            }
-            key={`assign-${params.id}`}
-            label="Assign FISMA systems"
-            showInMenu
-            onClick={() => handleOpenModal(params.id)}
-          />,
-          <GridActionsCellItem
-            key={`assign-opdivs-${params.id}`}
-            icon={
-              <DomainIcon fontSize="small" sx={{ color: colors.neutral700 }} />
-            }
-            label="Assign OpDivs"
-            showInMenu
-            onClick={() => handleOpenOpDivModal(params.id)}
-          />,
-          <GridActionsCellItem
-            key={`delete-${params.id}`}
-            icon={
-              <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
-            }
-            label="Delete user"
-            showInMenu
-            onClick={handleDeleteClick(params.id)}
-          />,
-        ]
+        // delete actions. Every icon button is wrapped in a Tooltip so hover
+        // labels match the rest of the redesign.
+        return (
+          <ActionsCell
+            onEdit={handleEditClick(params.id)}
+            onAssignSystems={() => handleOpenModal(params.id)}
+            onAssignOpDivs={() => handleOpenOpDivModal(params.id)}
+            onDelete={handleDeleteClick(params.id)}
+          />
+        )
       },
     },
   ]
