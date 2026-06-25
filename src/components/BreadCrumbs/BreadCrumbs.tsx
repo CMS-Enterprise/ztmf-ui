@@ -1,9 +1,9 @@
 import Breadcrumbs from '@mui/material/Breadcrumbs'
 import { useLocation, Link as RouterLink } from 'react-router-dom'
 import Link, { LinkProps } from '@mui/material/Link'
-import { Typography, Box } from '@mui/material'
+import { Typography } from '@mui/material'
 import { capitalize } from 'lodash'
-import NavigateNextIcon from '@mui/icons-material/NavigateNext'
+import { colors } from '@/theme/tokens'
 interface LinkRouterProps extends LinkProps {
   to: string
   replace?: boolean
@@ -15,26 +15,28 @@ interface BreadCrumbsProps {
   segmentLabels?: Record<string, string>
 }
 
+/**
+ * Plain breadcrumb trail ("Home / ..."), no background band. The Home root
+ * always links to the dashboard; subsequent segments derive from the path or
+ * the optional segmentLabels override.
+ * @param {BreadCrumbsProps} props - Optional path-segment label overrides.
+ * @returns {JSX.Element} The breadcrumb trail.
+ */
 export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
   const location = useLocation()
-  // let currentLink: string = ''
-  const homeLink = [
-    <LinkRouter underline="hover" to="/" key={'home'}>
-      <Typography
-        sx={{
-          ml: 2,
-          color: 'black',
-        }}
-      >
-        Dashboard
-      </Typography>
-    </LinkRouter>,
-  ]
-  const homeText = [
-    <Typography key={'homeText'} sx={{ ml: 2 }}>
-      Dashboard
-    </Typography>,
-  ]
+  const isHome = location.pathname === '/'
+
+  const home = (
+    <LinkRouter
+      underline="hover"
+      to="/"
+      key="home"
+      sx={{ fontSize: 12, fontWeight: 500, color: colors.primary }}
+    >
+      Home
+    </LinkRouter>
+  )
+
   const crumbs = location.pathname.split('/').filter((x) => x)
   const path = crumbs.map((rawValue) => {
     const value = (() => {
@@ -53,35 +55,47 @@ export default function BreadCrumbs({ segmentLabels }: BreadCrumbsProps) {
           })()
     return (
       <Typography
-        sx={{ display: 'inline', whiteSpace: 'nowrap', color: '#5a5a5a' }}
+        sx={{
+          display: 'inline',
+          whiteSpace: 'nowrap',
+          fontSize: 12,
+          fontWeight: 500,
+          color: colors.neutral500,
+        }}
         key={value}
       >
         {displayText}
       </Typography>
     )
   })
-  const home = location.pathname === '/' ? homeText : homeLink
-  const breadcrumbs = [home, ...path]
+
+  // On the dashboard the path is empty, so show "Home / Dashboard" explicitly.
+  const trail = isHome
+    ? [
+        home,
+        <Typography
+          key="dashboard"
+          sx={{ fontSize: 12, fontWeight: 500, color: colors.neutral500 }}
+        >
+          Dashboard
+        </Typography>,
+      ]
+    : [home, ...path]
 
   return (
-    <Box>
-      <Breadcrumbs
-        aria-label="breadcrumb"
-        sx={{
-          '& .MuiBreadcrumbs-ol': {
-            flexDirection: 'row',
-          },
-          borderRadius: 1,
-          backgroundColor: 'rgb(242,242,242)',
-          p: 1,
-          mb: 1,
-        }}
-        separator={
-          <NavigateNextIcon fontSize="small" sx={{ color: '#5a5a5a' }} />
-        }
-      >
-        {breadcrumbs}
-      </Breadcrumbs>
-    </Box>
+    <Breadcrumbs
+      aria-label="breadcrumb"
+      sx={{ '& .MuiBreadcrumbs-separator': { mx: 0.75 } }}
+      separator={
+        <Typography
+          component="span"
+          sx={{ fontSize: 12, color: colors.neutral400 }}
+        >
+          /
+        </Typography>
+      }
+    >
+      {trail}
+    </Breadcrumbs>
   )
 }
