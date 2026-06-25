@@ -198,11 +198,13 @@ export default function HomePageContainer() {
       sx={{
         pt: 3,
         pb: 4,
-        // Flex column so the FISMA table card can flex: 1 and fill the
-        // remaining vertical space inside the (scrolling) main element.
+        // Cap at main's height (not just min) so the FISMA table child with
+        // flex: 1 + min-height: 0 is *bounded* and its internal scroll fires
+        // instead of growing this column and triggering main's outer scroll.
         display: 'flex',
         flexDirection: 'column',
-        minHeight: '100%',
+        height: '100%',
+        boxSizing: 'border-box',
       }}
     >
       <PageHeader
