@@ -194,7 +194,7 @@ export default function HomePageContainer() {
   }
 
   return (
-    <Box sx={{ py: 4 }}>
+    <Box sx={{ pt: 3, pb: 4 }}>
       <PageHeader
         title="Dashboard"
         subtitle={
@@ -241,13 +241,14 @@ export default function HomePageContainer() {
             backgroundColor: colors.white,
             border: `1px solid ${colors.neutral200}`,
             borderRadius: `${radius.card}px`,
-            px: 4,
-            py: 3.5,
-            mb: 4,
+            px: 2,
+            py: 1.5,
+            mb: 2,
+            minHeight: 56,
+            boxSizing: 'border-box',
             display: 'flex',
             alignItems: 'center',
-            gap: 4,
-            flexWrap: 'wrap',
+            gap: 2,
           }}
         >
           <Typography
@@ -257,6 +258,7 @@ export default function HomePageContainer() {
               letterSpacing: '0.08em',
               textTransform: 'uppercase',
               color: colors.neutral500,
+              whiteSpace: 'nowrap',
             }}
           >
             Datacall
@@ -271,15 +273,16 @@ export default function HomePageContainer() {
             sx={{
               display: 'inline-flex',
               alignItems: 'center',
-              gap: 1,
-              px: 3,
-              py: 1.5,
+              gap: 0.5,
+              px: 1.5,
+              py: 0.75,
               borderRadius: `${radius.button}px`,
               backgroundColor: colors.primary50,
               color: colors.primary,
               fontSize: 13,
               fontWeight: 600,
               cursor: 'pointer',
+              whiteSpace: 'nowrap',
             }}
           >
             {datacallName}
@@ -314,11 +317,11 @@ export default function HomePageContainer() {
               marginLeft: 'auto',
               display: 'flex',
               alignItems: 'center',
-              gap: 4,
+              gap: 2,
               fontSize: 13,
               fontWeight: 500,
               color: colors.neutral500,
-              flexWrap: 'wrap',
+              whiteSpace: 'nowrap',
             }}
           >
             <span>

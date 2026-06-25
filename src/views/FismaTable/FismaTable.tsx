@@ -97,12 +97,11 @@ function TableFooter() {
       sx={{
         display: 'flex',
         alignItems: 'center',
-        gap: 2,
-        px: 4.5,
-        py: 3,
+        gap: 1.5,
+        px: 2.25,
+        py: 1.5,
         backgroundColor: colors.neutral50,
         borderTop: `1px solid ${colors.neutral200}`,
-        flexWrap: 'wrap',
       }}
     >
       <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
@@ -194,17 +193,18 @@ function TableToolbar({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        gap: 2,
-        px: 4.5,
-        py: 3.5,
+        gap: 1.5,
+        px: 2.25,
+        py: 1.5,
         borderBottom: `1px solid ${colors.neutral200}`,
-        flexWrap: 'wrap',
       }}
     >
-      <Typography sx={{ fontSize: 15, fontWeight: 700 }}>
+      <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
         FISMA systems
       </Typography>
-      <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+      <Typography
+        sx={{ fontSize: 12, fontWeight: 500, color: colors.neutral500 }}
+      >
         {count} {count === 1 ? 'system' : 'systems'}
       </Typography>
       <Box
@@ -212,8 +212,7 @@ function TableToolbar({
           marginLeft: 'auto',
           display: 'flex',
           alignItems: 'center',
-          gap: 2,
-          flexWrap: 'wrap',
+          gap: 1,
         }}
       >
         <Box
@@ -222,9 +221,9 @@ function TableToolbar({
             alignItems: 'center',
             gap: 1,
             px: 1.5,
-            py: 0.5,
+            height: 30,
             border: `1px solid ${colors.neutral200}`,
-            borderRadius: 1,
+            borderRadius: `${radius.md}px`,
           }}
         >
           <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
@@ -232,7 +231,7 @@ function TableToolbar({
             placeholder="Search systems"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            sx={{ fontSize: 13, width: 160 }}
+            sx={{ fontSize: 13, width: 150 }}
             inputProps={{ 'aria-label': 'Search systems' }}
           />
         </Box>
@@ -245,7 +244,11 @@ function TableToolbar({
               e.target.value === 'all' ? 'all' : Number(e.target.value)
             )
           }
-          sx={{ minWidth: 130 }}
+          sx={{
+            minWidth: 130,
+            '& .MuiInputBase-root': { height: 30 },
+            '& .MuiSelect-select': { py: 0, fontSize: 13 },
+          }}
           aria-label="Filter by OpDiv"
         >
           <MenuItem value="all">All OpDivs</MenuItem>
@@ -335,28 +338,44 @@ export default function FismaTable({ scores }: FismaTableProps) {
       flex: 2,
       minWidth: 240,
       hideable: false,
-      renderCell: (params: GridRenderCellParams) => (
-        <Box sx={{ py: 1 }}>
-          <Link
-            to={`/systems/${params.row.fismasystemid}`}
-            style={{
-              color: colors.ink,
-              fontWeight: 600,
-              textDecoration: 'none',
-            }}
-            onClick={(e) => e.stopPropagation()}
-          >
-            {params.row.fismaname}
-          </Link>
-          {params.row.mission && (
-            <Typography
-              sx={{ fontSize: 12, color: colors.neutral500, mt: 0.25 }}
+      renderCell: (params: GridRenderCellParams) => {
+        // Prefer a real description; fall back to whatever context exists so
+        // the row never reads as a single bare line.
+        const subtitle =
+          params.row.mission ||
+          params.row.component ||
+          params.row.datacenterenvironment ||
+          ''
+        return (
+          <Box>
+            <Link
+              to={`/systems/${params.row.fismasystemid}`}
+              style={{
+                color: colors.ink,
+                fontWeight: 600,
+                fontSize: 14,
+                textDecoration: 'none',
+                display: 'block',
+              }}
+              onClick={(e) => e.stopPropagation()}
             >
-              {params.row.mission}
-            </Typography>
-          )}
-        </Box>
-      ),
+              {params.row.fismaname}
+            </Link>
+            {subtitle && (
+              <Typography
+                sx={{
+                  fontSize: 12,
+                  fontWeight: 500,
+                  color: colors.neutral500,
+                  mt: 0.25,
+                }}
+              >
+                {subtitle}
+              </Typography>
+            )}
+          </Box>
+        )
+      },
     },
     {
       field: 'fismauid',
@@ -513,7 +532,7 @@ export default function FismaTable({ scores }: FismaTableProps) {
           rows={rows}
           columns={columns}
           getRowId={(row) => row.fismasystemid}
-          rowHeight={64}
+          rowHeight={60}
           disableRowSelectionOnClick
           disableColumnSelector
           filterModel={{ items: [], quickFilterValues }}

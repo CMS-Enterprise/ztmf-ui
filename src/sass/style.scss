@@ -20,3 +20,10 @@ main {
 footer {
   margin-top: auto;
 }
+
+// The CMS Design System global stylesheet uppercases button text. Force
+// sentence case on MUI buttons app-wide so labels render as authored
+// (e.g. "Export CSV", "Add system"), once, instead of per-component.
+.MuiButton-root {
+  text-transform: none !important;
+}
