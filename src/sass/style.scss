@@ -2,18 +2,24 @@ html,
 body {
   margin: 0; // remove default margin/padding
   padding: 0;
-  min-height: 100%; // allow for full-page layouts
+  height: 100%; // cap so #root can use 100vh and constrain its children
 }
 
 #root {
   display: flex;
   flex-direction: column;
-  min-height: 100vh; // ensures the root container fills the screen
+  height: 100vh; // cap the column to the viewport (was min-height)
 }
 
-// The main content area can stretch
+// The main content area takes the leftover space inside the viewport. It
+// must allow itself to shrink below content (min-height: 0) so children
+// with flex: 1 can bound themselves to its height; overflow-y: auto means
+// any view whose content does exceed the available main height scrolls
+// inside main instead of pushing the CMS footer below the fold.
 main {
-  flex: 1; // "take up the leftover space"
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
 }
 
 // The footer is then pushed to the bottom
