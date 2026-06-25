@@ -480,58 +480,64 @@ export default function Title() {
           </Box>
         </Box>
       )}
-      <Container
-        maxWidth={false}
-        sx={{
-          px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
-          minWidth: 800,
-        }}
-      >
-        {loaderData.serverError ? (
+      {loaderData.serverError ? (
+        <Container
+          maxWidth={false}
+          sx={{ px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 }, minWidth: 800 }}
+        >
           <ServerErrorPage />
-        ) : loaderData.status !== 200 ? (
+        </Container>
+      ) : loaderData.status !== 200 ? (
+        <Container
+          maxWidth={false}
+          sx={{ px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 }, minWidth: 800 }}
+        >
           <LoginPage />
-        ) : (
-          <>
-            <Box
-              component="main"
-              sx={{ backgroundColor: colors.neutral50, minHeight: '60vh' }}
-            >
-              <Outlet
-                context={{
-                  fismaSystems,
-                  setFismaSystems,
-                  userInfo,
-                  latestDataCallId,
-                  latestDatacall,
-                  latestDeadline,
-                  datacalls,
-                  selectedDatacall,
-                  setSelectedDatacall,
-                  showDecommissioned,
-                  setShowDecommissioned,
-                  fetchFismaSystems,
-                  dashboardSearch,
-                  setDashboardSearch,
-                }}
-              />
-            </Box>
-          </>
-        )}
+        </Container>
+      ) : (
+        // Full-bleed gray canvas: the background spans the viewport while the
+        // page content stays padded to the same gutters as the header.
+        <Box
+          component="main"
+          sx={{
+            backgroundColor: colors.neutral50,
+            minWidth: 800,
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          }}
+        >
+          <Outlet
+            context={{
+              fismaSystems,
+              setFismaSystems,
+              userInfo,
+              latestDataCallId,
+              latestDatacall,
+              latestDeadline,
+              datacalls,
+              selectedDatacall,
+              setSelectedDatacall,
+              showDecommissioned,
+              setShowDecommissioned,
+              fetchFismaSystems,
+              dashboardSearch,
+              setDashboardSearch,
+            }}
+          />
+        </Box>
+      )}
 
-        <EditSystemModal
-          title={'Add'}
-          open={openModal}
-          onClose={handleCloseModal}
-          system={EMPTY_SYSTEM}
-          mode={'create'}
-        />
-        <EmailModal
-          openModal={openEmailModal}
-          closeModal={handleCloseEmailModal}
-        />
-        <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
-      </Container>
+      <EditSystemModal
+        title={'Add'}
+        open={openModal}
+        onClose={handleCloseModal}
+        system={EMPTY_SYSTEM}
+        mode={'create'}
+      />
+      <EmailModal
+        openModal={openEmailModal}
+        closeModal={handleCloseEmailModal}
+      />
+      <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
       <Footer />
     </>
   )
