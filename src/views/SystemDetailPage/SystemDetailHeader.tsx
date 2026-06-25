@@ -1,6 +1,5 @@
-import { Box, Typography, IconButton } from '@mui/material'
+import { Box, Typography, IconButton, Button } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
-import { Button as CmsButton } from '@cmsgov/design-system'
 import { useNavigate } from 'react-router-dom'
 
 interface SystemDetailHeaderProps {
@@ -42,27 +41,37 @@ export default function SystemDetailHeader({
         >
           <ArrowBackIcon />
         </IconButton>
-        <Typography variant="h5">{systemName}</Typography>
+        <Typography
+          sx={{ fontSize: 28, fontWeight: 800, letterSpacing: '-0.02em' }}
+        >
+          {systemName}
+        </Typography>
       </Box>
-      <Box sx={{ display: 'flex', gap: 1 }}>
+      <Box sx={{ display: 'flex', gap: 1.5 }}>
         {isEditing ? (
           <>
-            <CmsButton
-              variation="solid"
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={onCancel}
+              disabled={isSaving}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
               onClick={onSave}
               disabled={!isFormValid || isSaving}
             >
-              {isSaving ? 'Saving...' : 'Save'}
-            </CmsButton>
-            <CmsButton onClick={onCancel} disabled={isSaving}>
-              Cancel
-            </CmsButton>
+              {isSaving ? 'Saving...' : 'Save changes'}
+            </Button>
           </>
         ) : (
           isAdmin && (
-            <CmsButton variation="solid" onClick={onEdit}>
-              Edit
-            </CmsButton>
+            <Button variant="contained" color="primary" onClick={onEdit}>
+              Edit system
+            </Button>
           )
         )}
       </Box>
