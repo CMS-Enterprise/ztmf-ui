@@ -560,38 +560,37 @@ export default function FismaTable({ scores }: FismaTableProps) {
         showDecommissioned={showDecommissioned}
         setShowDecommissioned={setShowDecommissioned}
       />
-      <DataGrid
-        rows={rows}
-        columns={columns}
-        getRowId={(row) => row.fismasystemid}
-        rowHeight={60}
-        // Size the grid to its rows so the page scrolls naturally instead of
-        // showing dead space below a fixed-height viewport.
-        autoHeight
-        disableRowSelectionOnClick
-        disableColumnSelector
-        filterModel={{ items: [], quickFilterValues }}
-        initialState={{
-          pagination: { paginationModel: { pageSize: 25, page: 0 } },
-        }}
-        pageSizeOptions={PAGE_SIZES}
-        slots={{ footer: TableFooter }}
-        sx={{
-          border: 'none',
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: colors.neutral50,
-          },
-          // Hairline row separators per the redesign spec.
-          '& .MuiDataGrid-cell': {
-            borderBottom: `1px solid ${colors.neutral100}`,
-          },
-          // Subtle rounded-hover background on the row action icon buttons.
-          '& .MuiDataGrid-actionsCell .MuiIconButton-root:hover, & [data-field="actions"] .MuiButtonBase-root:hover':
-            {
-              backgroundColor: colors.neutral100,
+      <Box sx={{ height: 560, width: '100%' }}>
+        <DataGrid
+          rows={rows}
+          columns={columns}
+          getRowId={(row) => row.fismasystemid}
+          rowHeight={60}
+          disableRowSelectionOnClick
+          disableColumnSelector
+          filterModel={{ items: [], quickFilterValues }}
+          initialState={{
+            pagination: { paginationModel: { pageSize: 25, page: 0 } },
+          }}
+          pageSizeOptions={PAGE_SIZES}
+          slots={{ footer: TableFooter }}
+          sx={{
+            border: 'none',
+            '& .MuiDataGrid-columnHeaders': {
+              backgroundColor: colors.neutral50,
             },
-        }}
-      />
+            // Hairline row separators per the redesign spec.
+            '& .MuiDataGrid-cell': {
+              borderBottom: `1px solid ${colors.neutral100}`,
+            },
+            // Subtle rounded-hover background on the row action icon buttons.
+            '& .MuiDataGrid-actionsCell .MuiIconButton-root:hover, & [data-field="actions"] .MuiButtonBase-root:hover':
+              {
+                backgroundColor: colors.neutral100,
+              },
+          }}
+        />
+      </Box>
     </Box>
   )
 }
