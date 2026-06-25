@@ -387,7 +387,12 @@ export default function FismaTable({ scores }: FismaTableProps) {
           <Tooltip title="Questionnaire">
             <span>
               <GridActionsCellItem
-                icon={<QuestionAnswerOutlinedIcon fontSize="small" />}
+                icon={
+                  <QuestionAnswerOutlinedIcon
+                    fontSize="small"
+                    sx={{ color: colors.neutral700 }}
+                  />
+                }
                 key={`question-${params.row.fismasystemid}`}
                 label={`View Questionnaire for ${params.row.fismaname}`}
                 role="button"
@@ -405,7 +410,12 @@ export default function FismaTable({ scores }: FismaTableProps) {
           <Tooltip title="Pillar scores">
             <span>
               <GridActionsCellItem
-                icon={<BarChartIcon fontSize="small" />}
+                icon={
+                  <BarChartIcon
+                    fontSize="small"
+                    sx={{ color: colors.neutral700 }}
+                  />
+                }
                 key={`chart-${params.row.fismasystemid}`}
                 label={`View Pillar Scores for ${params.row.fismaname}`}
                 role="button"
@@ -421,7 +431,12 @@ export default function FismaTable({ scores }: FismaTableProps) {
             <Tooltip title="System details">
               <span>
                 <GridActionsCellItem
-                  icon={<VisibilityIcon fontSize="small" />}
+                  icon={
+                    <VisibilityIcon
+                      fontSize="small"
+                      sx={{ color: colors.neutral700 }}
+                    />
+                  }
                   key={`view-${params.row.fismasystemid}`}
                   label={`View system details for ${params.row.fismaname}`}
                   role="button"

@@ -923,7 +923,12 @@ export default function UserTable() {
         if (params.row.deleted) {
           return [
             <GridActionsCellItem
-              icon={<RestoreIcon fontSize="small" />}
+              icon={
+                <RestoreIcon
+                  fontSize="small"
+                  sx={{ color: colors.neutral700 }}
+                />
+              }
               key={`restore-${params.id}`}
               label="Restore user"
               showInMenu={false}
@@ -933,19 +938,26 @@ export default function UserTable() {
           ]
         }
 
-        // Active / Invited rows: Edit (icon) + a kebab menu with the
-        // assign / delete actions, matching the redesign mock. Icons match
-        // the Dashboard row actions: fontSize="small" (~20px), inherit color.
+        // Active / Invited rows: Edit (icon) + a kebab menu with the assign /
+        // delete actions. Match the Dashboard row actions: fontSize="small"
+        // (~20px), neutral700 color so both tables read identically.
         return [
           <GridActionsCellItem
-            icon={<EditIcon fontSize="small" />}
+            icon={
+              <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+            }
             key={`edit-${params.id}`}
             label="Edit user"
             onClick={handleEditClick(params.id)}
             color="inherit"
           />,
           <GridActionsCellItem
-            icon={<MoreHorizIcon fontSize="small" />}
+            icon={
+              <MoreHorizIcon
+                fontSize="small"
+                sx={{ color: colors.neutral700 }}
+              />
+            }
             key={`assign-${params.id}`}
             label="Assign FISMA systems"
             showInMenu
@@ -953,14 +965,18 @@ export default function UserTable() {
           />,
           <GridActionsCellItem
             key={`assign-opdivs-${params.id}`}
-            icon={<DomainIcon fontSize="small" />}
+            icon={
+              <DomainIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+            }
             label="Assign OpDivs"
             showInMenu
             onClick={() => handleOpenOpDivModal(params.id)}
           />,
           <GridActionsCellItem
             key={`delete-${params.id}`}
-            icon={<DeleteIcon fontSize="small" />}
+            icon={
+              <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+            }
             label="Delete user"
             showInMenu
             onClick={handleDeleteClick(params.id)}
