@@ -155,7 +155,6 @@ export default function AssignSystemModal({
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Assign FISMA systems"
               variant="outlined"
               placeholder="Search FISMA systems"
             />

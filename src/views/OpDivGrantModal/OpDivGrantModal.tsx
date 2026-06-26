@@ -95,9 +95,13 @@ export default function OpDivGrantModal({
       .catch((error) => handleError(error))
   }
 
+  // Fall back to a stable placeholder when an assigned OpDiv is not present
+  // in the option set (e.g. an OPDIV_ADMIN viewing a target who has grants
+  // for OpDivs outside the actor's own scope, or a recently-deactivated
+  // OpDiv). Without this the chip renders as a bare X with no label.
   const optionLabel = (opdivId: number) => {
     const od = opdivMap[opdivId]
-    return od ? `${od.code} - ${od.name}` : ''
+    return od ? `${od.code} - ${od.name}` : `OpDiv #${opdivId}`
   }
 
   return (
@@ -161,7 +165,6 @@ export default function OpDivGrantModal({
           renderInput={(params) => (
             <TextField
               {...params}
-              label="Assign OpDivs"
               variant="outlined"
               placeholder="Search OpDivs"
             />
