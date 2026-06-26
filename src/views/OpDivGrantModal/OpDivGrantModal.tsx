@@ -1,20 +1,14 @@
 import React from 'react'
-import { Button } from '@mui/material'
-import SideDrawer from '@/components/ds/SideDrawer'
+import { Box, Button, Checkbox, Typography } from '@mui/material'
+import Modal from '@/components/ds/Modal'
 import { GridRowId } from '@mui/x-data-grid'
-import Checkbox from '@mui/material/Checkbox'
-import TextField from '@mui/material/TextField'
-import Autocomplete from '@mui/material/Autocomplete'
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
-import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import { CodeBadge } from '@/components/ds/StatusChip'
 import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { colors, radius } from '@/theme/tokens'
 import type { OpDiv } from '@/types'
-
-const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
-const checkedIcon = <CheckBoxIcon fontSize="small" />
 
 type Props = {
   open: boolean
@@ -35,6 +29,60 @@ type Props = {
   onChanged?: (userid: string) => void
 }
 
+type View = 'selected' | 'all'
+
+const rowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1.25,
+  px: 1.75,
+  py: 1.25,
+  borderBottom: `1px solid ${colors.neutral100}`,
+  cursor: 'pointer',
+  '&:last-of-type': { borderBottom: 'none' },
+  '&:hover': { backgroundColor: colors.neutral50 },
+}
+
+/** Pill-style toggle for the Selected/All view switcher. */
+function PillTab({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean
+  children: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      sx={{
+        font: 'inherit',
+        fontSize: 13,
+        fontWeight: 500,
+        px: 1.25,
+        py: 0.5,
+        borderRadius: 999,
+        border: active ? 'none' : `1px solid ${colors.neutral200}`,
+        backgroundColor: active ? colors.primary50 : colors.white,
+        color: active ? colors.primary : colors.ink,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+/**
+ * Assign OpDivs modal. Renders the pill-tab + checkbox list described by
+ * the mockup (frame 17) in the shared Modal shell, replacing the legacy
+ * SideDrawer + Autocomplete. Behavior is unchanged: checking a row grants
+ * immediately, unchecking opens a confirm dialog before the revoke, and
+ * the footer Done button just closes - nothing is queued.
+ */
 export default function OpDivGrantModal({
   open,
   handleClose,
@@ -47,6 +95,7 @@ export default function OpDivGrantModal({
   const [pendingRevoke, setPendingRevoke] = React.useState<{
     opdivId: number
   } | null>(null)
+  const [view, setView] = React.useState<View>('all')
 
   const opdivMap = React.useMemo(() => {
     const map: Record<number, { code: string; name: string }> = {}
@@ -65,6 +114,20 @@ export default function OpDivGrantModal({
         ),
     [opdivOptions, opdivMap]
   )
+
+  const visibleOpDivs = React.useMemo(
+    () =>
+      view === 'selected'
+        ? sortedOptionIds.filter((id) => assignedOpDivs.includes(id))
+        : sortedOptionIds,
+    [view, sortedOptionIds, assignedOpDivs]
+  )
+
+  // Reset to the All view whenever the modal opens so a previous Selected
+  // view from a different user doesn't carry over.
+  React.useEffect(() => {
+    if (open) setView('all')
+  }, [open])
 
   const handleError = (error: unknown) => {
     if (isAuthHandled(error)) return
@@ -95,82 +158,143 @@ export default function OpDivGrantModal({
       .catch((error) => handleError(error))
   }
 
+  const handleToggle = (opdivId: number, checked: boolean) => {
+    if (checked) {
+      grantOpDiv(String(userid), opdivId)
+        .then(() => {
+          setAssignedOpDivs((prev) =>
+            prev.includes(opdivId) ? prev : [...prev, opdivId]
+          )
+          notify('Saved - granted OpDiv', 'success')
+          onChanged?.(String(userid))
+        })
+        .catch((error) => handleError(error))
+    } else {
+      setPendingRevoke({ opdivId })
+    }
+  }
+
   // Fall back to a stable placeholder when an assigned OpDiv is not present
   // in the option set (e.g. an OPDIV_ADMIN viewing a target who has grants
   // for OpDivs outside the actor's own scope, or a recently-deactivated
-  // OpDiv). Without this the chip renders as a bare X with no label.
+  // OpDiv).
   const optionLabel = (opdivId: number) => {
     const od = opdivMap[opdivId]
     return od ? `${od.code} - ${od.name}` : `OpDiv #${opdivId}`
   }
 
+  const selectedCount = assignedOpDivs.length
+  const totalCount = sortedOptionIds.length
+
   return (
     <>
-      <SideDrawer
+      <Modal
         open={open}
         onClose={handleClose}
         title="Assign OpDivs"
         eyebrow={userName || undefined}
+        size="sm"
         footer={
-          <Button variant="contained" color="primary" onClick={handleClose}>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleClose}
+            sx={{ borderRadius: `${radius.button}px` }}
+          >
             Done
           </Button>
         }
       >
-        <Autocomplete
-          multiple
-          disableCloseOnSelect
-          limitTags={3}
-          options={sortedOptionIds}
-          disableClearable
-          getOptionLabel={optionLabel}
-          renderOption={(props, option, { selected }) => (
-            <li {...props} key={option}>
-              <Checkbox
-                icon={icon}
-                checkedIcon={checkedIcon}
-                style={{ marginRight: 8 }}
-                checked={selected}
-              />
-              {optionLabel(option)}
-            </li>
-          )}
-          value={assignedOpDivs}
-          onChange={(_event, newValue) => {
-            const added = newValue.filter(
-              (item) => !assignedOpDivs.includes(item)
-            )
-            const removed = assignedOpDivs.filter(
-              (item) => !newValue.includes(item)
-            )
-            // Grant every added OpDiv and reflect only what the server
-            // confirms - never trust the optimistic newValue wholesale.
-            added.forEach((opdivId) => {
-              grantOpDiv(String(userid), opdivId)
-                .then(() => {
-                  setAssignedOpDivs((prev) =>
-                    prev.includes(opdivId) ? prev : [...prev, opdivId]
-                  )
-                  notify('Saved - granted OpDiv', 'success')
-                  onChanged?.(String(userid))
-                })
-                .catch((error) => handleError(error))
-            })
-            // Revocations confirm one at a time; the revoke handler computes
-            // the next value functionally from the id being removed.
-            if (removed.length) {
-              setPendingRevoke({ opdivId: removed[0] })
-            }
-          }}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              variant="outlined"
-              placeholder="Search OpDivs"
-            />
-          )}
-        />
-      </SideDrawer>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+            OpDiv Admins manage users and systems within their assigned OpDivs.
+          </Typography>
+
+          <Box sx={{ display: 'flex', gap: 1 }}>
+            <PillTab
+              active={view === 'selected'}
+              onClick={() => setView('selected')}
+            >
+              Selected ({selectedCount})
+            </PillTab>
+            <PillTab active={view === 'all'} onClick={() => setView('all')}>
+              All OpDivs ({totalCount})
+            </PillTab>
+          </Box>
+
+          <Box
+            sx={{
+              border: `1px solid ${colors.neutral200}`,
+              borderRadius: 1,
+              maxHeight: 320,
+              overflow: 'auto',
+            }}
+          >
+            {visibleOpDivs.length === 0 ? (
+              <Typography
+                sx={{
+                  fontSize: 13,
+                  color: colors.neutral500,
+                  textAlign: 'center',
+                  py: 3,
+                }}
+              >
+                {view === 'selected'
+                  ? 'No OpDivs assigned yet.'
+                  : 'No OpDivs available.'}
+              </Typography>
+            ) : (
+              visibleOpDivs.map((opdivId) => {
+                const od = opdivMap[opdivId]
+                const isAssigned = assignedOpDivs.includes(opdivId)
+                return (
+                  <Box
+                    key={opdivId}
+                    component="label"
+                    htmlFor={`assign-opdiv-${opdivId}`}
+                    sx={rowSx}
+                  >
+                    <Checkbox
+                      id={`assign-opdiv-${opdivId}`}
+                      checked={isAssigned}
+                      onChange={(e) => handleToggle(opdivId, e.target.checked)}
+                      sx={{ p: 0.5 }}
+                    />
+                    {od ? (
+                      <>
+                        <CodeBadge code={od.code} />
+                        <Typography
+                          sx={{
+                            fontSize: 13,
+                            fontWeight: 600,
+                            color: colors.ink,
+                            flex: 1,
+                            minWidth: 0,
+                          }}
+                        >
+                          {od.name}
+                        </Typography>
+                      </>
+                    ) : (
+                      <Typography
+                        sx={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: colors.ink,
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        OpDiv #{opdivId}
+                      </Typography>
+                    )}
+                  </Box>
+                )
+              })
+            )}
+          </Box>
+        </Box>
+      </Modal>
       <ConfirmDialog
         title="Confirm Revoke OpDiv"
         confirmationText={
