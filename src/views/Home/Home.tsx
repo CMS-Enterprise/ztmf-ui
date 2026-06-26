@@ -28,8 +28,6 @@ import { colors, radius } from '@/theme/tokens'
 import _ from 'lodash'
 import type { ScoreAggregate, SystemScoreEntry, FismaSystemType } from '@/types'
 
-const ARROW_RIGHT = '→'
-
 /** Formats an ISO date string as e.g. "May 1, 2026". */
 function formatDate(value: string | undefined): string {
   if (!value) return '-'
@@ -409,18 +407,6 @@ export default function HomePageContainer() {
                 {formatDate(selectedDatacall?.deadline)}
               </strong>
             </span>
-            <Box
-              component="a"
-              href="#compare-datacalls"
-              sx={{
-                color: colors.primary,
-                fontWeight: 600,
-                textDecoration: 'none',
-                whiteSpace: 'nowrap',
-              }}
-            >
-              Compare datacalls {ARROW_RIGHT}
-            </Box>
           </Box>
         </Box>
       )}
