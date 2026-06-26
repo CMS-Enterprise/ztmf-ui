@@ -24,7 +24,7 @@ import {
   Tooltip,
 } from 'recharts'
 import axiosInstance from '@/axiosConfig'
-import type { ScoreAggregate, ScoreTier } from '@/types'
+import type { FismaQuestion, ScoreAggregate, ScoreTier } from '@/types'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import { isAuthHandled } from '@/utils/notify'
 import { colors, fonts, radius, tierDot } from '@/theme/tokens'
@@ -42,16 +42,51 @@ const TIER_OPTIONS: ScoreTier[] = [
   'Not Assessed',
 ]
 
-/** Shape returned by /scores?datacallid=...&fismasystemid=...&include=functionoption. */
-interface QuestionScore {
-  scoreid?: number
+/**
+ * Shape of a /scores row when fetched with ?include=functionoption.
+ *
+ * The Score row itself only carries `functionoptionid`. The joined
+ * `functionoption` brings back the picked option's numeric score (1-4) and
+ * its parent `functionid`, which is what we need to join back to a question
+ * (each question has one function via /fismasystems/{id}/questions).
+ */
+interface QuestionScoreRow {
+  scoreid: number
+  functionoptionid: number
+  functionoption?: {
+    functionoptionid: number
+    functionid: number
+    score: number
+    optionname: string
+    description: string
+  }
+}
+
+/**
+ * Joined view-model for a single row of the question-level breakdown,
+ * computed by stitching /fismasystems/{id}/questions against
+ * /scores?...&include=functionoption.
+ */
+interface QuestionBreakdownRow {
+  scoreid: number
   questionid: number
-  question?: string
-  function?: { functionid: number; function: string; pillar?: string }
-  pillar?: string
-  option?: { score?: number; tier?: ScoreTier }
-  score?: number
-  tier?: ScoreTier
+  question: string
+  pillar: string
+  functionName: string
+  rawScore: number
+  tier: ScoreTier
+}
+
+/**
+ * Map a function-option integer score (1-4) to a tier label. Mirrors the
+ * tier thresholds the backend uses for /scores/aggregate.
+ */
+function tierForOptionScore(score: number | undefined): ScoreTier {
+  if (typeof score !== 'number' || score <= 0) return 'Not Assessed'
+  if (score >= 4) return 'Optimal'
+  if (score >= 3) return 'Advanced'
+  if (score >= 2) return 'Initial'
+  return 'Traditional'
 }
 
 /** Props for {@link PillarScoresContent}. */
@@ -342,9 +377,15 @@ function PillarGrid({
 }
 
 /**
- * Per-question table with pillar + tier filters. Fetches the same per-question
- * scores endpoint the Questionnaire page uses, then filters client-side so the
- * filter dropdowns feel instant.
+ * Per-question table with pillar + tier filters. Builds rows by joining two
+ * endpoints (since /scores alone has no question text, pillar or function):
+ *  - /fismasystems/{id}/questions -> question text + pillar + function name,
+ *    keyed by functionid (each question has exactly one function);
+ *  - /scores?datacallid=...&fismasystemid=...&include=functionoption -> the
+ *    picked option per question, carrying functionid + numeric score.
+ * The tier is derived from the option's integer score using the same
+ * thresholds the aggregate endpoint uses, so the colored chip matches the
+ * pillar grid above.
  */
 function QuestionBreakdown({
   fismasystemid,
@@ -353,7 +394,8 @@ function QuestionBreakdown({
   fismasystemid: number
   datacallid: number
 }) {
-  const [rows, setRows] = useState<QuestionScore[]>([])
+  const [questions, setQuestions] = useState<FismaQuestion[]>([])
+  const [scores, setScores] = useState<QuestionScoreRow[]>([])
   const [loading, setLoading] = useState(true)
   const [pillarFilter, setPillarFilter] = useState<string | null>(null)
   const [tierFilter, setTierFilter] = useState<ScoreTier | null>(null)
@@ -364,11 +406,17 @@ function QuestionBreakdown({
     setLoading(true)
     async function load() {
       try {
-        const res = await axiosInstance.get(
-          `scores?datacallid=${datacallid}&fismasystemid=${fismasystemid}&include=functionoption`,
-          { signal: controller.signal }
-        )
-        setRows(res.data?.data ?? [])
+        const [questionsRes, scoresRes] = await Promise.all([
+          axiosInstance.get(`/fismasystems/${fismasystemid}/questions`, {
+            signal: controller.signal,
+          }),
+          axiosInstance.get(
+            `scores?datacallid=${datacallid}&fismasystemid=${fismasystemid}&include=functionoption`,
+            { signal: controller.signal }
+          ),
+        ])
+        setQuestions(questionsRes.data?.data ?? [])
+        setScores(scoresRes.data?.data ?? [])
       } catch (error) {
         if (controller.signal.aborted) return
         if (isAuthHandled(error)) return
@@ -383,21 +431,70 @@ function QuestionBreakdown({
     }
   }, [fismasystemid, datacallid])
 
+  // Index questions by functionid so the score join is O(1) per row. Each
+  // question is associated with exactly one function on the backend.
+  const questionByFunctionId = useMemo(() => {
+    const map = new Map<
+      number,
+      {
+        questionid: number
+        question: string
+        pillar: string
+        functionName: string
+      }
+    >()
+    for (const q of questions) {
+      if (q.function?.functionid != null) {
+        map.set(q.function.functionid, {
+          questionid: q.questionid,
+          question: q.question,
+          pillar: q.pillar?.pillar ?? '-',
+          functionName: q.function.function,
+        })
+      }
+    }
+    return map
+  }, [questions])
+
+  // Join scores against the question map, dropping any score whose function
+  // we can't resolve (defensive: a stale score row for a removed function).
+  const rows: QuestionBreakdownRow[] = useMemo(() => {
+    const out: QuestionBreakdownRow[] = []
+    for (const s of scores) {
+      const fid = s.functionoption?.functionid
+      if (fid == null) continue
+      const q = questionByFunctionId.get(fid)
+      if (!q) continue
+      const rawScore = s.functionoption?.score ?? 0
+      out.push({
+        scoreid: s.scoreid,
+        questionid: q.questionid,
+        question: q.question,
+        pillar: q.pillar,
+        functionName: q.functionName,
+        rawScore,
+        tier: tierForOptionScore(rawScore),
+      })
+    }
+    // Stable sort by pillar order then function name so consecutive rows in
+    // the same pillar group together visually.
+    return out.sort((a, b) => {
+      const pr = pillarRank(a.pillar) - pillarRank(b.pillar)
+      if (pr !== 0) return pr
+      return a.functionName.localeCompare(b.functionName)
+    })
+  }, [scores, questionByFunctionId])
+
   const pillarOptions = useMemo(() => {
     const set = new Set<string>()
-    for (const r of rows) {
-      const p = r.pillar ?? r.function?.pillar
-      if (p) set.add(p)
-    }
+    for (const r of rows) set.add(r.pillar)
     return Array.from(set).sort((a, b) => pillarRank(a) - pillarRank(b))
   }, [rows])
 
   const filtered = useMemo(() => {
     return rows.filter((r) => {
-      const p = r.pillar ?? r.function?.pillar
-      const t = r.tier ?? r.option?.tier
-      if (pillarFilter && p !== pillarFilter) return false
-      if (tierFilter && t !== tierFilter) return false
+      if (pillarFilter && r.pillar !== pillarFilter) return false
+      if (tierFilter && r.tier !== tierFilter) return false
       return true
     })
   }, [rows, pillarFilter, tierFilter])
@@ -420,7 +517,9 @@ function QuestionBreakdown({
             Question-level breakdown
           </Typography>
           <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-            {loading ? 'Loading...' : `${rows.length} questions`}
+            {loading
+              ? 'Loading...'
+              : `${rows.length} ${rows.length === 1 ? 'question' : 'questions'}`}
           </Typography>
         </Box>
         <Box sx={{ display: 'flex', gap: 1 }}>
@@ -460,40 +559,30 @@ function QuestionBreakdown({
             </TableRow>
           </TableHead>
           <TableBody>
-            {filtered.map((r, idx) => {
-              const pillar = r.pillar ?? r.function?.pillar ?? '-'
-              const fn = r.function?.function ?? ''
-              const score = r.score ?? r.option?.score
-              const tier: ScoreTier = (r.tier ??
-                r.option?.tier ??
-                'Not Assessed') as ScoreTier
-              return (
-                <TableRow key={r.scoreid ?? `${r.questionid}-${idx}`}>
-                  <TableCell sx={breakdownCellSx}>
-                    <Typography
-                      sx={{ fontSize: 13, fontWeight: 600, color: colors.ink }}
-                    >
-                      {pillar}
+            {filtered.map((r) => (
+              <TableRow key={r.scoreid}>
+                <TableCell sx={breakdownCellSx}>
+                  <Typography
+                    sx={{ fontSize: 13, fontWeight: 600, color: colors.ink }}
+                  >
+                    {r.pillar}
+                  </Typography>
+                  {r.functionName && (
+                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                      {r.functionName}
                     </Typography>
-                    {fn && (
-                      <Typography
-                        sx={{ fontSize: 12, color: colors.neutral500 }}
-                      >
-                        {fn}
-                      </Typography>
-                    )}
-                  </TableCell>
-                  <TableCell sx={breakdownCellSx}>
-                    <Typography sx={{ fontSize: 13, color: colors.ink }}>
-                      {r.question ?? `Question #${r.questionid}`}
-                    </Typography>
-                  </TableCell>
-                  <TableCell align="right" sx={breakdownCellSx}>
-                    <ScoreCell score={score} tier={tier} />
-                  </TableCell>
-                </TableRow>
-              )
-            })}
+                  )}
+                </TableCell>
+                <TableCell sx={breakdownCellSx}>
+                  <Typography sx={{ fontSize: 13, color: colors.ink }}>
+                    {r.question}
+                  </Typography>
+                </TableCell>
+                <TableCell align="right" sx={breakdownCellSx}>
+                  <ScoreCell score={r.rawScore} tier={r.tier} />
+                </TableCell>
+              </TableRow>
+            ))}
           </TableBody>
         </Table>
       )}
