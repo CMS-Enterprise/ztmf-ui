@@ -1,9 +1,15 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams } from 'react-router-dom'
-import { Box, CircularProgress, Divider, Typography } from '@mui/material'
+import { useParams, useNavigate } from 'react-router-dom'
+import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import _ from 'lodash'
 
-import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
+import {
+  FismaSystemType,
+  FormValidType,
+  FormValidHelperText,
+  OpDiv,
+  ScoreAggregate,
+} from '@/types'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
@@ -16,20 +22,30 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ds/PageHeader'
+import { StatusChip, CodeBadge } from '@/components/ds/StatusChip'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
 import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
+import { fetchOpDivs } from '@/utils/opdivs'
 
-import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
-import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
+  const navigate = useNavigate()
+  const {
+    fismaSystems,
+    setFismaSystems,
+    userInfo,
+    selectedDatacall,
+    latestDataCallId,
+    datacalls,
+  } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
+  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
 
   const system = useMemo(
     () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
@@ -75,6 +91,49 @@ export default function SystemDetailPage() {
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
   const [openDecommissionDialog, setOpenDecommissionDialog] = useState(false)
   const [openReactivateDialog, setOpenReactivateDialog] = useState(false)
+
+  // OpDiv reference list, for the Organization card chip and subtitle.
+  const [opdivs, setOpDivs] = useState<OpDiv[]>([])
+  useEffect(() => {
+    let active = true
+    fetchOpDivs(true)
+      .then((list) => {
+        if (active) setOpDivs(list)
+      })
+      .catch((error) => {
+        if (isAuthHandled(error)) return
+        console.error('Failed to load OpDivs', error)
+      })
+    return () => {
+      active = false
+    }
+  }, [])
+
+  // Score aggregates across every datacall for this system. Used to render the
+  // overall score, the pillar snapshot, and the trend line in the score hero.
+  // Mirrors the PillarScoresPage call (include_pillars=true).
+  const [scores, setScores] = useState<ScoreAggregate[]>([])
+  useEffect(() => {
+    if (!systemId) return
+    const controller = new AbortController()
+    async function fetchScores() {
+      try {
+        const res = await axiosInstance.get(
+          `/scores/aggregate?fismasystemid=${systemId}&include_pillars=true`,
+          { signal: controller.signal }
+        )
+        setScores(res.data?.data ?? [])
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        console.error('Failed to load system scores', error)
+      }
+    }
+    fetchScores()
+    return () => {
+      controller.abort()
+    }
+  }, [systemId])
 
   // Decommission-specific state
   const [decommissionDate, setDecommissionDate] = useState('')
@@ -494,19 +553,97 @@ export default function SystemDetailPage() {
     )
   }
 
-  return (
-    <Box sx={{ mt: 1, mb: 4 }}>
-      <BreadCrumbs segmentLabels={{ [fismasystemid!]: system.fismaname }} />
+  // Pick the score aggregate matching the currently-selected datacall; fall
+  // back to the highest datacallid in the set so the page still shows the most
+  // recent measurement when no datacall is picked.
+  const currentScore =
+    scores.find((s) => s.datacallid === activeDataCallId) ??
+    scores.reduce<ScoreAggregate | undefined>(
+      (latest, s) => (!latest || s.datacallid > latest.datacallid ? s : latest),
+      undefined
+    )
+  const previousScore = currentScore
+    ? scores
+        .filter((s) => s.datacallid < currentScore.datacallid)
+        .sort((a, b) => b.datacallid - a.datacallid)[0]
+    : undefined
+  const datacallNameById = (id?: number) =>
+    id ? datacalls.find((dc) => dc.datacallid === id)?.datacall : undefined
+  const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
 
-      <SystemDetailHeader
-        systemName={system.fismaname}
-        isAdmin={isAdmin}
-        isEditing={isEditing}
-        isSaving={isSaving}
-        isFormValid={isFormValid()}
-        onEdit={handleEdit}
-        onSave={handleSave}
-        onCancel={handleCancel}
+  // Header actions vary by mode: View questionnaire + Edit system in read,
+  // Cancel + Save in edit. Edit gates on admin and on not being mid-save.
+  const headerActions = isEditing ? (
+    <>
+      <Button
+        variant="outlined"
+        color="primary"
+        onClick={handleCancel}
+        disabled={isSaving}
+      >
+        Cancel
+      </Button>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={handleSave}
+        disabled={!isFormValid() || isSaving}
+      >
+        {isSaving ? 'Saving...' : 'Save changes'}
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button
+        variant="outlined"
+        color="primary"
+        onClick={() =>
+          navigate(`/questionnaire/${system.fismaacronym}/${activeDataCallId}`)
+        }
+      >
+        View questionnaire
+      </Button>
+      {isAdmin && (
+        <Button variant="contained" color="primary" onClick={handleEdit}>
+          Edit system
+        </Button>
+      )}
+    </>
+  )
+
+  return (
+    <Box sx={{ py: 4 }}>
+      <PageHeader
+        breadcrumbs={
+          <BreadCrumbs segmentLabels={{ [fismasystemid!]: system.fismaname }} />
+        }
+        title={
+          <Box
+            component="span"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.25 }}
+          >
+            {system.fismaname}
+            <StatusChip
+              label={system.decommissioned ? 'Decommissioned' : 'Active'}
+              kind={system.decommissioned ? 'neutral' : 'active'}
+            />
+          </Box>
+        }
+        subtitle={
+          <Box
+            component="span"
+            sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+          >
+            {system.fismauid && <CodeBadge code={system.fismauid} />}
+            {opdivCode && (
+              <>
+                <span aria-hidden>·</span>
+                <CodeBadge code={opdivCode} />
+              </>
+            )}
+          </Box>
+        }
+        actions={headerActions}
       />
 
       {isEditing && editedSystem ? (
@@ -543,20 +680,12 @@ export default function SystemDetailPage() {
       ) : (
         <SystemDetailReadView
           system={system}
-          decommissionedByName={decommissionedByName}
+          opdivs={opdivs}
+          currentScore={currentScore}
+          previousScore={previousScore}
+          currentDatacallName={datacallNameById(currentScore?.datacallid)}
+          previousDatacallName={datacallNameById(previousScore?.datacallid)}
         />
-      )}
-
-      {/* ZTMF Insights enrichment is CMS-only for now; gate the whole section on
-          the per-system sdl_sync_enabled toggle (default false for new OpDivs). */}
-      {system.fismauid && system.sdl_sync_enabled && (
-        <>
-          <Divider sx={{ my: 4 }} />
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            ZTMF Insights
-          </Typography>
-          <CfactsRecordCard fismaUid={system.fismauid} />
-        </>
       )}
 
       <ConfirmDialog
