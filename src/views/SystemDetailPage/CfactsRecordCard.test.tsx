@@ -66,23 +66,19 @@ test('403 renders the quiet empty state and the interceptor stays out of the way
 
   renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
 
-  expect(
-    await screen.findByText(/no ztmf insights data found/i)
-  ).toBeInTheDocument()
+  expect(await screen.findByText(/no ztmf insights yet/i)).toBeInTheDocument()
   // The opt-out is real: no permission snackbar fired anywhere.
   expect(screen.queryByText(ERROR_MESSAGES.permission)).not.toBeInTheDocument()
   // And no redirect either - skipAuthHandling bypasses both branches.
   expect(mockedNavigate).not.toHaveBeenCalled()
 })
 
-test('404 renders the same quiet empty state', async () => {
+test('404 renders the shared insights empty state', async () => {
   mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(404)
 
   renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
 
-  expect(
-    await screen.findByText(/no ztmf insights data found/i)
-  ).toBeInTheDocument()
+  expect(await screen.findByText(/no ztmf insights yet/i)).toBeInTheDocument()
 })
 
 test('500 renders the failed-to-load message', async () => {

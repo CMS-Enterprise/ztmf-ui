@@ -11,6 +11,7 @@ import {
 } from '@mui/material'
 import { CfactsSystemType } from '@/types'
 import axiosInstance from '@/axiosConfig'
+import InsightsEmptyState from './InsightsEmptyState'
 
 interface CfactsRecordCardProps {
   fismaUid: string
@@ -160,11 +161,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
   }
 
   if (notFound || !cfacts) {
-    return (
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        No ZTMF Insights data found.
-      </Typography>
-    )
+    return <InsightsEmptyState />
   }
 
   const atoColor = getAtoColor(cfacts.ato_expiration_date)

@@ -7,9 +7,9 @@ import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
 import {
+  Autocomplete,
   FormControlLabel,
   InputBase,
-  MenuItem,
   Switch,
   TextField,
 } from '@mui/material'
@@ -42,6 +42,14 @@ type FormState = { code: string; name: string; is_parent: boolean }
 const EMPTY_FORM: FormState = { code: '', name: '', is_parent: false }
 
 type TypeFilter = 'all' | 'parent' | 'child'
+
+const TYPE_FILTER_OPTIONS: {
+  value: Exclude<TypeFilter, 'all'>
+  label: string
+}[] = [
+  { value: 'parent', label: 'Parent' },
+  { value: 'child', label: 'Child' },
+]
 
 interface OpDivsToolbarProps {
   search: string
@@ -97,29 +105,40 @@ function OpDivsToolbar({
           inputProps={{ 'aria-label': 'Search OpDivs' }}
         />
       </Box>
-      <TextField
-        select
+      <Autocomplete
         size="small"
-        value={typeFilter}
-        onChange={(e) => setTypeFilter(e.target.value as TypeFilter)}
+        options={TYPE_FILTER_OPTIONS}
+        getOptionLabel={(opt) => opt.label}
+        isOptionEqualToValue={(option, value) => option.value === value.value}
+        value={
+          typeFilter === 'all'
+            ? null
+            : TYPE_FILTER_OPTIONS.find((opt) => opt.value === typeFilter) ??
+              null
+        }
+        onChange={(_event, opt) =>
+          setTypeFilter((opt?.value ?? 'all') as TypeFilter)
+        }
         sx={{
-          minWidth: 110,
-          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
-          '& .MuiSelect-select': {
-            py: 0,
-            pl: 1.5,
-            display: 'flex',
-            alignItems: 'center',
-            height: '30px !important',
-            boxSizing: 'border-box',
+          width: 140,
+          '& .MuiInputBase-root': {
+            height: 30,
+            fontSize: 13,
+            py: '0 !important',
           },
+          '& .MuiAutocomplete-input': { py: '0 !important' },
         }}
-        aria-label="Filter by type"
-      >
-        <MenuItem value="all">Type</MenuItem>
-        <MenuItem value="parent">Parent</MenuItem>
-        <MenuItem value="child">Child</MenuItem>
-      </TextField>
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            placeholder="Type"
+            inputProps={{
+              ...params.inputProps,
+              'aria-label': 'Filter by type',
+            }}
+          />
+        )}
+      />
       <CompactSwitchLabel
         checked={showDeactivated}
         onChange={setShowDeactivated}

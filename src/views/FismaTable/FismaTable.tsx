@@ -5,7 +5,13 @@ import {
   GridActionsCellItem,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
-import { Box, InputBase, TextField, MenuItem, Typography } from '@mui/material'
+import {
+  Box,
+  InputBase,
+  TextField,
+  Typography,
+  Autocomplete,
+} from '@mui/material'
 import { useEffect, useMemo, useState } from 'react'
 import SearchIcon from '@mui/icons-material/Search'
 import { useNavigate, Link } from 'react-router-dom'
@@ -135,41 +141,60 @@ function TableToolbar({
             inputProps={{ 'aria-label': 'Search systems' }}
           />
         </Box>
-        <TextField
-          select
+        <Autocomplete
           size="small"
-          value={opdivFilter}
-          onChange={(e) =>
-            setOpDivFilter(
-              e.target.value === 'all' ? 'all' : Number(e.target.value)
-            )
+          options={opdivs}
+          getOptionLabel={(od) => od.code}
+          isOptionEqualToValue={(option, value) =>
+            option.opdiv_id === value.opdiv_id
           }
+          value={
+            opdivFilter === 'all'
+              ? null
+              : opdivs.find((od) => od.opdiv_id === opdivFilter) ?? null
+          }
+          onChange={(_event, od) => setOpDivFilter(od ? od.opdiv_id : 'all')}
+          renderOption={(props, option) => {
+            const { key, ...rest } = props
+            return (
+              <li key={key} {...rest}>
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexDirection: 'column',
+                    width: '100%',
+                  }}
+                >
+                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                    {option.code}
+                  </Typography>
+                  <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                    {option.name}
+                  </Typography>
+                </Box>
+              </li>
+            )
+          }}
           sx={{
-            minWidth: 130,
-            // Lock the outer outlined input AND the inner select cell to 30px;
-            // small TextFields default to ~40px from the notched outline.
+            width: 180,
             '& .MuiInputBase-root': {
               height: 30,
               fontSize: 13,
+              py: '0 !important',
             },
-            '& .MuiSelect-select': {
-              py: 0,
-              pl: 1.5,
-              display: 'flex',
-              alignItems: 'center',
-              height: '30px !important',
-              boxSizing: 'border-box',
-            },
+            '& .MuiAutocomplete-input': { py: '0 !important' },
           }}
-          aria-label="Filter by OpDiv"
-        >
-          <MenuItem value="all">All OpDivs</MenuItem>
-          {opdivs.map((od) => (
-            <MenuItem key={od.opdiv_id} value={od.opdiv_id}>
-              {od.code}
-            </MenuItem>
-          ))}
-        </TextField>
+          renderInput={(params) => (
+            <TextField
+              {...params}
+              placeholder="All OpDivs"
+              inputProps={{
+                ...params.inputProps,
+                'aria-label': 'Filter by OpDiv',
+              }}
+            />
+          )}
+        />
         <CompactSwitchLabel
           checked={showDecommissioned}
           onChange={setShowDecommissioned}

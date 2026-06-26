@@ -29,6 +29,7 @@ import {
   MenuItem,
   IconButton,
   Tooltip,
+  Autocomplete,
 } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import './UserTable.css'
@@ -356,6 +357,9 @@ function OpDivsEditCell({
 function IdpEditCell(props: GridRenderEditCellParams) {
   const { id, row } = props
   const apiRef = useGridApiContext()
+  // Read the raw row value so the Select reflects the user's current IdP on
+  // enter-edit (the column's valueGetter returns the display label "Okta",
+  // which would not match the lowercase MenuItem values).
   const value = (row.identity_provider as string | undefined) ?? ''
   return (
     <Box sx={{ px: 2.25, py: 1, width: '100%' }}>
@@ -371,6 +375,27 @@ function IdpEditCell(props: GridRenderEditCellParams) {
           })
         }
         fullWidth
+        SelectProps={{
+          // displayEmpty so the Select still renders when the user has no
+          // identity_provider yet (Invited rows); renderValue gives us a
+          // reliable label even when the CMS DSG global styles clobber the
+          // default selected-MenuItem rendering. Lowercase the value defensively
+          // so an upstream display-cased label still maps to the right option.
+          displayEmpty: true,
+          renderValue: (selected) => {
+            const v = ((selected as string | undefined) ?? '').toLowerCase()
+            if (v === 'okta') return 'Okta'
+            if (v === 'entra') return 'Entra'
+            return (
+              <Box
+                component="span"
+                sx={{ color: colors.neutral500, fontSize: 13 }}
+              >
+                Select identity provider
+              </Box>
+            )
+          },
+        }}
         sx={{
           '& .MuiInputBase-root': { height: 30, fontSize: 13 },
           '& .MuiSelect-select': {
@@ -509,62 +534,91 @@ function UsersToolbar({
           inputProps={{ 'aria-label': 'Search users' }}
         />
       </Box>
-      <TextField
-        select
+      <Autocomplete
         size="small"
-        value={roleFilter}
-        onChange={(e) => setRoleFilter(e.target.value as string | 'all')}
-        sx={{
-          minWidth: 110,
-          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
-          '& .MuiSelect-select': {
-            py: 0,
-            pl: 1.5,
-            display: 'flex',
-            alignItems: 'center',
-            height: '30px !important',
-            boxSizing: 'border-box',
-          },
-        }}
-        aria-label="Filter by role"
-      >
-        <MenuItem value="all">Role</MenuItem>
-        {roleOptions.map((opt) => (
-          <MenuItem key={opt.value} value={opt.value}>
-            {opt.label}
-          </MenuItem>
-        ))}
-      </TextField>
-      <TextField
-        select
-        size="small"
-        value={opdivFilter}
-        onChange={(e) =>
-          setOpDivFilter(
-            e.target.value === 'all' ? 'all' : Number(e.target.value)
-          )
+        options={roleOptions}
+        getOptionLabel={(opt) => opt.label}
+        isOptionEqualToValue={(option, value) => option.value === value.value}
+        value={
+          roleFilter === 'all'
+            ? null
+            : roleOptions.find((opt) => opt.value === roleFilter) ?? null
         }
+        onChange={(_event, opt) => setRoleFilter(opt ? opt.value : 'all')}
         sx={{
-          minWidth: 110,
-          '& .MuiInputBase-root': { height: 30, fontSize: 13 },
-          '& .MuiSelect-select': {
-            py: 0,
-            pl: 1.5,
-            display: 'flex',
-            alignItems: 'center',
-            height: '30px !important',
-            boxSizing: 'border-box',
+          width: 200,
+          '& .MuiInputBase-root': {
+            height: 30,
+            fontSize: 13,
+            py: '0 !important',
           },
+          '& .MuiAutocomplete-input': { py: '0 !important' },
         }}
-        aria-label="Filter by OpDiv"
-      >
-        <MenuItem value="all">OpDiv</MenuItem>
-        {opdivOptions.map((od) => (
-          <MenuItem key={od.opdiv_id} value={od.opdiv_id}>
-            {od.code}
-          </MenuItem>
-        ))}
-      </TextField>
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            placeholder="Role"
+            inputProps={{
+              ...params.inputProps,
+              'aria-label': 'Filter by role',
+            }}
+          />
+        )}
+      />
+      <Autocomplete
+        size="small"
+        options={opdivOptions}
+        getOptionLabel={(od) => od.code}
+        isOptionEqualToValue={(option, value) =>
+          option.opdiv_id === value.opdiv_id
+        }
+        value={
+          opdivFilter === 'all'
+            ? null
+            : opdivOptions.find((od) => od.opdiv_id === opdivFilter) ?? null
+        }
+        onChange={(_event, od) => setOpDivFilter(od ? od.opdiv_id : 'all')}
+        renderOption={(props, option) => {
+          const { key, ...rest } = props
+          return (
+            <li key={key} {...rest}>
+              <Box
+                sx={{
+                  display: 'flex',
+                  flexDirection: 'column',
+                  width: '100%',
+                }}
+              >
+                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                  {option.code}
+                </Typography>
+                <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                  {option.name}
+                </Typography>
+              </Box>
+            </li>
+          )
+        }}
+        sx={{
+          width: 180,
+          '& .MuiInputBase-root': {
+            height: 30,
+            fontSize: 13,
+            py: '0 !important',
+          },
+          '& .MuiAutocomplete-input': { py: '0 !important' },
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            placeholder="OpDiv"
+            inputProps={{
+              ...params.inputProps,
+              'aria-label': 'Filter by OpDiv',
+            }}
+          />
+        )}
+      />
       <CompactSwitchLabel
         checked={showDeleted}
         onChange={setShowDeleted}
@@ -1308,7 +1362,12 @@ export default function UserTable() {
       renderEditCell: (params: GridRenderEditCellParams) => (
         <IdpEditCell {...params} />
       ),
-      valueGetter: (params) => idpLabel(params.row.identity_provider),
+      // No valueGetter: the inline IdP Select binds to the raw lowercase value
+      // ('okta'/'entra') and a valueGetter returning the display label would
+      // make MUI's edit state seed 'Okta'/'Entra' instead, which would never
+      // match the MenuItem values and the Select would render empty.
+      // valueFormatter is fine for sort/quick-filter display, but renderCell
+      // already handles display so neither is needed here.
       renderCell: (params) => {
         const idp = params.row.identity_provider
         if (!idp) {
