@@ -3,6 +3,7 @@ import {
   GridColDef,
   GridRenderCellParams,
   GridActionsCellItem,
+  GridRowParams,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
 import {
@@ -215,7 +216,15 @@ function TableToolbar({
  *   fismasystemid.
  * @returns {JSX.Element} The systems table card.
  */
-export default function FismaTable({ scores }: FismaTableProps) {
+export default function FismaTable({
+  scores,
+  selectedRows,
+  onSelectionChange,
+}: FismaTableProps) {
+  // Selection mode is opt-in: the parent enables it by passing handlers. This
+  // keeps the table usable on pages that don't surface an Export CSV action.
+  const selectionEnabled =
+    selectedRows !== undefined && onSelectionChange !== undefined
   const {
     fismaSystems,
     userInfo,
@@ -486,7 +495,23 @@ export default function FismaTable({ scores }: FismaTableProps) {
           columns={columns}
           getRowId={(row) => row.fismasystemid}
           rowHeight={60}
+          // Clicks on the row body navigate (handled by the System link in
+          // the first column); only the checkbox toggles selection.
           disableRowSelectionOnClick
+          checkboxSelection={selectionEnabled}
+          rowSelectionModel={selectionEnabled ? selectedRows : undefined}
+          onRowSelectionModelChange={
+            selectionEnabled
+              ? (ids) => onSelectionChange!(ids.map((id) => Number(id)))
+              : undefined
+          }
+          // Matches main: only scored systems are selectable, since there's
+          // nothing to export for a "Not Assessed" row.
+          isRowSelectable={
+            selectionEnabled
+              ? (params: GridRowParams) => params.row.fismasystemid in scores
+              : undefined
+          }
           disableColumnSelector
           // Each table already has its own search + filters in the toolbar.
           // The DataGrid's per-column 3-dot menu adds nothing here and its

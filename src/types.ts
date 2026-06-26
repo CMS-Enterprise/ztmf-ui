@@ -244,6 +244,14 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, SystemScoreEntry>
+  /**
+   * Currently selected row ids (fismasystemid). When provided alongside
+   * onSelectionChange, the table renders selection checkboxes. The parent
+   * owns the state so other actions (e.g. Export CSV) can read it.
+   */
+  selectedRows?: number[]
+  /** Called when the user toggles row selection. */
+  onSelectionChange?: (ids: number[]) => void
 }
 
 export type ThemeColor =
