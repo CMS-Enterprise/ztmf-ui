@@ -1,10 +1,4 @@
-import {
-  Container,
-  Typography,
-  Autocomplete,
-  TextField,
-  Chip,
-} from '@mui/material'
+import { Container } from '@mui/material'
 import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
@@ -160,17 +154,7 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
-  const isSystemDetail = location.pathname.startsWith('/systems/')
-  const isPillarScoresRoute = location.pathname.endsWith('/pillar-scores')
   const isHomeRoute = location.pathname === '/'
-  const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
-  // The dashboard renders its own datacall card in-body (matching the mock),
-  // so the slim sub-bar only shows on the questionnaire and system-detail
-  // routes that still need the datacall context inline. The pillar scores
-  // page bakes the datacall name into its subtitle ("System · FY2023..."),
-  // so the sub-bar would just be a duplicate.
-  const datacallContextNeeded =
-    isQuestionnaireRoute || (isSystemDetail && !isPillarScoresRoute)
   // Initials for the account avatar, from the user's name (or email).
   const initials =
     (userInfo.fullname || userInfo.email || '')
@@ -382,103 +366,8 @@ export default function Title() {
           )}
         </Box>
       )}
-      {/* Datacall sub-bar (shown when datacall context needed, hidden everywhere else) */}
-      {loaderData.status == 200 && datacallContextNeeded && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            px: { xs: 2, sm: 4 },
-            py: 1,
-            backgroundColor: '#fbfbfd',
-            borderBottom: '1px solid rgba(0,0,0,0.12)',
-            minWidth: 800,
-          }}
-        >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography
-              variant="subtitle1"
-              component="span"
-              sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
-            >
-              Datacall:
-            </Typography>
-            {isSystemDetail ? (
-              <Typography variant="subtitle1" component="span">
-                {latestDatacall}
-              </Typography>
-            ) : (
-              datacalls.length > 0 && (
-                <Autocomplete
-                  size="small"
-                  options={datacalls}
-                  getOptionLabel={(dc) => dc.datacall}
-                  isOptionEqualToValue={(option, value) =>
-                    option.datacallid === value.datacallid
-                  }
-                  value={selectedDatacall ?? datacalls[0]}
-                  onChange={(_, dc) => {
-                    if (dc) setSelectedDatacall(dc)
-                  }}
-                  renderOption={(props, option) => {
-                    const isCurrent = option.datacallid === latestDataCallId
-                    const isClosed = new Date() > new Date(option.deadline)
-                    const { key, ...rest } = props
-                    const deadlineLabel = new Date(
-                      option.deadline
-                    ).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })
-                    return (
-                      <li key={key} {...rest}>
-                        <Box sx={{ width: '100%' }}>
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              width: '100%',
-                              gap: 1,
-                            }}
-                          >
-                            <Typography variant="body2">
-                              {option.datacall}
-                            </Typography>
-                            {isCurrent && (
-                              <Chip
-                                label="Current"
-                                size="small"
-                                variant="outlined"
-                                color="primary"
-                                sx={{ height: 18, fontSize: '0.65rem' }}
-                              />
-                            )}
-                          </Box>
-                          <Typography
-                            variant="caption"
-                            sx={{ color: 'text.secondary' }}
-                          >
-                            {isClosed ? 'Closed' : 'Active'} · deadline{' '}
-                            {deadlineLabel}
-                          </Typography>
-                        </Box>
-                      </li>
-                    )
-                  }}
-                  disableClearable
-                  sx={{ minWidth: 260 }}
-                  renderInput={(params) => (
-                    <TextField {...params} size="small" />
-                  )}
-                />
-              )
-            )}
-          </Box>
-        </Box>
-      )}
+      {/* Datacall context is rendered by each page via the shared
+          DatacallContextCard component, never as chrome. */}
       {loaderData.serverError ? (
         <Container
           maxWidth={false}

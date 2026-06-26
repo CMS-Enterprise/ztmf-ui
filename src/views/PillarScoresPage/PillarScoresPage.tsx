@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Box, Button, CircularProgress } from '@mui/material'
 import PageHeader from '@/components/ds/PageHeader'
+import DatacallContextCard from '@/components/ds/DatacallContextCard'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import PillarScoresContent from './PillarScoresContent'
@@ -56,22 +57,20 @@ export default function PillarScoresPage() {
 
   const systemName = system?.fismaname ?? 'System'
   const systemAcronym = system?.fismaacronym ?? ''
-  // Datacall name for the hero subtitle and trend line. Falls back to the id
-  // if the datacalls list has not loaded yet.
+  // Subtitle stays system-name-only because the datacall card above carries
+  // the current-datacall context. currentDatacallName is still threaded down
+  // for the hero "Datacall" stat (a useful tier-level confirmation inside
+  // the score card) and previousDatacallName for the trend line.
   const currentDatacallName = datacalls.find(
     (dc) => dc.datacallid === activeDataCallId
   )?.datacall
-  // Previous datacall for the trend label (most recent one before the current
-  // that actually has score data on this system).
   const previousDatacallId = scores
     .filter((s) => s.datacallid < (activeDataCallId ?? Number.MAX_SAFE_INTEGER))
     .sort((a, b) => b.datacallid - a.datacallid)[0]?.datacallid
   const previousDatacallName = datacalls.find(
     (dc) => dc.datacallid === previousDatacallId
   )?.datacall
-  const subtitle = currentDatacallName
-    ? `${systemName} · ${currentDatacallName}`
-    : systemName
+  const subtitle = systemName
 
   return (
     <Box sx={{ py: 4 }}>
@@ -90,6 +89,7 @@ export default function PillarScoresPage() {
           </Button>
         }
       />
+      <DatacallContextCard />
       {loading ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress />
