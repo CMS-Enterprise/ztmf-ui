@@ -33,7 +33,7 @@ import _ from 'lodash'
 import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
 import ztmfLogo from '@/assets/ztmf-logo-color.png'
-import { colors } from '@/theme/tokens'
+import { colors, fonts } from '@/theme/tokens'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -211,19 +211,23 @@ export default function Title() {
         <Box
           sx={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'stretch',
             justifyContent: 'space-between',
             px: { xs: 2, sm: 4 },
-            py: 1.5,
-            borderBottom: '1px solid rgba(0,0,0,0.12)',
+            height: 60,
+            borderBottom: `1px solid ${colors.neutral200}`,
             minWidth: 800,
           }}
         >
           {/* left: ZTMF mark + primary nav */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 3 }}>
+          <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 4 }}>
             <Link
               to={Routes.ROOT}
-              style={{ display: 'flex', textDecoration: 'none' }}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                textDecoration: 'none',
+              }}
             >
               <img
                 src={ztmfLogo}
@@ -232,37 +236,47 @@ export default function Title() {
               />
             </Link>
 
-            {/* primary nav tabs */}
+            {/* primary nav tabs — underline-active, no pill background.
+                Each link stretches full-height so its 2px bottom border
+                sits flush at the bar's bottom edge; mb: -1px overlaps the
+                header's 1px bottom border so the active underline visually
+                replaces that segment instead of stacking above it. */}
             <Box
               component="nav"
-              sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
+              sx={{
+                display: 'flex',
+                alignItems: 'stretch',
+                gap: 3.5,
+                fontFamily: fonts.base,
+                fontSize: 14,
+                fontWeight: 500,
+              }}
             >
               {navItems.map((item) => (
                 <Link
                   key={item.label}
                   to={item.to}
-                  style={{ textDecoration: 'none' }}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: 0,
+                    background: 'transparent',
+                    textDecoration: 'none',
+                    color: item.active ? colors.ink : colors.neutral500,
+                    fontWeight: item.active ? 600 : 500,
+                    borderBottom: `2px solid ${item.active ? colors.primary : 'transparent'}`,
+                    marginBottom: -1,
+                    transition: 'color 120ms ease, border-color 120ms ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!item.active) e.currentTarget.style.color = colors.ink
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!item.active)
+                      e.currentTarget.style.color = colors.neutral500
+                  }}
                 >
-                  <Box
-                    sx={{
-                      px: 3.5,
-                      py: 2,
-                      borderRadius: 1.5,
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: item.active ? colors.primary : colors.neutral700,
-                      backgroundColor: item.active
-                        ? colors.primary50
-                        : 'transparent',
-                      '&:hover': {
-                        backgroundColor: item.active
-                          ? colors.primary50
-                          : colors.neutral50,
-                      },
-                    }}
-                  >
-                    {item.label}
-                  </Box>
+                  {item.label}
                 </Link>
               ))}
             </Box>
