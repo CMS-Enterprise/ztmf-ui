@@ -1,7 +1,15 @@
 import React from 'react'
-import { Box, Button, Checkbox, Typography } from '@mui/material'
+import {
+  Box,
+  Button,
+  Checkbox,
+  InputAdornment,
+  OutlinedInput,
+  Typography,
+} from '@mui/material'
 import Modal from '@/components/ds/Modal'
 import { GridRowId } from '@mui/x-data-grid'
+import SearchIcon from '@mui/icons-material/Search'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { CodeBadge } from '@/components/ds/StatusChip'
 import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
@@ -30,6 +38,13 @@ type Props = {
 }
 
 type View = 'selected' | 'all'
+
+const searchInputSx = {
+  height: 36,
+  fontSize: 13,
+  '& .MuiOutlinedInput-input': { padding: '0 0' },
+  '& fieldset': { borderColor: colors.neutral200 },
+}
 
 const rowSx = {
   display: 'flex',
@@ -96,6 +111,7 @@ export default function OpDivGrantModal({
     opdivId: number
   } | null>(null)
   const [view, setView] = React.useState<View>('all')
+  const [search, setSearch] = React.useState<string>('')
 
   const opdivMap = React.useMemo(() => {
     const map: Record<number, { code: string; name: string }> = {}
@@ -115,18 +131,29 @@ export default function OpDivGrantModal({
     [opdivOptions, opdivMap]
   )
 
-  const visibleOpDivs = React.useMemo(
-    () =>
+  const visibleOpDivs = React.useMemo(() => {
+    const scoped =
       view === 'selected'
         ? sortedOptionIds.filter((id) => assignedOpDivs.includes(id))
-        : sortedOptionIds,
-    [view, sortedOptionIds, assignedOpDivs]
-  )
+        : sortedOptionIds
+    const needle = search.trim().toLowerCase()
+    if (!needle) return scoped
+    return scoped.filter((id) => {
+      const od = opdivMap[id]
+      if (!od) return false
+      return (
+        od.code.toLowerCase().includes(needle) ||
+        od.name.toLowerCase().includes(needle)
+      )
+    })
+  }, [view, sortedOptionIds, assignedOpDivs, opdivMap, search])
 
-  // Reset to the All view whenever the modal opens so a previous Selected
-  // view from a different user doesn't carry over.
+  // Reset transient view state whenever the modal opens/closes so a
+  // previous user's filter doesn't carry over and per the project rule
+  // that closed modals must not retain validation/UI state.
   React.useEffect(() => {
     if (open) setView('all')
+    if (!open) setSearch('')
   }, [open])
 
   const handleError = (error: unknown) => {
@@ -193,7 +220,8 @@ export default function OpDivGrantModal({
         onClose={handleClose}
         title="Assign OpDivs"
         eyebrow={userName || undefined}
-        size="sm"
+        size="md"
+        dense
         footer={
           <Button
             variant="contained"
@@ -209,6 +237,20 @@ export default function OpDivGrantModal({
           <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
             OpDiv Admins manage users and systems within their assigned OpDivs.
           </Typography>
+
+          <OutlinedInput
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by code or name"
+            fullWidth
+            sx={searchInputSx}
+            startAdornment={
+              <InputAdornment position="start" sx={{ ml: 1.25, mr: 1 }}>
+                <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
+              </InputAdornment>
+            }
+            inputProps={{ 'aria-label': 'Search OpDivs' }}
+          />
 
           <Box sx={{ display: 'flex', gap: 1 }}>
             <PillTab
@@ -226,7 +268,7 @@ export default function OpDivGrantModal({
             sx={{
               border: `1px solid ${colors.neutral200}`,
               borderRadius: 1,
-              maxHeight: 320,
+              maxHeight: 240,
               overflow: 'auto',
             }}
           >
@@ -239,9 +281,11 @@ export default function OpDivGrantModal({
                   py: 3,
                 }}
               >
-                {view === 'selected'
-                  ? 'No OpDivs assigned yet.'
-                  : 'No OpDivs available.'}
+                {search.trim()
+                  ? 'No OpDivs match your search.'
+                  : view === 'selected'
+                    ? 'No OpDivs assigned yet.'
+                    : 'No OpDivs available.'}
               </Typography>
             ) : (
               visibleOpDivs.map((opdivId) => {

@@ -35,13 +35,26 @@ const searchInputSx = {
 const rowSx = {
   display: 'flex',
   alignItems: 'center',
-  gap: 1.25,
-  px: 1.75,
-  py: 1.25,
+  gap: 1,
+  px: 1.25,
+  py: 0.75,
   borderBottom: `1px solid ${colors.neutral100}`,
   cursor: 'pointer',
   '&:last-of-type': { borderBottom: 'none' },
   '&:hover': { backgroundColor: colors.neutral50 },
+}
+
+const rowTitleSx = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: colors.ink,
+  lineHeight: 1.3,
+}
+
+const rowMetaSx = {
+  fontSize: 12,
+  color: colors.neutral500,
+  lineHeight: 1.3,
 }
 
 /**
@@ -135,6 +148,42 @@ export default function AssignSystemModal({
     }
   }
 
+  // Bulk-assign every currently visible (filtered) system that is not yet
+  // assigned. "In scope" = whatever the search filter leaves; this mirrors
+  // the mockup's framing ("they're responsible for in REBEL and SCNDRL")
+  // by letting an admin narrow scope via the search box first.
+  const handleSelectAllInScope = async () => {
+    const toAdd = filteredSystemIds.filter(
+      (id) => !assignedSystems.includes(id)
+    )
+    if (toAdd.length === 0) return
+    const results = await Promise.allSettled(
+      toAdd.map((id) =>
+        axiosInstance.post(`/users/${userid}/assignedfismasystems`, {
+          fismasystemid: id,
+        })
+      )
+    )
+    const succeeded = toAdd.filter((_, i) => results[i].status === 'fulfilled')
+    if (succeeded.length > 0) {
+      setAssignedSystems((prev) => Array.from(new Set([...prev, ...succeeded])))
+      notify(
+        `Saved - assigned ${succeeded.length} ${
+          succeeded.length === 1 ? 'system' : 'systems'
+        }`,
+        'success'
+      )
+    }
+    const failed = toAdd.length - succeeded.length
+    if (failed > 0) {
+      notify(
+        `${failed} ${failed === 1 ? 'assignment' : 'assignments'} failed`,
+        'error',
+        { autoHideDuration: 2500 }
+      )
+    }
+  }
+
   const handleToggle = async (systemId: number, checked: boolean) => {
     if (checked) {
       try {
@@ -167,11 +216,28 @@ export default function AssignSystemModal({
         onClose={handleClose}
         title="Assign FISMA systems"
         eyebrow={userName || undefined}
-        size="sm"
+        size="md"
+        dense
         footer={
-          <Button variant="contained" color="primary" onClick={handleClose}>
-            Done
-          </Button>
+          <>
+            <Button
+              variant="text"
+              color="primary"
+              onClick={handleSelectAllInScope}
+              disabled={filteredSystemIds.every((id) =>
+                assignedSystems.includes(id)
+              )}
+              sx={{ mr: 'auto', textTransform: 'none', fontWeight: 600 }}
+            >
+              Select all in scope
+            </Button>
+            <Button variant="text" color="inherit" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleClose}>
+              Save assignments
+            </Button>
+          </>
         }
       >
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
@@ -197,7 +263,7 @@ export default function AssignSystemModal({
             sx={{
               border: `1px solid ${colors.neutral200}`,
               borderRadius: 1,
-              maxHeight: 320,
+              maxHeight: 240,
               overflow: 'auto',
             }}
           >
@@ -227,23 +293,11 @@ export default function AssignSystemModal({
                       id={`assign-system-${systemId}`}
                       checked={isAssigned}
                       onChange={(e) => handleToggle(systemId, e.target.checked)}
-                      sx={{ p: 0.5 }}
+                      sx={{ p: 0.25 }}
                     />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography
-                        sx={{
-                          fontSize: 13,
-                          fontWeight: 600,
-                          color: colors.ink,
-                        }}
-                      >
-                        {system?.name}
-                      </Typography>
-                      <Typography
-                        sx={{ fontSize: 12, color: colors.neutral500 }}
-                      >
-                        {system?.acronym}
-                      </Typography>
+                      <Typography sx={rowTitleSx}>{system?.name}</Typography>
+                      <Typography sx={rowMetaSx}>{system?.acronym}</Typography>
                     </Box>
                   </Box>
                 )
