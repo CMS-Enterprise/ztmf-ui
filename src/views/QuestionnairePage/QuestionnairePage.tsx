@@ -12,6 +12,7 @@ import Tooltip from '@mui/material/Tooltip'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import {
   FismaQuestion,
   QuestionOption,
@@ -146,13 +147,24 @@ export default function QuestionnarePage() {
       const response = await axiosInstance.get(
         `scores?datacallid=${datacallID}&fismasystemid=${systemId}&include=functionoption`
       )
+      const rows: QuestionScores[] = response.data.data ?? []
       const hashTable: questionScoreMap = Object.assign(
         {},
-        ...response.data.data.map((item: QuestionScores) => ({
+        ...rows.map((item: QuestionScores) => ({
           [item.functionoptionid]: item,
         }))
       )
       setQuestionScores(hashTable)
+      // Seed the "last saved" indicator from the freshest score row so the
+      // header subtitle reads "last saved 2 min ago" on first paint instead
+      // of waiting for a save in this session.
+      let maxAt = 0
+      for (const r of rows) {
+        if (!r.last_edited_at) continue
+        const t = new Date(r.last_edited_at).getTime()
+        if (Number.isFinite(t) && t > maxAt) maxAt = t
+      }
+      if (maxAt > 0) setLastSavedAt(new Date(maxAt))
     } catch (error) {
       if (isAuthHandled(error)) return
       console.error('Error fetching question scores:', error)
@@ -338,13 +350,23 @@ export default function QuestionnarePage() {
               `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`,
               { signal: controller.signal }
             )
+            const rows: QuestionScores[] = res.data.data ?? []
             const hashTable: questionScoreMap = Object.assign(
               {},
-              ...res.data.data.map((item: QuestionScores) => ({
+              ...rows.map((item: QuestionScores) => ({
                 [item.functionoptionid]: item,
               }))
             )
             setQuestionScores(hashTable)
+            // Same seed as fetchQuestionScores so a freshly-loaded page
+            // shows "last saved <time>" without needing a save first.
+            let maxAt = 0
+            for (const r of rows) {
+              if (!r.last_edited_at) continue
+              const t = new Date(r.last_edited_at).getTime()
+              if (Number.isFinite(t) && t > maxAt) maxAt = t
+            }
+            if (maxAt > 0) setLastSavedAt(new Date(maxAt))
           } catch (error) {
             if (controller.signal.aborted) return
             if (isAuthHandled(error)) return
@@ -461,6 +483,24 @@ export default function QuestionnarePage() {
   // map is keyed by functionoptionid; each question has exactly one picked
   // option, so size === answered question count.
   const totalAnswered = Object.keys(questionScores).length
+  // Set of functionids that have a score row, derived from the embedded
+  // functionoption.functionid on each score row (present because we fetched
+  // with ?include=functionoption). Drives per-pillar progress counts in the
+  // left rail and per-question checkmarks in the right rail.
+  const answeredFunctionIds = new Set<number>()
+  for (const id in questionScores) {
+    const row = questionScores[Number(id)] as QuestionScores & {
+      functionoption?: { functionid?: number }
+    }
+    const fid = row.functionoption?.functionid
+    if (typeof fid === 'number') answeredFunctionIds.add(fid)
+  }
+  const answeredCountInCategory = (cat: Category): number =>
+    cat.steps.reduce(
+      (acc, s) =>
+        answeredFunctionIds.has(s.function.functionid) ? acc + 1 : acc,
+      0
+    )
   const currentCategory = categories.find((c) =>
     c.steps.some((s) => s.function.functionid === selectedIndex)
   )
@@ -524,13 +564,38 @@ export default function QuestionnarePage() {
           />
         }
         actions={
-          <Button
-            variant="outlined"
-            color="primary"
-            onClick={() => setDiffModalOpen(true)}
-          >
-            Compare datacalls
-          </Button>
+          <>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => setDiffModalOpen(true)}
+            >
+              Compare datacalls
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              disabled={isReadOnly}
+              // Auto-save is the persistence mechanism (there is no submit
+              // endpoint), so this button closes the questionnaire and
+              // returns to the system detail view rather than firing a
+              // dedicated submit. Disabled while read-only so a user past
+              // the deadline cannot confuse "submit" with "reopen".
+              onClick={() => {
+                if (!system) return
+                notify(
+                  totalAnswered === totalQuestions
+                    ? 'All responses saved.'
+                    : `${totalAnswered} of ${totalQuestions} responses saved.`,
+                  'success',
+                  { autoHideDuration: 2000 }
+                )
+                navigate(`/systems/${system}`)
+              }}
+            >
+              Submit responses
+            </Button>
+          </>
         }
       />
       {isPastDeadline && <ClosedDatacallBanner readOnly={isReadOnly} />}
@@ -548,6 +613,7 @@ export default function QuestionnarePage() {
         <PillarRail
           categories={categories}
           currentCategoryName={currentCategoryName}
+          answeredCountInCategory={answeredCountInCategory}
           onPillarClick={(category) => {
             const first = category.steps[0]
             if (first) navigateToFunction(category.name, first)
@@ -762,8 +828,7 @@ export default function QuestionnarePage() {
         <SectionRail
           category={currentCategory}
           selectedIndex={selectedIndex}
-          totalAnswered={totalAnswered}
-          totalQuestions={totalQuestions}
+          answeredFunctionIds={answeredFunctionIds}
           onFunctionClick={(fn) => {
             if (currentCategory) navigateToFunction(currentCategory.name, fn)
           }}
@@ -831,10 +896,12 @@ function ClosedDatacallBanner({ readOnly }: { readOnly: boolean }) {
 function PillarRail({
   categories,
   currentCategoryName,
+  answeredCountInCategory,
   onPillarClick,
 }: {
   categories: Category[]
   currentCategoryName: string
+  answeredCountInCategory: (cat: Category) => number
   onPillarClick: (category: Category) => void
 }) {
   // Cross-cutting pillars are kept in a separate group below the main pillar
@@ -847,6 +914,7 @@ function PillarRail({
         eyebrow="Pillars"
         items={main}
         currentName={currentCategoryName}
+        answeredCountInCategory={answeredCountInCategory}
         onClick={onPillarClick}
       />
       {cross.length > 0 && (
@@ -855,6 +923,7 @@ function PillarRail({
             eyebrow="Cross-cutting"
             items={cross}
             currentName={currentCategoryName}
+            answeredCountInCategory={answeredCountInCategory}
             onClick={onPillarClick}
           />
         </Box>
@@ -867,11 +936,13 @@ function PillarGroup({
   eyebrow,
   items,
   currentName,
+  answeredCountInCategory,
   onClick,
 }: {
   eyebrow: string
   items: Category[]
   currentName: string
+  answeredCountInCategory: (cat: Category) => number
   onClick: (category: Category) => void
 }) {
   return (
@@ -892,11 +963,8 @@ function PillarGroup({
       <Box>
         {items.map((cat) => {
           const isCurrent = cat.name === currentName
-          // Pillar progress is conservatively reported as "total" for now,
-          // since the FE doesn't have a stable option->function mapping
-          // without per-function fetches. We can compute the real "answered"
-          // count once the QuestionnairePage state denormalizes that.
           const total = cat.steps.length
+          const answered = answeredCountInCategory(cat)
           return (
             <Box
               key={cat.name}
@@ -931,10 +999,11 @@ function PillarGroup({
                 sx={{
                   fontFamily: fonts.mono,
                   fontSize: 12,
-                  color: colors.neutral500,
+                  color: answered === total ? colors.up : colors.neutral500,
+                  fontWeight: answered === total ? 600 : 500,
                 }}
               >
-                {total}
+                {answered} / {total}
               </Typography>
             </Box>
           )
@@ -1074,14 +1143,12 @@ function OptionCardList({
 function SectionRail({
   category,
   selectedIndex,
-  totalAnswered,
-  totalQuestions,
+  answeredFunctionIds,
   onFunctionClick,
 }: {
   category: Category | undefined
   selectedIndex: number
-  totalAnswered: number
-  totalQuestions: number
+  answeredFunctionIds: Set<number>
   onFunctionClick: (fn: FismaQuestion) => void
 }) {
   if (!category) {
@@ -1094,121 +1161,170 @@ function SectionRail({
     )
   }
   const sectionTotal = category.steps.length
-  // We can't accurately tell which functions in THIS section are answered
-  // without the option->function map; show a global "total answered /
-  // total questions" progress here so the rail is honest about scope.
-  const fill = totalQuestions
-    ? Math.min(1, totalAnswered / totalQuestions) * 100
+  const sectionAnswered = category.steps.reduce(
+    (acc, s) =>
+      answeredFunctionIds.has(s.function.functionid) ? acc + 1 : acc,
+    0
+  )
+  const fill = sectionTotal
+    ? Math.min(1, sectionAnswered / sectionTotal) * 100
     : 0
   return (
-    <Card sx={{ p: 2 }}>
-      <Typography
-        sx={{ fontSize: 13, fontWeight: 700, color: colors.ink, mb: 0.25 }}
-      >
-        Section progress
-      </Typography>
-      <Typography sx={{ fontSize: 12, color: colors.neutral500, mb: 1 }}>
-        {category.name === 'CrossCutting' ? 'Cross-cutting' : category.name}
-      </Typography>
-      <Typography
-        sx={{
-          fontFamily: fonts.mono,
-          fontSize: 12,
-          color: colors.neutral500,
-          mb: 0.5,
-        }}
-      >
-        {totalAnswered} of {totalQuestions} answered
-      </Typography>
-      <Box
-        sx={{
-          height: 5,
-          borderRadius: `${radius.sm}px`,
-          backgroundColor: colors.neutral200,
-          overflow: 'hidden',
-          mb: 2,
-        }}
-      >
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+      <Card sx={{ p: 2 }}>
+        <Typography
+          sx={{ fontSize: 13, fontWeight: 700, color: colors.ink, mb: 0.25 }}
+        >
+          Section progress
+        </Typography>
+        <Typography sx={{ fontSize: 12, color: colors.neutral500, mb: 1 }}>
+          {category.name === 'CrossCutting' ? 'Cross-cutting' : category.name}
+        </Typography>
+        <Typography
+          sx={{
+            fontFamily: fonts.mono,
+            fontSize: 12,
+            color: colors.neutral500,
+            mb: 0.5,
+          }}
+        >
+          {sectionAnswered} of {sectionTotal} answered
+        </Typography>
         <Box
           sx={{
-            width: `${fill}%`,
-            height: '100%',
-            backgroundColor: colors.primary,
+            height: 5,
+            borderRadius: `${radius.sm}px`,
+            backgroundColor: colors.neutral200,
+            overflow: 'hidden',
+            mb: 2,
           }}
-        />
-      </Box>
-      <Typography
-        sx={{
-          fontSize: 11,
-          fontWeight: 600,
-          color: colors.neutral500,
-          textTransform: 'uppercase',
-          letterSpacing: '0.08em',
-          mb: 0.75,
-        }}
-      >
-        Questions in this section
-      </Typography>
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
-        {category.steps.map((fn, i) => {
-          const isCurrent = fn.function.functionid === selectedIndex
-          return (
-            <Box
-              key={fn.function.functionid}
-              role="button"
-              tabIndex={0}
-              onClick={() => onFunctionClick(fn)}
-              onKeyDown={(e) => {
-                if (e.key === 'Enter' || e.key === ' ') onFunctionClick(fn)
-              }}
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                px: 0.75,
-                py: 0.5,
-                borderRadius: `${radius.sm}px`,
-                cursor: 'pointer',
-                backgroundColor: isCurrent ? colors.primary50 : 'transparent',
-                color: isCurrent ? colors.ink900 : colors.ink,
-                '&:hover': {
-                  backgroundColor: isCurrent
-                    ? colors.primary50
-                    : colors.neutral50,
-                },
-              }}
-            >
-              <Typography
-                sx={{
-                  fontFamily: fonts.mono,
-                  fontSize: 11,
-                  color: colors.neutral500,
-                  minWidth: 24,
-                }}
-              >
-                Q{i + 1}
-              </Typography>
-              <Typography
-                sx={{
-                  fontSize: 13,
-                  fontWeight: isCurrent ? 600 : 500,
-                  flex: 1,
-                  whiteSpace: 'nowrap',
-                  overflow: 'hidden',
-                  textOverflow: 'ellipsis',
-                }}
-              >
-                {addSpace(fn.function.function)}
-              </Typography>
-            </Box>
-          )
-        })}
-      </Box>
-      {sectionTotal === 0 && (
-        <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 1 }}>
-          No questions in this section.
+        >
+          <Box
+            sx={{
+              width: `${fill}%`,
+              height: '100%',
+              backgroundColor: colors.primary,
+            }}
+          />
+        </Box>
+        <Typography
+          sx={{
+            fontSize: 11,
+            fontWeight: 600,
+            color: colors.neutral500,
+            textTransform: 'uppercase',
+            letterSpacing: '0.08em',
+            mb: 0.75,
+          }}
+        >
+          Questions in this section
         </Typography>
-      )}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+          {category.steps.map((fn, i) => {
+            const isCurrent = fn.function.functionid === selectedIndex
+            const isAnswered = answeredFunctionIds.has(fn.function.functionid)
+            return (
+              <Box
+                key={fn.function.functionid}
+                role="button"
+                tabIndex={0}
+                onClick={() => onFunctionClick(fn)}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' || e.key === ' ') onFunctionClick(fn)
+                }}
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: 1,
+                  px: 0.75,
+                  py: 0.5,
+                  borderRadius: `${radius.sm}px`,
+                  cursor: 'pointer',
+                  backgroundColor: isCurrent ? colors.primary50 : 'transparent',
+                  color: isCurrent ? colors.ink900 : colors.ink,
+                  '&:hover': {
+                    backgroundColor: isCurrent
+                      ? colors.primary50
+                      : colors.neutral50,
+                  },
+                }}
+              >
+                {isCurrent ? (
+                  <RadioButtonCheckedIcon
+                    sx={{ fontSize: 14, color: colors.primary }}
+                  />
+                ) : isAnswered ? (
+                  <CheckCircleIcon sx={{ fontSize: 14, color: colors.up }} />
+                ) : (
+                  <RadioButtonUncheckedIcon
+                    sx={{ fontSize: 14, color: colors.neutral400 }}
+                  />
+                )}
+                <Typography
+                  sx={{
+                    fontFamily: fonts.mono,
+                    fontSize: 11,
+                    color: colors.neutral500,
+                    minWidth: 24,
+                  }}
+                >
+                  Q{i + 1}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontSize: 13,
+                    fontWeight: isCurrent ? 600 : 500,
+                    flex: 1,
+                    whiteSpace: 'nowrap',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                  }}
+                >
+                  {addSpace(fn.function.function)}
+                </Typography>
+              </Box>
+            )
+          })}
+        </Box>
+        {sectionTotal === 0 && (
+          <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 1 }}>
+            No questions in this section.
+          </Typography>
+        )}
+      </Card>
+      <CisaReferenceCard />
+    </Box>
+  )
+}
+
+/**
+ * Static CISA Zero Trust reference card. We do not have a per-question CISA
+ * section pointer in the data model, so this is a framework-level reference
+ * (true for the whole questionnaire) rather than per-question. If/when the
+ * backend grows a per-question CISA section field we can pass it down and
+ * make the body specific.
+ */
+function CisaReferenceCard() {
+  return (
+    <Card sx={{ p: 2 }}>
+      <Box sx={{ display: 'flex', alignItems: 'flex-start', gap: 1 }}>
+        <InfoOutlinedIcon
+          sx={{ fontSize: 18, color: colors.primary, mt: 0.25 }}
+        />
+        <Box>
+          <Typography
+            sx={{ fontSize: 13, fontWeight: 700, color: colors.ink, mb: 0.5 }}
+          >
+            CISA reference
+          </Typography>
+          <Typography
+            sx={{ fontSize: 12, color: colors.neutral500, lineHeight: 1.5 }}
+          >
+            Scoring follows the CISA Zero Trust Maturity Model v2.0. Use the
+            model as the rubric when picking an option.
+          </Typography>
+        </Box>
+      </Box>
     </Card>
   )
 }
