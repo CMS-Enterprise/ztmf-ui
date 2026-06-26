@@ -621,6 +621,11 @@ function ActionsCell({
           <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
         </IconButton>
       </Tooltip>
+      <Tooltip title="Delete user">
+        <IconButton size="small" onClick={onDelete} aria-label="Delete user">
+          <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+        </IconButton>
+      </Tooltip>
       <Tooltip title="More actions">
         <IconButton
           size="small"
@@ -630,11 +635,6 @@ function ActionsCell({
           aria-expanded={open || undefined}
         >
           <MoreHorizIcon fontSize="small" sx={{ color: colors.neutral700 }} />
-        </IconButton>
-      </Tooltip>
-      <Tooltip title="Delete user">
-        <IconButton size="small" onClick={onDelete} aria-label="Delete user">
-          <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
         </IconButton>
       </Tooltip>
       <Menu
