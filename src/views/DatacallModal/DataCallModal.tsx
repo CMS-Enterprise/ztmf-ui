@@ -1,17 +1,46 @@
 import React from 'react'
-import { Box, Button, TextField, Typography } from '@mui/material'
+import { Box, Button, OutlinedInput, Typography } from '@mui/material'
 import Modal from '@/components/ds/Modal'
 import { datacallModalProps } from '@/types'
 import axiosInstance from '@/axiosConfig'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { colors } from '@/theme/tokens'
+import { colors, radius } from '@/theme/tokens'
+
+// Static labels rendered above the input rather than MUI's floating-label
+// TextField. The CMS Design System resets applied at the app root were
+// clobbering the floating-label positioning, which is what produced the
+// overlapping label / placeholder seen in the old modal. The mockup uses
+// the same static-label layout, so the visual fix and the design contract
+// converge on this shape.
+const labelSx = {
+  display: 'block',
+  fontSize: 13,
+  fontWeight: 600,
+  color: colors.ink,
+  mb: 0.75,
+}
+
+// Inputs configured to match the mockup's 38px height with a thin neutral
+// border. The inner padding and border-color overrides are scoped to the
+// `&` selector so they only affect inputs in this modal and don't leak
+// out via global selectors.
+const inputSx = {
+  height: 38,
+  fontSize: 14,
+  '& .MuiOutlinedInput-input': { padding: '0 12px' },
+  '& fieldset': { borderColor: colors.neutral200 },
+}
+
+const requiredMark = (
+  <span style={{ color: colors.neutral500, fontWeight: 400 }}>*</span>
+)
 
 /**
- * Create-datacall modal. Renders through the shared Modal shell so it matches
- * every other dialog (rounded, X close top-right, Cancel beside the primary
- * action). The validation and POST behavior are unchanged from the previous
- * CMS Design System version.
+ * Create-datacall modal. Renders through the shared Modal shell and uses
+ * label-above-input fields that resist the global CMS Design System
+ * resets. Validation and POST behavior are unchanged from the previous
+ * implementation; the visual layer is the only change.
  * @param {datacallModalProps} props - Open state and close handler.
  * @returns {JSX.Element} The create-datacall modal.
  */
@@ -23,21 +52,19 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
 
   function isValidFormat(input: string) {
     const pattern = /^FY\d{4} Q\d$/
-    if (input.length != 9) {
+    if (input.length !== 9) {
       setDatacallError('')
-    } else {
-      if (input.length === 9 && pattern.test(input)) {
-        setDatacallError('')
-      } else {
-        setDatacallError('Invalid datacall format')
-      }
+      return
     }
+    setDatacallError(pattern.test(input) ? '' : 'Invalid datacall format')
   }
+
   const handleDatacallChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setDatacall(value)
     isValidFormat(value.toUpperCase())
   }
+
   const validateDeadline = (e: React.FocusEvent<HTMLInputElement>) => {
     if (e.target.value.length === 10 && !isNaN(Date.parse(e.target.value))) {
       setDeadline(e.target.value)
@@ -46,6 +73,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       setDeadlineError('Invalid Deadline')
     }
   }
+
   const submitDatacall = async () => {
     try {
       await axiosInstance.post(`/datacalls`, {
@@ -83,6 +111,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       open={open}
       onClose={onClose}
       title="Create datacall"
+      eyebrow="New datacall"
       size="sm"
       disableBackdropClose
       footer={
@@ -95,43 +124,84 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
             color="primary"
             disabled={!canSubmit}
             onClick={submitDatacall}
+            sx={{ borderRadius: `${radius.button}px` }}
           >
             Create
           </Button>
         </>
       }
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
         <Box>
-          <TextField
-            label="Datacall name"
-            required
-            fullWidth
+          <Typography component="label" htmlFor="datacall-name" sx={labelSx}>
+            Name {requiredMark}
+          </Typography>
+          <OutlinedInput
+            id="datacall-name"
             name="datacall"
-            inputProps={{ maxLength: 9 }}
+            fullWidth
+            value={datacall}
+            inputProps={{ maxLength: 9, 'aria-label': 'Datacall name' }}
             onChange={handleDatacallChange}
             error={!!datacallError}
-            helperText={datacallError || undefined}
+            sx={inputSx}
           />
-          <Typography
-            variant="caption"
-            sx={{ color: colors.neutral500, mt: 0.5, display: 'block' }}
-          >
-            Use the format FYXXXX QX, for example FY2024 Q1.
-          </Typography>
+          {datacallError ? (
+            <Typography
+              variant="caption"
+              sx={{
+                color: colors.danger,
+                mt: 0.5,
+                display: 'block',
+                fontWeight: 500,
+              }}
+            >
+              {datacallError}
+            </Typography>
+          ) : (
+            <Typography
+              variant="caption"
+              sx={{ color: colors.neutral500, mt: 0.5, display: 'block' }}
+            >
+              Use the format FYXXXX QX, for example FY2024 Q1.
+            </Typography>
+          )}
         </Box>
-        <TextField
-          label="Deadline"
-          required
-          fullWidth
-          type="date"
-          name="deadline-date"
-          InputLabelProps={{ shrink: true }}
-          onBlur={validateDeadline}
-          onChange={(e) => setDeadline(e.target.value)}
-          error={!!deadlineError}
-          helperText={deadlineError || undefined}
-        />
+
+        <Box>
+          <Typography
+            component="label"
+            htmlFor="datacall-deadline"
+            sx={labelSx}
+          >
+            Deadline {requiredMark}
+          </Typography>
+          <OutlinedInput
+            id="datacall-deadline"
+            name="deadline-date"
+            type="date"
+            fullWidth
+            value={deadline}
+            inputProps={{ 'aria-label': 'Datacall deadline' }}
+            onBlur={validateDeadline}
+            onChange={(e) => setDeadline(e.target.value)}
+            error={!!deadlineError}
+            sx={inputSx}
+          />
+          {deadlineError && (
+            <Typography
+              variant="caption"
+              sx={{
+                color: colors.danger,
+                mt: 0.5,
+                display: 'block',
+                fontWeight: 500,
+              }}
+            >
+              {deadlineError}
+            </Typography>
+          )}
+        </Box>
       </Box>
     </Modal>
   )
