@@ -650,6 +650,8 @@ export default function UserTable() {
           ]
         }
 
+        const isSelf = params.row.userid === userInfo.userid
+
         return [
           <GridActionsCellItem
             icon={<EditIcon />}
@@ -686,11 +688,7 @@ export default function UserTable() {
             />
           </Tooltip>,
           <Tooltip
-            title={
-              params.row.userid === userInfo.userid
-                ? "You can't delete your own account"
-                : 'Delete User'
-            }
+            title={isSelf ? "You can't delete your own account" : 'Delete User'}
             key={`tooltip-delete-${params.id}`}
             placement="right-start"
           >
@@ -699,20 +697,11 @@ export default function UserTable() {
             <span>
               <GridActionsCellItem
                 key={`delete-${params.id}`}
-                icon={
-                  <DeleteIcon
-                    sx={{
-                      color:
-                        params.row.userid === userInfo.userid
-                          ? 'gray'
-                          : 'black',
-                    }}
-                  />
-                }
+                icon={<DeleteIcon sx={{ color: isSelf ? 'gray' : 'black' }} />}
                 label="Delete"
                 onClick={handleDeleteClick(params.id)}
                 color="inherit"
-                disabled={params.row.userid === userInfo.userid}
+                disabled={isSelf}
               />
             </span>
           </Tooltip>,
