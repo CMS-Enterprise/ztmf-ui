@@ -14,8 +14,13 @@ import { CodeBadge } from '@/components/ds/StatusChip'
 import CfactsRecordCard from './CfactsRecordCard'
 import InsightsEmptyState from './InsightsEmptyState'
 
-/** Highest possible zero trust score; used to normalize the pillar bars. */
-const MAX_SCORE = 4
+/**
+ * Highest possible zero trust score on the user-facing scale, used to
+ * normalize the pillar snapshot bars. The backend computes scores on a
+ * 1.0-5.0 scale via the +1 shift at aggregation
+ * (backend/internal/model/scores.go).
+ */
+const MAX_SCORE = 5
 
 /**
  * Props for {@link SystemDetailReadView}.

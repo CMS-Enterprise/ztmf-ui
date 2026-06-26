@@ -598,7 +598,14 @@ export default function SystemDetailPage() {
         variant="outlined"
         color="primary"
         onClick={() =>
-          navigate(`/questionnaire/${system.fismaacronym}/${activeDataCallId}`)
+          navigate(
+            `/questionnaire/${system.fismaacronym.toLowerCase()}`,
+            // QuestionnairePage reads the system id off location.state, not
+            // the URL, so we must pass it here (the page's early-return
+            // guard will otherwise show "Cannot load questionnaire from a
+            // direct link"). Mirrors how FismaTable opens the questionnaire.
+            { state: { fismasystemid: system.fismasystemid } }
+          )
         }
       >
         View questionnaire

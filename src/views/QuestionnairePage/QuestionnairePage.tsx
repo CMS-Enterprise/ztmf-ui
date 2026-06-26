@@ -1,17 +1,17 @@
 import * as React from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import List from '@mui/material/List'
-import ListItemButton from '@mui/material/ListItemButton'
-import ListItemText from '@mui/material/ListItemText'
-import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
-import { ChoiceList, Spinner } from '@cmsgov/design-system'
-import { colors } from '@/theme/tokens'
-import Grid from '@mui/material/Grid'
+import { Spinner } from '@cmsgov/design-system'
+import { colors, fonts, radius } from '@/theme/tokens'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ds/PageHeader'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
+import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked'
 import {
   FismaQuestion,
   QuestionOption,
@@ -24,7 +24,6 @@ import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
-import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
   STATUS_MESSAGES,
@@ -134,6 +133,11 @@ export default function QuestionnarePage() {
   const [stepId, setStepId] = React.useState<number>(0)
   const [selectQuestionOption, setSelectQuestionOption] =
     React.useState<number>(-1)
+  // Local "last saved" timestamp used by the save indicator under the
+  // question card. Updated on every successful saveResponse() so the
+  // indicator reads "Saved just now / 2 min ago" without depending on the
+  // questionScores re-fetch round trip.
+  const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
@@ -154,32 +158,6 @@ export default function QuestionnarePage() {
       console.error('Error fetching question scores:', error)
     }
   }
-  const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
-    setSelectQuestionOption(Number(event.target.value))
-  }
-  const renderRadioGroup = (options: QuestionChoice[]) => {
-    return (
-      <Box
-        sx={{
-          '& .ds-c-choice-wrapper': {
-            maxWidth: 'none',
-          },
-        }}
-      >
-        <ChoiceList
-          choices={options}
-          name={'radio-choices'}
-          type={'radio'}
-          label={undefined}
-          className="ds-u-margin-top--05"
-          size="small"
-          onChange={handleChoiceChange}
-          disabled={isReadOnly}
-        />
-      </Box>
-    )
-  }
-
   const navigate = useNavigate()
   const location = useLocation()
   const { fismaacronym } = useParams()
@@ -232,6 +210,7 @@ export default function QuestionnarePage() {
         })
       }
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      setLastSavedAt(new Date())
       fetchQuestionScores(system, setQuestionScores)
     } catch (error) {
       if (isAuthHandled(error)) return
@@ -473,287 +452,329 @@ export default function QuestionnarePage() {
       </>
     )
   }
+  // Derived values used in the render block. Plain const (not useMemo)
+  // because they sit below the early returns above; useMemo here would
+  // violate React's rules-of-hooks ordering. Cheap O(n) over the pillar
+  // list, which has < 10 elements.
+  const totalQuestions = categories.reduce((acc, p) => acc + p.steps.length, 0)
+  // Answered count = number of score rows for this (system, datacall). The
+  // map is keyed by functionoptionid; each question has exactly one picked
+  // option, so size === answered question count.
+  const totalAnswered = Object.keys(questionScores).length
+  const currentCategory = categories.find((c) =>
+    c.steps.some((s) => s.function.functionid === selectedIndex)
+  )
+  const currentCategoryName = currentCategory?.name ?? ''
+  const currentFunctionIndex = currentCategory
+    ? currentCategory.steps.findIndex(
+        (s) => s.function.functionid === selectedIndex
+      )
+    : 0
+  const currentFunctionName = currentCategory?.steps[currentFunctionIndex]
+    ? addSpace(currentCategory.steps[currentFunctionIndex].function.function)
+    : ''
+
+  const navigateToFunction = (pillarName: string, fn: FismaQuestion) => {
+    if (selectedIndex === fn.function.functionid) return
+    const dirty =
+      !isReadOnly &&
+      ((selectQuestionOption !== -1 &&
+        initQuestionChoice !== selectQuestionOption) ||
+        initNotes !== notes)
+    if (dirty) {
+      setStepId(fn.function.functionid)
+      setOpenAlert(true)
+      return
+    }
+    navigate(
+      `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillarName)}/${toSlug(fn.function.function)}`,
+      {
+        state: { fismasystemid: system },
+        replace: true,
+      }
+    )
+    handleListItemClick(fn.function.functionid)
+  }
+
   return (
-    <>
+    <Box sx={{ py: 4 }}>
+      <PageHeader
+        breadcrumbs={<BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />}
+        title={
+          <Box
+            component="span"
+            sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 1 }}
+          >
+            <Box component="span" sx={{ color: colors.ink }}>
+              {systemName}
+            </Box>
+            <Box
+              component="span"
+              sx={{ color: colors.neutral500, fontWeight: 600 }}
+            >
+              · Questionnaire
+            </Box>
+          </Box>
+        }
+        subtitle={
+          <SubtitleLine
+            totalAnswered={totalAnswered}
+            totalQuestions={totalQuestions}
+            lastSavedAt={lastSavedAt}
+          />
+        }
+        actions={
+          <Button
+            variant="outlined"
+            color="primary"
+            onClick={() => setDiffModalOpen(true)}
+          >
+            Compare datacalls
+          </Button>
+        }
+      />
+      {isPastDeadline && <ClosedDatacallBanner readOnly={isReadOnly} />}
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: '220px 1fr 260px',
+          },
+          gap: 1.75,
+          alignItems: 'flex-start',
         }}
       >
-        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={() => setDiffModalOpen(true)}
-          sx={{ whiteSpace: 'nowrap' }}
-        >
-          Compare Datacalls
-        </Button>
-      </Box>
-      {isPastDeadline && !isReadOnly && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          This datacall has closed. Changes will be recorded as post-deadline.
-        </Alert>
-      )}
-      <Container maxWidth={false} disableGutters>
-        <Grid container columnSpacing={2} sx={{ mt: 2 }}>
-          <Grid item xs={3}>
-            <List
+        <PillarRail
+          categories={categories}
+          currentCategoryName={currentCategoryName}
+          onPillarClick={(category) => {
+            const first = category.steps[0]
+            if (first) navigateToFunction(category.name, first)
+          }}
+        />
+        <Card sx={{ p: 3 }}>
+          <EyebrowLine
+            pillar={currentCategoryName}
+            functionName={currentFunctionName}
+            current={currentFunctionIndex + 1}
+            total={currentCategory?.steps.length ?? 0}
+          />
+          <Typography
+            sx={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: colors.ink,
+              mt: 0.75,
+              mb: 0.5,
+              lineHeight: 1.35,
+            }}
+          >
+            {question || ' '}
+          </Typography>
+          {description && (
+            <Typography
               sx={{
-                width: '100%',
-                // maxWidth: 500,
-                bgcolor: 'background.paper',
-                position: 'relative',
-                overflow: 'auto',
-                overflowX: 'hidden',
-                maxHeight: 'calc(100vh - 240px)',
-                '& ul': { padding: 0 },
-                msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
-                '&::-webkit-scrollbar': { display: 'none' },
-                '@supports (-moz-appearance:none)': {
-                  scrollbarWidth: 'none',
-                },
+                fontSize: 13,
+                color: colors.neutral500,
+                mb: 2,
               }}
-              subheader={<li />}
             >
-              {categories.map((pillar) => (
-                <li key={`${pillar.name}-section`}>
-                  <ul>
-                    <ListSubheader
-                      sx={{
-                        backgroundColor: colors.ink900,
-                        color: 'white',
-                        textAlign: 'center',
-                      }}
-                    >
-                      {pillar.name === 'CrossCutting'
-                        ? 'CROSS CUTTING'
-                        : pillar.name.toUpperCase()}
-                    </ListSubheader>
-                    {pillar.steps.map((func) => {
-                      // console.log(func)
-                      const text = addSpace(func.function.function)
-                      const customFontSize =
-                        text.length > 33 ? '0.9rem' : '1rem'
-                      // TODO: refactor this code such that it's going to be a single component instead of being rerendered everytime
-                      return (
-                        <ListItemButton
-                          key={`item-${pillar.name}-${func.function.functionid}`}
-                          selected={selectedIndex === func.function.functionid}
-                          onClick={() => {
-                            // prevent clicking on the same question to break list
-                            if (selectedIndex !== func.function.functionid) {
-                              setStepId(func.function.functionid)
-                              if (
-                                !isReadOnly &&
-                                ((selectQuestionOption !== -1 &&
-                                  initQuestionChoice !==
-                                    selectQuestionOption) ||
-                                  initNotes !== notes)
-                              ) {
-                                setOpenAlert(true)
-                              } else {
-                                navigate(
-                                  `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
-                                  {
-                                    state: { fismasystemid: system },
-                                    replace: true,
-                                  }
-                                )
-                                handleListItemClick(func.function.functionid)
-                              }
-                            }
-                          }}
-                        >
-                          <ListItemText
-                            primary={`${text}`}
-                            sx={{ fontSize: customFontSize }}
-                          />
-                        </ListItemButton>
-                      )
-                    })}
-                  </ul>
-                </li>
-              ))}
-            </List>
-          </Grid>
-          <Grid item xs={9}>
-            <Box>
-              <Box
+              {description}
+            </Typography>
+          )}
+          {loadingQuestion ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                py: 4,
+              }}
+            >
+              <Spinner size="big" />
+            </Box>
+          ) : (
+            <>
+              <OptionCardList
+                options={options}
+                selectedValue={selectQuestionOption}
+                onChange={(v) => setSelectQuestionOption(v)}
+                disabled={isReadOnly}
+              />
+              <Typography
                 sx={{
-                  color: '#5a5a5a',
-                  mb: 0,
-                  borderRadius: 1,
+                  fontSize: 13,
+                  fontWeight: 600,
+                  color: colors.ink,
+                  mt: 3,
+                  mb: 0.5,
                 }}
               >
-                {description}
-              </Box>
-              <Typography variant="h6" sx={{ mt: 1, mb: 0 }}>
-                {question}
-              </Typography>
-              {loadingQuestion ? (
+                Supporting evidence{' '}
                 <Box
+                  component="span"
                   sx={{
-                    display: 'flex',
-                    justifyContent: 'center',
-                    alignItems: 'center',
-                    maxHeight: '100%',
+                    color: colors.neutral500,
+                    fontWeight: 500,
                   }}
                 >
-                  <Spinner size="big" />
+                  - optional
                 </Box>
-              ) : (
-                <Box>
-                  <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
-                  <Typography variant="h6" sx={{ mb: 1 }}>
-                    {notePrompt || ''}
-                  </Typography>
-                  <CssTextField
-                    multiline
-                    rows={4}
-                    fullWidth
-                    value={notes}
-                    disabled={isReadOnly}
-                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
-                    onChange={(e) => {
-                      setNotes(e.target.value)
+              </Typography>
+              <CssTextField
+                multiline
+                rows={4}
+                fullWidth
+                value={notes}
+                disabled={isReadOnly}
+                placeholder={
+                  notePrompt ||
+                  'Link policies or screenshots in your evidence repo.'
+                }
+                inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
+                onChange={(e) => setNotes(e.target.value)}
+              />
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mt: 0.5,
+                }}
+              >
+                <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                  {notePrompt
+                    ? notePrompt
+                    : 'Link policies or screenshots in your evidence repo.'}
+                </Typography>
+                {!isReadOnly && (
+                  <Typography
+                    sx={{
+                      fontSize: 12,
+                      color:
+                        notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                          ? colors.danger
+                          : notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                            ? '#A34200'
+                            : colors.neutral500,
                     }}
-                  />
-                  {!isReadOnly && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color:
-                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                            ? 'error.main'
-                            : notes.length >=
-                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                              ? 'warning.main'
-                              : 'text.secondary',
-                        display: 'block',
-                        mt: 0.5,
-                      }}
-                    >
-                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                    </Typography>
-                  )}
-                  <Box
-                    position="relative"
-                    display="flex"
-                    width="100%"
-                    justifyContent={'space-between'}
-                    sx={{ mt: 1 }}
                   >
-                    <Button
-                      onClick={() => {
-                        if (
-                          !isReadOnly &&
-                          ((selectQuestionOption !== -1 &&
-                            initQuestionChoice !== selectQuestionOption) ||
-                            initNotes !== notes)
-                        ) {
-                          setStepId(
-                            stepFunctionId[functionIdIdx[selectedIndex] - 1]
-                          )
-                          setOpenAlert(true)
-                        } else {
-                          const id =
-                            stepFunctionId[functionIdIdx[selectedIndex] - 1]
-                          if (questions[id]) {
-                            const q = questions[id]
-                            navigate(
-                              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
-                              {
-                                state: { fismasystemid: system },
-                                replace: true,
-                              }
-                            )
-                          }
-                          setLoadingQuestion(true)
-                          setQuestionId(id)
-                          setSelectedIndex(id)
-                        }
-                      }}
-                      variant="outlined"
-                      color="primary"
-                      disabled={selectedIndex === stepFunctionId[0]}
-                      sx={{ my: 1 }}
-                    >
-                      <ArrowIcon direction="left" />
-                      {` Back`}
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      onClick={() => {
-                        const id =
-                          selectedIndex ===
-                          stepFunctionId[stepFunctionId.length - 1]
-                            ? stepFunctionId[0]
-                            : stepFunctionId[functionIdIdx[selectedIndex] + 1]
-
-                        if (questions[id]) {
-                          const q = questions[id]
-                          navigate(
-                            `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
-                            {
-                              state: { fismasystemid: system },
-                              replace: true,
-                            }
-                          )
-                        }
-                        setLoadingQuestion(true)
-                        setQuestionId(id)
-                        setSelectedIndex(id)
-                        if (!isReadOnly) {
-                          saveResponse()
-                        }
-                        setLoadingQuestion(false)
-                      }}
-                      style={{ marginBottom: '8px', marginTop: '8px' }}
-                    >
-                      {selectedIndex ===
-                      stepFunctionId[stepFunctionId.length - 1] ? (
-                        <Typography>Complete</Typography>
-                      ) : (
-                        <Typography>
-                          Next <ArrowIcon direction="right" />
-                        </Typography>
-                      )}
-                      {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
-                    </Button>
-                  </Box>
-                  <LastEditedFooter
-                    lastEditedAt={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_at
-                        : null
+                    {notes.length} / {MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                  </Typography>
+                )}
+              </Box>
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mt: 3,
+                  pt: 2,
+                  borderTop: `1px solid ${colors.neutral200}`,
+                }}
+              >
+                <Button
+                  variant="text"
+                  color="primary"
+                  disabled={selectedIndex === stepFunctionId[0]}
+                  onClick={() => {
+                    const id = stepFunctionId[functionIdIdx[selectedIndex] - 1]
+                    if (
+                      !isReadOnly &&
+                      ((selectQuestionOption !== -1 &&
+                        initQuestionChoice !== selectQuestionOption) ||
+                        initNotes !== notes)
+                    ) {
+                      setStepId(id)
+                      setOpenAlert(true)
+                      return
                     }
-                    lastEditedBy={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_by
-                        : null
+                    if (questions[id]) {
+                      const q = questions[id]
+                      navigate(
+                        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                        {
+                          state: { fismasystemid: system },
+                          replace: true,
+                        }
+                      )
                     }
-                  />
-                </Box>
-              )}
-            </Box>
-          </Grid>
-          <ConfirmDialog
-            confirmationText={CONFIRMATION_MESSAGE_QUESTION}
-            open={openAlert}
-            onClose={() => setOpenAlert(false)}
-            confirmClick={handleConfirmReturn}
-          />
-        </Grid>
-      </Container>
-      {/* selectedDataCallId seeds the "To" picker default in ScoreDiffModal.
-          #417 renamed selectedDataCallId → selectedDatacall (datacall object)
-          on context; use the id off the object now that #408 has landed. */}
+                    setLoadingQuestion(true)
+                    setQuestionId(id)
+                    setSelectedIndex(id)
+                  }}
+                  sx={{ fontSize: 13, fontWeight: 600 }}
+                >
+                  {'< Previous'}
+                </Button>
+                <SaveIndicator
+                  lastSavedAt={lastSavedAt}
+                  lastEditedAt={
+                    initQuestionChoice !== -1 &&
+                    questionScores[initQuestionChoice]
+                      ? questionScores[initQuestionChoice].last_edited_at
+                      : null
+                  }
+                  lastEditedBy={
+                    initQuestionChoice !== -1 &&
+                    questionScores[initQuestionChoice]
+                      ? questionScores[initQuestionChoice].last_edited_by
+                      : null
+                  }
+                  isReadOnly={isReadOnly}
+                />
+                <Button
+                  variant="contained"
+                  color="primary"
+                  onClick={() => {
+                    const id =
+                      selectedIndex ===
+                      stepFunctionId[stepFunctionId.length - 1]
+                        ? stepFunctionId[0]
+                        : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                    if (questions[id]) {
+                      const q = questions[id]
+                      navigate(
+                        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                        {
+                          state: { fismasystemid: system },
+                          replace: true,
+                        }
+                      )
+                    }
+                    setLoadingQuestion(true)
+                    setQuestionId(id)
+                    setSelectedIndex(id)
+                    if (!isReadOnly) saveResponse()
+                    setLoadingQuestion(false)
+                  }}
+                  sx={{ fontSize: 13 }}
+                >
+                  {selectedIndex === stepFunctionId[stepFunctionId.length - 1]
+                    ? 'Complete'
+                    : 'Next question >'}
+                </Button>
+              </Box>
+            </>
+          )}
+        </Card>
+        <SectionRail
+          category={currentCategory}
+          selectedIndex={selectedIndex}
+          totalAnswered={totalAnswered}
+          totalQuestions={totalQuestions}
+          onFunctionClick={(fn) => {
+            if (currentCategory) navigateToFunction(currentCategory.name, fn)
+          }}
+        />
+      </Box>
+      <ConfirmDialog
+        confirmationText={CONFIRMATION_MESSAGE_QUESTION}
+        open={openAlert}
+        onClose={() => setOpenAlert(false)}
+        confirmClick={handleConfirmReturn}
+      />
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
@@ -762,6 +783,511 @@ export default function QuestionnarePage() {
         systemAcronym={fismaacronym ?? ''}
         selectedDataCallId={selectedDatacall?.datacallid}
       />
-    </>
+    </Box>
   )
+}
+
+/* ------------------------------------------------------------------ */
+/* Presentational sub-components                                      */
+/* ------------------------------------------------------------------ */
+
+function Card({ children, sx }: { children: React.ReactNode; sx?: object }) {
+  return (
+    <Box
+      sx={{
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: `${radius.card}px`,
+        p: 2.25,
+        ...sx,
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+function ClosedDatacallBanner({ readOnly }: { readOnly: boolean }) {
+  const text = readOnly
+    ? 'This datacall is closed. Responses are read-only. To edit, switch to an active datacall or contact your HHS admin.'
+    : 'This datacall has closed. Changes will be recorded as post-deadline.'
+  return (
+    <Alert
+      severity="warning"
+      sx={{
+        mb: 2,
+        backgroundColor: '#FFF4E6',
+        color: '#A34200',
+        border: `1px solid #FBC97A`,
+        borderRadius: `${radius.md}px`,
+        '& .MuiAlert-icon': { color: '#A34200' },
+      }}
+    >
+      {text}
+    </Alert>
+  )
+}
+
+function PillarRail({
+  categories,
+  currentCategoryName,
+  onPillarClick,
+}: {
+  categories: Category[]
+  currentCategoryName: string
+  onPillarClick: (category: Category) => void
+}) {
+  // Cross-cutting pillars are kept in a separate group below the main pillar
+  // list, matching the redesign mock's two-section layout.
+  const main = categories.filter((c) => c.name !== 'CrossCutting')
+  const cross = categories.filter((c) => c.name === 'CrossCutting')
+  return (
+    <Card sx={{ p: 1.5 }}>
+      <PillarGroup
+        eyebrow="Pillars"
+        items={main}
+        currentName={currentCategoryName}
+        onClick={onPillarClick}
+      />
+      {cross.length > 0 && (
+        <Box sx={{ mt: 2 }}>
+          <PillarGroup
+            eyebrow="Cross-cutting"
+            items={cross}
+            currentName={currentCategoryName}
+            onClick={onPillarClick}
+          />
+        </Box>
+      )}
+    </Card>
+  )
+}
+
+function PillarGroup({
+  eyebrow,
+  items,
+  currentName,
+  onClick,
+}: {
+  eyebrow: string
+  items: Category[]
+  currentName: string
+  onClick: (category: Category) => void
+}) {
+  return (
+    <Box>
+      <Typography
+        sx={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: colors.neutral500,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          px: 1,
+          mb: 0.5,
+        }}
+      >
+        {eyebrow}
+      </Typography>
+      <Box>
+        {items.map((cat) => {
+          const isCurrent = cat.name === currentName
+          // Pillar progress is conservatively reported as "total" for now,
+          // since the FE doesn't have a stable option->function mapping
+          // without per-function fetches. We can compute the real "answered"
+          // count once the QuestionnairePage state denormalizes that.
+          const total = cat.steps.length
+          return (
+            <Box
+              key={cat.name}
+              role="button"
+              tabIndex={0}
+              onClick={() => onClick(cat)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') onClick(cat)
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                px: 1,
+                py: 0.75,
+                borderRadius: `${radius.sm}px`,
+                cursor: 'pointer',
+                backgroundColor: isCurrent ? colors.primary50 : 'transparent',
+                color: isCurrent ? colors.ink900 : colors.ink,
+                fontWeight: isCurrent ? 600 : 500,
+                '&:hover': {
+                  backgroundColor: isCurrent
+                    ? colors.primary50
+                    : colors.neutral50,
+                },
+              }}
+            >
+              <Typography sx={{ fontSize: 13, fontWeight: 'inherit' }}>
+                {cat.name === 'CrossCutting' ? 'Cross-cutting' : cat.name}
+              </Typography>
+              <Typography
+                sx={{
+                  fontFamily: fonts.mono,
+                  fontSize: 12,
+                  color: colors.neutral500,
+                }}
+              >
+                {total}
+              </Typography>
+            </Box>
+          )
+        })}
+      </Box>
+    </Box>
+  )
+}
+
+function EyebrowLine({
+  pillar,
+  functionName,
+  current,
+  total,
+}: {
+  pillar: string
+  functionName: string
+  current: number
+  total: number
+}) {
+  return (
+    <Box
+      sx={{ display: 'flex', alignItems: 'center', gap: 1, flexWrap: 'wrap' }}
+    >
+      <Typography
+        sx={{
+          fontSize: 11,
+          fontWeight: 700,
+          color: colors.ink900,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+        }}
+      >
+        {pillar === 'CrossCutting' ? 'Cross-cutting' : pillar}
+      </Typography>
+      {functionName && (
+        <>
+          <Typography
+            component="span"
+            sx={{ fontSize: 13, color: colors.neutral500 }}
+          >
+            {functionName}
+          </Typography>
+          {total > 0 && (
+            <Typography
+              component="span"
+              sx={{ fontSize: 13, color: colors.neutral500 }}
+            >
+              · Q{current} of {total}
+            </Typography>
+          )}
+        </>
+      )}
+    </Box>
+  )
+}
+
+function OptionCardList({
+  options,
+  selectedValue,
+  onChange,
+  disabled,
+}: {
+  options: QuestionChoice[]
+  selectedValue: number
+  onChange: (value: number) => void
+  disabled: boolean
+}) {
+  if (!options.length) return null
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+      {options.map((opt) => {
+        const value = Number(opt.value)
+        const selected = value === selectedValue
+        return (
+          <Box
+            key={value}
+            role="radio"
+            aria-checked={selected}
+            tabIndex={disabled ? -1 : 0}
+            onClick={() => {
+              if (!disabled) onChange(value)
+            }}
+            onKeyDown={(e) => {
+              if (disabled) return
+              if (e.key === 'Enter' || e.key === ' ') {
+                e.preventDefault()
+                onChange(value)
+              }
+            }}
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              gap: 1.5,
+              p: 1.5,
+              borderRadius: `${radius.md}px`,
+              border: `1px solid ${selected ? colors.primary : colors.neutral200}`,
+              backgroundColor: selected ? colors.primary50 : colors.white,
+              cursor: disabled ? 'not-allowed' : 'pointer',
+              opacity: disabled ? 0.7 : 1,
+              transition: 'border-color 0.15s, background-color 0.15s',
+              '&:hover': {
+                borderColor: disabled
+                  ? colors.neutral200
+                  : selected
+                    ? colors.primary
+                    : colors.border,
+              },
+            }}
+          >
+            {selected ? (
+              <RadioButtonCheckedIcon
+                sx={{ fontSize: 18, color: colors.primary, mt: 0.25 }}
+              />
+            ) : (
+              <RadioButtonUncheckedIcon
+                sx={{ fontSize: 18, color: colors.neutral400, mt: 0.25 }}
+              />
+            )}
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.ink,
+                fontWeight: selected ? 600 : 500,
+                lineHeight: 1.5,
+              }}
+            >
+              {String(opt.label)}
+            </Typography>
+          </Box>
+        )
+      })}
+    </Box>
+  )
+}
+
+function SectionRail({
+  category,
+  selectedIndex,
+  totalAnswered,
+  totalQuestions,
+  onFunctionClick,
+}: {
+  category: Category | undefined
+  selectedIndex: number
+  totalAnswered: number
+  totalQuestions: number
+  onFunctionClick: (fn: FismaQuestion) => void
+}) {
+  if (!category) {
+    return (
+      <Card sx={{ p: 2 }}>
+        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+          Loading section...
+        </Typography>
+      </Card>
+    )
+  }
+  const sectionTotal = category.steps.length
+  // We can't accurately tell which functions in THIS section are answered
+  // without the option->function map; show a global "total answered /
+  // total questions" progress here so the rail is honest about scope.
+  const fill = totalQuestions
+    ? Math.min(1, totalAnswered / totalQuestions) * 100
+    : 0
+  return (
+    <Card sx={{ p: 2 }}>
+      <Typography
+        sx={{ fontSize: 13, fontWeight: 700, color: colors.ink, mb: 0.25 }}
+      >
+        Section progress
+      </Typography>
+      <Typography sx={{ fontSize: 12, color: colors.neutral500, mb: 1 }}>
+        {category.name === 'CrossCutting' ? 'Cross-cutting' : category.name}
+      </Typography>
+      <Typography
+        sx={{
+          fontFamily: fonts.mono,
+          fontSize: 12,
+          color: colors.neutral500,
+          mb: 0.5,
+        }}
+      >
+        {totalAnswered} of {totalQuestions} answered
+      </Typography>
+      <Box
+        sx={{
+          height: 5,
+          borderRadius: `${radius.sm}px`,
+          backgroundColor: colors.neutral200,
+          overflow: 'hidden',
+          mb: 2,
+        }}
+      >
+        <Box
+          sx={{
+            width: `${fill}%`,
+            height: '100%',
+            backgroundColor: colors.primary,
+          }}
+        />
+      </Box>
+      <Typography
+        sx={{
+          fontSize: 11,
+          fontWeight: 600,
+          color: colors.neutral500,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          mb: 0.75,
+        }}
+      >
+        Questions in this section
+      </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 0.25 }}>
+        {category.steps.map((fn, i) => {
+          const isCurrent = fn.function.functionid === selectedIndex
+          return (
+            <Box
+              key={fn.function.functionid}
+              role="button"
+              tabIndex={0}
+              onClick={() => onFunctionClick(fn)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' || e.key === ' ') onFunctionClick(fn)
+              }}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 0.75,
+                py: 0.5,
+                borderRadius: `${radius.sm}px`,
+                cursor: 'pointer',
+                backgroundColor: isCurrent ? colors.primary50 : 'transparent',
+                color: isCurrent ? colors.ink900 : colors.ink,
+                '&:hover': {
+                  backgroundColor: isCurrent
+                    ? colors.primary50
+                    : colors.neutral50,
+                },
+              }}
+            >
+              <Typography
+                sx={{
+                  fontFamily: fonts.mono,
+                  fontSize: 11,
+                  color: colors.neutral500,
+                  minWidth: 24,
+                }}
+              >
+                Q{i + 1}
+              </Typography>
+              <Typography
+                sx={{
+                  fontSize: 13,
+                  fontWeight: isCurrent ? 600 : 500,
+                  flex: 1,
+                  whiteSpace: 'nowrap',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                }}
+              >
+                {addSpace(fn.function.function)}
+              </Typography>
+            </Box>
+          )
+        })}
+      </Box>
+      {sectionTotal === 0 && (
+        <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 1 }}>
+          No questions in this section.
+        </Typography>
+      )}
+    </Card>
+  )
+}
+
+function SubtitleLine({
+  totalAnswered,
+  totalQuestions,
+  lastSavedAt,
+}: {
+  totalAnswered: number
+  totalQuestions: number
+  lastSavedAt: Date | null
+}) {
+  const parts: string[] = []
+  if (totalQuestions > 0) {
+    parts.push(`${totalAnswered} of ${totalQuestions} questions answered`)
+  }
+  if (lastSavedAt) {
+    parts.push(`last saved ${relativeTimeFrom(lastSavedAt)}`)
+  }
+  if (parts.length === 0) return null
+  return <span>{parts.join(' · ')}</span>
+}
+
+function SaveIndicator({
+  lastSavedAt,
+  lastEditedAt,
+  lastEditedBy,
+  isReadOnly,
+}: {
+  lastSavedAt: Date | null
+  lastEditedAt?: string | null
+  lastEditedBy?: {
+    userid: string
+    name: string
+    email: string
+    role?: string
+  } | null
+  isReadOnly: boolean
+}) {
+  if (isReadOnly) {
+    return (
+      <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+        Read-only
+      </Typography>
+    )
+  }
+  const text = lastSavedAt
+    ? `Saved ${relativeTimeFrom(lastSavedAt)}`
+    : 'Saved automatically'
+  const tooltipBody =
+    lastEditedBy && lastEditedAt ? (
+      <LastEditedFooter
+        lastEditedAt={lastEditedAt}
+        lastEditedBy={lastEditedBy as unknown as never}
+      />
+    ) : null
+  return (
+    <Tooltip title={tooltipBody ?? ''}>
+      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+        <CheckCircleIcon sx={{ fontSize: 12, color: colors.up }} />
+        <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+          {text}
+        </Typography>
+      </Box>
+    </Tooltip>
+  )
+}
+
+function relativeTimeFrom(d: Date): string {
+  const seconds = Math.max(0, Math.floor((Date.now() - d.getTime()) / 1000))
+  if (seconds < 30) return 'just now'
+  if (seconds < 90) return '1 min ago'
+  const minutes = Math.floor(seconds / 60)
+  if (minutes < 60) return `${minutes} min ago`
+  const hours = Math.floor(minutes / 60)
+  if (hours < 24) return `${hours} hr ago`
+  return d.toLocaleString(undefined, {
+    dateStyle: 'medium',
+    timeStyle: 'short',
+  })
 }

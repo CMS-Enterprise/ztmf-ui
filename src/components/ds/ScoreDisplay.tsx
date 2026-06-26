@@ -3,8 +3,12 @@ import type { ScoreTier } from '@/types'
 import { colors, fonts, radius, tierDot } from '@/theme/tokens'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 
-/** Highest possible zero trust score; the bar fills relative to this. */
-const MAX_SCORE = 4
+/**
+ * Highest possible zero trust score; the bar fills relative to this. The
+ * authoritative scale is 1.0-5.0 (backend/internal/model/scores.go applies a
+ * +1 shift at aggregation so 0..4 raw option scores become 1.0..5.0).
+ */
+const MAX_SCORE = 5
 
 /** Em-dash shown for the value when a system has not been assessed. */
 const EM_DASH = '—'

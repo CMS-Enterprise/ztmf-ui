@@ -25,13 +25,18 @@ import {
 } from 'recharts'
 import axiosInstance from '@/axiosConfig'
 import type { FismaQuestion, ScoreAggregate, ScoreTier } from '@/types'
-import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
+import { TIER_CHIP_STYLES, tierForScore } from '@/utils/tierStyles'
 import { isAuthHandled } from '@/utils/notify'
 import { colors, fonts, radius, tierDot } from '@/theme/tokens'
 import { PILLAR_ORDER } from '@/constants'
 
-/** Highest possible zero trust score; used to normalize progress bars. */
-const MAX_SCORE = 4
+/**
+ * Highest possible zero trust score on the user-facing scale, used to
+ * normalize progress bars and the radar axis. The backend computes scores
+ * on a 1.0-5.0 scale via the +1 shift at aggregation
+ * (backend/internal/model/scores.go).
+ */
+const MAX_SCORE = 5
 
 /** All tier strings in display order, for the breakdown filter dropdown. */
 const TIER_OPTIONS: ScoreTier[] = [
@@ -66,6 +71,12 @@ interface QuestionScoreRow {
  * Joined view-model for a single row of the question-level breakdown,
  * computed by stitching /fismasystems/{id}/questions against
  * /scores?...&include=functionoption.
+ *
+ * `displayScore` is on the user-facing 1-5 scale: per-option raw scores from
+ * the backend live on a 0-4 scale, and the aggregation applies a +1 shift to
+ * land on 1-5. The breakdown table displays a per-question (per-option)
+ * score, so we apply the same shift here so the row tiers visually agree
+ * with the pillar grid above (also on 1-5 from the aggregate endpoint).
  */
 interface QuestionBreakdownRow {
   scoreid: number
@@ -73,20 +84,8 @@ interface QuestionBreakdownRow {
   question: string
   pillar: string
   functionName: string
-  rawScore: number
+  displayScore: number
   tier: ScoreTier
-}
-
-/**
- * Map a function-option integer score (1-4) to a tier label. Mirrors the
- * tier thresholds the backend uses for /scores/aggregate.
- */
-function tierForOptionScore(score: number | undefined): ScoreTier {
-  if (typeof score !== 'number' || score <= 0) return 'Not Assessed'
-  if (score >= 4) return 'Optimal'
-  if (score >= 3) return 'Advanced'
-  if (score >= 2) return 'Initial'
-  return 'Traditional'
 }
 
 /** Props for {@link PillarScoresContent}. */
@@ -458,6 +457,9 @@ function QuestionBreakdown({
 
   // Join scores against the question map, dropping any score whose function
   // we can't resolve (defensive: a stale score row for a removed function).
+  // Apply the same +1 shift the backend uses at aggregation so the per-row
+  // tier lookup uses the authoritative thresholds and the displayed value
+  // matches the 1-5 scale shown elsewhere on the page.
   const rows: QuestionBreakdownRow[] = useMemo(() => {
     const out: QuestionBreakdownRow[] = []
     for (const s of scores) {
@@ -466,14 +468,15 @@ function QuestionBreakdown({
       const q = questionByFunctionId.get(fid)
       if (!q) continue
       const rawScore = s.functionoption?.score ?? 0
+      const displayScore = rawScore + 1
       out.push({
         scoreid: s.scoreid,
         questionid: q.questionid,
         question: q.question,
         pillar: q.pillar,
         functionName: q.functionName,
-        rawScore,
-        tier: tierForOptionScore(rawScore),
+        displayScore,
+        tier: tierForScore(displayScore),
       })
     }
     // Stable sort by pillar order then function name so consecutive rows in
@@ -579,7 +582,7 @@ function QuestionBreakdown({
                   </Typography>
                 </TableCell>
                 <TableCell align="right" sx={breakdownCellSx}>
-                  <ScoreCell score={r.rawScore} tier={r.tier} />
+                  <ScoreCell score={r.displayScore} tier={r.tier} />
                 </TableCell>
               </TableRow>
             ))}
