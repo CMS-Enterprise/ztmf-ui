@@ -42,6 +42,8 @@ describe('FismaTable', () => {
     expect(
       await screen.findByText('Imperial Star Destroyer')
     ).toBeInTheDocument()
-    expect(screen.getByText('ISD-001')).toBeInTheDocument()
+    // FISMA UID column was dropped in the redesign; Acronym replaces it
+    // as the per-row identifier on the leftmost stripe of cells.
+    expect(screen.getByText('ISD')).toBeInTheDocument()
   })
 })
