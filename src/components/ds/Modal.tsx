@@ -27,6 +27,12 @@ export type ModalProps = {
   size?: ModalSize
   /** Prevent closing on backdrop click (use for forms with unsaved input). */
   disableBackdropClose?: boolean
+  /**
+   * When true, reduces header / body / footer padding to ~half the default
+   * for dense list-style dialogs (e.g. the Assign OpDivs picker). Opt-in so
+   * existing form-heavy modals keep their roomier spacing.
+   */
+  dense?: boolean
 }
 
 /**
@@ -48,7 +54,16 @@ export function Modal({
   footer,
   size = 'md',
   disableBackdropClose = false,
+  dense = false,
 }: ModalProps) {
+  // Padding scales for the two density modes. Default is the roomy
+  // form-modal spacing; dense halves it for list-style dialogs.
+  const px = dense ? 2.5 : 5
+  const headerPt = dense ? 2.25 : 4.5
+  const headerPb = dense ? 1.75 : 3.5
+  const bodyPy = dense ? 2 : 5
+  const footerPy = dense ? 1.75 : 3.5
+
   return (
     <Dialog
       open={open}
@@ -66,9 +81,9 @@ export function Modal({
           alignItems: 'flex-start',
           justifyContent: 'space-between',
           gap: 2,
-          px: 5,
-          pt: 4.5,
-          pb: 3.5,
+          px,
+          pt: headerPt,
+          pb: headerPb,
           borderBottom: `1px solid ${colors.neutral200}`,
         }}
       >
@@ -100,7 +115,7 @@ export function Modal({
         </IconActionButton>
       </Box>
 
-      <Box sx={{ px: 5, py: 5 }}>{children}</Box>
+      <Box sx={{ px, py: bodyPy }}>{children}</Box>
 
       {footer && (
         <Box
@@ -109,8 +124,8 @@ export function Modal({
             alignItems: 'center',
             justifyContent: 'flex-end',
             gap: 2,
-            px: 5,
-            py: 3.5,
+            px,
+            py: footerPy,
             backgroundColor: colors.neutral50,
             borderTop: `1px solid ${colors.neutral200}`,
           }}
