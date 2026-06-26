@@ -38,7 +38,7 @@ import {
   selectableRoles,
 } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
-import { fetchUserOpDivs, grantOpDiv } from '@/utils/userOpdivs'
+import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import EditOpDivCell from './EditOpDivCell'
 import { parseApiError } from '@/utils/apiErrors'
@@ -277,7 +277,6 @@ export default function UserTable() {
   }
   const handleCloseOpDivModal = () => {
     setOpenOpDivModal(false)
-    refreshUserRow(String(opdivModalUserId))
   }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
@@ -316,45 +315,39 @@ export default function UserTable() {
         updatedRow.userid = createdUser.userid
 
         const opdivIdsToGrant = (newRow.opdivs as number[] | undefined) ?? []
-        const grantResults = await Promise.allSettled(
-          opdivIdsToGrant.map((opdivId) =>
-            grantOpDiv(createdUser.userid, opdivId)
-          )
-        )
-
-        if (
-          grantResults.some(
-            (r) => r.status === 'rejected' && isAuthHandled(r.reason)
-          )
-        ) {
-          return updatedRow
-        }
-
-        const succeededIds = opdivIdsToGrant.filter(
-          (_, i) => grantResults[i].status === 'fulfilled'
-        )
-        setUserOpDivMap((prev) => ({
-          ...prev,
-          [createdUser.userid]: succeededIds,
-        }))
-        updatedRow.assignedopdivids = succeededIds
+        let grantsFailed = false
 
         if (opdivIdsToGrant.length > 0) {
-          // Backend recomputes identity_provider after OpDiv grants — leave blank
-          // until refreshUserRow returns the authoritative value.
-          refreshUserRow(createdUser.userid)
+          try {
+            await setUserOpDivs(createdUser.userid, opdivIdsToGrant)
+            setUserOpDivMap((prev) => ({
+              ...prev,
+              [createdUser.userid]: opdivIdsToGrant,
+            }))
+            updatedRow.assignedopdivids = opdivIdsToGrant
+            // Backend recomputes identity_provider after OpDiv grants — leave blank
+            // until refreshUserRow returns the authoritative value.
+            refreshUserRow(createdUser.userid)
+          } catch (grantError) {
+            if (isAuthHandled(grantError)) {
+              apiRef.current.updateRows([
+                { userid: curRowUserId, _action: 'delete' },
+              ])
+              return updatedRow
+            }
+            grantsFailed = true
+            updatedRow.identity_provider = createdUser.identity_provider ?? ''
+          }
         } else {
           updatedRow.identity_provider = createdUser.identity_provider ?? ''
         }
 
         apiRef.current.updateRows([{ userid: curRowUserId, _action: 'delete' }])
         apiRef.current.updateRows([updatedRow])
-
-        const failCount = opdivIdsToGrant.length - succeededIds.length
-        setSnackBarSeverity(failCount > 0 ? 'warning' : 'success')
+        setSnackBarSeverity(grantsFailed ? 'warning' : 'success')
         setSnackBarText(
-          failCount > 0
-            ? `User created, but ${failCount} OpDiv grant(s) failed. Use Assign OpDivs to retry.`
+          grantsFailed
+            ? 'User created, but OpDiv grants failed. Use Assign OpDivs to retry.'
             : STATUS_MESSAGES.saved
         )
         setOpen(true)
@@ -787,11 +780,11 @@ export default function UserTable() {
                 assignableRoles.includes(params.row.role)
               )
             }
-            if (
-              params.field === 'opdivs' ||
-              params.field === 'identity_provider'
-            ) {
+            if (params.field === 'opdivs') {
               return !!params.row.isNew
+            }
+            if (params.field === 'identity_provider') {
+              return !!params.row.isNew && showIdpSelector
             }
             return true
           }}
