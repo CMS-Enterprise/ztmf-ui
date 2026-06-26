@@ -96,7 +96,7 @@ export interface PillarScoresContentProps {
   selectedDataCallId: number
   /** Stable system id, for the question-level breakdown fetch. */
   fismasystemid: number
-  /** Human-readable name of the current datacall, shown under stats. */
+  /** Human-readable name of the current datacall, shown in the hero stats. */
   currentDatacallName?: string
   /** Human-readable name of the previous datacall, used in the trend line. */
   previousDatacallName?: string

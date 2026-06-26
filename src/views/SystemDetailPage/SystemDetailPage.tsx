@@ -23,6 +23,7 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ds/PageHeader'
+import DatacallContextCard from '@/components/ds/DatacallContextCard'
 import { StatusChip, CodeBadge } from '@/components/ds/StatusChip'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
 import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
@@ -653,6 +654,8 @@ export default function SystemDetailPage() {
         actions={headerActions}
       />
 
+      <DatacallContextCard />
+
       {isEditing && editedSystem ? (
         <SystemDetailEditView
           system={system}
@@ -690,7 +693,6 @@ export default function SystemDetailPage() {
           opdivs={opdivs}
           currentScore={currentScore}
           previousScore={previousScore}
-          currentDatacallName={datacallNameById(currentScore?.datacallid)}
           previousDatacallName={datacallNameById(previousScore?.datacallid)}
         />
       )}

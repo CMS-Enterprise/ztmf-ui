@@ -3,42 +3,21 @@ import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
 import { useState, useEffect } from 'react'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
-import {
-  Box,
-  Button,
-  Chip,
-  CircularProgress,
-  Menu,
-  MenuItem,
-  Typography,
-} from '@mui/material'
+import { Box, Button, CircularProgress } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
-import KeyboardArrowDownIcon from '@mui/icons-material/KeyboardArrowDown'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ds/PageHeader'
-import { StatusChip } from '@/components/ds/StatusChip'
+import DatacallContextCard from '@/components/ds/DatacallContextCard'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import { exportSystemAnswers } from '@/utils/exportSystems'
 import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
-import { colors, radius } from '@/theme/tokens'
+import { colors } from '@/theme/tokens'
 import _ from 'lodash'
 import type { ScoreAggregate, SystemScoreEntry, FismaSystemType } from '@/types'
-
-/** Formats an ISO date string as e.g. "May 1, 2026". */
-function formatDate(value: string | undefined): string {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (isNaN(parsed.getTime())) return '-'
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
 
 /** Short fiscal-year label, e.g. "FY2022 ..." -> "FY22". Falls back to the name. */
 function shortFy(name: string | undefined): string {
@@ -76,11 +55,9 @@ export default function HomePageContainer() {
   const [addOpen, setAddOpen] = useState<boolean>(false)
   const [priorAvg, setPriorAvg] = useState<number | undefined>(undefined)
   const [priorLabel, setPriorLabel] = useState<string>('')
-  const [datacallAnchor, setDatacallAnchor] = useState<null | HTMLElement>(null)
   const {
     latestDataCallId,
     selectedDatacall,
-    setSelectedDatacall,
     datacalls,
     fismaSystems,
     setFismaSystems,
@@ -180,10 +157,6 @@ export default function HomePageContainer() {
     setAddOpen(false)
   }
 
-  const isClosed = selectedDatacall
-    ? new Date() > new Date(selectedDatacall.deadline)
-    : false
-
   if (loading) {
     return (
       <Box
@@ -260,156 +233,7 @@ export default function HomePageContainer() {
         }
       />
 
-      {/* Datacall context card */}
-      {datacalls.length > 0 && (
-        <Box
-          sx={{
-            backgroundColor: colors.white,
-            border: `1px solid ${colors.neutral200}`,
-            borderRadius: `${radius.card}px`,
-            px: 2,
-            py: 1.5,
-            mb: 2,
-            minHeight: 56,
-            boxSizing: 'border-box',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 2,
-          }}
-        >
-          <Typography
-            sx={{
-              fontSize: 11,
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: colors.neutral500,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            Datacall
-          </Typography>
-
-          {/* Pill-shaped datacall dropdown trigger */}
-          <Box
-            role="button"
-            aria-haspopup="true"
-            aria-label="Select datacall"
-            onClick={(e) => setDatacallAnchor(e.currentTarget)}
-            sx={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: 0.5,
-              px: 1.5,
-              py: 0.75,
-              borderRadius: `${radius.button}px`,
-              backgroundColor: colors.primary50,
-              color: colors.primary,
-              fontSize: 13,
-              fontWeight: 600,
-              cursor: 'pointer',
-              whiteSpace: 'nowrap',
-            }}
-          >
-            {datacallName}
-            <KeyboardArrowDownIcon sx={{ fontSize: 16 }} />
-          </Box>
-          <Menu
-            anchorEl={datacallAnchor}
-            open={Boolean(datacallAnchor)}
-            onClose={() => setDatacallAnchor(null)}
-            // Wider menu so the two-line title + meta row fits without
-            // wrapping the deadline label awkwardly.
-            slotProps={{ paper: { sx: { minWidth: 280 } } }}
-          >
-            {datacalls.map((dc) => {
-              const isCurrent = dc.datacallid === latestDataCallId
-              const isClosed = new Date() > new Date(dc.deadline)
-              const deadlineLabel = new Date(dc.deadline).toLocaleDateString(
-                'en-US',
-                { month: 'short', day: 'numeric', year: 'numeric' }
-              )
-              return (
-                <MenuItem
-                  key={dc.datacallid}
-                  selected={dc.datacallid === activeDataCallId}
-                  onClick={() => {
-                    setSelectedDatacall(dc)
-                    setDatacallAnchor(null)
-                  }}
-                  sx={{ alignItems: 'flex-start', py: 1 }}
-                >
-                  <Box sx={{ width: '100%' }}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'space-between',
-                        gap: 1,
-                      }}
-                    >
-                      <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                        {dc.datacall}
-                      </Typography>
-                      {isCurrent && (
-                        <Chip
-                          label="Current"
-                          size="small"
-                          variant="outlined"
-                          color="primary"
-                          sx={{
-                            height: 18,
-                            fontSize: '0.65rem',
-                            '& .MuiChip-label': { px: 0.75 },
-                          }}
-                        />
-                      )}
-                    </Box>
-                    <Typography
-                      variant="caption"
-                      sx={{ color: 'text.secondary' }}
-                    >
-                      {isClosed ? 'Closed' : 'Active'} · deadline{' '}
-                      {deadlineLabel}
-                    </Typography>
-                  </Box>
-                </MenuItem>
-              )
-            })}
-          </Menu>
-
-          <StatusChip
-            label={isClosed ? 'Closed' : 'Active'}
-            kind={isClosed ? 'neutral' : 'active'}
-          />
-
-          <Box
-            sx={{
-              marginLeft: 'auto',
-              display: 'flex',
-              alignItems: 'center',
-              gap: 2,
-              fontSize: 13,
-              fontWeight: 500,
-              color: colors.neutral500,
-              whiteSpace: 'nowrap',
-            }}
-          >
-            <span>
-              Opens{' '}
-              <strong style={{ color: colors.ink }}>
-                {formatDate(selectedDatacall?.datecreated)}
-              </strong>
-            </span>
-            <span>
-              Closes{' '}
-              <strong style={{ color: colors.ink }}>
-                {formatDate(selectedDatacall?.deadline)}
-              </strong>
-            </span>
-          </Box>
-        </Box>
-      )}
+      <DatacallContextCard />
 
       <StatisticsBlocks
         scores={scoreMap}

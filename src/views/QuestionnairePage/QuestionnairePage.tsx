@@ -7,6 +7,7 @@ import { colors, fonts, radius } from '@/theme/tokens'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ds/PageHeader'
+import DatacallContextCard from '@/components/ds/DatacallContextCard'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
@@ -598,6 +599,7 @@ export default function QuestionnarePage() {
           </>
         }
       />
+      <DatacallContextCard />
       {isPastDeadline && <ClosedDatacallBanner readOnly={isReadOnly} />}
       <Box
         sx={{

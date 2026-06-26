@@ -34,9 +34,7 @@ interface SystemDetailReadViewProps {
   currentScore?: ScoreAggregate
   /** Score aggregate for the prior datacall on the same system, when available. */
   previousScore?: ScoreAggregate
-  /** Human-readable name for the current datacall (e.g. "FY2023 Imperial Security Review"). */
-  currentDatacallName?: string
-  /** Human-readable name for the previous datacall, when available. */
+  /** Human-readable name for the previous datacall, used in the trend line. */
   previousDatacallName?: string
 }
 
@@ -53,7 +51,6 @@ export default function SystemDetailReadView({
   opdivs,
   currentScore,
   previousScore,
-  currentDatacallName,
   previousDatacallName,
 }: SystemDetailReadViewProps) {
   const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
@@ -63,7 +60,6 @@ export default function SystemDetailReadView({
       <ScoreHero
         currentScore={currentScore}
         previousScore={previousScore}
-        currentDatacallName={currentDatacallName}
         previousDatacallName={previousDatacallName}
         systemId={system.fismasystemid}
       />
@@ -125,13 +121,11 @@ export default function SystemDetailReadView({
 function ScoreHero({
   currentScore,
   previousScore,
-  currentDatacallName,
   previousDatacallName,
   systemId,
 }: {
   currentScore?: ScoreAggregate
   previousScore?: ScoreAggregate
-  currentDatacallName?: string
   previousDatacallName?: string
   systemId: number
 }) {
@@ -162,10 +156,11 @@ function ScoreHero({
           pb: { xs: 2, md: 0 },
         }}
       >
-        <Eyebrow>
-          Zero trust score
-          {currentDatacallName ? ` · ${currentDatacallName}` : ''}
-        </Eyebrow>
+        {/* Datacall name lives in the chrome sub-bar (Title.tsx) now, so
+            the eyebrow stops at "Zero trust score" to avoid duplicate
+            context. The currentDatacallName prop is still passed down for
+            the trend-line label below ("was 3.52 in <prev datacall>"). */}
+        <Eyebrow>Zero trust score</Eyebrow>
         {currentScore ? (
           <>
             <Box
