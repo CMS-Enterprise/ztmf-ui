@@ -71,6 +71,10 @@ export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
   const [exporting, setExporting] = useState<boolean>(false)
+  // Lifted so the Export CSV action can scope itself to the user's selection.
+  // Empty array (default) -> export every system in the active datacall, which
+  // matches the prior "select nothing, export all" behavior.
+  const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [addOpen, setAddOpen] = useState<boolean>(false)
   const [priorAvg, setPriorAvg] = useState<number | undefined>(undefined)
   const [priorLabel, setPriorLabel] = useState<string>('')
@@ -156,7 +160,10 @@ export default function HomePageContainer() {
     if (!activeDataCallId) return
     setExporting(true)
     try {
-      await exportSystemAnswers(activeDataCallId)
+      // Selection drives scope: with rows selected, export just those; with
+      // nothing selected, fall back to the full-datacall export.
+      const scope = selectedRows.length > 0 ? selectedRows : undefined
+      await exportSystemAnswers(activeDataCallId, scope)
     } catch (error) {
       if (!isAuthHandled(error)) {
         notify(ERROR_MESSAGES.tryAgain, 'warning', { autoHideDuration: 4000 })
@@ -230,8 +237,16 @@ export default function HomePageContainer() {
               startIcon={<FileDownloadOutlinedIcon />}
               onClick={handleExport}
               disabled={exporting || !activeDataCallId}
+              // Title surfaces the scope so it isn't hidden behind the count.
+              title={
+                selectedRows.length > 0
+                  ? `Export ${selectedRows.length} selected system${selectedRows.length === 1 ? '' : 's'}`
+                  : 'Export all systems in the active datacall'
+              }
             >
-              Export CSV
+              {selectedRows.length > 0
+                ? `Export CSV (${selectedRows.length})`
+                : 'Export CSV'}
             </Button>
             {isAdmin && (
               <Button
@@ -415,7 +430,11 @@ export default function HomePageContainer() {
         priorAvg={priorAvg}
         priorLabel={priorLabel}
       />
-      <FismaTable scores={scoreMap} />
+      <FismaTable
+        scores={scoreMap}
+        selectedRows={selectedRows}
+        onSelectionChange={setSelectedRows}
+      />
 
       <EditSystemModal
         title="Add"
