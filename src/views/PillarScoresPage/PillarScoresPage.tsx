@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams } from 'react-router-dom'
 import { Box, Button, CircularProgress } from '@mui/material'
 import PageHeader from '@/components/ds/PageHeader'
-import { CodeBadge } from '@/components/ds/StatusChip'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import PillarScoresContent from './PillarScoresContent'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
@@ -20,14 +20,15 @@ import type { ScoreAggregate } from '@/types'
  */
 export default function PillarScoresPage() {
   const { fismasystemid } = useParams()
-  const navigate = useNavigate()
-  const { fismaSystems, selectedDatacall, latestDataCallId } = useContextProp()
+  const { fismaSystems, selectedDatacall, latestDataCallId, datacalls } =
+    useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const systemId = Number(fismasystemid)
   const system = fismaSystems.find((s) => s.fismasystemid === systemId)
 
   const [scores, setScores] = useState<ScoreAggregate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
+  const [compareOpen, setCompareOpen] = useState<boolean>(false)
 
   useEffect(() => {
     if (!systemId) return
@@ -55,28 +56,37 @@ export default function PillarScoresPage() {
 
   const systemName = system?.fismaname ?? 'System'
   const systemAcronym = system?.fismaacronym ?? ''
+  // Datacall name for the hero subtitle and trend line. Falls back to the id
+  // if the datacalls list has not loaded yet.
+  const currentDatacallName = datacalls.find(
+    (dc) => dc.datacallid === activeDataCallId
+  )?.datacall
+  // Previous datacall for the trend label (most recent one before the current
+  // that actually has score data on this system).
+  const previousDatacallId = scores
+    .filter((s) => s.datacallid < (activeDataCallId ?? Number.MAX_SAFE_INTEGER))
+    .sort((a, b) => b.datacallid - a.datacallid)[0]?.datacallid
+  const previousDatacallName = datacalls.find(
+    (dc) => dc.datacallid === previousDatacallId
+  )?.datacall
+  const subtitle = currentDatacallName
+    ? `${systemName} · ${currentDatacallName}`
+    : systemName
 
   return (
     <Box sx={{ py: 4 }}>
       <PageHeader
         title="Pillar scores"
-        subtitle={
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
-          >
-            {systemName}
-            {systemAcronym && <CodeBadge code={systemAcronym} />}
-          </Box>
-        }
+        subtitle={subtitle}
         breadcrumbs={<BreadCrumbs segmentLabels={{ [systemId]: systemName }} />}
         actions={
           <Button
             variant="outlined"
             color="primary"
-            onClick={() => navigate(`/systems/${systemId}`)}
+            onClick={() => setCompareOpen(true)}
+            disabled={scores.length < 2}
           >
-            Back to system
+            Compare datacalls
           </Button>
         }
       />
@@ -85,20 +95,22 @@ export default function PillarScoresPage() {
           <CircularProgress />
         </Box>
       ) : (
-        <Box
-          sx={{
-            backgroundColor: '#fff',
-            border: '1px solid #E5E8EE',
-            borderRadius: 1.5,
-            p: 4,
-          }}
-        >
-          <PillarScoresContent
-            scores={scores}
-            selectedDataCallId={activeDataCallId}
-          />
-        </Box>
+        <PillarScoresContent
+          scores={scores}
+          selectedDataCallId={activeDataCallId ?? 0}
+          fismasystemid={systemId}
+          currentDatacallName={currentDatacallName}
+          previousDatacallName={previousDatacallName}
+        />
       )}
+      <ScoreDiffModal
+        open={compareOpen}
+        onClose={() => setCompareOpen(false)}
+        fismasystemid={systemId}
+        systemName={systemName}
+        systemAcronym={systemAcronym}
+        selectedDataCallId={activeDataCallId}
+      />
     </Box>
   )
 }

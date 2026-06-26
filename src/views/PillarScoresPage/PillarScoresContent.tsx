@@ -1,18 +1,18 @@
-import React, { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import {
+  Autocomplete,
   Box,
-  Typography,
   Table,
   TableBody,
   TableCell,
-  TableContainer,
   TableHead,
   TableRow,
-  Paper,
-  Collapse,
-  Button,
-  Grid,
+  TextField,
+  Typography,
 } from '@mui/material'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import TrendingFlatIcon from '@mui/icons-material/TrendingFlat'
 import {
   RadarChart,
   PolarGrid,
@@ -24,20 +24,34 @@ import {
   Tooltip,
 } from 'recharts'
 import axiosInstance from '@/axiosConfig'
-import type { ScoreAggregate } from '@/types'
-import { styleForTier, TIER_STYLES } from '@/utils/tierStyles'
+import type { ScoreAggregate, ScoreTier } from '@/types'
+import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
+import { isAuthHandled } from '@/utils/notify'
+import { colors, fonts, radius, tierDot } from '@/theme/tokens'
+import { PILLAR_ORDER } from '@/constants'
 
-// Static cache for datacalls that persists across component instances.
-const datacallsCache: { data: DataCall[] | null; timestamp: number | null } = {
-  data: null,
-  timestamp: null,
-}
+/** Highest possible zero trust score; used to normalize progress bars. */
+const MAX_SCORE = 4
 
-interface DataCall {
-  datacallid: number
-  datacall: string
-  datecreated: string
-  deadline: string
+/** All tier strings in display order, for the breakdown filter dropdown. */
+const TIER_OPTIONS: ScoreTier[] = [
+  'Optimal',
+  'Advanced',
+  'Initial',
+  'Traditional',
+  'Not Assessed',
+]
+
+/** Shape returned by /scores?datacallid=...&fismasystemid=...&include=functionoption. */
+interface QuestionScore {
+  scoreid?: number
+  questionid: number
+  question?: string
+  function?: { functionid: number; function: string; pillar?: string }
+  pillar?: string
+  option?: { score?: number; tier?: ScoreTier }
+  score?: number
+  tier?: ScoreTier
 }
 
 /** Props for {@link PillarScoresContent}. */
@@ -46,29 +60,40 @@ export interface PillarScoresContentProps {
   scores: ScoreAggregate[]
   /** The datacall to show as the current period. */
   selectedDataCallId: number
+  /** Stable system id, for the question-level breakdown fetch. */
+  fismasystemid: number
+  /** Human-readable name of the current datacall, shown under stats. */
+  currentDatacallName?: string
+  /** Human-readable name of the previous datacall, used in the trend line. */
+  previousDatacallName?: string
 }
 
-// Background color when the API has not returned a tier for a score. Matches
-// the Not Assessed pastel so a missing-tier cell reads as "no data".
-const FALLBACK_BACKGROUND = TIER_STYLES['Not Assessed'].backgroundColor
-
 /**
- * The pillar-scores read-out: overall score, per-pillar cards with trends, a
- * radar chart of this system's pillars across datacalls, and an accessible
- * data-table alternative. Extracted from the former modal so it can render as
- * a full page. All trends compare datacalls this system actually has; there is
- * no fabricated OpDiv-average overlay.
- * @param {PillarScoresContentProps} props - Scores and the current datacall id.
- * @returns {JSX.Element} The pillar-scores content block.
+ * Rewritten Pillar Scores view: two-card hero (overall + trend radar), pillar
+ * grid with bars + trends, and a filterable question-level breakdown table.
+ *
+ * Three deliberate omissions vs the visual mock, each driven by the locked plan:
+ *  - the "Comparison vs OpDiv average" radar is replaced with this system's
+ *    "Current vs Previous" history radar (no OpDiv-average endpoint exists
+ *    and the audit forbids fabricated comparators);
+ *  - the per-question "Δ FY22" column is dropped (the plan locks "no
+ *    per-question delta columns");
+ *  - the "Cross-cutting" stat in the hero is omitted (ambiguous semantics,
+ *    no single answer the design clarifies).
+ * @param {PillarScoresContentProps} props - Aggregates, current datacall id,
+ *   system id, and the datacall name labels for the hero.
+ * @returns {JSX.Element} The pillar scores content block.
  */
-const PillarScoresContent: React.FC<PillarScoresContentProps> = ({
+export default function PillarScoresContent({
   scores,
   selectedDataCallId,
-}) => {
-  const [datacalls, setDatacalls] = useState<DataCall[]>([])
-  const [showDataTable, setShowDataTable] = useState(false)
-
-  // Use the selected datacall if present, otherwise the highest datacallid.
+  fismasystemid,
+  currentDatacallName,
+  previousDatacallName,
+}: PillarScoresContentProps) {
+  // Latest score = the selected datacall if it has data, otherwise the highest
+  // datacallid in the set. Lets the page still render the most recent
+  // measurement when no datacall is picked yet.
   const latestScore =
     scores.length > 0
       ? scores.find((s) => s.datacallid === selectedDataCallId) ??
@@ -77,104 +102,30 @@ const PillarScoresContent: React.FC<PillarScoresContentProps> = ({
         )
       : null
 
-  const hasValidData =
-    latestScore &&
-    latestScore.pillarscores &&
-    latestScore.pillarscores.length > 0
-
-  const radarData = useMemo(() => {
-    if (!hasValidData || !latestScore?.pillarscores) return []
-    const previousDatacall = scores
+  const previousScore = useMemo(() => {
+    if (!latestScore) return undefined
+    return scores
       .filter((s) => s.datacallid < latestScore.datacallid)
       .sort((a, b) => b.datacallid - a.datacallid)[0]
-    return latestScore.pillarscores.map((pillar) => {
-      const previousPillarScore = previousDatacall?.pillarscores?.find(
-        (p) => p.pillarid === pillar.pillarid
-      )?.score
-      return {
-        pillar: pillar.pillar,
-        current: pillar.score ?? 0,
-        previous: previousPillarScore ?? 0,
-      }
-    })
-  }, [scores, latestScore, hasValidData])
+  }, [scores, latestScore])
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const fetchDatacalls = async () => {
-      try {
-        const now = Date.now()
-        const CACHE_DURATION = 10 * 60 * 1000
-        if (
-          datacallsCache.data &&
-          datacallsCache.timestamp &&
-          now - datacallsCache.timestamp < CACHE_DURATION
-        ) {
-          setDatacalls(datacallsCache.data)
-        } else {
-          const response = await axiosInstance.get('/datacalls', {
-            signal: controller.signal,
-          })
-          const datacallsData = response.data.data
-          setDatacalls(datacallsData)
-          datacallsCache.data = datacallsData
-          datacallsCache.timestamp = now
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return
-        console.error('Error fetching datacalls:', error)
-      }
-    }
-    fetchDatacalls()
-    return () => {
-      controller.abort()
-    }
-  }, [])
+  const hasValidData = Boolean(
+    latestScore &&
+      latestScore.pillarscores &&
+      latestScore.pillarscores.length > 0
+  )
 
-  const getQuarterName = (datacallid: number) => {
-    const datacall = datacalls.find((dc) => dc.datacallid === datacallid)
-    return datacall ? datacall.datacall : `Datacall ${datacallid}`
-  }
-
-  const getTrendInfo = (currentScore: number, previousScore: number | null) => {
-    if (previousScore === null) return { color: '#525252', trend: '', text: '' }
-    const difference = currentScore - previousScore
-    const percentChange = ((difference / previousScore) * 100).toFixed(1)
-    if (Math.abs(difference) < 0.05) {
-      return {
-        color: '#8B4513',
-        trend: 'No change',
-        text: `No significant change (${Number(percentChange) >= 0 ? '+' : ''}${percentChange}%)`,
-      }
-    } else if (difference > 0) {
-      return {
-        color: '#0F5C4C',
-        trend: 'Up',
-        text: `Improved by ${difference.toFixed(2)} (+${percentChange}%)`,
-      }
-    } else {
-      return {
-        color: '#9B2E1E',
-        trend: 'Down',
-        text: `Decreased by ${Math.abs(difference).toFixed(2)} (${percentChange}%)`,
-      }
-    }
-  }
-
-  if (!hasValidData) {
+  if (!latestScore || !hasValidData) {
     return (
-      <Box textAlign="center" py={6}>
+      <Box sx={{ textAlign: 'center', py: 6 }}>
         <Typography
-          variant="h3"
-          color="text.secondary"
-          gutterBottom
-          sx={{ fontSize: '1.25rem' }}
+          sx={{ fontSize: 15, fontWeight: 700, color: colors.ink, mb: 1 }}
         >
           No score data available
         </Typography>
-        <Typography variant="body1" color="text.secondary">
-          This system does not have any scoring data yet. Please check back
-          after the next evaluation period.
+        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+          This system does not have any scoring data yet. Check back after the
+          next datacall closes.
         </Typography>
       </Box>
     )
@@ -182,280 +133,816 @@ const PillarScoresContent: React.FC<PillarScoresContentProps> = ({
 
   return (
     <Box>
-      {/* Overall System Score */}
-      <Box mb={3} textAlign="center">
-        <Typography variant="h3" sx={{ fontSize: '1.25rem' }} gutterBottom>
-          Overall score
-        </Typography>
+      <HeroRow
+        latestScore={latestScore}
+        previousScore={previousScore}
+        currentDatacallName={currentDatacallName}
+        previousDatacallName={previousDatacallName}
+        scores={scores}
+      />
+      <PillarGrid latestScore={latestScore} previousScore={previousScore} />
+      <QuestionBreakdown
+        fismasystemid={fismasystemid}
+        datacallid={latestScore.datacallid}
+      />
+    </Box>
+  )
+}
+
+/**
+ * Two-card hero: overall score with stats on the left, trend radar on the right.
+ */
+function HeroRow({
+  latestScore,
+  previousScore,
+  currentDatacallName,
+  previousDatacallName,
+  scores,
+}: {
+  latestScore: ScoreAggregate
+  previousScore?: ScoreAggregate
+  currentDatacallName?: string
+  previousDatacallName?: string
+  scores: ScoreAggregate[]
+}) {
+  const trending = trendDirection(
+    latestScore.systemscore,
+    previousScore?.systemscore
+  )
+  const pillarsAtOptimal = (latestScore.pillarscores ?? []).filter(
+    (p) => p.tier === 'Optimal'
+  ).length
+  const totalPillars = latestScore.pillarscores?.length ?? 0
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+        gap: 1.75,
+        mb: 1.75,
+      }}
+    >
+      <Card>
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <Eyebrow>Overall ZT score</Eyebrow>
+          {trending && <TrendingPill direction={trending} />}
+        </Box>
         <Box
           sx={{
-            p: 2,
-            border: 1,
-            borderColor: 'divider',
-            borderRadius: 2,
-            backgroundColor: latestScore.systemscore
-              ? styleForTier(latestScore.systemtier)?.backgroundColor ??
-                FALLBACK_BACKGROUND
-              : FALLBACK_BACKGROUND,
-            maxWidth: '320px',
-            margin: '0 auto',
+            display: 'flex',
+            alignItems: 'baseline',
+            gap: 1.25,
+            mt: 1,
+            mb: 0.5,
           }}
-          role="region"
-          aria-label={`Overall system score: ${latestScore.systemscore?.toFixed(2) || 'N/A'}`}
         >
           <Typography
-            variant="h4"
-            fontWeight="bold"
-            mb={0.5}
-            sx={{ fontSize: '2.125rem' }}
+            component="span"
+            sx={{
+              fontFamily: fonts.mono,
+              fontSize: 48,
+              fontWeight: 700,
+              lineHeight: 1,
+              letterSpacing: '-0.02em',
+              color: colors.ink,
+            }}
           >
-            {latestScore.systemscore?.toFixed(2) || 'N/A'}
+            {latestScore.systemscore.toFixed(2)}
           </Typography>
-          {latestScore.systemtier && (
-            <Typography
-              variant="body1"
+          <TierLabel tier={latestScore.systemtier} />
+        </Box>
+        <TrendLine
+          current={latestScore.systemscore}
+          previous={previousScore?.systemscore}
+          previousDatacallName={previousDatacallName}
+        />
+        <Box
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: { xs: '1fr 1fr', sm: 'repeat(2, 1fr)' },
+            gap: 2,
+            mt: 2.5,
+            pt: 2,
+            borderTop: `1px solid ${colors.neutral200}`,
+          }}
+        >
+          <Stat
+            label="Pillars at Optimal"
+            value={`${pillarsAtOptimal} / ${totalPillars || '-'}`}
+          />
+          <Stat
+            label="Datacall"
+            value={currentDatacallName ?? `Datacall ${latestScore.datacallid}`}
+            mono={false}
+          />
+        </Box>
+      </Card>
+      <Card>
+        <Eyebrow>Trend vs previous</Eyebrow>
+        <TrendRadar scores={scores} latestScore={latestScore} />
+      </Card>
+    </Box>
+  )
+}
+
+/**
+ * Six pillar tiles in a 3-column grid. Each tile has the pillar name, tier
+ * chip, large score, trend line and a full-width tier-colored progress bar.
+ */
+function PillarGrid({
+  latestScore,
+  previousScore,
+}: {
+  latestScore: ScoreAggregate
+  previousScore?: ScoreAggregate
+}) {
+  const sorted = useMemo(() => {
+    const list = latestScore.pillarscores ?? []
+    return [...list].sort((a, b) => pillarRank(a.pillar) - pillarRank(b.pillar))
+  }, [latestScore])
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: {
+          xs: '1fr',
+          sm: 'repeat(2, 1fr)',
+          md: 'repeat(3, 1fr)',
+        },
+        gap: 1.75,
+        mb: 1.75,
+      }}
+    >
+      {sorted.map((p) => {
+        const prev = previousScore?.pillarscores?.find(
+          (pp) => pp.pillarid === p.pillarid
+        )?.score
+        const tier: ScoreTier = p.tier ?? 'Not Assessed'
+        const notAssessed = tier === 'Not Assessed'
+        const fillPct =
+          Math.max(0, Math.min(1, (p.score ?? 0) / MAX_SCORE)) * 100
+        return (
+          <Card key={p.pillarid} sx={{ p: 2 }}>
+            <Box
               sx={{
-                color: TIER_STYLES[latestScore.systemtier].color,
-                fontWeight: 'bold',
-                fontSize: '1rem',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                mb: 0.5,
               }}
             >
-              {latestScore.systemtier}
-            </Typography>
-          )}
-        </Box>
-      </Box>
-
-      {/* Pillar Scores */}
-      <Typography
-        variant="h3"
-        gutterBottom
-        sx={{ mt: 3, mb: 1.5, textAlign: 'center', fontSize: '1.25rem' }}
-      >
-        Pillar scores - {getQuarterName(latestScore.datacallid)}
-      </Typography>
-      <Grid container spacing={2}>
-        {(latestScore.pillarscores ?? []).map((pillar) => {
-          const previousDatacall = scores
-            .filter((s) => s.datacallid < latestScore.datacallid)
-            .sort((a, b) => b.datacallid - a.datacallid)[0]
-          const previousPillarScore = previousDatacall?.pillarscores?.find(
-            (p) => p.pillarid === pillar.pillarid
-          )?.score
-          const currentScore = pillar.score ?? 0
-          const trendInfo = getTrendInfo(
-            currentScore,
-            previousPillarScore || null
-          )
-          return (
-            <Grid item xs={6} sm={4} md={2} key={pillar.pillarid}>
-              <Box
-                sx={{
-                  p: 1.5,
-                  border: 1,
-                  borderColor: 'divider',
-                  borderRadius: 1.5,
-                  textAlign: 'center',
-                  height: '100%',
-                  backgroundColor:
-                    currentScore > 0
-                      ? styleForTier(pillar.tier)?.backgroundColor ??
-                        FALLBACK_BACKGROUND
-                      : FALLBACK_BACKGROUND,
-                }}
-                role="region"
-                aria-label={`${pillar.pillar} pillar score: ${currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}`}
+              <Typography
+                sx={{ fontSize: 14, fontWeight: 700, color: colors.ink }}
               >
-                <Typography
-                  variant="h4"
-                  fontWeight="bold"
-                  gutterBottom
-                  sx={{ fontSize: '0.9rem' }}
-                >
-                  {pillar.pillar}
-                </Typography>
-                <Typography
-                  variant="h4"
-                  fontWeight="bold"
-                  sx={{ fontSize: '1.5rem' }}
-                >
-                  {currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}
-                </Typography>
-                {pillar.tier && (
-                  <Typography
-                    variant="caption"
-                    sx={{
-                      color: TIER_STYLES[pillar.tier].color,
-                      fontWeight: 'bold',
-                      fontSize: '0.8rem',
-                      display: 'block',
-                    }}
-                  >
-                    {pillar.tier}
-                  </Typography>
-                )}
-                {previousPillarScore && currentScore > 0 && (
-                  <Typography
-                    variant="caption"
-                    sx={{ color: trendInfo.color, fontSize: '0.7rem' }}
-                  >
-                    {trendInfo.text
-                      .replace('Improved by ', '+')
-                      .replace('Decreased by ', '-')
-                      .split('(')[0]
-                      .trim()}
-                  </Typography>
-                )}
-              </Box>
-            </Grid>
-          )
-        })}
-      </Grid>
-
-      {/* Radar Chart */}
-      <Box mt={4}>
-        <Typography
-          variant="h3"
-          gutterBottom
-          sx={{ textAlign: 'center', mb: 2, fontSize: '1.25rem' }}
-        >
-          Pillar scores radar
-        </Typography>
-        <Box
-          role="img"
-          aria-label={`Radar chart showing pillar scores. Current scores: ${radarData.map((d) => `${d.pillar}: ${d.current.toFixed(2)}`).join(', ')}`}
-        >
-          <ResponsiveContainer width="100%" height={400}>
-            <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="75%">
-              <PolarGrid />
-              <PolarAngleAxis dataKey="pillar" />
-              <PolarRadiusAxis
-                angle={90}
-                domain={[0, 5]}
-                tick={{ fontSize: 12 }}
-                tickCount={6}
-              />
-              <Radar
-                name="Current"
-                dataKey="current"
-                stroke="#1B4DAB"
-                fill="#1B4DAB"
-                fillOpacity={0.25}
-                strokeWidth={2}
-              />
-              {scores.length > 1 && (
-                <Radar
-                  name="Previous"
-                  dataKey="previous"
-                  stroke="#9AA3B2"
-                  fill="#9AA3B2"
-                  fillOpacity={0.18}
-                  strokeWidth={2}
-                  strokeDasharray="5 5"
+                {p.pillar}
+              </Typography>
+              <TierChip tier={tier} />
+            </Box>
+            <Box sx={{ display: 'flex', alignItems: 'baseline', gap: 1 }}>
+              <Typography
+                component="span"
+                sx={{
+                  fontFamily: fonts.mono,
+                  fontSize: 26,
+                  fontWeight: 700,
+                  letterSpacing: '-0.01em',
+                  color: colors.ink,
+                }}
+              >
+                {notAssessed ? '-' : (p.score ?? 0).toFixed(2)}
+              </Typography>
+              <CompactTrend current={p.score ?? 0} previous={prev} />
+            </Box>
+            <Box
+              sx={{
+                mt: 1.25,
+                width: '100%',
+                height: 6,
+                borderRadius: `${radius.sm}px`,
+                backgroundColor: colors.neutral200,
+                overflow: 'hidden',
+              }}
+            >
+              {!notAssessed && (
+                <Box
+                  sx={{
+                    width: `${fillPct}%`,
+                    height: '100%',
+                    borderRadius: `${radius.sm}px`,
+                    backgroundColor: tierDot[tier],
+                  }}
                 />
               )}
-              <Legend />
-              <Tooltip
-                formatter={(value: number, name: string) => [
-                  value.toFixed(2),
-                  name === 'current' ? 'Current Score' : 'Previous Score',
-                ]}
-              />
-            </RadarChart>
-          </ResponsiveContainer>
-        </Box>
+            </Box>
+          </Card>
+        )
+      })}
+    </Box>
+  )
+}
 
-        {/* Accessible Data Table Alternative */}
-        <Box mt={3} textAlign="center">
-          <Button
-            onClick={() => setShowDataTable(!showDataTable)}
-            variant="outlined"
-            color="primary"
-            size="small"
-            aria-expanded={showDataTable}
-            aria-controls="pillar-data-table"
-            aria-label={`${showDataTable ? 'Hide' : 'Show'} detailed pillar scores data table`}
-          >
-            {showDataTable ? 'Hide' : 'Show'} data table
-          </Button>
-          <Collapse in={showDataTable}>
-            <TableContainer
-              component={Paper}
-              id="pillar-data-table"
-              variant="outlined"
-              sx={{ mt: 2, textAlign: 'left' }}
-            >
-              <Table aria-label="Pillar scores data">
-                <TableHead>
-                  <TableRow>
-                    <TableCell>
-                      <strong>Pillar name</strong>
-                    </TableCell>
-                    <TableCell align="right">
-                      <strong>Current score</strong>
-                    </TableCell>
-                    {scores.length > 1 && (
-                      <TableCell align="right">
-                        <strong>Previous score</strong>
-                      </TableCell>
-                    )}
-                    <TableCell align="right">
-                      <strong>Change</strong>
-                    </TableCell>
-                  </TableRow>
-                </TableHead>
-                <TableBody>
-                  {latestScore?.pillarscores?.map((pillar) => {
-                    const previousDatacall = scores
-                      .filter((s) => s.datacallid < latestScore.datacallid)
-                      .sort((a, b) => b.datacallid - a.datacallid)[0]
-                    const previousPillarScore =
-                      previousDatacall?.pillarscores?.find(
-                        (p) => p.pillarid === pillar.pillarid
-                      )?.score
-                    const currentScore = pillar.score ?? 0
-                    const prevScore = previousPillarScore ?? 0
-                    const change = prevScore ? currentScore - prevScore : null
-                    const changeColor =
-                      change === null
-                        ? '#525252'
-                        : change >= 0
-                          ? '#0F5C4C'
-                          : '#9B2E1E'
-                    return (
-                      <TableRow key={pillar.pillarid}>
-                        <TableCell component="th" scope="row">
-                          {pillar.pillar}
-                        </TableCell>
-                        <TableCell align="right">
-                          {currentScore > 0 ? currentScore.toFixed(2) : 'N/A'}
-                        </TableCell>
-                        {scores.length > 1 && (
-                          <TableCell align="right">
-                            {prevScore > 0 ? prevScore.toFixed(2) : 'N/A'}
-                          </TableCell>
-                        )}
-                        <TableCell align="right">
-                          {change !== null ? (
-                            <span style={{ color: changeColor }}>
-                              {change >= 0 ? '+' : ''}
-                              {change.toFixed(2)}
-                            </span>
-                          ) : (
-                            'N/A'
-                          )}
-                        </TableCell>
-                      </TableRow>
-                    )
-                  })}
-                </TableBody>
-              </Table>
-            </TableContainer>
-          </Collapse>
+/**
+ * Per-question table with pillar + tier filters. Fetches the same per-question
+ * scores endpoint the Questionnaire page uses, then filters client-side so the
+ * filter dropdowns feel instant.
+ */
+function QuestionBreakdown({
+  fismasystemid,
+  datacallid,
+}: {
+  fismasystemid: number
+  datacallid: number
+}) {
+  const [rows, setRows] = useState<QuestionScore[]>([])
+  const [loading, setLoading] = useState(true)
+  const [pillarFilter, setPillarFilter] = useState<string | null>(null)
+  const [tierFilter, setTierFilter] = useState<ScoreTier | null>(null)
+
+  useEffect(() => {
+    if (!fismasystemid || !datacallid) return
+    const controller = new AbortController()
+    setLoading(true)
+    async function load() {
+      try {
+        const res = await axiosInstance.get(
+          `scores?datacallid=${datacallid}&fismasystemid=${fismasystemid}&include=functionoption`,
+          { signal: controller.signal }
+        )
+        setRows(res.data?.data ?? [])
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        console.error('Failed to load question breakdown', error)
+      } finally {
+        if (!controller.signal.aborted) setLoading(false)
+      }
+    }
+    load()
+    return () => {
+      controller.abort()
+    }
+  }, [fismasystemid, datacallid])
+
+  const pillarOptions = useMemo(() => {
+    const set = new Set<string>()
+    for (const r of rows) {
+      const p = r.pillar ?? r.function?.pillar
+      if (p) set.add(p)
+    }
+    return Array.from(set).sort((a, b) => pillarRank(a) - pillarRank(b))
+  }, [rows])
+
+  const filtered = useMemo(() => {
+    return rows.filter((r) => {
+      const p = r.pillar ?? r.function?.pillar
+      const t = r.tier ?? r.option?.tier
+      if (pillarFilter && p !== pillarFilter) return false
+      if (tierFilter && t !== tierFilter) return false
+      return true
+    })
+  }, [rows, pillarFilter, tierFilter])
+
+  return (
+    <Card sx={{ p: 0, overflow: 'hidden' }}>
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          gap: 2,
+          px: 2.25,
+          py: 1.75,
+          borderBottom: `1px solid ${colors.neutral200}`,
+        }}
+      >
+        <Box>
+          <Typography sx={{ fontSize: 15, fontWeight: 700, color: colors.ink }}>
+            Question-level breakdown
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+            {loading ? 'Loading...' : `${rows.length} questions`}
+          </Typography>
         </Box>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <FilterAutocomplete
+            options={pillarOptions}
+            value={pillarFilter}
+            onChange={setPillarFilter}
+            placeholder="All pillars"
+            ariaLabel="Filter by pillar"
+          />
+          <FilterAutocomplete
+            options={TIER_OPTIONS}
+            value={tierFilter}
+            onChange={(v) => setTierFilter(v as ScoreTier | null)}
+            placeholder="All tiers"
+            ariaLabel="Filter by tier"
+          />
+        </Box>
+      </Box>
+      {filtered.length === 0 && !loading ? (
+        <Box sx={{ p: 4, textAlign: 'center' }}>
+          <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+            No questions match the current filters.
+          </Typography>
+        </Box>
+      ) : (
+        <Table size="small">
+          <TableHead>
+            <TableRow>
+              <BreakdownHeadCell sx={{ width: 220 }}>
+                Pillar · Function
+              </BreakdownHeadCell>
+              <BreakdownHeadCell>Question</BreakdownHeadCell>
+              <BreakdownHeadCell align="right" sx={{ width: 200 }}>
+                Score
+              </BreakdownHeadCell>
+            </TableRow>
+          </TableHead>
+          <TableBody>
+            {filtered.map((r, idx) => {
+              const pillar = r.pillar ?? r.function?.pillar ?? '-'
+              const fn = r.function?.function ?? ''
+              const score = r.score ?? r.option?.score
+              const tier: ScoreTier = (r.tier ??
+                r.option?.tier ??
+                'Not Assessed') as ScoreTier
+              return (
+                <TableRow key={r.scoreid ?? `${r.questionid}-${idx}`}>
+                  <TableCell sx={breakdownCellSx}>
+                    <Typography
+                      sx={{ fontSize: 13, fontWeight: 600, color: colors.ink }}
+                    >
+                      {pillar}
+                    </Typography>
+                    {fn && (
+                      <Typography
+                        sx={{ fontSize: 12, color: colors.neutral500 }}
+                      >
+                        {fn}
+                      </Typography>
+                    )}
+                  </TableCell>
+                  <TableCell sx={breakdownCellSx}>
+                    <Typography sx={{ fontSize: 13, color: colors.ink }}>
+                      {r.question ?? `Question #${r.questionid}`}
+                    </Typography>
+                  </TableCell>
+                  <TableCell align="right" sx={breakdownCellSx}>
+                    <ScoreCell score={score} tier={tier} />
+                  </TableCell>
+                </TableRow>
+              )
+            })}
+          </TableBody>
+        </Table>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * Trend radar (Current solid, Previous dashed) drawn into the right hero card.
+ */
+function TrendRadar({
+  scores,
+  latestScore,
+}: {
+  scores: ScoreAggregate[]
+  latestScore: ScoreAggregate
+}) {
+  const radarData = useMemo(() => {
+    const prev = scores
+      .filter((s) => s.datacallid < latestScore.datacallid)
+      .sort((a, b) => b.datacallid - a.datacallid)[0]
+    return (latestScore.pillarscores ?? []).map((p) => ({
+      pillar: p.pillar,
+      current: p.score ?? 0,
+      previous:
+        prev?.pillarscores?.find((pp) => pp.pillarid === p.pillarid)?.score ??
+        0,
+    }))
+  }, [scores, latestScore])
+
+  return (
+    <Box sx={{ width: '100%', height: 240, mt: 1 }} role="img">
+      <ResponsiveContainer width="100%" height="100%">
+        <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="72%">
+          <PolarGrid stroke={colors.neutral200} />
+          <PolarAngleAxis
+            dataKey="pillar"
+            tick={{ fontSize: 11, fill: colors.neutral500 }}
+          />
+          <PolarRadiusAxis
+            angle={90}
+            domain={[0, MAX_SCORE]}
+            tick={{ fontSize: 10, fill: colors.neutral400 }}
+            tickCount={5}
+          />
+          <Radar
+            name="Current"
+            dataKey="current"
+            stroke={colors.primary}
+            fill={colors.primary}
+            fillOpacity={0.22}
+            strokeWidth={2}
+          />
+          {scores.length > 1 && (
+            <Radar
+              name="Previous"
+              dataKey="previous"
+              stroke={colors.neutral400}
+              fill={colors.neutral400}
+              fillOpacity={0.14}
+              strokeWidth={2}
+              strokeDasharray="5 5"
+            />
+          )}
+          <Legend wrapperStyle={{ fontSize: 12 }} />
+          <Tooltip
+            formatter={(value: number, name: string) => [
+              value.toFixed(2),
+              name === 'current' ? 'Current' : 'Previous',
+            ]}
+          />
+        </RadarChart>
+      </ResponsiveContainer>
+    </Box>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Small presentational helpers                                       */
+/* ------------------------------------------------------------------ */
+
+function Card({ children, sx }: { children: React.ReactNode; sx?: object }) {
+  return (
+    <Box
+      sx={{
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: `${radius.card}px`,
+        p: 2.25,
+        ...sx,
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+function Eyebrow({ children }: { children: React.ReactNode }) {
+  return (
+    <Typography
+      sx={{
+        fontSize: 11,
+        fontWeight: 600,
+        color: colors.neutral500,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+      }}
+    >
+      {children}
+    </Typography>
+  )
+}
+
+function Stat({
+  label,
+  value,
+  mono = true,
+}: {
+  label: string
+  value: React.ReactNode
+  mono?: boolean
+}) {
+  return (
+    <Box>
+      <Typography
+        sx={{
+          fontSize: 11,
+          fontWeight: 500,
+          color: colors.neutral500,
+          mb: 0.25,
+        }}
+      >
+        {label}
+      </Typography>
+      <Typography
+        sx={{
+          fontSize: 16,
+          fontWeight: 700,
+          color: colors.ink,
+          fontFamily: mono ? fonts.mono : 'inherit',
+        }}
+      >
+        {value}
+      </Typography>
+    </Box>
+  )
+}
+
+function TierLabel({ tier }: { tier?: ScoreTier }) {
+  if (!tier || tier === 'Not Assessed') {
+    return (
+      <Typography
+        component="span"
+        sx={{ fontSize: 14, fontWeight: 600, color: colors.neutral500 }}
+      >
+        Not assessed
+      </Typography>
+    )
+  }
+  const color = TIER_CHIP_STYLES[tier].color
+  return (
+    <Typography component="span" sx={{ fontSize: 14, fontWeight: 600, color }}>
+      {tier}
+    </Typography>
+  )
+}
+
+function TierChip({ tier }: { tier: ScoreTier }) {
+  const palette = TIER_CHIP_STYLES[tier]
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-block',
+        fontSize: 11,
+        fontWeight: 600,
+        px: 1,
+        py: 0.25,
+        borderRadius: `${radius.pill}px`,
+        color: palette.color,
+        backgroundColor: palette.backgroundColor,
+      }}
+    >
+      {tier}
+    </Box>
+  )
+}
+
+function TrendLine({
+  current,
+  previous,
+  previousDatacallName,
+}: {
+  current: number
+  previous?: number
+  previousDatacallName?: string
+}) {
+  if (typeof previous !== 'number') {
+    return (
+      <Typography
+        sx={{ fontSize: 13, fontWeight: 500, color: colors.neutral500 }}
+      >
+        First measurement, no prior period to compare against.
+      </Typography>
+    )
+  }
+  const delta = current - previous
+  const flat = Math.abs(delta) < 0.005
+  const up = delta > 0
+  const color = flat ? colors.neutral500 : up ? colors.up : colors.down
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        color,
+        fontSize: 13,
+        fontWeight: 500,
+      }}
+    >
+      {flat ? (
+        <TrendingFlatIcon sx={{ fontSize: 14 }} />
+      ) : up ? (
+        <ArrowUpwardIcon sx={{ fontSize: 14 }} />
+      ) : (
+        <ArrowDownwardIcon sx={{ fontSize: 14 }} />
+      )}
+      <span>
+        {flat ? 'No change' : `${up ? '+' : ''}${delta.toFixed(2)}`}
+        {previousDatacallName ? ` vs ${previousDatacallName}` : ''}
+        {` (was ${previous.toFixed(2)})`}
+      </span>
+    </Box>
+  )
+}
+
+function CompactTrend({
+  current,
+  previous,
+}: {
+  current: number
+  previous?: number
+}) {
+  if (typeof previous !== 'number') {
+    return (
+      <Typography
+        component="span"
+        sx={{ fontSize: 12, color: colors.neutral500 }}
+      >
+        first run
+      </Typography>
+    )
+  }
+  const delta = current - previous
+  const flat = Math.abs(delta) < 0.005
+  const up = delta > 0
+  const color = flat ? colors.neutral500 : up ? colors.up : colors.down
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.25,
+        color,
+        fontSize: 12,
+        fontWeight: 500,
+      }}
+    >
+      {flat ? (
+        <TrendingFlatIcon sx={{ fontSize: 12 }} />
+      ) : up ? (
+        <ArrowUpwardIcon sx={{ fontSize: 12 }} />
+      ) : (
+        <ArrowDownwardIcon sx={{ fontSize: 12 }} />
+      )}
+      <span>{flat ? 'no change' : `${up ? '+' : ''}${delta.toFixed(2)}`}</span>
+    </Box>
+  )
+}
+
+function TrendingPill({ direction }: { direction: 'up' | 'down' | 'flat' }) {
+  if (direction === 'flat') return null
+  const up = direction === 'up'
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.25,
+        fontSize: 11,
+        fontWeight: 600,
+        color: up ? colors.up : colors.down,
+      }}
+    >
+      {up ? (
+        <ArrowUpwardIcon sx={{ fontSize: 12 }} />
+      ) : (
+        <ArrowDownwardIcon sx={{ fontSize: 12 }} />
+      )}
+      {up ? 'trending up' : 'trending down'}
+    </Box>
+  )
+}
+
+function ScoreCell({
+  score,
+  tier,
+}: {
+  score: number | undefined
+  tier: ScoreTier
+}) {
+  const notAssessed = tier === 'Not Assessed' || typeof score !== 'number'
+  const dotColor = tierDot[tier]
+  const tierColor = TIER_CHIP_STYLES[tier].color
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.75,
+      }}
+    >
+      <Box
+        component="span"
+        sx={{
+          width: 8,
+          height: 8,
+          borderRadius: '50%',
+          backgroundColor: dotColor,
+          flexShrink: 0,
+        }}
+      />
+      <Box
+        component="span"
+        sx={{
+          fontFamily: fonts.mono,
+          fontSize: 13,
+          fontWeight: 600,
+          color: colors.ink,
+          minWidth: 36,
+          textAlign: 'right',
+        }}
+      >
+        {notAssessed ? '-' : score.toFixed(2)}
+      </Box>
+      <Box
+        component="span"
+        sx={{ fontSize: 12, fontWeight: 500, color: tierColor }}
+      >
+        {tier}
       </Box>
     </Box>
   )
 }
 
-export default PillarScoresContent
+function FilterAutocomplete({
+  options,
+  value,
+  onChange,
+  placeholder,
+  ariaLabel,
+}: {
+  options: string[]
+  value: string | null
+  onChange: (next: string | null) => void
+  placeholder: string
+  ariaLabel: string
+}) {
+  return (
+    <Autocomplete
+      size="small"
+      options={options}
+      value={value}
+      onChange={(_event, next) => onChange(next)}
+      sx={{
+        width: 170,
+        '& .MuiInputBase-root': {
+          height: 30,
+          fontSize: 13,
+          py: '0 !important',
+        },
+        '& .MuiAutocomplete-input': { py: '0 !important' },
+      }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          placeholder={placeholder}
+          inputProps={{
+            ...params.inputProps,
+            'aria-label': ariaLabel,
+          }}
+        />
+      )}
+    />
+  )
+}
+
+const breakdownCellSx = {
+  borderBottom: `1px solid ${colors.neutral200}`,
+  py: 1.25,
+}
+
+function BreakdownHeadCell({
+  children,
+  align,
+  sx,
+}: {
+  children: React.ReactNode
+  align?: 'left' | 'right'
+  sx?: object
+}) {
+  return (
+    <TableCell
+      align={align}
+      sx={{
+        fontSize: 11,
+        fontWeight: 600,
+        textTransform: 'uppercase',
+        letterSpacing: '0.06em',
+        color: colors.neutral500,
+        backgroundColor: colors.neutral50,
+        borderBottom: `1px solid ${colors.neutral200}`,
+        ...sx,
+      }}
+    >
+      {children}
+    </TableCell>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Pure helpers                                                       */
+/* ------------------------------------------------------------------ */
+
+function pillarRank(name: string | undefined): number {
+  if (!name) return Number.MAX_SAFE_INTEGER
+  const i = PILLAR_ORDER.indexOf(name)
+  return i === -1 ? Number.MAX_SAFE_INTEGER : i
+}
+
+function trendDirection(
+  current: number,
+  previous?: number
+): 'up' | 'down' | 'flat' | undefined {
+  if (typeof previous !== 'number') return undefined
+  const delta = current - previous
+  if (Math.abs(delta) < 0.005) return 'flat'
+  return delta > 0 ? 'up' : 'down'
+}

@@ -161,12 +161,16 @@ export default function Title() {
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
   const isSystemDetail = location.pathname.startsWith('/systems/')
+  const isPillarScoresRoute = location.pathname.endsWith('/pillar-scores')
   const isHomeRoute = location.pathname === '/'
   const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
   // The dashboard renders its own datacall card in-body (matching the mock),
   // so the slim sub-bar only shows on the questionnaire and system-detail
-  // routes that still need the datacall context inline.
-  const datacallContextNeeded = isQuestionnaireRoute || isSystemDetail
+  // routes that still need the datacall context inline. The pillar scores
+  // page bakes the datacall name into its subtitle ("System · FY2023..."),
+  // so the sub-bar would just be a duplicate.
+  const datacallContextNeeded =
+    isQuestionnaireRoute || (isSystemDetail && !isPillarScoresRoute)
   // Initials for the account avatar, from the user's name (or email).
   const initials =
     (userInfo.fullname || userInfo.email || '')
