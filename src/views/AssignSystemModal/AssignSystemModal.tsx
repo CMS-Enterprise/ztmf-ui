@@ -1,19 +1,21 @@
 import React from 'react'
-import { Button } from '@mui/material'
-import SideDrawer from '@/components/ds/SideDrawer'
+import {
+  Box,
+  Button,
+  Checkbox,
+  InputAdornment,
+  OutlinedInput,
+  Typography,
+} from '@mui/material'
+import Modal from '@/components/ds/Modal'
 import { GridRowId } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
 import CustomSnackbar from '../Snackbar/Snackbar'
-import Checkbox from '@mui/material/Checkbox'
-import TextField from '@mui/material/TextField'
-import Autocomplete from '@mui/material/Autocomplete'
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
-import CheckBoxIcon from '@mui/icons-material/CheckBox'
+import SearchIcon from '@mui/icons-material/Search'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
-const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
-const checkedIcon = <CheckBoxIcon fontSize="small" />
+import { colors } from '@/theme/tokens'
 
 type Props = {
   fismaSystemMap: Record<number, { name: string; acronym: string }>
@@ -23,6 +25,32 @@ type Props = {
   userName: string
 }
 
+const searchInputSx = {
+  height: 36,
+  fontSize: 13,
+  '& .MuiOutlinedInput-input': { padding: '0 0' },
+  '& fieldset': { borderColor: colors.neutral200 },
+}
+
+const rowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1.25,
+  px: 1.75,
+  py: 1.25,
+  borderBottom: `1px solid ${colors.neutral100}`,
+  cursor: 'pointer',
+  '&:last-of-type': { borderBottom: 'none' },
+  '&:hover': { backgroundColor: colors.neutral50 },
+}
+
+/**
+ * Assign FISMA systems modal. Renders the checkbox list described by the
+ * mockup (frame 16) in the shared Modal shell, replacing the legacy
+ * SideDrawer + Autocomplete. Behavior is unchanged: checking a row POSTs
+ * the assignment immediately, unchecking opens a confirm dialog before
+ * the DELETE, and the footer Done button just closes - nothing is queued.
+ */
 export default function AssignSystemModal({
   fismaSystemMap,
   open,
@@ -31,12 +59,13 @@ export default function AssignSystemModal({
   userName,
 }: Props) {
   const [assignedSystems, setAssignedSystems] = React.useState<number[]>([])
-  const [fismaSystems, setFismaSystems] = React.useState<number[]>([])
   const [openSnackBar, setOpenSnackBar] = React.useState<boolean>(false)
   const [pendingUnassign, setPendingUnassign] = React.useState<{
     systemid: number
     nextValue: number[]
   } | null>(null)
+  const [search, setSearch] = React.useState<string>('')
+
   React.useEffect(() => {
     if (!open || !userid) return
     const controller = new AbortController()
@@ -46,11 +75,7 @@ export default function AssignSystemModal({
           `/users/${userid}/assignedfismasystems`,
           { signal: controller.signal }
         )
-        const assignedSys = res.data.data || []
-        setAssignedSystems(assignedSys)
-        // Include all systems in options
-        const systemIds = Object.keys(fismaSystemMap).map(Number)
-        setFismaSystems(systemIds)
+        setAssignedSystems(res.data.data || [])
       } catch (error) {
         if (controller.signal.aborted) return
         if (isAuthHandled(error)) return
@@ -61,7 +86,39 @@ export default function AssignSystemModal({
     return () => {
       controller.abort()
     }
-  }, [open, userid, fismaSystemMap])
+  }, [open, userid])
+
+  // Reset search when the modal closes so reopening it doesn't carry over
+  // the previous filter for a different user.
+  React.useEffect(() => {
+    if (!open) setSearch('')
+  }, [open])
+
+  const sortedSystemIds = React.useMemo(
+    () =>
+      Object.keys(fismaSystemMap)
+        .map(Number)
+        .sort((a, b) => {
+          const acrA = fismaSystemMap[a]?.acronym || ''
+          const acrB = fismaSystemMap[b]?.acronym || ''
+          return acrA.localeCompare(acrB)
+        }),
+    [fismaSystemMap]
+  )
+
+  const filteredSystemIds = React.useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    if (!needle) return sortedSystemIds
+    return sortedSystemIds.filter((id) => {
+      const sys = fismaSystemMap[id]
+      if (!sys) return false
+      return (
+        sys.name.toLowerCase().includes(needle) ||
+        sys.acronym.toLowerCase().includes(needle)
+      )
+    })
+  }, [sortedSystemIds, fismaSystemMap, search])
+
   const handleConfirmUnassign = async (confirm: boolean) => {
     const target = pendingUnassign
     setPendingUnassign(null)
@@ -78,89 +135,128 @@ export default function AssignSystemModal({
     }
   }
 
+  const handleToggle = async (systemId: number, checked: boolean) => {
+    if (checked) {
+      try {
+        await axiosInstance.post(`/users/${userid}/assignedfismasystems`, {
+          fismasystemid: systemId,
+        })
+        setAssignedSystems((prev) =>
+          prev.includes(systemId) ? prev : [...prev, systemId]
+        )
+        notify('Saved - assign system', 'success')
+      } catch (error) {
+        if (isAuthHandled(error)) return
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 1500 })
+      }
+    } else {
+      setPendingUnassign({
+        systemid: systemId,
+        nextValue: assignedSystems.filter((id) => id !== systemId),
+      })
+    }
+  }
+
+  const selectedCount = assignedSystems.length
+  const totalCount = sortedSystemIds.length
+
   return (
     <>
-      <SideDrawer
+      <Modal
         open={open}
         onClose={handleClose}
         title="Assign FISMA systems"
         eyebrow={userName || undefined}
+        size="sm"
         footer={
           <Button variant="contained" color="primary" onClick={handleClose}>
             Done
           </Button>
         }
       >
-        <Autocomplete
-          multiple
-          disableCloseOnSelect
-          limitTags={2}
-          options={fismaSystems.slice().sort((a: number, b: number) => {
-            const acrA = fismaSystemMap[a]?.acronym || ''
-            const acrB = fismaSystemMap[b]?.acronym || ''
-            return acrA.localeCompare(acrB)
-          })}
-          disableClearable
-          getOptionLabel={(option: number) => {
-            const system = fismaSystemMap[option]
-            return system ? `${system.acronym} - ${system.name}` : ''
-          }}
-          renderOption={(props, option, { selected }) => {
-            const isAssigned = assignedSystems.includes(option)
-            return (
-              <li {...props}>
-                <Checkbox
-                  icon={icon}
-                  key={option}
-                  checkedIcon={checkedIcon}
-                  style={{ marginRight: 8 }}
-                  checked={selected || isAssigned}
-                  disabled={isAssigned}
-                />
-                {fismaSystemMap[option]?.acronym}
-                {' - '}
-                {fismaSystemMap[option]?.name}
-              </li>
-            )
-          }}
-          value={assignedSystems}
-          onChange={async (_event, newValue) => {
-            const added = newValue.filter(
-              (item) => !assignedSystems.includes(item)
-            )
-            const removed = assignedSystems.filter(
-              (item) => !newValue.includes(item)
-            )
-            if (added.length) {
-              try {
-                await axiosInstance.post(
-                  `/users/${userid}/assignedfismasystems`,
-                  { fismasystemid: added[0] }
-                )
-                setAssignedSystems(newValue)
-                notify('Saved - assign system', 'success')
-              } catch (error) {
-                if (isAuthHandled(error)) return
-                notify(ERROR_MESSAGES.tryAgain, 'error', {
-                  autoHideDuration: 1500,
-                })
-              }
-            } else if (removed.length) {
-              setPendingUnassign({
-                systemid: removed[0],
-                nextValue: newValue,
-              })
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+            Select the FISMA systems this user is responsible for.
+          </Typography>
+
+          <OutlinedInput
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or FISMA ID"
+            fullWidth
+            sx={searchInputSx}
+            startAdornment={
+              <InputAdornment position="start" sx={{ ml: 1.25, mr: 1 }}>
+                <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
+              </InputAdornment>
             }
-          }}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              variant="outlined"
-              placeholder="Search FISMA systems"
-            />
-          )}
-        />
-      </SideDrawer>
+            inputProps={{ 'aria-label': 'Search FISMA systems' }}
+          />
+
+          <Box
+            sx={{
+              border: `1px solid ${colors.neutral200}`,
+              borderRadius: 1,
+              maxHeight: 320,
+              overflow: 'auto',
+            }}
+          >
+            {filteredSystemIds.length === 0 ? (
+              <Typography
+                sx={{
+                  fontSize: 13,
+                  color: colors.neutral500,
+                  textAlign: 'center',
+                  py: 3,
+                }}
+              >
+                No systems match your search.
+              </Typography>
+            ) : (
+              filteredSystemIds.map((systemId) => {
+                const system = fismaSystemMap[systemId]
+                const isAssigned = assignedSystems.includes(systemId)
+                return (
+                  <Box
+                    key={systemId}
+                    component="label"
+                    htmlFor={`assign-system-${systemId}`}
+                    sx={rowSx}
+                  >
+                    <Checkbox
+                      id={`assign-system-${systemId}`}
+                      checked={isAssigned}
+                      onChange={(e) => handleToggle(systemId, e.target.checked)}
+                      sx={{ p: 0.5 }}
+                    />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography
+                        sx={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: colors.ink,
+                        }}
+                      >
+                        {system?.name}
+                      </Typography>
+                      <Typography
+                        sx={{ fontSize: 12, color: colors.neutral500 }}
+                      >
+                        {system?.acronym}
+                      </Typography>
+                    </Box>
+                  </Box>
+                )
+              })
+            )}
+          </Box>
+
+          <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 0.5 }}>
+            {selectedCount} of {totalCount}{' '}
+            {totalCount === 1 ? 'system' : 'systems'} selected
+          </Typography>
+        </Box>
+      </Modal>
       <CustomSnackbar
         open={openSnackBar}
         handleClose={() => setOpenSnackBar(false)}

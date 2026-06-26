@@ -50,6 +50,20 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
   const [deadline, setDeadline] = React.useState<string>('')
   const [deadlineError, setDeadlineError] = React.useState<string>('')
 
+  // Modals stay mounted across open/close so React preserves their state.
+  // Without this reset, a user who triggers a validation error (e.g. blurs
+  // an invalid date), closes the modal, and reopens it would still see the
+  // red error from the previous session. Reset on the open->false edge so
+  // the next open starts with the same empty/valid state as a fresh mount.
+  React.useEffect(() => {
+    if (!open) {
+      setDatacall('')
+      setDatacallError('')
+      setDeadline('')
+      setDeadlineError('')
+    }
+  }, [open])
+
   function isValidFormat(input: string) {
     const pattern = /^FY\d{4} Q\d$/
     if (input.length !== 9) {

@@ -1,7 +1,6 @@
 import * as React from 'react'
-import TextField from '@mui/material/TextField'
 import Modal from '@/components/ds/Modal'
-import { Box, Button, Grid } from '@mui/material'
+import { Box, Button, Grid, OutlinedInput, Select } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
@@ -19,7 +18,6 @@ import {
 } from '@/constants'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 
-import ValidatedTextField from './ValidatedTextField'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
 import { datacenterenvironment } from './dataEnvironment'
@@ -30,6 +28,84 @@ import axiosInstance from '@/axiosConfig'
 import { TEXTFIELD_HELPER_TEXT } from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { colors } from '@/theme/tokens'
+
+// Static labels rendered above the input. MUI's floating-label TextField
+// was colliding with the global CMS Design System resets at the app root,
+// which is what produced the overlapping label/value rendering visible
+// before this change. The mockup uses the same static-label layout, so
+// the visual fix and the design contract converge here.
+const labelSx = {
+  display: 'block',
+  fontSize: 13,
+  fontWeight: 600,
+  color: colors.ink,
+  mb: 0.75,
+}
+
+const inputSx = {
+  height: 38,
+  fontSize: 14,
+  '& .MuiOutlinedInput-input': { padding: '0 12px' },
+  '& fieldset': { borderColor: colors.neutral200 },
+}
+
+const errorTextSx = {
+  color: colors.danger,
+  mt: 0.5,
+  display: 'block',
+  fontWeight: 500,
+}
+
+const helperTextSx = {
+  color: colors.neutral500,
+  mt: 0.5,
+  display: 'block',
+}
+
+const requiredMark = (
+  <span style={{ color: colors.neutral500, fontWeight: 400 }}>*</span>
+)
+
+/**
+ * Local helper: label above input, with optional inline error text. Used
+ * for every form row in the FISMA system modal so the floating-label
+ * collisions are confined to the legacy ValidatedTextField (not used
+ * here) and the rest of the form renders consistently.
+ */
+function Field({
+  id,
+  label,
+  required,
+  error,
+  helperText,
+  children,
+}: {
+  id: string
+  label: string
+  required?: boolean
+  error?: string
+  helperText?: string
+  children: React.ReactNode
+}) {
+  return (
+    <Box sx={{ mb: 2 }}>
+      <Typography component="label" htmlFor={id} sx={labelSx}>
+        {label} {required && requiredMark}
+      </Typography>
+      {children}
+      {error ? (
+        <Typography variant="caption" sx={errorTextSx}>
+          {error}
+        </Typography>
+      ) : helperText ? (
+        <Typography variant="caption" sx={helperTextSx}>
+          {helperText}
+        </Typography>
+      ) : null}
+    </Box>
+  )
+}
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -446,6 +522,7 @@ export default function EditSystemModal({
           open={open}
           onClose={handleClose}
           title={`${title} FISMA system`}
+          eyebrow={mode === 'create' ? 'New system' : undefined}
           size="xl"
           disableBackdropClose
           footer={
@@ -465,244 +542,297 @@ export default function EditSystemModal({
           }
         >
           <Box sx={{ flexGrow: 1 }} component="form">
-            <Grid container spacing={2}>
-              <Grid item xs={7}>
-                <TextField
+            <Grid container spacing={3}>
+              <Grid item xs={12} md={6}>
+                <Field
                   id="fismaname"
                   label="Fisma Name"
                   required
-                  fullWidth
-                  margin="normal"
-                  variant="outlined"
-                  defaultValue={system?.fismaname || ''}
-                  error={showError('fismaname')}
-                  helperText={
-                    showError('fismaname') ? formValidErrorText.fismaname : ''
+                  error={
+                    showError('fismaname')
+                      ? formValidErrorText.fismaname
+                      : undefined
                   }
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  onChange={(e) => {
-                    handleInputChange(e, 'fismaname')
-                  }}
-                />
-                <TextField
-                  id="fismaacronym"
-                  label="Fisma Acronym"
-                  required
-                  variant="outlined"
-                  margin="normal"
-                  defaultValue={system?.fismaacronym || ''}
-                  error={showError('fismaacronym')}
-                  helperText={
-                    showError('fismaacronym')
-                      ? formValidErrorText.fismaacronym
-                      : ''
-                  }
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  onChange={(e) => {
-                    handleInputChange(e, 'fismaacronym')
-                  }}
-                />
-                <TextField
-                  id="groupacronym"
-                  label="Group Acronym"
-                  variant="outlined"
-                  margin="normal"
-                  defaultValue={system?.groupacronym || ''}
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  sx={{ ml: 2 }}
-                  onChange={(e) => {
-                    setEditedFismaSystem((prevState) => ({
-                      ...prevState,
-                      groupacronym: e.target.value,
-                    }))
-                  }}
-                />
-                <TextField
+                >
+                  <OutlinedInput
+                    id="fismaname"
+                    fullWidth
+                    value={editedFismaSystem.fismaname || ''}
+                    error={showError('fismaname')}
+                    onChange={(e) =>
+                      handleInputChange(
+                        e as React.ChangeEvent<HTMLInputElement>,
+                        'fismaname'
+                      )
+                    }
+                    sx={inputSx}
+                  />
+                </Field>
+
+                <Grid container spacing={2}>
+                  <Grid item xs={6}>
+                    <Field
+                      id="fismaacronym"
+                      label="Fisma Acronym"
+                      required
+                      error={
+                        showError('fismaacronym')
+                          ? formValidErrorText.fismaacronym
+                          : undefined
+                      }
+                    >
+                      <OutlinedInput
+                        id="fismaacronym"
+                        fullWidth
+                        value={editedFismaSystem.fismaacronym || ''}
+                        error={showError('fismaacronym')}
+                        onChange={(e) =>
+                          handleInputChange(
+                            e as React.ChangeEvent<HTMLInputElement>,
+                            'fismaacronym'
+                          )
+                        }
+                        sx={inputSx}
+                      />
+                    </Field>
+                  </Grid>
+                  <Grid item xs={6}>
+                    <Field id="groupacronym" label="Group Acronym">
+                      <OutlinedInput
+                        id="groupacronym"
+                        fullWidth
+                        value={editedFismaSystem.groupacronym || ''}
+                        onChange={(e) =>
+                          setEditedFismaSystem((prev) => ({
+                            ...prev,
+                            groupacronym: e.target.value,
+                          }))
+                        }
+                        sx={inputSx}
+                      />
+                    </Field>
+                  </Grid>
+                </Grid>
+
+                <Field
                   id="component"
                   label="Component"
-                  variant="outlined"
                   required
-                  margin="normal"
-                  defaultValue={system?.component || ''}
-                  error={showError('component')}
-                  helperText={
-                    showError('component') ? formValidErrorText.component : ''
+                  error={
+                    showError('component')
+                      ? formValidErrorText.component
+                      : undefined
                   }
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  sx={{ ml: 2 }}
-                  onChange={(e) => {
-                    handleInputChange(e, 'component')
-                  }}
-                />
-                <TextField
-                  id="groupname"
-                  label="Group Name"
-                  variant="outlined"
-                  margin="normal"
-                  fullWidth
-                  defaultValue={system?.groupname || ''}
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  onChange={(e) => {
-                    setEditedFismaSystem((prevState) => ({
-                      ...prevState,
-                      groupname: e.target.value,
-                    }))
-                  }}
-                />
+                >
+                  <OutlinedInput
+                    id="component"
+                    fullWidth
+                    value={editedFismaSystem.component || ''}
+                    error={showError('component')}
+                    onChange={(e) =>
+                      handleInputChange(
+                        e as React.ChangeEvent<HTMLInputElement>,
+                        'component'
+                      )
+                    }
+                    sx={inputSx}
+                  />
+                </Field>
 
-                <TextField
-                  id="divisionname"
-                  label="Division Name"
-                  variant="outlined"
-                  margin="normal"
-                  fullWidth
-                  defaultValue={system?.divisionname}
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  onChange={(e) => {
-                    setEditedFismaSystem((prevState) => ({
-                      ...prevState,
-                      divisionname: e.target.value,
-                    }))
-                  }}
-                />
-                <TextField
-                  id="fismasubsystem"
-                  label="Fisma Subsystem"
-                  variant="outlined"
-                  margin="normal"
-                  fullWidth
-                  defaultValue={system?.fismasubsystem}
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  onChange={(e) => {
-                    setEditedFismaSystem((prevState) => ({
-                      ...prevState,
-                      fismasubsystem: e.target.value,
-                    }))
-                  }}
-                />
+                <Field id="groupname" label="Group Name">
+                  <OutlinedInput
+                    id="groupname"
+                    fullWidth
+                    value={editedFismaSystem.groupname || ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        groupname: e.target.value,
+                      }))
+                    }
+                    sx={inputSx}
+                  />
+                </Field>
+
+                <Field id="divisionname" label="Division Name">
+                  <OutlinedInput
+                    id="divisionname"
+                    fullWidth
+                    value={editedFismaSystem.divisionname || ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        divisionname: e.target.value,
+                      }))
+                    }
+                    sx={inputSx}
+                  />
+                </Field>
+
+                <Field id="fismasubsystem" label="Fisma Subsystem">
+                  <OutlinedInput
+                    id="fismasubsystem"
+                    fullWidth
+                    value={editedFismaSystem.fismasubsystem || ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        fismasubsystem: e.target.value,
+                      }))
+                    }
+                    sx={inputSx}
+                  />
+                </Field>
               </Grid>
-              <Grid item xs={5}>
-                <ValidatedTextField
-                  label="Data Call Contact"
-                  validator={emailValidator}
-                  dfValue={system?.datacallcontact || ''}
-                  isFullWidth={true}
-                  onChange={(isValid, newValue) => {
-                    setFormValid((prevState) => ({
-                      ...prevState,
-                      datacallcontact: isValid,
-                    }))
-                    if (isValid) {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        datacallcontact: newValue,
-                      }))
-                    }
-                  }}
-                />
-                <ValidatedTextField
-                  label="ISSO Email"
-                  validator={emailValidator}
-                  dfValue={system?.issoemail || ''}
-                  isFullWidth={true}
-                  onChange={(isValid, newValue) => {
-                    setFormValid((prevState) => ({
-                      ...prevState,
-                      issoemail: isValid,
-                    }))
-                    if (isValid) {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        issoemail: newValue,
-                      }))
-                    }
-                  }}
-                />
 
-                <TextField
+              <Grid item xs={12} md={6}>
+                <Field
+                  id="datacallcontact"
+                  label="Data Call Contact"
+                  required
+                  error={
+                    showError('datacallcontact')
+                      ? formValidErrorText.datacallcontact
+                      : undefined
+                  }
+                >
+                  <OutlinedInput
+                    id="datacallcontact"
+                    fullWidth
+                    value={editedFismaSystem.datacallcontact || ''}
+                    error={showError('datacallcontact')}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      const result = emailValidator(value)
+                      const isValid = result === false
+                      markTouched('datacallcontact')
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        datacallcontact: value,
+                      }))
+                      setFormValid((prev) => ({
+                        ...prev,
+                        datacallcontact: isValid,
+                      }))
+                      setFormValidErrorText((prev) => ({
+                        ...prev,
+                        datacallcontact: result || '',
+                      }))
+                    }}
+                    sx={inputSx}
+                  />
+                </Field>
+
+                <Field
+                  id="issoemail"
+                  label="ISSO Email"
+                  required
+                  error={
+                    showError('issoemail')
+                      ? formValidErrorText.issoemail
+                      : undefined
+                  }
+                >
+                  <OutlinedInput
+                    id="issoemail"
+                    fullWidth
+                    value={editedFismaSystem.issoemail || ''}
+                    error={showError('issoemail')}
+                    onChange={(e) => {
+                      const value = e.target.value
+                      const result = emailValidator(value)
+                      const isValid = result === false
+                      markTouched('issoemail')
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        issoemail: value,
+                      }))
+                      setFormValid((prev) => ({ ...prev, issoemail: isValid }))
+                      setFormValidErrorText((prev) => ({
+                        ...prev,
+                        issoemail: result || '',
+                      }))
+                    }}
+                    sx={inputSx}
+                  />
+                </Field>
+
+                <Field
                   id="fismauid"
                   label="Fisma UID"
-                  variant="outlined"
-                  margin="normal"
-                  fullWidth
-                  defaultValue={system?.fismauid || ''}
-                  error={showError('fismauid')}
-                  helperText={
-                    showError('fismauid') ? formValidErrorText.fismauid : ''
+                  error={
+                    showError('fismauid')
+                      ? formValidErrorText.fismauid
+                      : undefined
                   }
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  onChange={(e) => {
-                    handleInputChange(e, 'fismauid')
-                  }}
-                />
-                <TextField
-                  id="outlined-select-datacenterenvironment"
-                  required
-                  select
+                >
+                  <OutlinedInput
+                    id="fismauid"
+                    fullWidth
+                    value={editedFismaSystem.fismauid || ''}
+                    error={showError('fismauid')}
+                    onChange={(e) =>
+                      handleInputChange(
+                        e as React.ChangeEvent<HTMLInputElement>,
+                        'fismauid'
+                      )
+                    }
+                    sx={inputSx}
+                  />
+                </Field>
+
+                <Field
+                  id="datacenterenvironment"
                   label="Datacenter Environment"
-                  variant="outlined"
-                  defaultValue={system?.datacenterenvironment || ''}
-                  fullWidth
-                  error={showError('datacenterenvironment')}
-                  helperText={
+                  required
+                  error={
                     showError('datacenterenvironment')
                       ? formValidErrorText.datacenterenvironment
-                      : ''
+                      : undefined
                   }
-                  InputLabelProps={{
-                    sx: {
-                      marginTop: 0,
-                    },
-                  }}
-                  sx={{ mt: 2 }}
-                  onChange={(e) => {
-                    handleInputChange(e, 'datacenterenvironment')
-                  }}
                 >
-                  {datacenterenvironment.map((option) => (
-                    <MenuItem key={option.value} value={option.value}>
-                      {option.label}
-                    </MenuItem>
-                  ))}
-                </TextField>
+                  <Select
+                    id="datacenterenvironment"
+                    fullWidth
+                    value={editedFismaSystem.datacenterenvironment || ''}
+                    error={showError('datacenterenvironment')}
+                    onChange={(e) => {
+                      const value = e.target.value as string
+                      markTouched('datacenterenvironment')
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        datacenterenvironment: value,
+                      }))
+                      setFormValid((prev) => ({
+                        ...prev,
+                        datacenterenvironment: value.length > 0,
+                      }))
+                      if (value.length === 0) {
+                        setFormValidErrorText((prev) => ({
+                          ...prev,
+                          datacenterenvironment: TEXTFIELD_HELPER_TEXT,
+                        }))
+                      }
+                    }}
+                    sx={{
+                      height: 38,
+                      fontSize: 14,
+                      '& fieldset': { borderColor: colors.neutral200 },
+                    }}
+                  >
+                    {datacenterenvironment.map((option) => (
+                      <MenuItem key={option.value} value={option.value}>
+                        {option.label}
+                      </MenuItem>
+                    ))}
+                  </Select>
+                </Field>
+
                 <Box
                   sx={{
                     mt: 3,
                     p: 2,
-                    border: 1,
-                    borderColor: 'divider',
+                    border: `1px solid ${colors.neutral200}`,
                     borderRadius: 1,
                   }}
                 >
