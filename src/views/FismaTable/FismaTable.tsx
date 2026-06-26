@@ -31,33 +31,8 @@ import DataGridPaginationFooter from '@/components/ds/DataGridPaginationFooter'
 import CompactSwitchLabel from '@/components/ds/CompactSwitchLabel'
 import { colors, fonts, radius } from '@/theme/tokens'
 
-const ELLIPSIS = '…'
-const UUID_RE =
-  /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
-
 // Short aliases for OpDiv codes longer than the 6-char column budget.
 const OPDIV_ALIASES: Record<string, string> = { REBELLION: 'REBEL' }
-
-/**
- * Formats a FISMA id for the table. When the only id is a UUID, show just the
- * first segment with an ellipsis; the full value goes in a tooltip.
- * @param {string} uid - The raw FISMA uid.
- * @returns {{ display: string, full: string, truncated: boolean }} Display parts.
- */
-function formatFismaId(uid: string): {
-  display: string
-  full: string
-  truncated: boolean
-} {
-  if (uid && UUID_RE.test(uid)) {
-    return {
-      display: `${uid.split('-')[0]}${ELLIPSIS}`,
-      full: uid,
-      truncated: true,
-    }
-  }
-  return { display: uid ?? '', full: uid ?? '', truncated: false }
-}
 
 /**
  * Aliases or caps an OpDiv code to at most 6 characters for the OpDiv column.
@@ -279,13 +254,9 @@ export default function FismaTable({
       minWidth: 240,
       hideable: false,
       renderCell: (params: GridRenderCellParams) => {
-        // Prefer a real description; fall back to whatever context exists so
-        // the row never reads as a single bare line.
-        const subtitle =
-          params.row.mission ||
-          params.row.component ||
-          params.row.datacenterenvironment ||
-          ''
+        // Subtitle pulls from mission/component only - datacenterenvironment
+        // has its own column, so showing it here would duplicate.
+        const subtitle = params.row.mission || params.row.component || ''
         return (
           <Box>
             <Link
@@ -318,25 +289,44 @@ export default function FismaTable({
       },
     },
     {
-      field: 'fismauid',
-      headerName: 'FISMA ID',
-      flex: 0.9,
-      minWidth: 110,
-      renderCell: (params) => {
-        const { display, full, truncated } = formatFismaId(params.row.fismauid)
-        const text = (
-          <Typography
-            sx={{
-              fontFamily: fonts.mono,
-              fontSize: 13,
-              color: colors.neutral700,
-            }}
-          >
-            {display}
-          </Typography>
-        )
-        return truncated ? <Tooltip title={full}>{text}</Tooltip> : text
+      field: 'fismaacronym',
+      headerName: 'Acronym',
+      flex: 0.7,
+      minWidth: 90,
+      renderCell: (params) => (
+        <Typography
+          sx={{
+            fontFamily: fonts.mono,
+            fontSize: 13,
+            fontWeight: 600,
+            color: colors.ink,
+          }}
+        >
+          {params.row.fismaacronym}
+        </Typography>
+      ),
+    },
+    {
+      field: 'issoemail',
+      headerName: 'ISSO',
+      flex: 1.1,
+      minWidth: 140,
+      // Derive a "First Last" display name from the ISSO email local-part
+      // (john.doe@x.com -> "John Doe"). Falls back to the raw local-part
+      // when the email is a single token. Same logic main has used since
+      // before the redesign so the column reads the same way.
+      valueGetter: (value) => {
+        const local = (value.row.issoemail ?? '').split('@')[0] ?? ''
+        const parts = local.replace(/[0-9]/g, '').split('.')
+        if (parts.length <= 1) return parts[0] ?? ''
+        const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : '')
+        return `${cap(parts[0])} ${cap(parts[1])}`
       },
+      renderCell: (params) => (
+        <Typography sx={{ fontSize: 13, color: colors.ink }}>
+          {params.value || '-'}
+        </Typography>
+      ),
     },
     {
       field: 'opdiv',
@@ -349,6 +339,17 @@ export default function FismaTable({
           : '',
       renderCell: (params) =>
         params.value ? <CodeBadge code={String(params.value)} /> : null,
+    },
+    {
+      field: 'datacenterenvironment',
+      headerName: 'Data center',
+      flex: 1,
+      minWidth: 130,
+      renderCell: (params) => (
+        <Typography sx={{ fontSize: 13, color: colors.neutral700 }}>
+          {params.row.datacenterenvironment || '-'}
+        </Typography>
+      ),
     },
     {
       field: 'Score',
