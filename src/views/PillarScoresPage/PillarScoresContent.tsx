@@ -100,6 +100,13 @@ export interface PillarScoresContentProps {
   currentDatacallName?: string
   /** Human-readable name of the previous datacall, used in the trend line. */
   previousDatacallName?: string
+  /**
+   * Datacall id to use as the trend baseline. Overrides the implicit
+   * "most recent prior datacall on this system" lookup; lets the parent
+   * page tie the trend to the user's pick from the Compare Datacalls
+   * modal. Falls back to the implicit lookup when undefined.
+   */
+  comparisonFromDatacallId?: number
 }
 
 /**
@@ -124,6 +131,7 @@ export default function PillarScoresContent({
   fismasystemid,
   currentDatacallName,
   previousDatacallName,
+  comparisonFromDatacallId,
 }: PillarScoresContentProps) {
   // Latest score = the selected datacall if it has data, otherwise the highest
   // datacallid in the set. Lets the page still render the most recent
@@ -136,12 +144,18 @@ export default function PillarScoresContent({
         )
       : null
 
+  // Previous-score lookup respects the parent's explicit comparison pick
+  // (driven by the Compare Datacalls modal) and falls back to the most
+  // recent prior datacall on this system when nothing's been picked yet.
   const previousScore = useMemo(() => {
     if (!latestScore) return undefined
+    if (typeof comparisonFromDatacallId === 'number') {
+      return scores.find((s) => s.datacallid === comparisonFromDatacallId)
+    }
     return scores
       .filter((s) => s.datacallid < latestScore.datacallid)
       .sort((a, b) => b.datacallid - a.datacallid)[0]
-  }, [scores, latestScore])
+  }, [scores, latestScore, comparisonFromDatacallId])
 
   const hasValidData = Boolean(
     latestScore &&
@@ -273,7 +287,11 @@ function HeroRow({
       </Card>
       <Card>
         <Eyebrow>Trend vs previous</Eyebrow>
-        <TrendRadar scores={scores} latestScore={latestScore} />
+        <TrendRadar
+          latestScore={latestScore}
+          previousScore={previousScore}
+          hasPrevious={scores.length > 1}
+        />
       </Card>
     </Box>
   )
@@ -597,24 +615,25 @@ function QuestionBreakdown({
  * Trend radar (Current solid, Previous dashed) drawn into the right hero card.
  */
 function TrendRadar({
-  scores,
   latestScore,
+  previousScore,
+  hasPrevious,
 }: {
-  scores: ScoreAggregate[]
   latestScore: ScoreAggregate
+  previousScore?: ScoreAggregate
+  hasPrevious: boolean
 }) {
+  // Radar data uses the previousScore the parent decided on (which respects
+  // the user's Compare Datacalls modal pick), not a local N-1 lookup.
   const radarData = useMemo(() => {
-    const prev = scores
-      .filter((s) => s.datacallid < latestScore.datacallid)
-      .sort((a, b) => b.datacallid - a.datacallid)[0]
     return (latestScore.pillarscores ?? []).map((p) => ({
       pillar: p.pillar,
       current: p.score ?? 0,
       previous:
-        prev?.pillarscores?.find((pp) => pp.pillarid === p.pillarid)?.score ??
-        0,
+        previousScore?.pillarscores?.find((pp) => pp.pillarid === p.pillarid)
+          ?.score ?? 0,
     }))
-  }, [scores, latestScore])
+  }, [previousScore, latestScore])
 
   return (
     <Box sx={{ width: '100%', height: 240, mt: 1 }} role="img">
@@ -639,7 +658,7 @@ function TrendRadar({
             fillOpacity={0.22}
             strokeWidth={2}
           />
-          {scores.length > 1 && (
+          {hasPrevious && (
             <Radar
               name="Previous"
               dataKey="previous"

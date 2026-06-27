@@ -21,8 +21,13 @@ import type { ScoreAggregate } from '@/types'
  */
 export default function PillarScoresPage() {
   const { fismasystemid } = useParams()
-  const { fismaSystems, selectedDatacall, latestDataCallId, datacalls } =
-    useContextProp()
+  const {
+    fismaSystems,
+    selectedDatacall,
+    setSelectedDatacall,
+    latestDataCallId,
+    datacalls,
+  } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const systemId = Number(fismasystemid)
   const system = fismaSystems.find((s) => s.fismasystemid === systemId)
@@ -30,6 +35,10 @@ export default function PillarScoresPage() {
   const [scores, setScores] = useState<ScoreAggregate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [compareOpen, setCompareOpen] = useState<boolean>(false)
+  // Comparison baseline selected by the user in the Compare Datacalls modal.
+  // When null we fall back to "most recent prior datacall on this system"
+  // (the default the modal seeds and the page used to hard-wire).
+  const [comparisonFromId, setComparisonFromId] = useState<number | null>(null)
 
   useEffect(() => {
     if (!systemId) return
@@ -64,9 +73,12 @@ export default function PillarScoresPage() {
   const currentDatacallName = datacalls.find(
     (dc) => dc.datacallid === activeDataCallId
   )?.datacall
-  const previousDatacallId = scores
+  // Previous-datacall lookup: prefer the user's explicit pick from the modal;
+  // fall back to the most recent prior datacall this system has scores for.
+  const fallbackPreviousId = scores
     .filter((s) => s.datacallid < (activeDataCallId ?? Number.MAX_SAFE_INTEGER))
     .sort((a, b) => b.datacallid - a.datacallid)[0]?.datacallid
+  const previousDatacallId = comparisonFromId ?? fallbackPreviousId
   const previousDatacallName = datacalls.find(
     (dc) => dc.datacallid === previousDatacallId
   )?.datacall
@@ -101,6 +113,7 @@ export default function PillarScoresPage() {
           fismasystemid={systemId}
           currentDatacallName={currentDatacallName}
           previousDatacallName={previousDatacallName}
+          comparisonFromDatacallId={previousDatacallId}
         />
       )}
       <ScoreDiffModal
@@ -110,6 +123,18 @@ export default function PillarScoresPage() {
         systemName={systemName}
         systemAcronym={systemAcronym}
         selectedDataCallId={activeDataCallId}
+        onComparisonChange={(from, to) => {
+          // From -> page-level comparison baseline (trend line, radar
+          // Previous series, per-pillar deltas).
+          setComparisonFromId(from?.datacallid ?? null)
+          // To -> the app-wide selectedDatacall. Picking a different "To"
+          // in the modal flows back into the DatacallContextCard's picker,
+          // the hero "Overall ZT score", the pillar grid, and every other
+          // datacall-scoped surface in the app. One source of truth.
+          if (to && to.datacallid !== selectedDatacall?.datacallid) {
+            setSelectedDatacall(to)
+          }
+        }}
       />
     </Box>
   )
