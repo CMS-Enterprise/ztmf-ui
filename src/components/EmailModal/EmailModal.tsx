@@ -1,9 +1,16 @@
 import React from 'react'
-import { Box, Button, TextField, Typography } from '@mui/material'
+import {
+  Box,
+  Button,
+  MenuItem,
+  OutlinedInput,
+  Select,
+  Typography,
+} from '@mui/material'
 import Modal from '@/components/ds/Modal'
+import Field, { fieldInputSx } from '@/components/ds/Field'
 import SentEmailsModal from './SentEmailsModal'
 import { EmailModalProps } from '@/types'
-import './EmailModal.css'
 import axiosInstance from '@/axiosConfig'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -100,45 +107,61 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
           </>
         }
       >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <TextField
-            select
-            label="Send to"
-            required
-            fullWidth
-            name="email_group"
-            value={groupValue}
-            onChange={(e) => setGroupValue(e.target.value)}
-            SelectProps={{ native: true }}
-            InputLabelProps={{ shrink: true }}
-          >
-            <option value="">- Select an option -</option>
-            {GROUP_OPTIONS.map((opt) => (
-              <option key={opt.value} value={opt.value}>
-                {opt.label}
-              </option>
-            ))}
-          </TextField>
-          <TextField
-            label="Subject"
-            required
-            fullWidth
-            name="email_subject"
-            value={subject}
-            inputProps={{ maxLength: 100 }}
-            onChange={(e) => setSubject(e.target.value)}
-          />
-          <Box>
-            <TextField
-              label="Message"
-              required
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Field id="email_group" label="Send to" required>
+            <Select
+              id="email_group"
+              name="email_group"
+              displayEmpty
+              fullWidth
+              // The Field component renders a <label htmlFor="email_group">,
+              // but MUI Select's combobox role needs aria-labelledby. The
+              // labelId points back at the label that Field renders so a11y
+              // tooling sees "Send to" as the accessible name.
+              labelId="email_group-label"
+              inputProps={{ 'aria-labelledby': 'email_group-label' }}
+              value={groupValue}
+              onChange={(e) => setGroupValue(e.target.value)}
+              input={<OutlinedInput sx={fieldInputSx} />}
+              renderValue={(selected) =>
+                selected ? (
+                  selected
+                ) : (
+                  <Box component="span" sx={{ color: colors.neutral500 }}>
+                    Select a recipient group
+                  </Box>
+                )
+              }
+            >
+              {GROUP_OPTIONS.map((opt) => (
+                <MenuItem key={opt.value} value={opt.value}>
+                  {opt.label}
+                </MenuItem>
+              ))}
+            </Select>
+          </Field>
+          <Field id="email_subject" label="Subject" required>
+            <OutlinedInput
+              id="email_subject"
+              name="email_subject"
+              fullWidth
+              value={subject}
+              inputProps={{ maxLength: 100 }}
+              onChange={(e) => setSubject(e.target.value)}
+              sx={fieldInputSx}
+            />
+          </Field>
+          <Field id="email_body" label="Message" required>
+            <OutlinedInput
+              id="email_body"
+              name="email_body"
               fullWidth
               multiline
               minRows={8}
-              name="email_body"
               value={body}
               inputProps={{ maxLength: 2000 }}
               onChange={(e) => setBody(e.target.value)}
+              sx={fieldInputSx}
             />
             <Typography
               variant="caption"
@@ -152,7 +175,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             >
               {body.length} / 2000
             </Typography>
-          </Box>
+          </Field>
         </Box>
       </Modal>
       <SentEmailsModal

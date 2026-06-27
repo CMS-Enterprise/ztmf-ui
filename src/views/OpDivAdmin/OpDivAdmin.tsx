@@ -10,9 +10,11 @@ import {
   Autocomplete,
   FormControlLabel,
   InputBase,
+  OutlinedInput,
   Switch,
   TextField,
 } from '@mui/material'
+import Field, { fieldInputSx } from '@/components/ds/Field'
 import SearchIcon from '@mui/icons-material/Search'
 import Modal from '@/components/ds/Modal'
 import CompactSwitchLabel from '@/components/ds/CompactSwitchLabel'
@@ -552,27 +554,41 @@ export default function OpDivAdmin() {
           </>
         }
       >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-          <TextField
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Field
+            id="opdiv-code"
             label="Code"
             required
-            fullWidth
-            value={form.code}
-            onChange={(e) => setForm({ ...form, code: e.target.value })}
-            error={!!fieldErrors.code}
-            helperText={fieldErrors.code ?? `1-${CODE_MAX} characters`}
-            inputProps={{ maxLength: CODE_MAX }}
-          />
-          <TextField
+            error={fieldErrors.code}
+            helperText={`1-${CODE_MAX} characters`}
+          >
+            <OutlinedInput
+              id="opdiv-code"
+              fullWidth
+              value={form.code}
+              onChange={(e) => setForm({ ...form, code: e.target.value })}
+              error={!!fieldErrors.code}
+              inputProps={{ maxLength: CODE_MAX }}
+              sx={fieldInputSx}
+            />
+          </Field>
+          <Field
+            id="opdiv-name"
             label="Name"
             required
-            fullWidth
-            value={form.name}
-            onChange={(e) => setForm({ ...form, name: e.target.value })}
-            error={!!fieldErrors.name}
-            helperText={fieldErrors.name ?? `1-${NAME_MAX} characters`}
-            inputProps={{ maxLength: NAME_MAX }}
-          />
+            error={fieldErrors.name}
+            helperText={`1-${NAME_MAX} characters`}
+          >
+            <OutlinedInput
+              id="opdiv-name"
+              fullWidth
+              value={form.name}
+              onChange={(e) => setForm({ ...form, name: e.target.value })}
+              error={!!fieldErrors.name}
+              inputProps={{ maxLength: NAME_MAX }}
+              sx={fieldInputSx}
+            />
+          </Field>
           <FormControlLabel
             control={
               <Switch

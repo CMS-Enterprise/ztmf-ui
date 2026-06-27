@@ -1,19 +1,24 @@
-import {
-  Box,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
-  IconButton,
-} from '@mui/material'
-import List from '@mui/material/List'
-import ListItem from '@mui/material/ListItem'
-import ListItemIcon from '@mui/material/ListItemIcon'
-import ListItemText from '@mui/material/ListItemText'
+import Box from '@mui/material/Box'
+import Button from '@mui/material/Button'
+import Typography from '@mui/material/Typography'
 import EmailIcon from '@mui/icons-material/Email'
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
-import { Button as CMSButton } from '@cmsgov/design-system'
+import Modal from '@/components/ds/Modal'
+import { colors, radius } from '@/theme/tokens'
 import { SentEmailDialogProps } from '@/types'
+
+/**
+ * Read-only list of email addresses that were sent in a recent batch. Renders
+ * through the shared ds/Modal shell so it picks up the same header (eyebrow +
+ * title + X), body padding, and footer treatment every other dialog uses.
+ *
+ * The address list is intentionally rendered as plain Boxes (not <ul>/<li>)
+ * because the CMS DSG global stylesheet resets `ul { display: flex;
+ * flex-direction: column; gap: 0.5em; padding-inline-start: 2em }` which
+ * collides with MUI's List padding/alignment.
+ * @param {SentEmailDialogProps} props - Open state, close handler, addresses
+ *   that were emailed, and the recipient group name shown in the title.
+ * @returns {JSX.Element} The sent-emails modal.
+ */
 export default function SentEmailsModal({
   openModal,
   closeModal,
@@ -21,78 +26,56 @@ export default function SentEmailsModal({
   group,
 }: SentEmailDialogProps) {
   return (
-    <Dialog
+    <Modal
       open={openModal}
       onClose={closeModal}
-      maxWidth="sm"
-      fullWidth
-      sx={{
-        '& .MuiDialog-paper': {
-          borderRadius: 0,
-          boxShadow: '3px 3px 5px',
-          minHeight: '90vh',
-          maxHeight: '90vh',
-        },
-      }}
+      size="md"
+      dense
+      eyebrow="Sent emails"
+      title={`Sent to ${group}`}
+      footer={
+        <Button variant="contained" color="primary" onClick={closeModal}>
+          Close
+        </Button>
+      }
     >
-      <DialogTitle id="email-dialog-title">
+      {emails.length === 0 ? (
+        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+          No emails were sent.
+        </Typography>
+      ) : (
         <Box
-          sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}
-          className={'ds-u-font-size--2xl ds-u-font-weight--bold'}
-        >
-          {`Emails Sent to ${group}'s`}
-          <IconButton
-            size="large"
-            sx={{
-              p: 0,
-              borderRadius: 0,
-              '&:hover': {
-                backgroundColor: 'white',
-              },
-            }}
-            onClick={closeModal}
-          >
-            <CloseRoundedIcon
-              fontSize="large"
-              sx={{ color: 'rgb(90, 90, 90)' }}
-            />
-          </IconButton>
-        </Box>
-      </DialogTitle>
-      <DialogContent sx={{ overflow: 'hidden' }}>
-        <List
           sx={{
-            width: '100%',
-            // maxWidth: 500,
-            bgcolor: 'background.paper',
-            position: 'relative',
-            overflow: 'auto',
-            overflowX: 'hidden',
-            maxHeight: 600,
-            '& ul': { padding: 0 },
+            display: 'flex',
+            flexDirection: 'column',
+            gap: 0.5,
+            maxHeight: 480,
+            overflowY: 'auto',
           }}
         >
           {emails.map((email) => (
-            <ListItem key={email}>
-              <ListItemIcon key={`${email}-icon`}>
-                <EmailIcon />
-              </ListItemIcon>
-              <ListItemText key={`email-${email}`}>{email}</ListItemText>
-            </ListItem>
+            <Box
+              key={email}
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1.5,
+                px: 1,
+                py: 1,
+                borderRadius: `${radius.sm}px`,
+                '&:hover': { backgroundColor: colors.neutral50 },
+              }}
+            >
+              <EmailIcon
+                sx={{ fontSize: 18, color: colors.neutral500, flexShrink: 0 }}
+              />
+              <Typography sx={{ fontSize: 13, color: colors.ink }}>
+                {email}
+              </Typography>
+            </Box>
           ))}
-        </List>
-      </DialogContent>
-      <DialogActions
-        sx={{
-          justifyContent: 'flex-start',
-          ml: 3,
-          mb: 3,
-        }}
-      >
-        <CMSButton variation="solid" onClick={closeModal}>
-          Close
-        </CMSButton>
-      </DialogActions>
-    </Dialog>
+        </Box>
+      )}
+    </Modal>
   )
 }

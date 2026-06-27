@@ -37,13 +37,12 @@ const mockedNavigate = (router as unknown as { navigate: jest.Mock }).navigate
 const mock = new MockAdapter(axiosInstance)
 
 async function fillAndSubmit() {
-  // CMS design-system controls do not expose accessible names the way
-  // native form elements do, so query by the underlying `name` attribute
-  // which is stable and what the FormData submit reads.
-  const group = document.querySelector(
-    'select[name="email_group"]'
-  ) as HTMLSelectElement
-  await userEvent.selectOptions(group, 'ALL')
+  // The Send To control is a MUI Select rendered as an aria combobox button
+  // (no real <select> element). Open it, then click the "ALL" option.
+  const group = screen.getByRole('combobox', { name: /send to/i })
+  await userEvent.click(group)
+  const option = await screen.findByRole('option', { name: 'ALL' })
+  await userEvent.click(option)
 
   const subject = document.querySelector(
     'input[name="email_subject"]'

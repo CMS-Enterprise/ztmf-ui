@@ -1,40 +1,12 @@
 import React from 'react'
-import { Box, Button, OutlinedInput, Typography } from '@mui/material'
+import { Box, Button, OutlinedInput } from '@mui/material'
 import Modal from '@/components/ds/Modal'
+import Field, { fieldInputSx } from '@/components/ds/Field'
 import { datacallModalProps } from '@/types'
 import axiosInstance from '@/axiosConfig'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { colors, radius } from '@/theme/tokens'
-
-// Static labels rendered above the input rather than MUI's floating-label
-// TextField. The CMS Design System resets applied at the app root were
-// clobbering the floating-label positioning, which is what produced the
-// overlapping label / placeholder seen in the old modal. The mockup uses
-// the same static-label layout, so the visual fix and the design contract
-// converge on this shape.
-const labelSx = {
-  display: 'block',
-  fontSize: 13,
-  fontWeight: 600,
-  color: colors.ink,
-  mb: 0.75,
-}
-
-// Inputs configured to match the mockup's 38px height with a thin neutral
-// border. The inner padding and border-color overrides are scoped to the
-// `&` selector so they only affect inputs in this modal and don't leak
-// out via global selectors.
-const inputSx = {
-  height: 38,
-  fontSize: 14,
-  '& .MuiOutlinedInput-input': { padding: '0 12px' },
-  '& fieldset': { borderColor: colors.neutral200 },
-}
-
-const requiredMark = (
-  <span style={{ color: colors.neutral500, fontWeight: 400 }}>*</span>
-)
+import { radius } from '@/theme/tokens'
 
 /**
  * Create-datacall modal. Renders through the shared Modal shell and uses
@@ -145,11 +117,14 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
         </>
       }
     >
-      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2.5 }}>
-        <Box>
-          <Typography component="label" htmlFor="datacall-name" sx={labelSx}>
-            Name {requiredMark}
-          </Typography>
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Field
+          id="datacall-name"
+          label="Name"
+          required
+          error={datacallError}
+          helperText="Use the format FYXXXX QX, for example FY2024 Q1."
+        >
           <OutlinedInput
             id="datacall-name"
             name="datacall"
@@ -158,38 +133,16 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
             inputProps={{ maxLength: 9, 'aria-label': 'Datacall name' }}
             onChange={handleDatacallChange}
             error={!!datacallError}
-            sx={inputSx}
+            sx={fieldInputSx}
           />
-          {datacallError ? (
-            <Typography
-              variant="caption"
-              sx={{
-                color: colors.danger,
-                mt: 0.5,
-                display: 'block',
-                fontWeight: 500,
-              }}
-            >
-              {datacallError}
-            </Typography>
-          ) : (
-            <Typography
-              variant="caption"
-              sx={{ color: colors.neutral500, mt: 0.5, display: 'block' }}
-            >
-              Use the format FYXXXX QX, for example FY2024 Q1.
-            </Typography>
-          )}
-        </Box>
+        </Field>
 
-        <Box>
-          <Typography
-            component="label"
-            htmlFor="datacall-deadline"
-            sx={labelSx}
-          >
-            Deadline {requiredMark}
-          </Typography>
+        <Field
+          id="datacall-deadline"
+          label="Deadline"
+          required
+          error={deadlineError}
+        >
           <OutlinedInput
             id="datacall-deadline"
             name="deadline-date"
@@ -200,22 +153,9 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
             onBlur={validateDeadline}
             onChange={(e) => setDeadline(e.target.value)}
             error={!!deadlineError}
-            sx={inputSx}
+            sx={fieldInputSx}
           />
-          {deadlineError && (
-            <Typography
-              variant="caption"
-              sx={{
-                color: colors.danger,
-                mt: 0.5,
-                display: 'block',
-                fontWeight: 500,
-              }}
-            >
-              {deadlineError}
-            </Typography>
-          )}
-        </Box>
+        </Field>
       </Box>
     </Modal>
   )
