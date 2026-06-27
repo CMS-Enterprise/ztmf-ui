@@ -58,11 +58,6 @@ const expectations: FileExpectation[] = [
     excludes: ['Routes.SIGNIN'],
   },
   {
-    filePath: 'src/views/QuestionnareModal/QuestionnareModal.tsx',
-    includes: ['if (isAuthHandled(error)) return'],
-    excludes: ['Routes.SIGNIN'],
-  },
-  {
     filePath: 'src/views/SystemDetailPage/CfactsRecordCard.tsx',
     includes: ['skipAuthHandling: true'],
   },

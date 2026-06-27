@@ -47,3 +47,45 @@ footer {
   flex-wrap: nowrap !important;
   align-items: center !important;
 }
+
+// CMS DSG resets `label, legend { display: block; margin-block: 1.5em 0 }` and
+// stamps cursor/font-weight on every <label>. That collides with MUI's
+// floating-label pattern in two ways:
+//
+//   1. The <legend> inside <fieldset> (the notch cutout for the floating
+//      label) renders as a visible block of text alongside the label, since
+//      DSG sets it to display:block with non-zero font/padding.
+//   2. The <label> itself (MUI's InputLabel) picks up a 1.5em top margin
+//      from DSG, which pushes the floating label out of position inside
+//      the outlined input.
+//
+// Reset those properties back to MUI's defaults on every label/legend that
+// is part of an MUI form control. Scoped to MUI selectors so non-MUI labels
+// (CMS DSG's own choice/radio labels) keep their intended treatment.
+.MuiFormControl-root,
+.MuiTextField-root {
+  > .MuiInputLabel-root,
+  .MuiInputBase-root + .MuiInputLabel-root,
+  .MuiInputLabel-root {
+    margin: 0 !important;
+    display: block;
+  }
+}
+
+.MuiOutlinedInput-notchedOutline legend {
+  display: block;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 0.75em !important;
+  visibility: hidden !important;
+  height: 11px;
+  line-height: 11px;
+}
+
+// Same fix for FormControlLabel labels (used with Switch / Checkbox /
+// Radio in plain MUI form rows like the "Parent (department) row" toggle
+// in Create OpDiv). DSG would otherwise push the label text down 1.5em
+// below the switch.
+.MuiFormControlLabel-root .MuiFormControlLabel-label {
+  margin: 0 !important;
+}

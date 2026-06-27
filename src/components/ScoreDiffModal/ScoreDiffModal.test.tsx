@@ -165,9 +165,12 @@ describe('ScoreDiffModal', () => {
         systemAcronym="MS"
       />
     )
+    // Modal header now uses an eyebrow ("MS - Compare") above the title
+    // ("Compare datacalls - My System") via the shared ds/Modal shell.
     expect(
-      screen.getByText(/My System \(MS\) — Compare Datacalls/)
+      screen.getByText(/Compare datacalls - My System/)
     ).toBeInTheDocument()
+    expect(screen.getByText(/MS - Compare/)).toBeInTheDocument()
   })
 
   it('shows a spinner while datacalls are loading', () => {
@@ -259,11 +262,13 @@ describe('ScoreDiffModal', () => {
     setupMocks()
     const onClose = jest.fn()
     render(<ScoreDiffModal {...DEFAULT_PROPS} onClose={onClose} />)
-    fireEvent.click(
-      screen.getByRole('button', { name: 'Close compare datacalls dialog' })
-    )
+    // ds/Modal renders two close affordances both named "Close":
+    // the X icon button in the header and the footer button.
+    const closeButtons = screen.getAllByRole('button', { name: 'Close' })
+    expect(closeButtons).toHaveLength(2)
+    fireEvent.click(closeButtons[0])
     expect(onClose).toHaveBeenCalledTimes(1)
-    fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+    fireEvent.click(closeButtons[1])
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 

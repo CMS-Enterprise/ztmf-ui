@@ -1,5 +1,6 @@
 import * as React from 'react'
 import Modal from '@/components/ds/Modal'
+import Field, { fieldInputSx } from '@/components/ds/Field'
 import { Box, Button, Grid, OutlinedInput, Select } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
@@ -30,82 +31,11 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { colors } from '@/theme/tokens'
 
-// Static labels rendered above the input. MUI's floating-label TextField
-// was colliding with the global CMS Design System resets at the app root,
-// which is what produced the overlapping label/value rendering visible
-// before this change. The mockup uses the same static-label layout, so
-// the visual fix and the design contract converge here.
-const labelSx = {
-  display: 'block',
-  fontSize: 13,
-  fontWeight: 600,
-  color: colors.ink,
-  mb: 0.75,
-}
+// Field shape (label + input + helper/error) lives in the shared
+// ds/Field component so every form modal in the app renders identically.
+// Use {@link fieldInputSx} for the input control to match the 38px height
+// + 14px text + neutral-200 border used across the rest of the app.
 
-const inputSx = {
-  height: 38,
-  fontSize: 14,
-  '& .MuiOutlinedInput-input': { padding: '0 12px' },
-  '& fieldset': { borderColor: colors.neutral200 },
-}
-
-const errorTextSx = {
-  color: colors.danger,
-  mt: 0.5,
-  display: 'block',
-  fontWeight: 500,
-}
-
-const helperTextSx = {
-  color: colors.neutral500,
-  mt: 0.5,
-  display: 'block',
-}
-
-const requiredMark = (
-  <span style={{ color: colors.neutral500, fontWeight: 400 }}>*</span>
-)
-
-/**
- * Local helper: label above input, with optional inline error text. Used
- * for every form row in the FISMA system modal so the floating-label
- * collisions are confined to the legacy ValidatedTextField (not used
- * here) and the rest of the form renders consistently.
- */
-function Field({
-  id,
-  label,
-  required,
-  error,
-  helperText,
-  children,
-}: {
-  id: string
-  label: string
-  required?: boolean
-  error?: string
-  helperText?: string
-  children: React.ReactNode
-}) {
-  return (
-    <Box sx={{ mb: 2 }}>
-      <Typography component="label" htmlFor={id} sx={labelSx}>
-        {label} {required && requiredMark}
-      </Typography>
-      {children}
-      {error ? (
-        <Typography variant="caption" sx={errorTextSx}>
-          {error}
-        </Typography>
-      ) : helperText ? (
-        <Typography variant="caption" sx={helperTextSx}>
-          {helperText}
-        </Typography>
-      ) : null}
-    </Box>
-  )
-}
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -565,7 +495,7 @@ export default function EditSystemModal({
                         'fismaname'
                       )
                     }
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
 
@@ -592,7 +522,7 @@ export default function EditSystemModal({
                             'fismaacronym'
                           )
                         }
-                        sx={inputSx}
+                        sx={fieldInputSx}
                       />
                     </Field>
                   </Grid>
@@ -608,7 +538,7 @@ export default function EditSystemModal({
                             groupacronym: e.target.value,
                           }))
                         }
-                        sx={inputSx}
+                        sx={fieldInputSx}
                       />
                     </Field>
                   </Grid>
@@ -635,7 +565,7 @@ export default function EditSystemModal({
                         'component'
                       )
                     }
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
 
@@ -650,7 +580,7 @@ export default function EditSystemModal({
                         groupname: e.target.value,
                       }))
                     }
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
 
@@ -665,7 +595,7 @@ export default function EditSystemModal({
                         divisionname: e.target.value,
                       }))
                     }
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
 
@@ -680,7 +610,7 @@ export default function EditSystemModal({
                         fismasubsystem: e.target.value,
                       }))
                     }
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
               </Grid>
@@ -719,7 +649,7 @@ export default function EditSystemModal({
                         datacallcontact: result || '',
                       }))
                     }}
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
 
@@ -753,7 +683,7 @@ export default function EditSystemModal({
                         issoemail: result || '',
                       }))
                     }}
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
 
@@ -777,7 +707,7 @@ export default function EditSystemModal({
                         'fismauid'
                       )
                     }
-                    sx={inputSx}
+                    sx={fieldInputSx}
                   />
                 </Field>
 
