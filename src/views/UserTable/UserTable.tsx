@@ -327,6 +327,9 @@ export default function UserTable() {
             (r) => r.status === 'rejected' && isAuthHandled(r.reason)
           )
         ) {
+          apiRef.current.updateRows([
+            { userid: curRowUserId, _action: 'delete' },
+          ])
           return updatedRow
         }
 
