@@ -18,7 +18,7 @@ import {
   Divider,
 } from '@mui/material'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
-import Modal from '@/components/ds/Modal'
+import Modal from '@/components/ui/Modal'
 import axiosInstance from '@/axiosConfig'
 import { isAuthHandled } from '@/utils/notify'
 import { PILLAR_ORDER, PILLAR_FUNCTION_MAP } from '@/constants'

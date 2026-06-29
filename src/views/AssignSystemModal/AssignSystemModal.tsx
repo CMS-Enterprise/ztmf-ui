@@ -7,7 +7,7 @@ import {
   OutlinedInput,
   Typography,
 } from '@mui/material'
-import Modal from '@/components/ds/Modal'
+import Modal from '@/components/ui/Modal'
 import { GridRowId } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
 import CustomSnackbar from '../Snackbar/Snackbar'

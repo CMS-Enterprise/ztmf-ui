@@ -4,7 +4,7 @@ import InputBase from '@mui/material/InputBase'
 import TextField from '@mui/material/TextField'
 import Autocomplete from '@mui/material/Autocomplete'
 import SearchIcon from '@mui/icons-material/Search'
-import CompactSwitchLabel from '@/components/ds/CompactSwitchLabel'
+import CompactSwitchLabel from '@/components/ui/CompactSwitchLabel'
 import { colors, radius } from '@/theme/tokens'
 import type { OpDiv } from '@/types'
 

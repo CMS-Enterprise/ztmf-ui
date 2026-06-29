@@ -10,7 +10,7 @@ import type { FismaSystemType, OpDiv, ScoreAggregate, ScoreTier } from '@/types'
 import { colors, fonts, radius, tierDot } from '@/theme/tokens'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import { PILLAR_ORDER } from '@/constants'
-import { CodeBadge } from '@/components/ds/StatusChip'
+import { CodeBadge } from '@/components/ui/StatusChip'
 import CfactsRecordCard from './CfactsRecordCard'
 import InsightsEmptyState from './InsightsEmptyState'
 
