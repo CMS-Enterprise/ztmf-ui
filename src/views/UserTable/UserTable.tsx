@@ -59,6 +59,7 @@ import UsersToolbar from './components/UsersToolbar'
 import ActionsCell from './components/ActionsCell'
 import { useUserFilters } from './hooks/useUserFilters'
 import { useOpDivCatalog } from './hooks/useOpDivCatalog'
+import { useUsersSnackbar } from './hooks/useUsersSnackbar'
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
@@ -79,13 +80,7 @@ export default function UserTable() {
   const [rows, setRows] = useState<users[]>([])
   const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
-  const [open, setOpen] = useState<boolean>(false)
-  const [snackBarText, setSnackBarText] = useState<string>(
-    STATUS_MESSAGES.saved
-  )
-  const [snackBarSeverity, setSnackBarSeverity] = useState<
-    'success' | 'error' | 'warning' | 'info'
-  >('success')
+  const snackbar = useUsersSnackbar()
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<users | undefined>({
     userid: '',
@@ -171,17 +166,11 @@ export default function UserTable() {
       } else if (validateEmail(curRow?.email) === false) {
         errMessage = 'Please enter a valid email'
       }
-      setSnackBarSeverity('error')
-      setSnackBarText(errMessage)
-      setOpen(true)
+      snackbar.show(errMessage, 'error')
       setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.Edit } })
     } else {
       setRowModesModel({ ...rowModesModel, [id]: { mode: GridRowModes.View } })
     }
-  }
-
-  const handleCloseSnackbar = () => {
-    setOpen(false)
   }
   const handleOpenModal = (id: GridRowId) => {
     setUserId(id)
@@ -299,13 +288,11 @@ export default function UserTable() {
         updatedRow.userid = newRow.userid
         apiRef.current.updateRows([{ userid: curRowUserId, _action: 'delete' }])
         apiRef.current.updateRows([updatedRow])
-        setSnackBarSeverity('success')
-        setSnackBarText(STATUS_MESSAGES.saved)
-        setOpen(true)
+        snackbar.show(STATUS_MESSAGES.saved, 'success')
       } catch (error) {
         if (isAuthHandled(error)) return updatedRow
         console.error('Error updating score:', error)
-        setSaveError(error)
+        snackbar.showSaveError(error)
       }
     } else {
       try {
@@ -318,12 +305,10 @@ export default function UserTable() {
           // as the override hook.
           identity_provider: updatedRow?.identity_provider,
         })
-        setSnackBarSeverity('success')
-        setSnackBarText(STATUS_MESSAGES.saved)
-        setOpen(true)
+        snackbar.show(STATUS_MESSAGES.saved, 'success')
       } catch (error) {
         if (isAuthHandled(error)) return updatedRow
-        setSaveError(error)
+        snackbar.showSaveError(error)
       }
     }
     setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
@@ -333,21 +318,7 @@ export default function UserTable() {
     setRowModesModel(newRowModesModel)
   }
   const handleProcessRowUpdateError = () => {
-    setSnackBarSeverity('error')
-    setSnackBarText('An error occurred while saving the row')
-    setOpen(true)
-  }
-  // Surface the backend's specific reason on a failed save. On a 400 the body
-  // carries a field -> message map (e.g. a duplicate email); join those so the
-  // user sees what to fix rather than a generic retry message.
-  const setSaveError = (error: unknown) => {
-    const parsed = parseApiError(error)
-    const message = parsed.fieldErrors
-      ? Object.values(parsed.fieldErrors).join(' ')
-      : parsed.message
-    setSnackBarSeverity('error')
-    setSnackBarText(message)
-    setOpen(true)
+    snackbar.show('An error occurred while saving the row', 'error')
   }
   const handleDeleteClick = (id: GridRowId) => () => {
     const curRow = apiRef.current.getRow(id) as users | undefined
@@ -1014,11 +985,11 @@ export default function UserTable() {
         </Box>
       </Box>
       <CustomSnackbar
-        open={open}
-        handleClose={handleCloseSnackbar}
+        open={snackbar.open}
+        handleClose={snackbar.close}
         duration={2000}
-        severity={snackBarSeverity}
-        text={snackBarText}
+        severity={snackbar.severity}
+        text={snackbar.text}
       />
       <AssignSystemModal
         fismaSystemMap={fismaSystemsMap}
