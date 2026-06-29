@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react'
 import { useParams } from 'react-router-dom'
 import { Box, Button, CircularProgress } from '@mui/material'
-import PageHeader from '@/components/ds/PageHeader'
+import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'

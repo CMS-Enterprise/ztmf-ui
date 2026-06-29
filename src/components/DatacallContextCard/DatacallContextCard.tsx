@@ -1,5 +1,5 @@
 import { useContextProp } from '@/views/Title/Context'
-import DatacallContextCardView from '@/components/ds/DatacallContextCardView'
+import DatacallContextCardView from '@/components/ui/DatacallContextCardView'
 
 /** Props for {@link DatacallContextCard}. */
 export type DatacallContextCardProps = {

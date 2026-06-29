@@ -2,7 +2,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import EmailIcon from '@mui/icons-material/Email'
-import Modal from '@/components/ds/Modal'
+import Modal from '@/components/ui/Modal'
 import { colors, radius } from '@/theme/tokens'
 import { SentEmailDialogProps } from '@/types'
 

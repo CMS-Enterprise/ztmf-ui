@@ -9,8 +9,8 @@ import {
   Typography,
 } from '@mui/material'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
-import Field, { fieldInputSx } from '@/components/ds/Field'
-import { StatusChip } from '@/components/ds/StatusChip'
+import Field, { fieldInputSx } from '@/components/ui/Field'
+import { StatusChip } from '@/components/ui/StatusChip'
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'

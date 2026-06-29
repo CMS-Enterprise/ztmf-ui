@@ -7,8 +7,8 @@ import {
   Select,
   Typography,
 } from '@mui/material'
-import Modal from '@/components/ds/Modal'
-import Field, { fieldInputSx } from '@/components/ds/Field'
+import Modal from '@/components/ui/Modal'
+import Field, { fieldInputSx } from '@/components/ui/Field'
 import SentEmailsModal from './SentEmailsModal'
 import { EmailModalProps } from '@/types'
 import axiosInstance from '@/axiosConfig'

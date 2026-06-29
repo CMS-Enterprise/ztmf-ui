@@ -7,11 +7,11 @@ import {
   OutlinedInput,
   Typography,
 } from '@mui/material'
-import Modal from '@/components/ds/Modal'
+import Modal from '@/components/ui/Modal'
 import { GridRowId } from '@mui/x-data-grid'
 import SearchIcon from '@mui/icons-material/Search'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
-import { CodeBadge } from '@/components/ds/StatusChip'
+import { CodeBadge } from '@/components/ui/StatusChip'
 import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'

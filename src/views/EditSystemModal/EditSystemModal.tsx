@@ -1,6 +1,6 @@
 import * as React from 'react'
-import Modal from '@/components/ds/Modal'
-import Field, { fieldInputSx } from '@/components/ds/Field'
+import Modal from '@/components/ui/Modal'
+import Field, { fieldInputSx } from '@/components/ui/Field'
 import { Box, Button, Grid, OutlinedInput, Select } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'

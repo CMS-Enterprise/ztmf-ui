@@ -41,9 +41,9 @@ import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
-import PageHeader from '@/components/ds/PageHeader'
-import { CodeBadge, StatusChip } from '@/components/ds/StatusChip'
-import DataGridPaginationFooter from '@/components/ds/DataGridPaginationFooter'
+import PageHeader from '@/components/ui/PageHeader'
+import { CodeBadge, StatusChip } from '@/components/ui/StatusChip'
+import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
 import { colors, radius } from '@/theme/tokens'
 import {
   avatarColor,

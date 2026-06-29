@@ -3,7 +3,7 @@ import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
 import Autocomplete from '@mui/material/Autocomplete'
 import TextField from '@mui/material/TextField'
-import StatusChip from '@/components/ds/StatusChip'
+import StatusChip from '@/components/ui/StatusChip'
 import { colors, radius } from '@/theme/tokens'
 import type { datacall } from '@/types'
 

@@ -1,5 +1,5 @@
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
-import EmptyState from '@/components/ds/EmptyState'
+import EmptyState from '@/components/ui/EmptyState'
 
 /**
  * Empty state used by the ZTMF Insights section on the System detail page,
