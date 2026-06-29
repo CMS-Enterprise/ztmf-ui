@@ -679,7 +679,12 @@ export default function SystemDetailPage() {
         actions={headerActions}
       />
 
-      <DatacallContextCard />
+      {/* Edit mode locks the datacall picker: system metadata (acronym,
+          datacenter env, etc.) is not datacall-scoped, so switching the
+          datacall mid-edit would do nothing and confuse the user. The card
+          still renders so the user knows which datacall context they're in,
+          just static. */}
+      <DatacallContextCard readOnly={isEditing} />
 
       {isEditing && editedSystem ? (
         <SystemDetailEditView
