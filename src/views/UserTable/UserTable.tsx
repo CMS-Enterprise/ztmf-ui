@@ -61,6 +61,7 @@ import { useUserFilters } from './hooks/useUserFilters'
 import { useOpDivCatalog } from './hooks/useOpDivCatalog'
 import { useUsersSnackbar } from './hooks/useUsersSnackbar'
 import { useUsersModals } from './hooks/useUsersModals'
+import { useLoadUsers } from './hooks/useLoadUsers'
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
@@ -78,7 +79,6 @@ export default function UserTable() {
       navigate(Routes.ROOT, { replace: true })
     }
   }, [userInfo.role, canRead, navigate])
-  const [rows, setRows] = useState<users[]>([])
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const snackbar = useUsersSnackbar()
   const modals = useUsersModals()
@@ -89,9 +89,6 @@ export default function UserTable() {
     role: '' as users['role'],
     assignedfismasystems: [],
   })
-  const [fismaSystemsMap, setFismaSystemsMap] = useState<
-    Record<number, { name: string; acronym: string }>
-  >({})
   const {
     search,
     setSearch,
@@ -104,11 +101,8 @@ export default function UserTable() {
     quickFilterValues,
   } = useUserFilters()
   const { opdivOptions, opdivCodeMap } = useOpDivCatalog(isAdmin, userInfo)
-  // userid -> granted opdiv ids, used as a refresh override after the grant modal
-  // closes. The list now returns grants inline (assignedopdivids); this map only
-  // holds rows refreshed since load, plus a one-time backfill against older
-  // backends that omit the inline grants (see the load effect).
-  const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
+  const { rows, setRows, fismaSystemsMap, userOpDivMap, setUserOpDivMap } =
+    useLoadUsers({ canRead, fismaSystems, showDeleted })
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -348,84 +342,6 @@ export default function UserTable() {
       notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2000 })
     }
   }
-  // TODO: Custom hook for fetching data
-  useEffect(() => {
-    if (!canRead) return
-    const controller = new AbortController()
-    // backfillAborted guards the Promise.all per-user calls, which can't receive
-    // a signal since fetchUserOpDivs doesn't accept one.
-    let backfillAborted = false
-    async function load() {
-      try {
-        const res = await axiosInstance.get('/users', {
-          params: { deleted: showDeleted },
-          signal: controller.signal,
-        })
-        if (res.status !== 200) return
-        const data = res.data.data.map((row: users) => ({
-          ...row,
-          role: row.role.trim(),
-        }))
-        setRows(data)
-        const map: Record<number, { name: string; acronym: string }> = {}
-        for (const obj of fismaSystems) {
-          map[obj.fismasystemid] = {
-            name: obj.fismasubsystem
-              ? obj.fismaname + ' - ' + obj.fismasubsystem
-              : obj.fismaname,
-            acronym: obj.fismaacronym,
-          }
-        }
-        setFismaSystemsMap(map)
-        // Grants now arrive inline on each list row (assignedopdivids), so the
-        // OpDivs column reads them directly with no per-user calls. Fall back to
-        // the per-user detail endpoint only against an older backend that omits
-        // them, keeping this safe to ship before or after the backend deploys.
-        // Distinguish "old backend omitted the field" (key absent -> backfill)
-        // from "new backend, user simply has zero grants" (key present, value
-        // null/[] -> no backfill). A value check would misfire on every
-        // zero-grant user and re-introduce the N+1.
-        const missingInlineGrants = data.some(
-          (u: users) => !('assignedopdivids' in u)
-        )
-        if (missingInlineGrants) {
-          try {
-            const entries = await Promise.all(
-              data.map((u: users) =>
-                fetchUserOpDivs(u.userid)
-                  .then((ids) => [u.userid, ids] as [string, number[]])
-                  .catch(() => [u.userid, []] as [string, number[]])
-              )
-            )
-            if (backfillAborted) return
-            // Merge rather than replace so an in-flight per-user refresh
-            // (e.g. from closing the grant modal) is not clobbered.
-            setUserOpDivMap((prev) => ({
-              ...prev,
-              ...Object.fromEntries(entries),
-            }))
-          } catch (error) {
-            if (backfillAborted) return
-            // The per-user catches above already default to [], so this only
-            // trips on an unexpected failure. Surface it rather than leaving
-            // the OpDivs column silently blank.
-            console.error('Failed to backfill OpDiv grants', error)
-            notify(ERROR_MESSAGES.tryAgain, 'warning')
-          }
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Fetch users error:', error)
-        notify(ERROR_MESSAGES.tryAgain, 'error')
-      }
-    }
-    load()
-    return () => {
-      controller.abort()
-      backfillAborted = true
-    }
-  }, [canRead, fismaSystems, navigate, showDeleted])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
