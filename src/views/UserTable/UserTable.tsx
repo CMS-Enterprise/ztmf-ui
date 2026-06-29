@@ -414,14 +414,6 @@ export default function UserTable() {
     const target = pendingDeleteRow
     setPendingDeleteRow(null)
     if (!confirm || !target) return
-    // Backstop: the row-action icon for the current user is already
-    // disabled, but guard the handler in case it's invoked some other
-    // way (programmatic call, future refactor wiring a new entry point).
-    // Self-delete locks the user out of the app with no recovery path.
-    if (target.userid === userInfo.userid) {
-      notify("You can't delete your own account.", 'error')
-      return
-    }
     try {
       await axiosInstance.delete(`/users/${target.userid}`)
       setRows((prev) => prev.filter((row) => row.userid !== target.userid))
@@ -716,8 +708,6 @@ export default function UserTable() {
           ]
         }
 
-        const isSelf = params.row.userid === userInfo.userid
-
         return [
           <GridActionsCellItem
             icon={<EditIcon />}
@@ -753,24 +743,13 @@ export default function UserTable() {
               color="inherit"
             />
           </Tooltip>,
-          <Tooltip
-            title={isSelf ? "You can't delete your own account" : 'Delete User'}
-            key={`tooltip-delete-${params.id}`}
-            placement="right-start"
-          >
-            {/* span wrapper lets Tooltip listen to events even when the
-                child is disabled (MUI requirement). */}
-            <span>
-              <GridActionsCellItem
-                key={`delete-${params.id}`}
-                icon={<DeleteIcon sx={{ color: isSelf ? 'gray' : 'black' }} />}
-                label="Delete"
-                onClick={handleDeleteClick(params.id)}
-                color="inherit"
-                disabled={isSelf}
-              />
-            </span>
-          </Tooltip>,
+          <GridActionsCellItem
+            key={`delete-${params.id}`}
+            icon={<DeleteIcon sx={{ color: 'black' }} />}
+            label="Delete"
+            onClick={handleDeleteClick(params.id)}
+            color="inherit"
+          />,
         ]
       },
     },
