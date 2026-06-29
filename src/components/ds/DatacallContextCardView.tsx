@@ -3,9 +3,9 @@ import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
 import Autocomplete from '@mui/material/Autocomplete'
 import TextField from '@mui/material/TextField'
-import { useContextProp } from '@/views/Title/Context'
 import StatusChip from '@/components/ds/StatusChip'
 import { colors, radius } from '@/theme/tokens'
+import type { datacall } from '@/types'
 
 /** Formats an ISO date string as e.g. "May 1, 2026". */
 function formatDate(value: string | undefined): string {
@@ -19,40 +19,49 @@ function formatDate(value: string | undefined): string {
   })
 }
 
-/** Props for {@link DatacallContextCard}. */
-export type DatacallContextCardProps = {
+/** Props for {@link DatacallContextCardView}. */
+export type DatacallContextCardViewProps = {
+  /** Every datacall the user can choose from. */
+  datacalls: datacall[]
+  /** Currently-selected datacall. */
+  selectedDatacall: datacall | null
+  /** Fired when the user picks a different datacall. */
+  onSelect: (dc: datacall) => void
   /**
-   * When true, the datacall picker becomes a non-interactive pill that
-   * statically displays the current datacall name. Use on routes where
-   * switching the datacall would have no effect (e.g. the System Detail
-   * edit-mode view, where system metadata is not datacall-scoped). Defaults
-   * to false, which gives users the full searchable picker.
+   * Datacall id considered "latest" by the system; rendered with a "Current"
+   * outlined chip inside the picker dropdown so users can spot the active
+   * cycle without re-deriving it.
+   */
+  latestDataCallId: number
+  /**
+   * When true the picker becomes a non-interactive pill. Used on routes
+   * where switching the datacall would have no effect (e.g. the System
+   * Detail edit-mode view, where system metadata is not datacall-scoped).
    */
   readOnly?: boolean
 }
 
 /**
- * Shared "DATACALL · [picker] · Active/Closed · Opens/Closes" card that any
- * datacall-scoped page can drop at the top of its body to declare which
- * datacall the content below corresponds to.
+ * Pure presentational shell for the datacall context card. Owns no state and
+ * no context: the parent supplies the datacall list, current selection, and
+ * the change handler. Keeping this layer pure means it can be rendered from
+ * Storybook, dropped into snapshot tests, or composed under a different
+ * data source without dragging Title-context coupling along with it.
  *
- * Picker, status chip and Opens/Closes dates are all read from the Title
- * context, so the same instance is used on Dashboard, System Detail, Pillar
- * Scores, and Questionnaire without needing props. Selecting a different
- * datacall flows back into the same context and every downstream page reacts
- * to it.
- *
- * Renders nothing when no datacalls have loaded yet (the page should still
- * render its other content; the card just stays out of the way).
- * @param {DatacallContextCardProps} props - Component props.
- * @returns {JSX.Element | null} The persistent datacall context card.
+ * The interactive picker is a searchable Autocomplete styled to read like a
+ * pill (primary50 fill, primary text, 30px height). When {@link readOnly} is
+ * true the picker collapses to a non-interactive pill of the same shape.
+ * @param {DatacallContextCardViewProps} props - Component props.
+ * @returns {JSX.Element | null} The card markup, or null when the datacall
+ *   list is empty (so callers can mount the card unconditionally).
  */
-export default function DatacallContextCard({
+export default function DatacallContextCardView({
+  datacalls,
+  selectedDatacall,
+  onSelect,
+  latestDataCallId,
   readOnly = false,
-}: DatacallContextCardProps = {}) {
-  const { datacalls, selectedDatacall, setSelectedDatacall, latestDataCallId } =
-    useContextProp()
-
+}: DatacallContextCardViewProps) {
   if (datacalls.length === 0) return null
 
   const isClosed = selectedDatacall
@@ -89,9 +98,7 @@ export default function DatacallContextCard({
       </Typography>
 
       {/* Read-only routes render the datacall as a static pill so the
-          control does not falsely suggest the user can change scope. Visual
-          treatment matches the interactive picker (same primary50 fill,
-          primary text, 30px) minus the caret and the click target. */}
+          control does not falsely suggest the user can change scope. */}
       {readOnly ? (
         <Box
           aria-label={`Datacall: ${selectedDatacall?.datacall ?? ''}`}
@@ -119,7 +126,7 @@ export default function DatacallContextCard({
           getOptionLabel={(dc) => dc.datacall}
           isOptionEqualToValue={(a, b) => a.datacallid === b.datacallid}
           onChange={(_event, dc) => {
-            if (dc) setSelectedDatacall(dc)
+            if (dc) onSelect(dc)
           }}
           disableClearable
           renderOption={(props, option) => {
