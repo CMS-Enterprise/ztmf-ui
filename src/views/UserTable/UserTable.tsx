@@ -19,15 +19,13 @@ import { Typography, IconButton, Tooltip } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
-import { users, OpDiv } from '@/types'
+import { users } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
-  isOpDivTier,
   selectableRoles,
   roleLabel,
 } from '@/utils/userRoles'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -60,6 +58,7 @@ import RoleEditCell from './cells/RoleEditCell'
 import UsersToolbar from './components/UsersToolbar'
 import ActionsCell from './components/ActionsCell'
 import { useUserFilters } from './hooks/useUserFilters'
+import { useOpDivCatalog } from './hooks/useOpDivCatalog'
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
@@ -115,9 +114,7 @@ export default function UserTable() {
   const [openOpDivModal, setOpenOpDivModal] = useState<boolean>(false)
   const [opdivModalUserId, setOpDivModalUserId] = useState<GridRowId>('')
   const [opdivModalUserName, setOpDivModalUserName] = useState<string>('')
-  const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
-  // opdiv_id -> code, for rendering the OpDivs membership column.
-  const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
+  const { opdivOptions, opdivCodeMap } = useOpDivCatalog(isAdmin, userInfo)
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
   // holds rows refreshed since load, plus a one-time backfill against older
@@ -470,38 +467,6 @@ export default function UserTable() {
       backfillAborted = true
     }
   }, [canRead, fismaSystems, navigate, showDeleted])
-  // OpDiv options for the grant modal: assignable children only (the HHS
-  // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
-  // own OpDivs, so narrow the option set to their own grants; the server
-  // enforces the same rule.
-  useEffect(() => {
-    if (!isAdmin) return
-    // Pull the full list (incl. inactive/parent) so any granted id resolves to
-    // a code in the OpDivs column; derive the assignable subset from the same
-    // response for the grant modal.
-    async function loadOpDivs() {
-      try {
-        const all = await fetchOpDivs(true)
-        const codeMap: Record<number, string> = {}
-        all.forEach((od) => {
-          codeMap[od.opdiv_id] = od.code
-        })
-        setOpDivCodeMap(codeMap)
-
-        let assignable = all.filter((od) => !od.is_parent && od.active)
-        if (isOpDivTier(userInfo)) {
-          const own = new Set(userInfo.assignedopdivids ?? [])
-          assignable = assignable.filter((od) => own.has(od.opdiv_id))
-        }
-        setOpDivOptions(assignable)
-      } catch {
-        // Non-fatal: the grant modal simply shows no options if this fails.
-        setOpDivOptions([])
-        setOpDivCodeMap({})
-      }
-    }
-    loadOpDivs()
-  }, [isAdmin, userInfo])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
