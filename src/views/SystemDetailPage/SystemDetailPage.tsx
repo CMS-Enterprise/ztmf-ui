@@ -625,31 +625,56 @@ export default function SystemDetailPage() {
         breadcrumbs={
           <BreadCrumbs segmentLabels={{ [fismasystemid!]: system.fismaname }} />
         }
+        // Edit mode reframes the page identity: H1 reads "Edit system" with
+        // a plain "<name> · <acronym>" subtitle so the user knows which
+        // system they are editing. Read mode keeps the system name as the
+        // h1 with the inline Active/Decommissioned chip.
         title={
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.25 }}
-          >
-            {system.fismaname}
-            <StatusChip
-              label={system.decommissioned ? 'Decommissioned' : 'Active'}
-              kind={system.decommissioned ? 'neutral' : 'active'}
-            />
-          </Box>
+          isEditing ? (
+            'Edit system'
+          ) : (
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.25 }}
+            >
+              {system.fismaname}
+              <StatusChip
+                label={system.decommissioned ? 'Decommissioned' : 'Active'}
+                kind={system.decommissioned ? 'neutral' : 'active'}
+              />
+            </Box>
+          )
         }
         subtitle={
-          <Box
-            component="span"
-            sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
-          >
-            {system.fismauid && <CodeBadge code={system.fismauid} />}
-            {opdivCode && (
-              <>
-                <span aria-hidden>·</span>
-                <CodeBadge code={opdivCode} />
-              </>
-            )}
-          </Box>
+          isEditing ? (
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+            >
+              {system.fismaname}
+              {system.fismaacronym && (
+                <>
+                  <span aria-hidden>·</span>
+                  <Box component="span" sx={{ fontWeight: 600 }}>
+                    {system.fismaacronym}
+                  </Box>
+                </>
+              )}
+            </Box>
+          ) : (
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+            >
+              {system.fismauid && <CodeBadge code={system.fismauid} />}
+              {opdivCode && (
+                <>
+                  <span aria-hidden>·</span>
+                  <CodeBadge code={opdivCode} />
+                </>
+              )}
+            </Box>
+          )
         }
         actions={headerActions}
       />
