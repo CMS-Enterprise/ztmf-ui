@@ -1,15 +1,17 @@
 import { ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { colors } from '@/theme/tokens'
+import { colors, status } from '@/theme/tokens'
 
 /** Color intent for the {@link EmptyState} icon circle. */
 export type EmptyStateTone = 'info' | 'warning' | 'neutral'
 
 const TONE: Record<EmptyStateTone, { circle: string; icon: string }> = {
   info: { circle: colors.primary50, icon: colors.primary },
-  warning: { circle: '#FFF4E6', icon: '#A34200' },
-  neutral: { circle: '#F1F3F7', icon: colors.neutral500 },
+  // Warning + neutral pull from the shared status palette so this surface
+  // never drifts from StatusChip and other warning-toned components.
+  warning: { circle: status.warning.bg, icon: status.warning.color },
+  neutral: { circle: status.neutral.bg, icon: colors.neutral500 },
 }
 
 /** Props for {@link EmptyState}. */
