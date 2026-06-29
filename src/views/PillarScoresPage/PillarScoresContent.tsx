@@ -1,15 +1,5 @@
-import { useState, useEffect, useMemo } from 'react'
-import {
-  Autocomplete,
-  Box,
-  Table,
-  TableBody,
-  TableCell,
-  TableHead,
-  TableRow,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { useMemo } from 'react'
+import { Box, Typography } from '@mui/material'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import TrendingFlatIcon from '@mui/icons-material/TrendingFlat'
@@ -23,12 +13,12 @@ import {
   Legend,
   Tooltip,
 } from 'recharts'
-import axiosInstance from '@/axiosConfig'
-import type { FismaQuestion, ScoreAggregate, ScoreTier } from '@/types'
-import { TIER_CHIP_STYLES, tierForScore } from '@/utils/tierStyles'
-import { isAuthHandled } from '@/utils/notify'
+import type { ScoreAggregate, ScoreTier } from '@/types'
+import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import { colors, fonts, radius, tierDot } from '@/theme/tokens'
 import { PILLAR_ORDER } from '@/constants'
+import QuestionBreakdown from './QuestionBreakdown'
+import Card from './components/Card'
 
 /**
  * Highest possible zero trust score on the user-facing scale, used to
@@ -37,56 +27,6 @@ import { PILLAR_ORDER } from '@/constants'
  * (backend/internal/model/scores.go).
  */
 const MAX_SCORE = 5
-
-/** All tier strings in display order, for the breakdown filter dropdown. */
-const TIER_OPTIONS: ScoreTier[] = [
-  'Optimal',
-  'Advanced',
-  'Initial',
-  'Traditional',
-  'Not Assessed',
-]
-
-/**
- * Shape of a /scores row when fetched with ?include=functionoption.
- *
- * The Score row itself only carries `functionoptionid`. The joined
- * `functionoption` brings back the picked option's numeric score (1-4) and
- * its parent `functionid`, which is what we need to join back to a question
- * (each question has one function via /fismasystems/{id}/questions).
- */
-interface QuestionScoreRow {
-  scoreid: number
-  functionoptionid: number
-  functionoption?: {
-    functionoptionid: number
-    functionid: number
-    score: number
-    optionname: string
-    description: string
-  }
-}
-
-/**
- * Joined view-model for a single row of the question-level breakdown,
- * computed by stitching /fismasystems/{id}/questions against
- * /scores?...&include=functionoption.
- *
- * `displayScore` is on the user-facing 1-5 scale: per-option raw scores from
- * the backend live on a 0-4 scale, and the aggregation applies a +1 shift to
- * land on 1-5. The breakdown table displays a per-question (per-option)
- * score, so we apply the same shift here so the row tiers visually agree
- * with the pillar grid above (also on 1-5 from the aggregate endpoint).
- */
-interface QuestionBreakdownRow {
-  scoreid: number
-  questionid: number
-  question: string
-  pillar: string
-  functionName: string
-  displayScore: number
-  tier: ScoreTier
-}
 
 /** Props for {@link PillarScoresContent}. */
 export interface PillarScoresContentProps {
@@ -394,224 +334,6 @@ function PillarGrid({
 }
 
 /**
- * Per-question table with pillar + tier filters. Builds rows by joining two
- * endpoints (since /scores alone has no question text, pillar or function):
- *  - /fismasystems/{id}/questions -> question text + pillar + function name,
- *    keyed by functionid (each question has exactly one function);
- *  - /scores?datacallid=...&fismasystemid=...&include=functionoption -> the
- *    picked option per question, carrying functionid + numeric score.
- * The tier is derived from the option's integer score using the same
- * thresholds the aggregate endpoint uses, so the colored chip matches the
- * pillar grid above.
- */
-function QuestionBreakdown({
-  fismasystemid,
-  datacallid,
-}: {
-  fismasystemid: number
-  datacallid: number
-}) {
-  const [questions, setQuestions] = useState<FismaQuestion[]>([])
-  const [scores, setScores] = useState<QuestionScoreRow[]>([])
-  const [loading, setLoading] = useState(true)
-  const [pillarFilter, setPillarFilter] = useState<string | null>(null)
-  const [tierFilter, setTierFilter] = useState<ScoreTier | null>(null)
-
-  useEffect(() => {
-    if (!fismasystemid || !datacallid) return
-    const controller = new AbortController()
-    setLoading(true)
-    async function load() {
-      try {
-        const [questionsRes, scoresRes] = await Promise.all([
-          axiosInstance.get(`/fismasystems/${fismasystemid}/questions`, {
-            signal: controller.signal,
-          }),
-          axiosInstance.get(
-            `scores?datacallid=${datacallid}&fismasystemid=${fismasystemid}&include=functionoption`,
-            { signal: controller.signal }
-          ),
-        ])
-        setQuestions(questionsRes.data?.data ?? [])
-        setScores(scoresRes.data?.data ?? [])
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Failed to load question breakdown', error)
-      } finally {
-        if (!controller.signal.aborted) setLoading(false)
-      }
-    }
-    load()
-    return () => {
-      controller.abort()
-    }
-  }, [fismasystemid, datacallid])
-
-  // Index questions by functionid so the score join is O(1) per row. Each
-  // question is associated with exactly one function on the backend.
-  const questionByFunctionId = useMemo(() => {
-    const map = new Map<
-      number,
-      {
-        questionid: number
-        question: string
-        pillar: string
-        functionName: string
-      }
-    >()
-    for (const q of questions) {
-      if (q.function?.functionid != null) {
-        map.set(q.function.functionid, {
-          questionid: q.questionid,
-          question: q.question,
-          pillar: q.pillar?.pillar ?? '-',
-          functionName: q.function.function,
-        })
-      }
-    }
-    return map
-  }, [questions])
-
-  // Join scores against the question map, dropping any score whose function
-  // we can't resolve (defensive: a stale score row for a removed function).
-  // Apply the same +1 shift the backend uses at aggregation so the per-row
-  // tier lookup uses the authoritative thresholds and the displayed value
-  // matches the 1-5 scale shown elsewhere on the page.
-  const rows: QuestionBreakdownRow[] = useMemo(() => {
-    const out: QuestionBreakdownRow[] = []
-    for (const s of scores) {
-      const fid = s.functionoption?.functionid
-      if (fid == null) continue
-      const q = questionByFunctionId.get(fid)
-      if (!q) continue
-      const rawScore = s.functionoption?.score ?? 0
-      const displayScore = rawScore + 1
-      out.push({
-        scoreid: s.scoreid,
-        questionid: q.questionid,
-        question: q.question,
-        pillar: q.pillar,
-        functionName: q.functionName,
-        displayScore,
-        tier: tierForScore(displayScore),
-      })
-    }
-    // Stable sort by pillar order then function name so consecutive rows in
-    // the same pillar group together visually.
-    return out.sort((a, b) => {
-      const pr = pillarRank(a.pillar) - pillarRank(b.pillar)
-      if (pr !== 0) return pr
-      return a.functionName.localeCompare(b.functionName)
-    })
-  }, [scores, questionByFunctionId])
-
-  const pillarOptions = useMemo(() => {
-    const set = new Set<string>()
-    for (const r of rows) set.add(r.pillar)
-    return Array.from(set).sort((a, b) => pillarRank(a) - pillarRank(b))
-  }, [rows])
-
-  const filtered = useMemo(() => {
-    return rows.filter((r) => {
-      if (pillarFilter && r.pillar !== pillarFilter) return false
-      if (tierFilter && r.tier !== tierFilter) return false
-      return true
-    })
-  }, [rows, pillarFilter, tierFilter])
-
-  return (
-    <Card sx={{ p: 0, overflow: 'hidden' }}>
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-          gap: 2,
-          px: 2.25,
-          py: 1.75,
-          borderBottom: `1px solid ${colors.neutral200}`,
-        }}
-      >
-        <Box>
-          <Typography sx={{ fontSize: 15, fontWeight: 700, color: colors.ink }}>
-            Question-level breakdown
-          </Typography>
-          <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-            {loading
-              ? 'Loading...'
-              : `${rows.length} ${rows.length === 1 ? 'question' : 'questions'}`}
-          </Typography>
-        </Box>
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          <FilterAutocomplete
-            options={pillarOptions}
-            value={pillarFilter}
-            onChange={setPillarFilter}
-            placeholder="All pillars"
-            ariaLabel="Filter by pillar"
-          />
-          <FilterAutocomplete
-            options={TIER_OPTIONS}
-            value={tierFilter}
-            onChange={(v) => setTierFilter(v as ScoreTier | null)}
-            placeholder="All tiers"
-            ariaLabel="Filter by tier"
-          />
-        </Box>
-      </Box>
-      {filtered.length === 0 && !loading ? (
-        <Box sx={{ p: 4, textAlign: 'center' }}>
-          <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
-            No questions match the current filters.
-          </Typography>
-        </Box>
-      ) : (
-        <Table size="small">
-          <TableHead>
-            <TableRow>
-              <BreakdownHeadCell sx={{ width: 220 }}>
-                Pillar · Function
-              </BreakdownHeadCell>
-              <BreakdownHeadCell>Question</BreakdownHeadCell>
-              <BreakdownHeadCell align="right" sx={{ width: 200 }}>
-                Score
-              </BreakdownHeadCell>
-            </TableRow>
-          </TableHead>
-          <TableBody>
-            {filtered.map((r) => (
-              <TableRow key={r.scoreid}>
-                <TableCell sx={breakdownCellSx}>
-                  <Typography
-                    sx={{ fontSize: 13, fontWeight: 600, color: colors.ink }}
-                  >
-                    {r.pillar}
-                  </Typography>
-                  {r.functionName && (
-                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                      {r.functionName}
-                    </Typography>
-                  )}
-                </TableCell>
-                <TableCell sx={breakdownCellSx}>
-                  <Typography sx={{ fontSize: 13, color: colors.ink }}>
-                    {r.question}
-                  </Typography>
-                </TableCell>
-                <TableCell align="right" sx={breakdownCellSx}>
-                  <ScoreCell score={r.displayScore} tier={r.tier} />
-                </TableCell>
-              </TableRow>
-            ))}
-          </TableBody>
-        </Table>
-      )}
-    </Card>
-  )
-}
-
-/**
  * Trend radar (Current solid, Previous dashed) drawn into the right hero card.
  */
 function TrendRadar({
@@ -683,24 +405,10 @@ function TrendRadar({
 }
 
 /* ------------------------------------------------------------------ */
-/* Small presentational helpers                                       */
+/* Small presentational helpers (Card / ScoreCell / FilterAutocomplete  */
+/* / BreakdownHeadCell now live under ./components/ alongside           */
+/* QuestionBreakdown). Anything left here is queued for phase F.       */
 /* ------------------------------------------------------------------ */
-
-function Card({ children, sx }: { children: React.ReactNode; sx?: object }) {
-  return (
-    <Box
-      sx={{
-        backgroundColor: colors.white,
-        border: `1px solid ${colors.neutral200}`,
-        borderRadius: `${radius.card}px`,
-        p: 2.25,
-        ...sx,
-      }}
-    >
-      {children}
-    </Box>
-  )
-}
 
 function Eyebrow({ children }: { children: React.ReactNode }) {
   return (
@@ -912,131 +620,8 @@ function TrendingPill({ direction }: { direction: 'up' | 'down' | 'flat' }) {
   )
 }
 
-function ScoreCell({
-  score,
-  tier,
-}: {
-  score: number | undefined
-  tier: ScoreTier
-}) {
-  const notAssessed = tier === 'Not Assessed' || typeof score !== 'number'
-  const dotColor = tierDot[tier]
-  const tierColor = TIER_CHIP_STYLES[tier].color
-  return (
-    <Box
-      sx={{
-        display: 'inline-flex',
-        alignItems: 'center',
-        gap: 0.75,
-      }}
-    >
-      <Box
-        component="span"
-        sx={{
-          width: 8,
-          height: 8,
-          borderRadius: '50%',
-          backgroundColor: dotColor,
-          flexShrink: 0,
-        }}
-      />
-      <Box
-        component="span"
-        sx={{
-          fontFamily: fonts.mono,
-          fontSize: 13,
-          fontWeight: 600,
-          color: colors.ink,
-          minWidth: 36,
-          textAlign: 'right',
-        }}
-      >
-        {notAssessed ? '-' : score.toFixed(2)}
-      </Box>
-      <Box
-        component="span"
-        sx={{ fontSize: 12, fontWeight: 500, color: tierColor }}
-      >
-        {tier}
-      </Box>
-    </Box>
-  )
-}
-
-function FilterAutocomplete({
-  options,
-  value,
-  onChange,
-  placeholder,
-  ariaLabel,
-}: {
-  options: string[]
-  value: string | null
-  onChange: (next: string | null) => void
-  placeholder: string
-  ariaLabel: string
-}) {
-  return (
-    <Autocomplete
-      size="small"
-      options={options}
-      value={value}
-      onChange={(_event, next) => onChange(next)}
-      sx={{
-        width: 170,
-        '& .MuiInputBase-root': {
-          height: 30,
-          fontSize: 13,
-          py: '0 !important',
-        },
-        '& .MuiAutocomplete-input': { py: '0 !important' },
-      }}
-      renderInput={(params) => (
-        <TextField
-          {...params}
-          placeholder={placeholder}
-          inputProps={{
-            ...params.inputProps,
-            'aria-label': ariaLabel,
-          }}
-        />
-      )}
-    />
-  )
-}
-
-const breakdownCellSx = {
-  borderBottom: `1px solid ${colors.neutral200}`,
-  py: 1.25,
-}
-
-function BreakdownHeadCell({
-  children,
-  align,
-  sx,
-}: {
-  children: React.ReactNode
-  align?: 'left' | 'right'
-  sx?: object
-}) {
-  return (
-    <TableCell
-      align={align}
-      sx={{
-        fontSize: 11,
-        fontWeight: 600,
-        textTransform: 'uppercase',
-        letterSpacing: '0.06em',
-        color: colors.neutral500,
-        backgroundColor: colors.neutral50,
-        borderBottom: `1px solid ${colors.neutral200}`,
-        ...sx,
-      }}
-    >
-      {children}
-    </TableCell>
-  )
-}
+/* ScoreCell, FilterAutocomplete, BreakdownHeadCell + breakdownCellSx
+   moved into ./components/ as part of phase A. The Card helper too. */
 
 /* ------------------------------------------------------------------ */
 /* Pure helpers                                                       */
