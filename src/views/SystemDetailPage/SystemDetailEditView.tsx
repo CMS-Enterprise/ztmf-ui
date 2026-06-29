@@ -1,25 +1,37 @@
 import {
-  Card,
-  CardContent,
-  CardHeader,
-  Grid,
   Box,
-  TextField,
-  MenuItem,
-  FormControlLabel,
-  Checkbox,
-  Typography,
-  Chip,
   Button,
+  Checkbox,
+  FormControlLabel,
+  MenuItem,
+  OutlinedInput,
+  Select,
+  Typography,
 } from '@mui/material'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
-import { getFieldsBySection, FieldConfig } from './fieldConfig'
-import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
-import { emailValidator } from '@/views/EditSystemModal/validators'
+import Field, { fieldInputSx } from '@/components/ds/Field'
+import { StatusChip } from '@/components/ds/StatusChip'
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
+import { colors, radius } from '@/theme/tokens'
 
+/**
+ * In-page edit view for the System Detail page. Renders the card-grouped
+ * layout the redesign mock specifies:
+ *
+ *   left column  -> System Identity (with status chip on the right)
+ *   right column -> System Status, Data Lake Export, Organization (which
+ *                   absorbs ISSO Email + Data Call Contact - the separate
+ *                   Contacts card from the mock was a redundancy)
+ *
+ * Every input renders through the shared {@link Field} + {@link fieldInputSx}
+ * shape so the visual treatment matches every other form in the app. Save /
+ * Cancel actions live in the page header (the parent SystemDetailPage
+ * swaps headerActions based on isEditing), so this component only owns the
+ * body content. Columns end at their own natural heights (no flex
+ * equalizer); the grid uses alignItems: flex-start.
+ */
 interface SystemDetailEditViewProps {
   system: FismaSystemType
   editedSystem: FismaSystemType
@@ -50,191 +62,79 @@ interface SystemDetailEditViewProps {
   onSdlSyncToggle: (checked: boolean) => void
 }
 
-function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
-  const {
-    editedSystem,
-    formValid,
-    formValidErrorText,
-    onInputChange,
-    onValidatedFieldChange,
-  } = props
-
-  if (field.type === 'email') {
-    return (
-      <ValidatedTextField
-        key={field.key}
-        label={field.label}
-        validator={emailValidator}
-        dfValue={String(editedSystem[field.key] ?? '')}
-        isFullWidth={true}
-        onChange={(isValid, newValue) => {
-          onValidatedFieldChange(field.key, isValid, newValue)
-        }}
-      />
-    )
-  }
-
-  if (field.type === 'select') {
-    return (
-      <TextField
-        key={field.key}
-        id={`edit-${field.key}`}
-        select
-        required={field.required}
-        label={field.label}
-        variant="outlined"
-        value={editedSystem[field.key] || ''}
-        fullWidth
-        error={!formValid[field.key]}
-        helperText={!formValid[field.key] ? formValidErrorText[field.key] : ''}
-        InputLabelProps={{ sx: { marginTop: 0 } }}
-        sx={{ mt: 2 }}
-        onChange={(e) => onInputChange(e, field.key)}
-      >
-        {datacenterenvironment.map((option) => (
-          <MenuItem key={option.value} value={option.value}>
-            {option.label}
-          </MenuItem>
-        ))}
-      </TextField>
-    )
-  }
-
-  // Default: text field
+/** Visual wrapper used by every card in the edit layout. */
+function Card({
+  title,
+  action,
+  children,
+}: {
+  title: string
+  action?: React.ReactNode
+  children: React.ReactNode
+}) {
   return (
-    <TextField
-      key={field.key}
-      id={`edit-${field.key}`}
-      label={field.label}
-      required={field.required}
-      fullWidth
-      margin="normal"
-      variant="outlined"
-      value={editedSystem[field.key] ?? ''}
-      error={field.required && !formValid[field.key]}
-      helperText={
-        field.required && !formValid[field.key]
-          ? formValidErrorText[field.key]
-          : ''
-      }
-      InputLabelProps={{ sx: { marginTop: 0 } }}
-      onChange={(e) => {
-        if (field.required) {
-          onInputChange(e, field.key)
-        } else {
-          props.onFieldChange(field.key, e.target.value)
-        }
+    <Box
+      sx={{
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: `${radius.card}px`,
+        p: 2.25,
       }}
-    />
-  )
-}
-
-function DecommissionDateNotesForm(props: SystemDetailEditViewProps) {
-  const {
-    decommissionDate,
-    decommissionDateError,
-    decommissionNotes,
-    onDecommissionDateChange,
-    onDecommissionNotesChange,
-    validateDecommissionDate,
-  } = props
-
-  return (
-    <>
-      <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500 }}>
-        Decommission Date
-      </Typography>
-      <input
-        type="date"
-        value={decommissionDate}
-        max={getTodayISO()}
-        onChange={(e) => {
-          onDecommissionDateChange(e.target.value)
-          if (decommissionDateError) {
-            validateDecommissionDate(e.target.value)
-          }
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'space-between',
+          mb: 2,
         }}
-        onBlur={(e) => validateDecommissionDate(e.currentTarget.value)}
-        style={{
-          width: '100%',
-          padding: '8px',
-          fontSize: '14px',
-          border: decommissionDateError
-            ? '1px solid #d32f2f'
-            : '1px solid #ccc',
-          borderRadius: '4px',
-          boxSizing: 'border-box',
-        }}
-      />
-      {decommissionDateError && (
-        <Typography
-          variant="caption"
-          sx={{ color: '#d32f2f', mt: 0.5, display: 'block' }}
-        >
-          {decommissionDateError}
+      >
+        <Typography sx={{ fontSize: 16, fontWeight: 700, color: colors.ink }}>
+          {title}
         </Typography>
-      )}
-      <Typography variant="body2" sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}>
-        Notes (optional)
-      </Typography>
-      <textarea
-        value={decommissionNotes}
-        maxLength={MAX_NOTES_LENGTH}
-        rows={3}
-        onChange={(e) => onDecommissionNotesChange(e.target.value)}
-        placeholder="Reason for decommission..."
-        style={{
-          width: '100%',
-          padding: '8px',
-          fontSize: '14px',
-          border: '1px solid #ccc',
-          borderRadius: '4px',
-          boxSizing: 'border-box',
-          fontFamily: 'inherit',
-          resize: 'vertical',
-        }}
-      />
-      <Typography
-        variant="caption"
-        sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
-      >
-        {decommissionNotes.length}/{MAX_NOTES_LENGTH}
-      </Typography>
-    </>
+        {action}
+      </Box>
+      {children}
+    </Box>
   )
 }
 
-function ReactivateNotesForm(props: SystemDetailEditViewProps) {
-  const { reactivationNotes, onReactivationNotesChange } = props
+/** Single text input row inside the edit form. */
+function TextRow({
+  id,
+  label,
+  required,
+  value,
+  showError,
+  errorText,
+  onChange,
+}: {
+  id: string
+  label: string
+  required?: boolean
+  value: string
+  showError: boolean
+  errorText: string
+  onChange: (
+    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
+  ) => void
+}) {
   return (
-    <>
-      <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500 }}>
-        Reactivation Notes (optional)
-      </Typography>
-      <textarea
-        value={reactivationNotes}
-        maxLength={MAX_NOTES_LENGTH}
-        rows={3}
-        onChange={(e) => onReactivationNotesChange(e.target.value)}
-        placeholder="Reason for reactivation..."
-        style={{
-          width: '100%',
-          padding: '8px',
-          fontSize: '14px',
-          border: '1px solid #ccc',
-          borderRadius: '4px',
-          boxSizing: 'border-box',
-          fontFamily: 'inherit',
-          resize: 'vertical',
-        }}
+    <Field
+      id={id}
+      label={label}
+      required={required}
+      error={showError ? errorText : undefined}
+    >
+      <OutlinedInput
+        id={id}
+        fullWidth
+        value={value ?? ''}
+        onChange={onChange}
+        error={showError}
+        sx={fieldInputSx}
       />
-      <Typography
-        variant="caption"
-        sx={{ color: 'text.secondary', display: 'block', mb: 1 }}
-      >
-        {reactivationNotes.length}/{MAX_NOTES_LENGTH}
-      </Typography>
-    </>
+    </Field>
   )
 }
 
@@ -242,275 +142,534 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
   const {
     system,
     editedSystem,
+    formValid,
+    formValidErrorText,
     showDecommissionForm,
     decommissionedByName,
     decommissionDate,
-    onShowDecommissionForm,
-    onDecommissionRequest,
+    decommissionDateError,
+    decommissionNotes,
+    reactivationNotes,
     showReactivateForm,
     reactivatedByName,
+    onInputChange,
+    onFieldChange,
+    onDecommissionDateChange,
+    onDecommissionNotesChange,
+    onShowDecommissionForm,
+    onDecommissionRequest,
+    onReactivationNotesChange,
     onShowReactivateForm,
     onReactivateRequest,
     validateDecommissionDate,
     onSdlSyncToggle,
   } = props
-  const identityFields = getFieldsBySection('identity')
-  const orgFields = getFieldsBySection('organization')
-  const contactFields = getFieldsBySection('contacts')
+
+  const requiredError = (key: keyof FormValidType): boolean => !formValid[key]
+  const requiredErrorText = (key: keyof FormValidType): string =>
+    formValidErrorText[key] ?? ''
 
   return (
-    <Grid container spacing={3}>
-      {/* System Identity */}
-      <Grid item xs={12} md={7}>
-        <Card variant="outlined">
-          <CardHeader
-            title="System Identity"
-            titleTypographyProps={{ variant: 'h6' }}
-            action={
-              system.decommissioned ? (
-                <Chip label="Decommissioned" color="error" size="small" />
-              ) : (
-                <Chip label="Active" color="success" size="small" />
-              )
-            }
-            sx={{ pb: 0 }}
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+        gap: 1.75,
+        // Columns end at their own natural heights. The flex equalizer is
+        // intentionally NOT applied here.
+        alignItems: 'flex-start',
+      }}
+    >
+      {/* Left: System Identity */}
+      <Card
+        title="System Identity"
+        action={
+          <StatusChip
+            label={system.decommissioned ? 'Decommissioned' : 'Active'}
+            kind={system.decommissioned ? 'neutral' : 'active'}
           />
-          <CardContent>
-            {identityFields.map((field) => renderEditField(field, props))}
-          </CardContent>
-        </Card>
-      </Grid>
-
-      {/* Right column: Decommission + Organization */}
-      <Grid
-        item
-        xs={12}
-        md={5}
-        sx={{ display: 'flex', flexDirection: 'column' }}
+        }
       >
-        {system.decommissioned ? (
-          <Card variant="outlined" sx={{ mb: 3, borderColor: 'error.main' }}>
-            <CardHeader
-              title="System Status"
-              titleTypographyProps={{ variant: 'h6' }}
-              sx={{ pb: 0 }}
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <TextRow
+            id="edit-fismaname"
+            label="Fisma Name"
+            required
+            value={editedSystem.fismaname}
+            showError={requiredError('fismaname')}
+            errorText={requiredErrorText('fismaname')}
+            onChange={(e) => onInputChange(e, 'fismaname')}
+          />
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: { xs: '1fr', sm: '1fr 1fr' },
+              gap: 2,
+            }}
+          >
+            <TextRow
+              id="edit-fismaacronym"
+              label="Fisma Acronym"
+              required
+              value={editedSystem.fismaacronym}
+              showError={requiredError('fismaacronym')}
+              errorText={requiredErrorText('fismaacronym')}
+              onChange={(e) => onInputChange(e, 'fismaacronym')}
             />
-            <CardContent>
-              {!showDecommissionForm && !showReactivateForm && (
-                <>
-                  {system.decommissioned_date && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Decommissioned On
-                      </Typography>
-                      <Typography variant="body1">
-                        {new Date(
-                          system.decommissioned_date
-                        ).toLocaleDateString()}
-                      </Typography>
-                    </Box>
-                  )}
-                  {system.decommissioned_by && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Decommissioned By
-                      </Typography>
-                      <Typography variant="body1">
-                        {decommissionedByName || system.decommissioned_by}
-                      </Typography>
-                    </Box>
-                  )}
-                  {system.decommissioned_notes && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography variant="caption" color="text.secondary">
-                        Notes
-                      </Typography>
-                      <Typography variant="body1">
-                        {system.decommissioned_notes}
-                      </Typography>
-                    </Box>
-                  )}
-                  {system.reactivated_date && (
-                    <Box sx={{ mb: 2 }}>
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          display: 'block',
-                          fontStyle: 'italic',
-                          color: 'text.secondary',
-                        }}
-                      >
-                        Previously reactivated on{' '}
-                        {new Date(system.reactivated_date).toLocaleDateString()}
-                        {system.reactivated_by &&
-                          ` by ${reactivatedByName || system.reactivated_by}`}
-                        {system.reactivation_notes
-                          ? ` (notes: ${system.reactivation_notes})`
-                          : ''}
-                      </Typography>
-                    </Box>
-                  )}
-                  <Box sx={{ display: 'flex', gap: 1, mt: '4px' }}>
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      size="small"
-                      onClick={() => onShowDecommissionForm(true)}
-                    >
-                      Edit decommission details
-                    </Button>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="small"
-                      onClick={() => onShowReactivateForm(true)}
-                    >
-                      Reactivate system
-                    </Button>
-                  </Box>
-                </>
-              )}
-              {showDecommissionForm && (
-                <Box sx={{ mt: 1 }}>
-                  <DecommissionDateNotesForm {...props} />
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="small"
-                      onClick={() => {
-                        if (validateDecommissionDate(decommissionDate)) {
-                          onDecommissionRequest()
-                        }
-                      }}
-                    >
-                      Update
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      size="small"
-                      onClick={() => onShowDecommissionForm(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </Box>
-                </Box>
-              )}
-              {showReactivateForm && (
-                <Box sx={{ mt: 1 }}>
-                  <ReactivateNotesForm {...props} />
-                  <Box sx={{ display: 'flex', gap: 1 }}>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      size="small"
-                      onClick={onReactivateRequest}
-                    >
-                      Reactivate
-                    </Button>
-                    <Button
-                      variant="outlined"
-                      color="primary"
-                      size="small"
-                      onClick={() => onShowReactivateForm(false)}
-                    >
-                      Cancel
-                    </Button>
-                  </Box>
-                </Box>
-              )}
-            </CardContent>
-          </Card>
-        ) : (
-          <Card variant="outlined" sx={{ mb: 3 }}>
-            <CardHeader
-              title="System Status"
-              titleTypographyProps={{ variant: 'h6' }}
-              sx={{ pb: 0 }}
+            <TextRow
+              id="edit-groupacronym"
+              label="Group Acronym"
+              value={editedSystem.groupacronym ?? ''}
+              showError={false}
+              errorText=""
+              onChange={(e) => onFieldChange('groupacronym', e.target.value)}
             />
-            <CardContent>
+          </Box>
+          <TextRow
+            id="edit-component"
+            label="Component"
+            required
+            value={editedSystem.component}
+            showError={requiredError('component')}
+            errorText={requiredErrorText('component')}
+            onChange={(e) => onInputChange(e, 'component')}
+          />
+          <TextRow
+            id="edit-groupname"
+            label="Group Name"
+            value={editedSystem.groupname ?? ''}
+            showError={false}
+            errorText=""
+            onChange={(e) => onFieldChange('groupname', e.target.value)}
+          />
+          <TextRow
+            id="edit-divisionname"
+            label="Division Name"
+            value={editedSystem.divisionname ?? ''}
+            showError={false}
+            errorText=""
+            onChange={(e) => onFieldChange('divisionname', e.target.value)}
+          />
+          <TextRow
+            id="edit-fismasubsystem"
+            label="Fisma Subsystem"
+            value={editedSystem.fismasubsystem ?? ''}
+            showError={false}
+            errorText=""
+            onChange={(e) => onFieldChange('fismasubsystem', e.target.value)}
+          />
+        </Box>
+      </Card>
+
+      {/* Right column: stacked cards */}
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.75 }}>
+        <Card title="System Status">
+          {system.decommissioned ? (
+            !showDecommissionForm && !showReactivateForm ? (
+              <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+                {system.decommissioned_date && (
+                  <Box>
+                    <Typography
+                      sx={{ fontSize: 12, color: colors.neutral500, mb: 0.25 }}
+                    >
+                      Decommissioned on
+                    </Typography>
+                    <Typography sx={{ fontSize: 14, color: colors.ink }}>
+                      {new Date(
+                        system.decommissioned_date
+                      ).toLocaleDateString()}
+                    </Typography>
+                  </Box>
+                )}
+                {system.decommissioned_by && (
+                  <Box>
+                    <Typography
+                      sx={{ fontSize: 12, color: colors.neutral500, mb: 0.25 }}
+                    >
+                      Decommissioned by
+                    </Typography>
+                    <Typography sx={{ fontSize: 14, color: colors.ink }}>
+                      {decommissionedByName || system.decommissioned_by}
+                    </Typography>
+                  </Box>
+                )}
+                {system.decommissioned_notes && (
+                  <Box>
+                    <Typography
+                      sx={{ fontSize: 12, color: colors.neutral500, mb: 0.25 }}
+                    >
+                      Notes
+                    </Typography>
+                    <Typography sx={{ fontSize: 14, color: colors.ink }}>
+                      {system.decommissioned_notes}
+                    </Typography>
+                  </Box>
+                )}
+                {system.reactivated_date && (
+                  <Typography
+                    sx={{
+                      fontSize: 12,
+                      color: colors.neutral500,
+                      fontStyle: 'italic',
+                    }}
+                  >
+                    Previously reactivated on{' '}
+                    {new Date(system.reactivated_date).toLocaleDateString()}
+                    {system.reactivated_by &&
+                      ` by ${reactivatedByName || system.reactivated_by}`}
+                    {system.reactivation_notes
+                      ? ` (notes: ${system.reactivation_notes})`
+                      : ''}
+                  </Typography>
+                )}
+                <Box sx={{ display: 'flex', gap: 1, mt: 0.5 }}>
+                  <Button
+                    variant="outlined"
+                    color="primary"
+                    size="small"
+                    onClick={() => onShowDecommissionForm(true)}
+                  >
+                    Edit decommission details
+                  </Button>
+                  <Button
+                    variant="contained"
+                    color="primary"
+                    size="small"
+                    onClick={() => onShowReactivateForm(true)}
+                  >
+                    Reactivate system
+                  </Button>
+                </Box>
+              </Box>
+            ) : showDecommissionForm ? (
+              <DecommissionEditForm
+                decommissionDate={decommissionDate}
+                decommissionDateError={decommissionDateError}
+                decommissionNotes={decommissionNotes}
+                onDecommissionDateChange={onDecommissionDateChange}
+                onDecommissionNotesChange={onDecommissionNotesChange}
+                validateDecommissionDate={validateDecommissionDate}
+                primaryLabel="Update"
+                onPrimary={() => {
+                  if (validateDecommissionDate(decommissionDate)) {
+                    onDecommissionRequest()
+                  }
+                }}
+                onCancel={() => onShowDecommissionForm(false)}
+              />
+            ) : (
+              <ReactivateEditForm
+                reactivationNotes={reactivationNotes}
+                onReactivationNotesChange={onReactivationNotesChange}
+                onPrimary={onReactivateRequest}
+                onCancel={() => onShowReactivateForm(false)}
+              />
+            )
+          ) : (
+            <Box>
               <FormControlLabel
+                sx={{ m: 0 }}
                 control={
                   <Checkbox
                     checked={showDecommissionForm}
                     onChange={(e) => onShowDecommissionForm(e.target.checked)}
                     sx={{
-                      color: '#d32f2f',
-                      '&.Mui-checked': { color: '#d32f2f' },
+                      p: 0,
+                      mr: 1,
+                      color: colors.danger,
+                      '&.Mui-checked': { color: colors.danger },
                     }}
                   />
                 }
                 label={
-                  <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 13,
+                      fontWeight: 500,
+                      color: colors.ink,
+                    }}
+                  >
                     Decommission System
                   </Typography>
                 }
               />
               {showDecommissionForm && (
-                <Box sx={{ ml: 4, mt: 1 }}>
-                  <DecommissionDateNotesForm {...props} />
-                  <Button
-                    variant="contained"
-                    color="error"
-                    onClick={() => {
+                <Box sx={{ mt: 2, ml: 3.5 }}>
+                  <DecommissionEditForm
+                    decommissionDate={decommissionDate}
+                    decommissionDateError={decommissionDateError}
+                    decommissionNotes={decommissionNotes}
+                    onDecommissionDateChange={onDecommissionDateChange}
+                    onDecommissionNotesChange={onDecommissionNotesChange}
+                    validateDecommissionDate={validateDecommissionDate}
+                    primaryLabel="Decommission"
+                    primaryColor="danger"
+                    onPrimary={() => {
                       if (validateDecommissionDate(decommissionDate)) {
                         onDecommissionRequest()
                       }
                     }}
-                    sx={{ mt: 3 }}
-                  >
-                    Decommission
-                  </Button>
+                    onCancel={() => onShowDecommissionForm(false)}
+                  />
                 </Box>
               )}
-            </CardContent>
-          </Card>
-        )}
-        <Card variant="outlined" sx={{ mb: 3 }}>
-          <CardHeader
-            title="Data Lake Export"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
+            </Box>
+          )}
+        </Card>
+
+        <Card title="Data Lake Export">
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'flex-start',
+              justifyContent: 'space-between',
+              gap: 2,
+            }}
+          >
+            <Box>
+              <Typography
+                sx={{ fontSize: 13, fontWeight: 600, color: colors.ink }}
+              >
+                Sync to SDL (Snowflake)
+              </Typography>
+              <Typography
+                sx={{ fontSize: 12, color: colors.neutral500, mt: 0.25 }}
+              >
+                Export this system and its scores to the CMS data lake nightly.
+              </Typography>
+            </Box>
             <SdlSyncToggle
               checked={editedSystem.sdl_sync_enabled ?? false}
               onChange={onSdlSyncToggle}
             />
-          </CardContent>
+          </Box>
         </Card>
-        <Card variant="outlined" sx={{ flex: 1 }}>
-          <CardHeader
-            title="Organization"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            {orgFields.map((field) => renderEditField(field, props))}
-          </CardContent>
-        </Card>
-      </Grid>
 
-      {/* Contacts — full width, fields horizontal */}
-      <Grid item xs={12}>
-        <Card variant="outlined">
-          <CardHeader
-            title="Contacts"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            <Grid container spacing={3}>
-              {contactFields.map((field) => (
-                <Grid item xs={12} sm={6} key={field.key}>
-                  {renderEditField(field, props)}
-                </Grid>
-              ))}
-            </Grid>
-          </CardContent>
+        {/* Organization. Absorbs ISSO Email + Data Call Contact - the
+            separate Contacts card from the mock was redundant. */}
+        <Card title="Organization">
+          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextRow
+              id="edit-datacallcontact"
+              label="Data Call Contact"
+              required
+              value={editedSystem.datacallcontact ?? ''}
+              showError={requiredError('datacallcontact')}
+              errorText={requiredErrorText('datacallcontact')}
+              onChange={(e) => onInputChange(e, 'datacallcontact')}
+            />
+            <TextRow
+              id="edit-issoemail"
+              label="ISSO Email"
+              required
+              value={editedSystem.issoemail}
+              showError={requiredError('issoemail')}
+              errorText={requiredErrorText('issoemail')}
+              onChange={(e) => onInputChange(e, 'issoemail')}
+            />
+            <TextRow
+              id="edit-fismauid"
+              label="Fisma UID"
+              required
+              value={editedSystem.fismauid}
+              showError={requiredError('fismauid')}
+              errorText={requiredErrorText('fismauid')}
+              onChange={(e) => onInputChange(e, 'fismauid')}
+            />
+            <Field
+              id="edit-datacenterenvironment"
+              label="Datacenter Environment"
+              required
+              error={
+                requiredError('datacenterenvironment')
+                  ? requiredErrorText('datacenterenvironment')
+                  : undefined
+              }
+            >
+              <Select
+                id="edit-datacenterenvironment"
+                fullWidth
+                displayEmpty
+                labelId="edit-datacenterenvironment-label"
+                inputProps={{
+                  'aria-labelledby': 'edit-datacenterenvironment-label',
+                }}
+                value={editedSystem.datacenterenvironment ?? ''}
+                onChange={(e) =>
+                  onInputChange(
+                    {
+                      target: { value: e.target.value as string },
+                    } as React.ChangeEvent<HTMLInputElement>,
+                    'datacenterenvironment'
+                  )
+                }
+                input={<OutlinedInput sx={fieldInputSx} />}
+                renderValue={(selected) => {
+                  const v = (selected as string) || ''
+                  if (!v)
+                    return (
+                      <Box component="span" sx={{ color: colors.neutral500 }}>
+                        Select an environment
+                      </Box>
+                    )
+                  return (
+                    datacenterenvironment.find((o) => o.value === v)?.label ?? v
+                  )
+                }}
+              >
+                {datacenterenvironment.map((option) => (
+                  <MenuItem key={option.value} value={option.value}>
+                    {option.label}
+                  </MenuItem>
+                ))}
+              </Select>
+            </Field>
+          </Box>
         </Card>
-      </Grid>
-    </Grid>
+      </Box>
+    </Box>
+  )
+}
+
+/* ------------------------------------------------------------------ */
+/* Sub-forms                                                          */
+/* ------------------------------------------------------------------ */
+
+function DecommissionEditForm({
+  decommissionDate,
+  decommissionDateError,
+  decommissionNotes,
+  onDecommissionDateChange,
+  onDecommissionNotesChange,
+  validateDecommissionDate,
+  primaryLabel,
+  primaryColor = 'primary',
+  onPrimary,
+  onCancel,
+}: {
+  decommissionDate: string
+  decommissionDateError: string
+  decommissionNotes: string
+  onDecommissionDateChange: (value: string) => void
+  onDecommissionNotesChange: (value: string) => void
+  validateDecommissionDate: (dateStr: string) => boolean
+  primaryLabel: string
+  primaryColor?: 'primary' | 'danger'
+  onPrimary: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Field
+        id="decommission-date"
+        label="Decommission Date"
+        required
+        error={decommissionDateError || undefined}
+      >
+        <OutlinedInput
+          id="decommission-date"
+          type="date"
+          fullWidth
+          value={decommissionDate}
+          inputProps={{ max: getTodayISO() }}
+          onChange={(e) => {
+            onDecommissionDateChange(e.target.value)
+            if (decommissionDateError) {
+              validateDecommissionDate(e.target.value)
+            }
+          }}
+          onBlur={(e) => validateDecommissionDate(e.currentTarget.value)}
+          error={!!decommissionDateError}
+          sx={fieldInputSx}
+        />
+      </Field>
+      <Field
+        id="decommission-notes"
+        label="Notes (optional)"
+        helperText={`${decommissionNotes.length} / ${MAX_NOTES_LENGTH}`}
+      >
+        <OutlinedInput
+          id="decommission-notes"
+          multiline
+          minRows={3}
+          fullWidth
+          value={decommissionNotes}
+          inputProps={{ maxLength: MAX_NOTES_LENGTH }}
+          placeholder="Reason for decommission..."
+          onChange={(e) => onDecommissionNotesChange(e.target.value)}
+          sx={fieldInputSx}
+        />
+      </Field>
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button
+          variant="contained"
+          color={primaryColor === 'danger' ? 'error' : 'primary'}
+          size="small"
+          onClick={onPrimary}
+        >
+          {primaryLabel}
+        </Button>
+        <Button
+          variant="outlined"
+          color="primary"
+          size="small"
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+      </Box>
+    </Box>
+  )
+}
+
+function ReactivateEditForm({
+  reactivationNotes,
+  onReactivationNotesChange,
+  onPrimary,
+  onCancel,
+}: {
+  reactivationNotes: string
+  onReactivationNotesChange: (value: string) => void
+  onPrimary: () => void
+  onCancel: () => void
+}) {
+  return (
+    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+      <Field
+        id="reactivation-notes"
+        label="Reactivation Notes (optional)"
+        helperText={`${reactivationNotes.length} / ${MAX_NOTES_LENGTH}`}
+      >
+        <OutlinedInput
+          id="reactivation-notes"
+          multiline
+          minRows={3}
+          fullWidth
+          value={reactivationNotes}
+          inputProps={{ maxLength: MAX_NOTES_LENGTH }}
+          placeholder="Reason for reactivation..."
+          onChange={(e) => onReactivationNotesChange(e.target.value)}
+          sx={fieldInputSx}
+        />
+      </Field>
+      <Box sx={{ display: 'flex', gap: 1 }}>
+        <Button
+          variant="contained"
+          color="primary"
+          size="small"
+          onClick={onPrimary}
+        >
+          Reactivate
+        </Button>
+        <Button
+          variant="outlined"
+          color="primary"
+          size="small"
+          onClick={onCancel}
+        >
+          Cancel
+        </Button>
+      </Box>
+    </Box>
   )
 }
