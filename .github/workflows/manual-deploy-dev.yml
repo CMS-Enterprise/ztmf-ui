@@ -1,0 +1,23 @@
+name: Manual Deploy to DEV
+
+# Manually deploy the current ref (run this on `main`) to the DEV environment.
+# DEV otherwise only deploys the head branch of an open PR, so `main` is never
+# auto-published to DEV. Use this to reset/redeploy DEV to main on demand.
+# Run: gh workflow run "Manual Deploy to DEV" --ref main
+on:
+  workflow_dispatch:
+
+jobs:
+  analysis:
+    name: Analysis
+    uses: ./.github/workflows/analysis.yml
+    secrets: inherit
+
+  ui:
+    name: ui
+    needs:
+      - analysis
+    uses: ./.github/workflows/ui.yml
+    with:
+      environment: dev
+    secrets: inherit
