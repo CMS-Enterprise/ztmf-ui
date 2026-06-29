@@ -59,6 +59,7 @@ import IdpEditCell from './cells/IdpEditCell'
 import RoleEditCell from './cells/RoleEditCell'
 import UsersToolbar from './components/UsersToolbar'
 import ActionsCell from './components/ActionsCell'
+import { useUserFilters } from './hooks/useUserFilters'
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
@@ -97,13 +98,17 @@ export default function UserTable() {
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
     Record<number, { name: string; acronym: string }>
   >({})
-  const [showDeleted, setShowDeleted] = useState<boolean>(false)
-  // Toolbar filter state. Search applies as a controlled quick-filter on the
-  // DataGrid; role and OpDiv narrow the row set client-side so the existing
-  // /users response shape stays unchanged.
-  const [search, setSearch] = useState<string>('')
-  const [roleFilter, setRoleFilter] = useState<string | 'all'>('all')
-  const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
+  const {
+    search,
+    setSearch,
+    roleFilter,
+    setRoleFilter,
+    opdivFilter,
+    setOpDivFilter,
+    showDeleted,
+    setShowDeleted,
+    quickFilterValues,
+  } = useUserFilters()
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
   const [assignModalUserName, setAssignModalUserName] = useState<string>('')
@@ -895,10 +900,6 @@ export default function UserTable() {
       return true
     })
   }, [rows, roleFilter, opdivFilter, userOpDivMap])
-
-  const quickFilterValues = search.trim()
-    ? search.trim().split(/\s+/)
-    : undefined
 
   return (
     <Box
