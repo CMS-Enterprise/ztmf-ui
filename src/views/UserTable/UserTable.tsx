@@ -60,6 +60,7 @@ import ActionsCell from './components/ActionsCell'
 import { useUserFilters } from './hooks/useUserFilters'
 import { useOpDivCatalog } from './hooks/useOpDivCatalog'
 import { useUsersSnackbar } from './hooks/useUsersSnackbar'
+import { useUsersModals } from './hooks/useUsersModals'
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
@@ -78,10 +79,9 @@ export default function UserTable() {
     }
   }, [userInfo.role, canRead, navigate])
   const [rows, setRows] = useState<users[]>([])
-  const [userId, setUserId] = useState<GridRowId>('')
   const [rowModesModel, setRowModesModel] = useState<GridRowModesModel>({})
   const snackbar = useUsersSnackbar()
-  const [openModal, setOpenModal] = useState<boolean>(false)
+  const modals = useUsersModals()
   const [selectedRow, setSelectedRow] = useState<users | undefined>({
     userid: '',
     email: '',
@@ -103,12 +103,6 @@ export default function UserTable() {
     setShowDeleted,
     quickFilterValues,
   } = useUserFilters()
-  const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
-  const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
-  const [assignModalUserName, setAssignModalUserName] = useState<string>('')
-  const [openOpDivModal, setOpenOpDivModal] = useState<boolean>(false)
-  const [opdivModalUserId, setOpDivModalUserId] = useState<GridRowId>('')
-  const [opdivModalUserName, setOpDivModalUserName] = useState<string>('')
   const { opdivOptions, opdivCodeMap } = useOpDivCatalog(isAdmin, userInfo)
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
@@ -173,19 +167,12 @@ export default function UserTable() {
     }
   }
   const handleOpenModal = (id: GridRowId) => {
-    setUserId(id)
     const row = rows.find((r) => r.userid === id)
-    setAssignModalUserName(row?.fullname ?? '')
-    setOpenModal(true)
-  }
-  const handleCloseModal = () => {
-    setOpenModal(false)
+    if (row) modals.openAssign(row)
   }
   const handleOpenOpDivModal = (id: GridRowId) => {
-    setOpDivModalUserId(id)
     const row = rows.find((r) => r.userid === id)
-    setOpDivModalUserName(row?.fullname ?? '')
-    setOpenOpDivModal(true)
+    if (row) modals.openOpDiv(row)
   }
   // Pull a single user's current OpDiv grants and derived identity_provider
   // and patch them onto the row. Called after a confirmed grant/revoke (the
@@ -220,8 +207,9 @@ export default function UserTable() {
       })
   }
   const handleCloseOpDivModal = () => {
-    setOpenOpDivModal(false)
-    refreshUserRow(String(opdivModalUserId))
+    const targetId = String(modals.opdiv.userid)
+    modals.closeOpDiv()
+    refreshUserRow(targetId)
   }
   /**
    * Inline OpDiv grant from the edit-cell. Updates local state optimistically
@@ -323,11 +311,11 @@ export default function UserTable() {
   const handleDeleteClick = (id: GridRowId) => () => {
     const curRow = apiRef.current.getRow(id) as users | undefined
     if (!curRow) return
-    setPendingDeleteRow(curRow)
+    modals.askDelete(curRow)
   }
   const handleConfirmDelete = async (confirm: boolean) => {
-    const target = pendingDeleteRow
-    setPendingDeleteRow(null)
+    const target = modals.pendingDelete
+    modals.clearDelete()
     if (!confirm || !target) return
     try {
       await axiosInstance.delete(`/users/${target.userid}`)
@@ -343,11 +331,11 @@ export default function UserTable() {
   const handleRestoreClick = (id: GridRowId) => () => {
     const curRow = apiRef.current.getRow(id) as users | undefined
     if (!curRow) return
-    setPendingRestoreRow(curRow)
+    modals.askRestore(curRow)
   }
   const handleConfirmRestore = async (confirm: boolean) => {
-    const target = pendingRestoreRow
-    setPendingRestoreRow(null)
+    const target = modals.pendingRestore
+    modals.clearRestore()
     if (!confirm || !target) return
     try {
       await axiosInstance.put(`/users/${target.userid}/restore`)
@@ -993,40 +981,40 @@ export default function UserTable() {
       />
       <AssignSystemModal
         fismaSystemMap={fismaSystemsMap}
-        open={openModal}
-        handleClose={handleCloseModal}
-        userid={userId}
-        userName={assignModalUserName}
+        open={modals.assign.open}
+        handleClose={modals.closeAssign}
+        userid={modals.assign.userid}
+        userName={modals.assign.userName}
       />
       <OpDivGrantModal
-        open={openOpDivModal}
+        open={modals.opdiv.open}
         handleClose={handleCloseOpDivModal}
-        userid={opdivModalUserId}
-        userName={opdivModalUserName}
+        userid={modals.opdiv.userid}
+        userName={modals.opdiv.userName}
         opdivOptions={opdivOptions}
         onChanged={refreshUserRow}
       />
       <ConfirmDialog
         title="Confirm User Deletion"
         confirmationText={
-          pendingDeleteRow
-            ? `Are you sure you want to delete ${pendingDeleteRow.fullname}? This will remove their access to ZTMF. The user can be restored later from the "Show Deleted" view.`
+          modals.pendingDelete
+            ? `Are you sure you want to delete ${modals.pendingDelete.fullname}? This will remove their access to ZTMF. The user can be restored later from the "Show Deleted" view.`
             : ''
         }
-        open={pendingDeleteRow !== null}
-        onClose={() => setPendingDeleteRow(null)}
+        open={modals.pendingDelete !== null}
+        onClose={modals.clearDelete}
         confirmClick={handleConfirmDelete}
         confirmLabel="Delete"
       />
       <ConfirmDialog
         title="Confirm User Restore"
         confirmationText={
-          pendingRestoreRow
-            ? `Restore ${pendingRestoreRow.fullname}? This will re-enable their access to ZTMF.`
+          modals.pendingRestore
+            ? `Restore ${modals.pendingRestore.fullname}? This will re-enable their access to ZTMF.`
             : ''
         }
-        open={pendingRestoreRow !== null}
-        onClose={() => setPendingRestoreRow(null)}
+        open={modals.pendingRestore !== null}
+        onClose={modals.clearRestore}
         confirmClick={handleConfirmRestore}
         confirmLabel="Restore"
       />
