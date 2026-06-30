@@ -1,18 +1,13 @@
 import * as React from 'react'
 import Modal from '@/components/ui/Modal'
-import Field, { fieldInputSx } from '@/components/ui/Field'
-import { Box, Button, Grid, OutlinedInput, Select } from '@mui/material'
+import { Box, Button } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
 import { editSystemModalProps } from '@/types'
-import MenuItem from '@mui/material/MenuItem'
 import { CONFIRMATION_MESSAGE, STATUS_MESSAGES } from '@/constants'
-import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 
-import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
-import { datacenterenvironment } from './dataEnvironment'
 import { useUserNameLookup } from './hooks/useUserNameLookup'
 import { useEditSystemForm } from './hooks/useEditSystemForm'
 import { useDecommissionFlow } from './hooks/useDecommissionFlow'
@@ -20,19 +15,13 @@ import { useReactivateFlow } from './hooks/useReactivateFlow'
 import DecommissionedSystemInfo from './components/DecommissionedSystemInfo'
 import DecommissionForm from './components/DecommissionForm'
 import ReactivateForm from './components/ReactivateForm'
+import SystemFormFields from './components/SystemFormFields'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
-import { TEXTFIELD_HELPER_TEXT } from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { colors } from '@/theme/tokens'
-
-// Field shape (label + input + helper/error) lives in the shared
-// ds/Field component so every form modal in the app renders identically.
-// Use {@link fieldInputSx} for the input control to match the 38px height
-// + 14px text + neutral-200 border used across the rest of the app.
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -234,424 +223,126 @@ export default function EditSystemModal({
           }
         >
           <Box sx={{ flexGrow: 1 }} component="form">
-            <Grid container spacing={3}>
-              <Grid item xs={12} md={6}>
-                <Field
-                  id="fismaname"
-                  label="Fisma Name"
-                  required
-                  error={
-                    showError('fismaname')
-                      ? formValidErrorText.fismaname
-                      : undefined
-                  }
-                >
-                  <OutlinedInput
-                    id="fismaname"
-                    fullWidth
-                    value={editedFismaSystem.fismaname || ''}
-                    error={showError('fismaname')}
-                    onChange={(e) =>
-                      handleInputChange(
-                        e as React.ChangeEvent<HTMLInputElement>,
-                        'fismaname'
-                      )
-                    }
-                    sx={fieldInputSx}
-                  />
-                </Field>
-
-                <Grid container spacing={2}>
-                  <Grid item xs={6}>
-                    <Field
-                      id="fismaacronym"
-                      label="Fisma Acronym"
-                      required
-                      error={
-                        showError('fismaacronym')
-                          ? formValidErrorText.fismaacronym
-                          : undefined
-                      }
-                    >
-                      <OutlinedInput
-                        id="fismaacronym"
-                        fullWidth
-                        value={editedFismaSystem.fismaacronym || ''}
-                        error={showError('fismaacronym')}
-                        onChange={(e) =>
-                          handleInputChange(
-                            e as React.ChangeEvent<HTMLInputElement>,
-                            'fismaacronym'
-                          )
-                        }
-                        sx={fieldInputSx}
-                      />
-                    </Field>
-                  </Grid>
-                  <Grid item xs={6}>
-                    <Field id="groupacronym" label="Group Acronym">
-                      <OutlinedInput
-                        id="groupacronym"
-                        fullWidth
-                        value={editedFismaSystem.groupacronym || ''}
-                        onChange={(e) =>
-                          setEditedFismaSystem((prev) => ({
-                            ...prev,
-                            groupacronym: e.target.value,
-                          }))
-                        }
-                        sx={fieldInputSx}
-                      />
-                    </Field>
-                  </Grid>
-                </Grid>
-
-                <Field
-                  id="component"
-                  label="Component"
-                  required
-                  error={
-                    showError('component')
-                      ? formValidErrorText.component
-                      : undefined
-                  }
-                >
-                  <OutlinedInput
-                    id="component"
-                    fullWidth
-                    value={editedFismaSystem.component || ''}
-                    error={showError('component')}
-                    onChange={(e) =>
-                      handleInputChange(
-                        e as React.ChangeEvent<HTMLInputElement>,
-                        'component'
-                      )
-                    }
-                    sx={fieldInputSx}
-                  />
-                </Field>
-
-                <Field id="groupname" label="Group Name">
-                  <OutlinedInput
-                    id="groupname"
-                    fullWidth
-                    value={editedFismaSystem.groupname || ''}
-                    onChange={(e) =>
-                      setEditedFismaSystem((prev) => ({
-                        ...prev,
-                        groupname: e.target.value,
-                      }))
-                    }
-                    sx={fieldInputSx}
-                  />
-                </Field>
-
-                <Field id="divisionname" label="Division Name">
-                  <OutlinedInput
-                    id="divisionname"
-                    fullWidth
-                    value={editedFismaSystem.divisionname || ''}
-                    onChange={(e) =>
-                      setEditedFismaSystem((prev) => ({
-                        ...prev,
-                        divisionname: e.target.value,
-                      }))
-                    }
-                    sx={fieldInputSx}
-                  />
-                </Field>
-
-                <Field id="fismasubsystem" label="Fisma Subsystem">
-                  <OutlinedInput
-                    id="fismasubsystem"
-                    fullWidth
-                    value={editedFismaSystem.fismasubsystem || ''}
-                    onChange={(e) =>
-                      setEditedFismaSystem((prev) => ({
-                        ...prev,
-                        fismasubsystem: e.target.value,
-                      }))
-                    }
-                    sx={fieldInputSx}
-                  />
-                </Field>
-              </Grid>
-
-              <Grid item xs={12} md={6}>
-                <Field
-                  id="datacallcontact"
-                  label="Data Call Contact"
-                  required
-                  error={
-                    showError('datacallcontact')
-                      ? formValidErrorText.datacallcontact
-                      : undefined
-                  }
-                >
-                  <OutlinedInput
-                    id="datacallcontact"
-                    fullWidth
-                    value={editedFismaSystem.datacallcontact || ''}
-                    error={showError('datacallcontact')}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      const result = emailValidator(value)
-                      const isValid = result === false
-                      markTouched('datacallcontact')
-                      setEditedFismaSystem((prev) => ({
-                        ...prev,
-                        datacallcontact: value,
-                      }))
-                      setFormValid((prev) => ({
-                        ...prev,
-                        datacallcontact: isValid,
-                      }))
-                      setFormValidErrorText((prev) => ({
-                        ...prev,
-                        datacallcontact: result || '',
-                      }))
-                    }}
-                    sx={fieldInputSx}
-                  />
-                </Field>
-
-                <Field
-                  id="issoemail"
-                  label="ISSO Email"
-                  required
-                  error={
-                    showError('issoemail')
-                      ? formValidErrorText.issoemail
-                      : undefined
-                  }
-                >
-                  <OutlinedInput
-                    id="issoemail"
-                    fullWidth
-                    value={editedFismaSystem.issoemail || ''}
-                    error={showError('issoemail')}
-                    onChange={(e) => {
-                      const value = e.target.value
-                      const result = emailValidator(value)
-                      const isValid = result === false
-                      markTouched('issoemail')
-                      setEditedFismaSystem((prev) => ({
-                        ...prev,
-                        issoemail: value,
-                      }))
-                      setFormValid((prev) => ({ ...prev, issoemail: isValid }))
-                      setFormValidErrorText((prev) => ({
-                        ...prev,
-                        issoemail: result || '',
-                      }))
-                    }}
-                    sx={fieldInputSx}
-                  />
-                </Field>
-
-                <Field
-                  id="fismauid"
-                  label="Fisma UID"
-                  error={
-                    showError('fismauid')
-                      ? formValidErrorText.fismauid
-                      : undefined
-                  }
-                >
-                  <OutlinedInput
-                    id="fismauid"
-                    fullWidth
-                    value={editedFismaSystem.fismauid || ''}
-                    error={showError('fismauid')}
-                    onChange={(e) =>
-                      handleInputChange(
-                        e as React.ChangeEvent<HTMLInputElement>,
-                        'fismauid'
-                      )
-                    }
-                    sx={fieldInputSx}
-                  />
-                </Field>
-
-                <Field
-                  id="datacenterenvironment"
-                  label="Datacenter Environment"
-                  required
-                  error={
-                    showError('datacenterenvironment')
-                      ? formValidErrorText.datacenterenvironment
-                      : undefined
-                  }
-                >
-                  <Select
-                    id="datacenterenvironment"
-                    fullWidth
-                    value={editedFismaSystem.datacenterenvironment || ''}
-                    error={showError('datacenterenvironment')}
-                    onChange={(e) => {
-                      const value = e.target.value as string
-                      markTouched('datacenterenvironment')
-                      setEditedFismaSystem((prev) => ({
-                        ...prev,
-                        datacenterenvironment: value,
-                      }))
-                      setFormValid((prev) => ({
-                        ...prev,
-                        datacenterenvironment: value.length > 0,
-                      }))
-                      if (value.length === 0) {
-                        setFormValidErrorText((prev) => ({
-                          ...prev,
-                          datacenterenvironment: TEXTFIELD_HELPER_TEXT,
-                        }))
-                      }
-                    }}
-                    sx={{
-                      height: 38,
-                      fontSize: 14,
-                      '& fieldset': { borderColor: colors.neutral200 },
-                    }}
-                  >
-                    {datacenterenvironment.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </Select>
-                </Field>
-
+            <SystemFormFields
+              editedFismaSystem={editedFismaSystem}
+              setEditedFismaSystem={setEditedFismaSystem}
+              handleInputChange={handleInputChange}
+              showError={showError}
+              formValidErrorText={formValidErrorText}
+              markTouched={markTouched}
+              setFormValid={setFormValid}
+              setFormValidErrorText={setFormValidErrorText}
+            >
+              {mode === 'edit' && (
                 <Box
                   sx={{
                     mt: 3,
                     p: 2,
-                    border: `1px solid ${colors.neutral200}`,
+                    border: 1,
+                    borderColor: 'divider',
                     borderRadius: 1,
                   }}
                 >
-                  <SdlSyncToggle
-                    checked={editedFismaSystem.sdl_sync_enabled ?? false}
-                    onChange={(checked) =>
-                      setEditedFismaSystem((prev) => ({
-                        ...prev,
-                        sdl_sync_enabled: checked,
-                      }))
-                    }
-                  />
-                </Box>
-                {mode === 'edit' && (
-                  <Box
-                    sx={{
-                      mt: 3,
-                      p: 2,
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    {system?.decommissioned ? (
-                      <>
-                        <Typography
-                          variant="body2"
-                          sx={{ fontWeight: 500, mb: 1 }}
-                        >
-                          System Decommissioned
-                        </Typography>
-                        {!showDecommissionForm && !showReactivateForm && (
-                          <DecommissionedSystemInfo
-                            system={system}
-                            decommissionedByName={decommissionedByName}
-                            reactivatedByName={reactivatedByName}
-                            onEditDecommission={() => {
-                              if (system?.decommissioned_date) {
-                                const d = new Date(system.decommissioned_date)
-                                const yyyy = d.getFullYear()
-                                const mm = String(d.getMonth() + 1).padStart(
-                                  2,
-                                  '0'
-                                )
-                                const dd = String(d.getDate()).padStart(2, '0')
-                                setDecommissionDate(`${yyyy}-${mm}-${dd}`)
-                              }
-                              setDecommissionNotes(
-                                system?.decommissioned_notes || ''
+                  {system?.decommissioned ? (
+                    <>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 500, mb: 1 }}
+                      >
+                        System Decommissioned
+                      </Typography>
+                      {!showDecommissionForm && !showReactivateForm && (
+                        <DecommissionedSystemInfo
+                          system={system}
+                          decommissionedByName={decommissionedByName}
+                          reactivatedByName={reactivatedByName}
+                          onEditDecommission={() => {
+                            if (system?.decommissioned_date) {
+                              const d = new Date(system.decommissioned_date)
+                              const yyyy = d.getFullYear()
+                              const mm = String(d.getMonth() + 1).padStart(
+                                2,
+                                '0'
                               )
-                              setShowDecommissionForm(true)
-                            }}
-                            onReactivate={() => {
-                              setReactivationNotes('')
-                              setShowReactivateForm(true)
-                            }}
-                          />
-                        )}
-                        {showReactivateForm && (
-                          <ReactivateForm
-                            notes={reactivationNotes}
-                            setNotes={setReactivationNotes}
-                            onConfirm={() => setOpenReactivateAlert(true)}
-                            onCancel={() => setShowReactivateForm(false)}
-                          />
-                        )}
-                        {showDecommissionForm && (
-                          <DecommissionForm
-                            date={decommissionDate}
-                            setDate={setDecommissionDate}
-                            dateError={decommissionDateError}
-                            checkDate={checkDecommissionDate}
-                            notes={decommissionNotes}
-                            setNotes={setDecommissionNotes}
-                            onConfirm={() => setOpenDecommissionAlert(true)}
-                            onCancel={() => setShowDecommissionForm(false)}
-                            confirmLabel="Update"
-                            marginLeft={2}
-                          />
-                        )}
-                      </>
-                    ) : (
-                      <>
-                        <FormControlLabel
-                          control={
-                            <Checkbox
-                              checked={showDecommissionForm}
-                              onChange={(e) => {
-                                setShowDecommissionForm(e.target.checked)
-                              }}
-                              sx={{
-                                color: '#d32f2f',
-                                '&.Mui-checked': {
-                                  color: '#d32f2f',
-                                },
-                              }}
-                            />
-                          }
-                          label={
-                            <Typography
-                              variant="body2"
-                              sx={{ fontWeight: 500 }}
-                            >
-                              Decommission System
-                            </Typography>
-                          }
+                              const dd = String(d.getDate()).padStart(2, '0')
+                              setDecommissionDate(`${yyyy}-${mm}-${dd}`)
+                            }
+                            setDecommissionNotes(
+                              system?.decommissioned_notes || ''
+                            )
+                            setShowDecommissionForm(true)
+                          }}
+                          onReactivate={() => {
+                            setReactivationNotes('')
+                            setShowReactivateForm(true)
+                          }}
                         />
-                        {showDecommissionForm && (
-                          <DecommissionForm
-                            date={decommissionDate}
-                            setDate={setDecommissionDate}
-                            dateError={decommissionDateError}
-                            checkDate={checkDecommissionDate}
-                            notes={decommissionNotes}
-                            setNotes={setDecommissionNotes}
-                            onConfirm={() => setOpenDecommissionAlert(true)}
-                            confirmLabel="Decommission"
-                            confirmColor="error"
-                            marginLeft={4}
+                      )}
+                      {showReactivateForm && (
+                        <ReactivateForm
+                          notes={reactivationNotes}
+                          setNotes={setReactivationNotes}
+                          onConfirm={() => setOpenReactivateAlert(true)}
+                          onCancel={() => setShowReactivateForm(false)}
+                        />
+                      )}
+                      {showDecommissionForm && (
+                        <DecommissionForm
+                          date={decommissionDate}
+                          setDate={setDecommissionDate}
+                          dateError={decommissionDateError}
+                          checkDate={checkDecommissionDate}
+                          notes={decommissionNotes}
+                          setNotes={setDecommissionNotes}
+                          onConfirm={() => setOpenDecommissionAlert(true)}
+                          onCancel={() => setShowDecommissionForm(false)}
+                          confirmLabel="Update"
+                          marginLeft={2}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={showDecommissionForm}
+                            onChange={(e) => {
+                              setShowDecommissionForm(e.target.checked)
+                            }}
+                            sx={{
+                              color: '#d32f2f',
+                              '&.Mui-checked': {
+                                color: '#d32f2f',
+                              },
+                            }}
                           />
-                        )}
-                      </>
-                    )}
-                  </Box>
-                )}
-              </Grid>
-            </Grid>
+                        }
+                        label={
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            Decommission System
+                          </Typography>
+                        }
+                      />
+                      {showDecommissionForm && (
+                        <DecommissionForm
+                          date={decommissionDate}
+                          setDate={setDecommissionDate}
+                          dateError={decommissionDateError}
+                          checkDate={checkDecommissionDate}
+                          notes={decommissionNotes}
+                          setNotes={setDecommissionNotes}
+                          onConfirm={() => setOpenDecommissionAlert(true)}
+                          confirmLabel="Decommission"
+                          confirmColor="error"
+                          marginLeft={4}
+                        />
+                      )}
+                    </>
+                  )}
+                </Box>
+              )}
+            </SystemFormFields>
           </Box>
         </Modal>
         <ConfirmDialog
