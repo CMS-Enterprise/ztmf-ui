@@ -13,12 +13,13 @@ import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
 import { datacenterenvironment } from './dataEnvironment'
-import { getTodayISO } from './helpers'
 import { useUserNameLookup } from './hooks/useUserNameLookup'
 import { useEditSystemForm } from './hooks/useEditSystemForm'
 import { useDecommissionFlow } from './hooks/useDecommissionFlow'
 import { useReactivateFlow } from './hooks/useReactivateFlow'
 import DecommissionedSystemInfo from './components/DecommissionedSystemInfo'
+import DecommissionForm from './components/DecommissionForm'
+import ReactivateForm from './components/ReactivateForm'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -583,164 +584,26 @@ export default function EditSystemModal({
                           />
                         )}
                         {showReactivateForm && (
-                          <Box sx={{ ml: 2, mt: 2 }}>
-                            <Typography
-                              variant="body2"
-                              sx={{ mt: 0, mb: 0.5, fontWeight: 500 }}
-                            >
-                              Reactivation Notes (optional)
-                            </Typography>
-                            <textarea
-                              value={reactivationNotes}
-                              maxLength={500}
-                              rows={3}
-                              onChange={(e) =>
-                                setReactivationNotes(e.target.value)
-                              }
-                              placeholder="Reason for reactivation..."
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                fontSize: '14px',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                boxSizing: 'border-box',
-                                fontFamily: 'inherit',
-                                resize: 'vertical',
-                              }}
-                            />
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: 'text.secondary',
-                                display: 'block',
-                                mb: 1,
-                              }}
-                            >
-                              {reactivationNotes.length}/500
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Button
-                                variant="contained"
-                                color="primary"
-                                size="small"
-                                onClick={() => setOpenReactivateAlert(true)}
-                              >
-                                Reactivate
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                color="primary"
-                                size="small"
-                                onClick={() => setShowReactivateForm(false)}
-                              >
-                                Cancel
-                              </Button>
-                            </Box>
-                          </Box>
+                          <ReactivateForm
+                            notes={reactivationNotes}
+                            setNotes={setReactivationNotes}
+                            onConfirm={() => setOpenReactivateAlert(true)}
+                            onCancel={() => setShowReactivateForm(false)}
+                          />
                         )}
                         {showDecommissionForm && (
-                          <Box sx={{ ml: 2, mt: 1 }}>
-                            <Typography
-                              variant="body2"
-                              sx={{ mb: 0.5, fontWeight: 500 }}
-                            >
-                              Decommission Date
-                            </Typography>
-                            <input
-                              type="date"
-                              value={decommissionDate}
-                              max={getTodayISO()}
-                              onChange={(e) => {
-                                setDecommissionDate(e.target.value)
-                                if (decommissionDateError) {
-                                  checkDecommissionDate(e.target.value)
-                                }
-                              }}
-                              onBlur={(e) => {
-                                checkDecommissionDate(e.currentTarget.value)
-                              }}
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                fontSize: '14px',
-                                border: decommissionDateError
-                                  ? '1px solid #d32f2f'
-                                  : '1px solid #ccc',
-                                borderRadius: '4px',
-                                boxSizing: 'border-box',
-                              }}
-                            />
-                            {decommissionDateError && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: '#d32f2f',
-                                  mt: 0.5,
-                                  display: 'block',
-                                }}
-                              >
-                                {decommissionDateError}
-                              </Typography>
-                            )}
-                            <Typography
-                              variant="body2"
-                              sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
-                            >
-                              Notes (optional)
-                            </Typography>
-                            <textarea
-                              value={decommissionNotes}
-                              maxLength={500}
-                              rows={3}
-                              onChange={(e) =>
-                                setDecommissionNotes(e.target.value)
-                              }
-                              placeholder="Reason for decommission..."
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                fontSize: '14px',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                boxSizing: 'border-box',
-                                fontFamily: 'inherit',
-                                resize: 'vertical',
-                              }}
-                            />
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: 'text.secondary',
-                                display: 'block',
-                                mb: 1,
-                              }}
-                            >
-                              {decommissionNotes.length}/500
-                            </Typography>
-                            <Box sx={{ display: 'flex', gap: 1 }}>
-                              <Button
-                                variant="contained"
-                                color="primary"
-                                size="small"
-                                onClick={() => {
-                                  if (checkDecommissionDate(decommissionDate)) {
-                                    setOpenDecommissionAlert(true)
-                                  }
-                                }}
-                              >
-                                Update
-                              </Button>
-                              <Button
-                                variant="outlined"
-                                color="primary"
-                                size="small"
-                                onClick={() => setShowDecommissionForm(false)}
-                              >
-                                Cancel
-                              </Button>
-                            </Box>
-                          </Box>
+                          <DecommissionForm
+                            date={decommissionDate}
+                            setDate={setDecommissionDate}
+                            dateError={decommissionDateError}
+                            checkDate={checkDecommissionDate}
+                            notes={decommissionNotes}
+                            setNotes={setDecommissionNotes}
+                            onConfirm={() => setOpenDecommissionAlert(true)}
+                            onCancel={() => setShowDecommissionForm(false)}
+                            confirmLabel="Update"
+                            marginLeft={2}
+                          />
                         )}
                       </>
                     ) : (
@@ -770,97 +633,18 @@ export default function EditSystemModal({
                           }
                         />
                         {showDecommissionForm && (
-                          <Box sx={{ ml: 4, mt: 1 }}>
-                            <Typography
-                              variant="body2"
-                              sx={{ mb: 0.5, fontWeight: 500 }}
-                            >
-                              Decommission Date
-                            </Typography>
-                            <input
-                              type="date"
-                              value={decommissionDate}
-                              max={getTodayISO()}
-                              onChange={(e) => {
-                                setDecommissionDate(e.target.value)
-                                if (decommissionDateError) {
-                                  checkDecommissionDate(e.target.value)
-                                }
-                              }}
-                              onBlur={(e) => {
-                                checkDecommissionDate(e.currentTarget.value)
-                              }}
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                fontSize: '14px',
-                                border: decommissionDateError
-                                  ? '1px solid #d32f2f'
-                                  : '1px solid #ccc',
-                                borderRadius: '4px',
-                                boxSizing: 'border-box',
-                              }}
-                            />
-                            {decommissionDateError && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: '#d32f2f',
-                                  mt: 0.5,
-                                  display: 'block',
-                                }}
-                              >
-                                {decommissionDateError}
-                              </Typography>
-                            )}
-                            <Typography
-                              variant="body2"
-                              sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
-                            >
-                              Notes (optional)
-                            </Typography>
-                            <textarea
-                              value={decommissionNotes}
-                              maxLength={500}
-                              rows={3}
-                              onChange={(e) =>
-                                setDecommissionNotes(e.target.value)
-                              }
-                              placeholder="Reason for decommission..."
-                              style={{
-                                width: '100%',
-                                padding: '8px',
-                                fontSize: '14px',
-                                border: '1px solid #ccc',
-                                borderRadius: '4px',
-                                boxSizing: 'border-box',
-                                fontFamily: 'inherit',
-                                resize: 'vertical',
-                              }}
-                            />
-                            <Typography
-                              variant="caption"
-                              sx={{
-                                color: 'text.secondary',
-                                display: 'block',
-                                mb: 1,
-                              }}
-                            >
-                              {decommissionNotes.length}/500
-                            </Typography>
-                            <Button
-                              variant="contained"
-                              color="error"
-                              onClick={() => {
-                                if (checkDecommissionDate(decommissionDate)) {
-                                  setOpenDecommissionAlert(true)
-                                }
-                              }}
-                              sx={{ mt: 3 }}
-                            >
-                              Decommission
-                            </Button>
-                          </Box>
+                          <DecommissionForm
+                            date={decommissionDate}
+                            setDate={setDecommissionDate}
+                            dateError={decommissionDateError}
+                            checkDate={checkDecommissionDate}
+                            notes={decommissionNotes}
+                            setNotes={setDecommissionNotes}
+                            onConfirm={() => setOpenDecommissionAlert(true)}
+                            confirmLabel="Decommission"
+                            confirmColor="error"
+                            marginLeft={4}
+                          />
                         )}
                       </>
                     )}
