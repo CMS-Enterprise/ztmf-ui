@@ -23,6 +23,7 @@ import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
 import { datacenterenvironment } from './dataEnvironment'
 import { getTodayISO, validateDecommissionDate } from './helpers'
+import { useUserNameLookup } from './hooks/useUserNameLookup'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -80,9 +81,14 @@ export default function EditSystemModal({
   const [decommissionNotes, setDecommissionNotes] = React.useState<string>('')
   const [showDecommissionForm, setShowDecommissionForm] =
     React.useState<boolean>(false)
-  const [decommissionedByName, setDecommissionedByName] =
-    React.useState<string>('')
-  const [reactivatedByName, setReactivatedByName] = React.useState<string>('')
+  const decommissionedByName = useUserNameLookup(
+    system?.decommissioned_by,
+    Boolean(open && system?.decommissioned && system?.decommissioned_by)
+  )
+  const reactivatedByName = useUserNameLookup(
+    system?.reactivated_by,
+    Boolean(open && system?.reactivated_by)
+  )
   const [showReactivateForm, setShowReactivateForm] =
     React.useState<boolean>(false)
   const [reactivationNotes, setReactivationNotes] = React.useState<string>('')
@@ -163,60 +169,6 @@ export default function EditSystemModal({
       setShowReactivateForm(false)
       setTouched({})
       setLoading(false)
-    }
-  }, [system, open])
-  React.useEffect(() => {
-    const controller = new AbortController()
-    if (open && system?.decommissioned && system?.decommissioned_by) {
-      const userId = system.decommissioned_by
-      async function load() {
-        try {
-          const res = await axiosInstance.get(`users/${userId}`, {
-            signal: controller.signal,
-          })
-          if (system?.decommissioned_by === userId) {
-            setDecommissionedByName(res.data?.data?.fullname || userId)
-          }
-        } catch {
-          if (controller.signal.aborted) return
-          if (system?.decommissioned_by === userId) {
-            setDecommissionedByName(userId)
-          }
-        }
-      }
-      load()
-    } else {
-      setDecommissionedByName('')
-    }
-    return () => {
-      controller.abort()
-    }
-  }, [system, open])
-  React.useEffect(() => {
-    const controller = new AbortController()
-    if (open && system?.reactivated_by) {
-      const userId = system.reactivated_by
-      async function load() {
-        try {
-          const res = await axiosInstance.get(`users/${userId}`, {
-            signal: controller.signal,
-          })
-          if (system?.reactivated_by === userId) {
-            setReactivatedByName(res.data?.data?.fullname || userId)
-          }
-        } catch {
-          if (controller.signal.aborted) return
-          if (system?.reactivated_by === userId) {
-            setReactivatedByName(userId)
-          }
-        }
-      }
-      load()
-    } else {
-      setReactivatedByName('')
-    }
-    return () => {
-      controller.abort()
     }
   }, [system, open])
   const handleClose = () => {
