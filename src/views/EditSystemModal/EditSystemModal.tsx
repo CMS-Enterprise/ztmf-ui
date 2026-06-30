@@ -17,9 +17,10 @@ import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
 import { datacenterenvironment } from './dataEnvironment'
-import { getTodayISO, validateDecommissionDate } from './helpers'
+import { getTodayISO } from './helpers'
 import { useUserNameLookup } from './hooks/useUserNameLookup'
 import { useEditSystemForm } from './hooks/useEditSystemForm'
+import { useDecommissionFlow } from './hooks/useDecommissionFlow'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -61,14 +62,20 @@ export default function EditSystemModal({
     markFieldError,
   } = useEditSystemForm(system, open)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
-  const [openDecommissionAlert, setOpenDecommissionAlert] =
-    React.useState<boolean>(false)
-  const [decommissionDate, setDecommissionDate] = React.useState<string>('')
-  const [decommissionDateError, setDecommissionDateError] =
-    React.useState<string>('')
-  const [decommissionNotes, setDecommissionNotes] = React.useState<string>('')
-  const [showDecommissionForm, setShowDecommissionForm] =
-    React.useState<boolean>(false)
+  const {
+    decommissionDate,
+    setDecommissionDate,
+    decommissionDateError,
+    decommissionNotes,
+    setDecommissionNotes,
+    showDecommissionForm,
+    setShowDecommissionForm,
+    openDecommissionAlert,
+    setOpenDecommissionAlert,
+    checkDecommissionDate,
+    handleDecommission: runDecommission,
+    resetDecommissionForm,
+  } = useDecommissionFlow()
   const decommissionedByName = useUserNameLookup(
     system?.decommissioned_by,
     Boolean(open && system?.decommissioned && system?.decommissioned_by)
@@ -91,13 +98,13 @@ export default function EditSystemModal({
   // system loads. (Form-state init lives inside useEditSystemForm.)
   React.useEffect(() => {
     if (system && open) {
-      setDecommissionDate(getTodayISO())
-      setDecommissionDateError('')
-      setDecommissionNotes('')
-      setShowDecommissionForm(false)
+      resetDecommissionForm()
       setReactivationNotes('')
       setShowReactivateForm(false)
     }
+    // resetDecommissionForm is stable (useCallback); we only want this
+    // effect re-running on system/open transitions, not on hook identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [system, open])
   const handleClose = () => {
     if (_.isEqual(system, editedFismaSystem)) {
@@ -181,66 +188,7 @@ export default function EditSystemModal({
       }
     }
   }
-  // Stateful wrapper around the pure validator: writes the inline error
-  // string to state and returns a bool, matching the closure shape every
-  // input handler below was already calling.
-  const checkDecommissionDate = (dateStr: string): boolean => {
-    const { ok, error } = validateDecommissionDate(dateStr)
-    setDecommissionDateError(error)
-    return ok
-  }
-  const handleDecommission = async () => {
-    setOpenDecommissionAlert(false)
-    if (!checkDecommissionDate(decommissionDate)) {
-      return
-    }
-    const isoDate = new Date(decommissionDate + 'T00:00:00.000Z').toISOString()
-    const trimmedNotes = decommissionNotes.trim()
-    const body: {
-      decommissioned_date: string
-      notes?: string
-    } = {
-      decommissioned_date: isoDate,
-    }
-    if (trimmedNotes) {
-      body.notes = trimmedNotes
-    }
-    try {
-      const res = await axiosInstance.delete(
-        `fismasystems/${editedFismaSystem.fismasystemid}`,
-        { data: body }
-      )
-      if (res.status === 200 || res.status === 204) {
-        notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
-          autoHideDuration: 2000,
-        })
-        const updatedSystem: FismaSystemType = res.data?.data || {
-          ...editedFismaSystem,
-          decommissioned: true,
-          decommissioned_date: isoDate,
-          decommissioned_notes: trimmedNotes || null,
-        }
-        onClose(updatedSystem)
-      }
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      console.error(
-        'Decommission error:',
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.status,
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.data
-      )
-      const parsed = parseApiError(error)
-      if (parsed.status === 404) {
-        notify(ERROR_MESSAGES.systemNotFound, 'error', {
-          autoHideDuration: 2000,
-        })
-        return
-      }
-      notify(parsed.message, 'error')
-    }
-  }
+  const handleDecommission = () => runDecommission(editedFismaSystem, onClose)
   const handleReactivate = async () => {
     setOpenReactivateAlert(false)
     const trimmedNotes = reactivationNotes.trim()
