@@ -224,6 +224,7 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
   mock.onGet(`/users/${USER_ID_B}/assignedopdivs`).reply(200, { data: [2] })
   mock.onPut(`/users/${USER_ID_B}/opdivs`).reply(204)
 
+  const onChanged = jest.fn()
   const { rerender } = renderModal()
 
   // Switch to user B before user A's fetch resolves — triggers effect cleanup.
@@ -234,7 +235,7 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
       userid={USER_ID_B}
       userName="Test User B"
       opdivOptions={opdivOptions}
-      onChanged={jest.fn()}
+      onChanged={onChanged}
     />
   )
 
@@ -250,4 +251,6 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
   const body = JSON.parse(mock.history.put[0].data)
   expect(body.opdiv_ids).toEqual([2])
   expect(body.opdiv_ids).not.toContain(1)
+  expect(onChanged).toHaveBeenCalledWith(USER_ID_B)
+  expect(onChanged).not.toHaveBeenCalledWith(USER_ID)
 })
