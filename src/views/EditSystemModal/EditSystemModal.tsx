@@ -5,13 +5,9 @@ import { Box, Button, Grid, OutlinedInput, Select } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
-import { editSystemModalProps, FismaSystemType } from '@/types'
+import { editSystemModalProps } from '@/types'
 import MenuItem from '@mui/material/MenuItem'
-import {
-  CONFIRMATION_MESSAGE,
-  ERROR_MESSAGES,
-  STATUS_MESSAGES,
-} from '@/constants'
+import { CONFIRMATION_MESSAGE, STATUS_MESSAGES } from '@/constants'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 
 import { emailValidator } from './validators'
@@ -21,6 +17,7 @@ import { getTodayISO } from './helpers'
 import { useUserNameLookup } from './hooks/useUserNameLookup'
 import { useEditSystemForm } from './hooks/useEditSystemForm'
 import { useDecommissionFlow } from './hooks/useDecommissionFlow'
+import { useReactivateFlow } from './hooks/useReactivateFlow'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -84,11 +81,16 @@ export default function EditSystemModal({
     system?.reactivated_by,
     Boolean(open && system?.reactivated_by)
   )
-  const [showReactivateForm, setShowReactivateForm] =
-    React.useState<boolean>(false)
-  const [reactivationNotes, setReactivationNotes] = React.useState<string>('')
-  const [openReactivateAlert, setOpenReactivateAlert] =
-    React.useState<boolean>(false)
+  const {
+    reactivationNotes,
+    setReactivationNotes,
+    showReactivateForm,
+    setShowReactivateForm,
+    openReactivateAlert,
+    setOpenReactivateAlert,
+    handleReactivate: runReactivate,
+    resetReactivateForm,
+  } = useReactivateFlow()
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)
@@ -99,11 +101,10 @@ export default function EditSystemModal({
   React.useEffect(() => {
     if (system && open) {
       resetDecommissionForm()
-      setReactivationNotes('')
-      setShowReactivateForm(false)
+      resetReactivateForm()
     }
-    // resetDecommissionForm is stable (useCallback); we only want this
-    // effect re-running on system/open transitions, not on hook identity.
+    // resetDecommissionForm / resetReactivateForm are stable (useCallback);
+    // re-run only on system/open transitions, not on hook identity.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [system, open])
   const handleClose = () => {
@@ -189,45 +190,7 @@ export default function EditSystemModal({
     }
   }
   const handleDecommission = () => runDecommission(editedFismaSystem, onClose)
-  const handleReactivate = async () => {
-    setOpenReactivateAlert(false)
-    const trimmedNotes = reactivationNotes.trim()
-    const body = trimmedNotes ? { notes: trimmedNotes } : undefined
-    try {
-      const res = await axiosInstance.put(
-        `fismasystems/${editedFismaSystem.fismasystemid}/reactivate`,
-        body
-      )
-      if (res.status === 200) {
-        notify(STATUS_MESSAGES.systemReactivated, 'success', {
-          autoHideDuration: 2000,
-        })
-        const updatedSystem: FismaSystemType = res.data?.data || {
-          ...editedFismaSystem,
-          decommissioned: false,
-          reactivation_notes: trimmedNotes || null,
-        }
-        onClose(updatedSystem)
-      }
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      console.error(
-        'Reactivate error:',
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.status,
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.data
-      )
-      const parsed = parseApiError(error)
-      if (parsed.status === 404) {
-        notify(ERROR_MESSAGES.systemNotFound, 'error', {
-          autoHideDuration: 2000,
-        })
-        return
-      }
-      notify(parsed.message, 'error')
-    }
-  }
+  const handleReactivate = () => runReactivate(editedFismaSystem, onClose)
   if (open && system) {
     if (loading) {
       return (
