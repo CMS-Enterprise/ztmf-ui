@@ -65,11 +65,11 @@ export default function OpDivGrantModal({
     [opdivOptions, opdivMap]
   )
 
-  const handleError = (error: unknown) => {
+  const handleError = React.useCallback((error: unknown) => {
     if (isAuthHandled(error)) return
     const parsed = parseApiError(error)
     notify(parsed.message, 'error')
-  }
+  }, [])
 
   React.useEffect(() => {
     if (open && userid) {
@@ -93,8 +93,11 @@ export default function OpDivGrantModal({
       return () => {
         cancelled = true
       }
+    } else {
+      setFetchFailed(false)
+      setLoading(false)
     }
-  }, [open, userid])
+  }, [open, userid, handleError])
 
   const optionLabel = (opdivId: number) => {
     const od = opdivMap[opdivId]
@@ -138,7 +141,7 @@ export default function OpDivGrantModal({
           disableCloseOnSelect
           limitTags={3}
           options={sortedOptionIds}
-          disabled={loading}
+          disabled={loading || fetchFailed}
           disableClearable
           getOptionLabel={optionLabel}
           renderOption={(props, option, { selected }) => (
