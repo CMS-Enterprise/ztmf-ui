@@ -20,9 +20,11 @@ export type ActionsCellProps = {
   /** Open the delete-confirmation dialog for this row. */
   onDelete: () => void
   /**
-   * True when this row represents the signed-in user themselves. Hides
-   * the Delete button so the actor can't deactivate their own account
-   * (the backend rejects self-delete too; this is just a UI guard).
+   * True when this row represents the signed-in user themselves. The
+   * Delete button still renders so the action stays discoverable, but
+   * it's disabled and its tooltip explains why - hiding it entirely
+   * leaves no signal that delete is a thing for this column.
+   * (Pattern matches the pre-redesign bugfix in commit 638b0d6.)
    */
   isSelf?: boolean
 }
@@ -65,13 +67,25 @@ export default function ActionsCell({
           <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
         </IconButton>
       </Tooltip>
-      {!isSelf && (
-        <Tooltip title="Delete user">
-          <IconButton size="small" onClick={onDelete} aria-label="Delete user">
-            <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+      <Tooltip
+        title={isSelf ? "You can't delete your own account" : 'Delete user'}
+      >
+        {/* span wrapper lets Tooltip listen for events even when the
+            child is disabled (MUI requirement). */}
+        <span>
+          <IconButton
+            size="small"
+            onClick={onDelete}
+            aria-label="Delete user"
+            disabled={isSelf}
+          >
+            <DeleteIcon
+              fontSize="small"
+              sx={{ color: isSelf ? colors.neutral400 : colors.neutral700 }}
+            />
           </IconButton>
-        </Tooltip>
-      )}
+        </span>
+      </Tooltip>
       <Tooltip title="More actions">
         <IconButton
           size="small"
