@@ -18,6 +18,7 @@ import { useUserNameLookup } from './hooks/useUserNameLookup'
 import { useEditSystemForm } from './hooks/useEditSystemForm'
 import { useDecommissionFlow } from './hooks/useDecommissionFlow'
 import { useReactivateFlow } from './hooks/useReactivateFlow'
+import DecommissionedSystemInfo from './components/DecommissionedSystemInfo'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -555,112 +556,31 @@ export default function EditSystemModal({
                           System Decommissioned
                         </Typography>
                         {!showDecommissionForm && !showReactivateForm && (
-                          <>
-                            {system?.decommissioned_date && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  display: 'block',
-                                  ml: 2,
-                                  color: 'text.secondary',
-                                }}
-                              >
-                                Date:{' '}
-                                {new Date(
-                                  system.decommissioned_date
-                                ).toLocaleDateString()}
-                              </Typography>
-                            )}
-                            {system?.decommissioned_by && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  display: 'block',
-                                  ml: 2,
-                                  color: 'text.secondary',
-                                }}
-                              >
-                                By:{' '}
-                                {decommissionedByName ||
-                                  system.decommissioned_by}
-                              </Typography>
-                            )}
-                            {system?.decommissioned_notes && (
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  display: 'block',
-                                  ml: 2,
-                                  mt: 0.5,
-                                  color: 'text.secondary',
-                                }}
-                              >
-                                Notes: {system.decommissioned_notes}
-                              </Typography>
-                            )}
-                            {system?.reactivated_date && (
-                              <Box sx={{ mt: 1 }}>
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: 'block',
-                                    fontStyle: 'italic',
-                                    color: 'text.secondary',
-                                  }}
-                                >
-                                  Previously reactivated on{' '}
-                                  {new Date(
-                                    system.reactivated_date
-                                  ).toLocaleDateString()}
-                                  {system?.reactivated_by &&
-                                    ` by ${reactivatedByName || system.reactivated_by}`}
-                                  {system?.reactivation_notes
-                                    ? ` (notes: ${system.reactivation_notes})`
-                                    : ''}
-                                </Typography>
-                              </Box>
-                            )}
-                            <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                              <Button
-                                variant="outlined"
-                                color="primary"
-                                size="small"
-                                onClick={() => {
-                                  if (system?.decommissioned_date) {
-                                    const d = new Date(
-                                      system.decommissioned_date
-                                    )
-                                    const yyyy = d.getFullYear()
-                                    const mm = String(
-                                      d.getMonth() + 1
-                                    ).padStart(2, '0')
-                                    const dd = String(d.getDate()).padStart(
-                                      2,
-                                      '0'
-                                    )
-                                    setDecommissionDate(`${yyyy}-${mm}-${dd}`)
-                                  }
-                                  setDecommissionNotes(
-                                    system?.decommissioned_notes || ''
-                                  )
-                                  setShowDecommissionForm(true)
-                                }}
-                              >
-                                Edit Decommission Details
-                              </Button>
-                              <Button
-                                variant="contained"
-                                color="primary"
-                                size="small"
-                                onClick={() => {
-                                  setReactivationNotes('')
-                                  setShowReactivateForm(true)
-                                }}
-                              >
-                                Reactivate System
-                              </Button>
-                            </Box>
-                          </>
+                          <DecommissionedSystemInfo
+                            system={system}
+                            decommissionedByName={decommissionedByName}
+                            reactivatedByName={reactivatedByName}
+                            onEditDecommission={() => {
+                              if (system?.decommissioned_date) {
+                                const d = new Date(system.decommissioned_date)
+                                const yyyy = d.getFullYear()
+                                const mm = String(d.getMonth() + 1).padStart(
+                                  2,
+                                  '0'
+                                )
+                                const dd = String(d.getDate()).padStart(2, '0')
+                                setDecommissionDate(`${yyyy}-${mm}-${dd}`)
+                              }
+                              setDecommissionNotes(
+                                system?.decommissioned_notes || ''
+                              )
+                              setShowDecommissionForm(true)
+                            }}
+                            onReactivate={() => {
+                              setReactivationNotes('')
+                              setShowReactivateForm(true)
+                            }}
+                          />
                         )}
                         {showReactivateForm && (
                           <Box sx={{ ml: 2, mt: 2 }}>
