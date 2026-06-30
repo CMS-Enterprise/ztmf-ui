@@ -190,7 +190,24 @@ test('save button stays disabled when the initial grant fetch fails', async () =
 
   renderModal()
 
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  // Wait for the full error path to settle — snackbar proves .catch ran and
+  // setFetchFailed(true) has committed, not just that the GET was sent.
+  await screen.findByText(ERROR_MESSAGES.tryAgain)
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+})
+
+test('401 on the initial grant fetch redirects to sign-in without a generic error snackbar', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(401)
+
+  renderModal()
+
+  await waitFor(() => {
+    expect(mockedNavigate).toHaveBeenCalledWith(Routes.SIGNIN, {
+      replace: true,
+      state: { message: ERROR_MESSAGES.expired, reason: 'EXPIRED' },
+    })
+  })
+  expect(screen.queryByText(ERROR_MESSAGES.tryAgain)).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
