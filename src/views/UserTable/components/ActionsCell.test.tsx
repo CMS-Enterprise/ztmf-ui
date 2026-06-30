@@ -8,6 +8,21 @@ describe('ActionsCell', () => {
   // the standalone behavior of the actions cell instead. Each of the four
   // callbacks must fire exactly once on its trigger and not be cross-wired.
 
+  test('isSelf=true hides the Delete button (self-delete guard)', () => {
+    render(
+      <ActionsCell
+        onEdit={jest.fn()}
+        onDelete={jest.fn()}
+        onAssignSystems={jest.fn()}
+        onAssignOpDivs={jest.fn()}
+        isSelf
+      />
+    )
+    expect(screen.getByLabelText('Edit user')).toBeInTheDocument()
+    expect(screen.queryByLabelText('Delete user')).not.toBeInTheDocument()
+    expect(screen.getByLabelText('More actions')).toBeInTheDocument()
+  })
+
   test('Edit / Delete / More buttons render with tooltipped labels', () => {
     render(
       <ActionsCell

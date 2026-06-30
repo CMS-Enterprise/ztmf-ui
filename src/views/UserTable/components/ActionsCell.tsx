@@ -19,6 +19,12 @@ export type ActionsCellProps = {
   onAssignOpDivs: () => void
   /** Open the delete-confirmation dialog for this row. */
   onDelete: () => void
+  /**
+   * True when this row represents the signed-in user themselves. Hides
+   * the Delete button so the actor can't deactivate their own account
+   * (the backend rejects self-delete too; this is just a UI guard).
+   */
+  isSelf?: boolean
 }
 
 /**
@@ -39,6 +45,7 @@ export default function ActionsCell({
   onAssignSystems,
   onAssignOpDivs,
   onDelete,
+  isSelf = false,
 }: ActionsCellProps) {
   const [anchor, setAnchor] = useState<HTMLElement | null>(null)
   const open = Boolean(anchor)
@@ -58,11 +65,13 @@ export default function ActionsCell({
           <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
         </IconButton>
       </Tooltip>
-      <Tooltip title="Delete user">
-        <IconButton size="small" onClick={onDelete} aria-label="Delete user">
-          <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
-        </IconButton>
-      </Tooltip>
+      {!isSelf && (
+        <Tooltip title="Delete user">
+          <IconButton size="small" onClick={onDelete} aria-label="Delete user">
+            <DeleteIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+          </IconButton>
+        </Tooltip>
+      )}
       <Tooltip title="More actions">
         <IconButton
           size="small"

@@ -305,12 +305,17 @@ export default function UserTable() {
   const handleDeleteClick = (id: GridRowId) => () => {
     const curRow = apiRef.current.getRow(id) as users | undefined
     if (!curRow) return
+    // Belt-and-braces self-delete guard: the ActionsCell hides the button
+    // for the actor's own row, but a stale apiRef invocation or future
+    // caller could still land here. Block it.
+    if (String(curRow.userid) === String(userInfo.userid)) return
     modals.askDelete(curRow)
   }
   const handleConfirmDelete = async (confirm: boolean) => {
     const target = modals.pendingDelete
     modals.clearDelete()
     if (!confirm || !target) return
+    if (String(target.userid) === String(userInfo.userid)) return
     try {
       await axiosInstance.delete(`/users/${target.userid}`)
       setRows((prev) => prev.filter((row) => row.userid !== target.userid))
@@ -692,6 +697,7 @@ export default function UserTable() {
             onAssignSystems={() => handleOpenModal(params.id)}
             onAssignOpDivs={() => handleOpenOpDivModal(params.id)}
             onDelete={handleDeleteClick(params.id)}
+            isSelf={String(params.row.userid) === String(userInfo.userid)}
           />
         )
       },
