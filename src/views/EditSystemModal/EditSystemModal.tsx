@@ -22,6 +22,7 @@ import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
 import { datacenterenvironment } from './dataEnvironment'
+import { getTodayISO, validateDecommissionDate } from './helpers'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -154,11 +155,7 @@ export default function EditSystemModal({
           system?.fismauid && system?.fismauid.length > 0 ? true : false,
       }))
       setEditedFismaSystem(system)
-      const today = new Date()
-      const yyyy = today.getFullYear()
-      const mm = String(today.getMonth() + 1).padStart(2, '0')
-      const dd = String(today.getDate()).padStart(2, '0')
-      setDecommissionDate(`${yyyy}-${mm}-${dd}`)
+      setDecommissionDate(getTodayISO())
       setDecommissionDateError('')
       setDecommissionNotes('')
       setShowDecommissionForm(false)
@@ -314,35 +311,17 @@ export default function EditSystemModal({
       }
     }
   }
-  const validateDecommissionDate = (dateStr: string): boolean => {
-    if (!dateStr) {
-      setDecommissionDateError('Date is required')
-      return false
-    }
-    const parsed = new Date(dateStr + 'T00:00:00.000Z')
-    if (isNaN(parsed.getTime())) {
-      setDecommissionDateError('Invalid date')
-      return false
-    }
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    if (parsed > today) {
-      setDecommissionDateError('Date cannot be in the future')
-      return false
-    }
-    setDecommissionDateError('')
-    return true
-  }
-  const getTodayISO = (): string => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    return `${yyyy}-${mm}-${dd}`
+  // Stateful wrapper around the pure validator: writes the inline error
+  // string to state and returns a bool, matching the closure shape every
+  // input handler below was already calling.
+  const checkDecommissionDate = (dateStr: string): boolean => {
+    const { ok, error } = validateDecommissionDate(dateStr)
+    setDecommissionDateError(error)
+    return ok
   }
   const handleDecommission = async () => {
     setOpenDecommissionAlert(false)
-    if (!validateDecommissionDate(decommissionDate)) {
+    if (!checkDecommissionDate(decommissionDate)) {
       return
     }
     const isoDate = new Date(decommissionDate + 'T00:00:00.000Z').toISOString()
@@ -974,11 +953,11 @@ export default function EditSystemModal({
                               onChange={(e) => {
                                 setDecommissionDate(e.target.value)
                                 if (decommissionDateError) {
-                                  validateDecommissionDate(e.target.value)
+                                  checkDecommissionDate(e.target.value)
                                 }
                               }}
                               onBlur={(e) => {
-                                validateDecommissionDate(e.currentTarget.value)
+                                checkDecommissionDate(e.currentTarget.value)
                               }}
                               style={{
                                 width: '100%',
@@ -1044,9 +1023,7 @@ export default function EditSystemModal({
                                 color="primary"
                                 size="small"
                                 onClick={() => {
-                                  if (
-                                    validateDecommissionDate(decommissionDate)
-                                  ) {
+                                  if (checkDecommissionDate(decommissionDate)) {
                                     setOpenDecommissionAlert(true)
                                   }
                                 }}
@@ -1106,11 +1083,11 @@ export default function EditSystemModal({
                               onChange={(e) => {
                                 setDecommissionDate(e.target.value)
                                 if (decommissionDateError) {
-                                  validateDecommissionDate(e.target.value)
+                                  checkDecommissionDate(e.target.value)
                                 }
                               }}
                               onBlur={(e) => {
-                                validateDecommissionDate(e.currentTarget.value)
+                                checkDecommissionDate(e.currentTarget.value)
                               }}
                               style={{
                                 width: '100%',
@@ -1174,9 +1151,7 @@ export default function EditSystemModal({
                               variant="contained"
                               color="error"
                               onClick={() => {
-                                if (
-                                  validateDecommissionDate(decommissionDate)
-                                ) {
+                                if (checkDecommissionDate(decommissionDate)) {
                                   setOpenDecommissionAlert(true)
                                 }
                               }}
