@@ -5,12 +5,7 @@ import { Box, Button, Grid, OutlinedInput, Select } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
-import {
-  editSystemModalProps,
-  FismaSystemType,
-  FormValidType,
-  FormValidHelperText,
-} from '@/types'
+import { editSystemModalProps, FismaSystemType } from '@/types'
 import MenuItem from '@mui/material/MenuItem'
 import {
   CONFIRMATION_MESSAGE,
@@ -24,6 +19,7 @@ import { EMPTY_SYSTEM } from './emptySystem'
 import { datacenterenvironment } from './dataEnvironment'
 import { getTodayISO, validateDecommissionDate } from './helpers'
 import { useUserNameLookup } from './hooks/useUserNameLookup'
+import { useEditSystemForm } from './hooks/useEditSystemForm'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -51,27 +47,19 @@ export default function EditSystemModal({
   system,
   mode,
 }: editSystemModalProps) {
-  const [formValid, setFormValid] = React.useState<FormValidType>({
-    issoemail: false,
-    datacallcontact: false,
-    fismaname: false,
-    fismaacronym: false,
-    datacenterenvironment: false,
-    component: false,
-    fismauid: false,
-  })
-  const isFormValid = (): boolean => {
-    return Object.values(formValid).every((value) => value === true)
-  }
-  // Fields the user has actually interacted with. Required-field errors only
-  // render once a field is touched, so opening the Add form no longer shows a
-  // wall of red before the user has typed anything (audit 4.1).
-  const [touched, setTouched] = React.useState<Record<string, boolean>>({})
-  const markTouched = (key: string) =>
-    setTouched((prev) => ({ ...prev, [key]: true }))
-  const showError = (key: keyof FormValidType): boolean =>
-    Boolean(touched[key]) && !formValid[key]
-  const [loading, setLoading] = React.useState<boolean>(true)
+  const {
+    editedFismaSystem,
+    setEditedFismaSystem,
+    setFormValid,
+    formValidErrorText,
+    setFormValidErrorText,
+    loading,
+    isFormValid,
+    showError,
+    handleInputChange,
+    markTouched,
+    markFieldError,
+  } = useEditSystemForm(system, open)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [openDecommissionAlert, setOpenDecommissionAlert] =
     React.useState<boolean>(false)
@@ -94,81 +82,21 @@ export default function EditSystemModal({
   const [reactivationNotes, setReactivationNotes] = React.useState<string>('')
   const [openReactivateAlert, setOpenReactivateAlert] =
     React.useState<boolean>(false)
-  const [formValidErrorText, setFormValidErrorText] =
-    React.useState<FormValidHelperText>({
-      issoemail: TEXTFIELD_HELPER_TEXT,
-      datacallcontact: TEXTFIELD_HELPER_TEXT,
-      fismaname: TEXTFIELD_HELPER_TEXT,
-      fismaacronym: TEXTFIELD_HELPER_TEXT,
-      datacenterenvironment: TEXTFIELD_HELPER_TEXT,
-      component: TEXTFIELD_HELPER_TEXT,
-      fismauid: TEXTFIELD_HELPER_TEXT,
-    })
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)
     }
   }
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-    key: string
-  ) => {
-    const value = e.target.value
-    const isValid = value.length > 0
-
-    markTouched(key)
-    setEditedFismaSystem((prevState) => ({
-      ...prevState,
-      [key]: value,
-    }))
-    setFormValid((prevState) => ({
-      ...prevState,
-      [key]: isValid,
-    }))
-    if (!isValid) {
-      setFormValidErrorText((prevState) => ({
-        ...prevState,
-        [key]: isValid ? '' : TEXTFIELD_HELPER_TEXT,
-      }))
-    }
-  }
-  const [editedFismaSystem, setEditedFismaSystem] =
-    React.useState<FismaSystemType>(EMPTY_SYSTEM)
+  // Reset the decommission + reactivate sub-form state every time a new
+  // system loads. (Form-state init lives inside useEditSystemForm.)
   React.useEffect(() => {
     if (system && open) {
-      setFormValid((prevState) => ({
-        ...prevState,
-        issoemail:
-          system?.issoemail && system?.issoemail.length > 0 ? true : false,
-        datacallcontact:
-          system?.datacallcontact && system?.datacallcontact.length > 0
-            ? true
-            : false,
-        fismaname:
-          system?.fismaname && system?.fismaname.length > 0 ? true : false,
-        fismaacronym:
-          system?.fismaacronym && system?.fismaacronym.length > 0
-            ? true
-            : false,
-        datacenterenvironment:
-          system?.datacenterenvironment &&
-          system?.datacenterenvironment.length > 0
-            ? true
-            : false,
-        component:
-          system?.component && system?.component.length > 0 ? true : false,
-        fismauid:
-          system?.fismauid && system?.fismauid.length > 0 ? true : false,
-      }))
-      setEditedFismaSystem(system)
       setDecommissionDate(getTodayISO())
       setDecommissionDateError('')
       setDecommissionNotes('')
       setShowDecommissionForm(false)
       setReactivationNotes('')
       setShowReactivateForm(false)
-      setTouched({})
-      setLoading(false)
     }
   }, [system, open])
   const handleClose = () => {
@@ -209,12 +137,7 @@ export default function EditSystemModal({
         // toast is a status flag, not the detail.
         if (parsed.fieldErrors) {
           Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-            setFormValid((prevState) => ({ ...prevState, [key]: false }))
-            markTouched(key)
-            setFormValidErrorText((prevState) => ({
-              ...prevState,
-              [key]: message,
-            }))
+            markFieldError(key, message)
           })
           notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
           return
@@ -247,12 +170,7 @@ export default function EditSystemModal({
         // toast is a status flag, not the detail.
         if (parsed.fieldErrors) {
           Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-            setFormValid((prevState) => ({ ...prevState, [key]: false }))
-            markTouched(key)
-            setFormValidErrorText((prevState) => ({
-              ...prevState,
-              [key]: message,
-            }))
+            markFieldError(key, message)
           })
           notify(STATUS_MESSAGES.notCreated, 'error', {
             autoHideDuration: 1500,
