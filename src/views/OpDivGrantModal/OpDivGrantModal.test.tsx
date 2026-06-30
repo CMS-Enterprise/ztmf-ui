@@ -30,6 +30,7 @@ const mockedNavigate = (router as unknown as { navigate: jest.Mock }).navigate
 const mock = new MockAdapter(axiosInstance)
 
 const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
+const USER_ID_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
 
 // Represents the caller's grantable scope (children, active, and — for an
 // OPDIV_ADMIN — limited to their own OpDivs). OpDiv 99 is intentionally absent
@@ -119,6 +120,7 @@ test('modal stays open on save error and does not call onChanged', async () => {
   const onChanged = jest.fn()
   renderModal({ handleClose, onChanged })
 
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
   expect(await screen.findByText(ERROR_MESSAGES.tryAgain)).toBeInTheDocument()
@@ -133,6 +135,7 @@ test('403 shows the permission snackbar and does not close the modal', async () 
   const handleClose = jest.fn()
   renderModal({ handleClose })
 
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
   expect(await screen.findByText(ERROR_MESSAGES.permission)).toBeInTheDocument()
@@ -144,6 +147,7 @@ test('401 redirects to sign-in without firing a generic error snackbar', async (
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(401)
 
   renderModal()
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
   await waitFor(() => {
@@ -163,7 +167,70 @@ test('save button is disabled while the request is in flight', async () => {
   renderModal()
   const saveButton = screen.getByRole('button', { name: /^save$/i })
 
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
   await userEvent.click(saveButton)
 
   expect(saveButton).toBeDisabled()
+})
+
+test('save button is disabled until the initial grant fetch resolves', async () => {
+  // GET never resolves — keeps the modal in loading state indefinitely.
+  mock
+    .onGet(`/users/${USER_ID}/assignedopdivs`)
+    .reply(() => new Promise(() => {}))
+
+  renderModal()
+  const saveButton = screen.getByRole('button', { name: /^save$/i })
+
+  expect(saveButton).toBeDisabled()
+})
+
+test('save button stays disabled when the initial grant fetch fails', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(500)
+
+  renderModal()
+
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+})
+
+test('stale fetch from a prior user is discarded when userid changes', async () => {
+  // User A's fetch is intentionally slow — held until we manually release it.
+  let resolveUserA!: () => void
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(
+    () =>
+      new Promise((res) => {
+        resolveUserA = () => res([200, { data: [1] }])
+      })
+  )
+  // User B's fetch resolves immediately with a different grant set.
+  mock.onGet(`/users/${USER_ID_B}/assignedopdivs`).reply(200, { data: [2] })
+  mock.onPut(`/users/${USER_ID_B}/opdivs`).reply(204)
+
+  const { rerender } = renderModal()
+
+  // Switch to user B before user A's fetch resolves — triggers effect cleanup.
+  rerender(
+    <OpDivGrantModal
+      open={true}
+      handleClose={jest.fn()}
+      userid={USER_ID_B}
+      userName="Test User B"
+      opdivOptions={opdivOptions}
+      onChanged={jest.fn()}
+    />
+  )
+
+  // Both GETs have been sent; user B's has already resolved.
+  await waitFor(() => expect(mock.history.get).toHaveLength(2))
+
+  // Release user A's stale fetch — the cancelled flag should swallow the result.
+  resolveUserA()
+
+  // Save must send user B's grant (opdiv 2), not user A's stale grant (opdiv 1).
+  await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  const body = JSON.parse(mock.history.put[0].data)
+  expect(body.opdiv_ids).toEqual([2])
+  expect(body.opdiv_ids).not.toContain(1)
 })

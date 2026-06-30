@@ -44,6 +44,8 @@ export default function OpDivGrantModal({
 }: Props) {
   const [localOpDivs, setLocalOpDivs] = React.useState<number[]>([])
   const [saving, setSaving] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+  const [fetchFailed, setFetchFailed] = React.useState(false)
 
   const opdivMap = React.useMemo(() => {
     const map: Record<number, { code: string; name: string }> = {}
@@ -71,9 +73,26 @@ export default function OpDivGrantModal({
 
   React.useEffect(() => {
     if (open && userid) {
+      let cancelled = false
+      setLoading(true)
+      setFetchFailed(false)
+      setLocalOpDivs([])
       fetchUserOpDivs(String(userid))
-        .then((grants) => setLocalOpDivs(grants))
-        .catch((error) => handleError(error))
+        .then((grants) => {
+          if (!cancelled) setLocalOpDivs(grants)
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            handleError(error)
+            setFetchFailed(true)
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+      return () => {
+        cancelled = true
+      }
     }
   }, [open, userid])
 
@@ -144,7 +163,10 @@ export default function OpDivGrantModal({
         <CmsButton onClick={handleClose} variation="ghost">
           Cancel
         </CmsButton>
-        <CmsButton onClick={handleSave} disabled={saving}>
+        <CmsButton
+          onClick={handleSave}
+          disabled={saving || loading || fetchFailed}
+        >
           Save
         </CmsButton>
       </DialogActions>
