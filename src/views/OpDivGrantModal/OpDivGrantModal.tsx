@@ -138,6 +138,7 @@ export default function OpDivGrantModal({
           disableCloseOnSelect
           limitTags={3}
           options={sortedOptionIds}
+          disabled={loading}
           disableClearable
           getOptionLabel={optionLabel}
           renderOption={(props, option, { selected }) => (
