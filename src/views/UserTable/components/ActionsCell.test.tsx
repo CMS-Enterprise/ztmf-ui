@@ -8,19 +8,30 @@ describe('ActionsCell', () => {
   // the standalone behavior of the actions cell instead. Each of the four
   // callbacks must fire exactly once on its trigger and not be cross-wired.
 
-  test('isSelf=true hides the Delete button (self-delete guard)', () => {
+  test('isSelf=true disables the Delete button without firing onDelete', () => {
+    // Matches the pre-redesign bugfix pattern (commit 638b0d6): the Delete
+    // icon stays visible (so the affordance is discoverable) but is
+    // disabled. Browsers prevent click events from firing on disabled
+    // buttons - this test pins both the disabled prop and a non-fired
+    // callback. The action handler in UserTable.handleConfirmDelete is
+    // the backstop if the button is ever re-enabled by a future refactor.
+    const onDelete = jest.fn()
     render(
       <ActionsCell
         onEdit={jest.fn()}
-        onDelete={jest.fn()}
+        onDelete={onDelete}
         onAssignSystems={jest.fn()}
         onAssignOpDivs={jest.fn()}
         isSelf
       />
     )
-    expect(screen.getByLabelText('Edit user')).toBeInTheDocument()
-    expect(screen.queryByLabelText('Delete user')).not.toBeInTheDocument()
-    expect(screen.getByLabelText('More actions')).toBeInTheDocument()
+    const button = screen.getByRole('button', { name: 'Delete user' })
+    expect(button).toBeInTheDocument()
+    expect(button).toBeDisabled()
+    // (Skip userEvent.click - it correctly refuses to interact with a
+    // pointer-events: none element, which is what disabled MUI buttons
+    // are. The disabled assertion above is what pins the behavior.)
+    expect(onDelete).not.toHaveBeenCalled()
   })
 
   test('Edit / Delete / More buttons render with tooltipped labels', () => {
@@ -32,9 +43,15 @@ describe('ActionsCell', () => {
         onAssignOpDivs={jest.fn()}
       />
     )
-    expect(screen.getByLabelText('Edit user')).toBeInTheDocument()
-    expect(screen.getByLabelText('Delete user')).toBeInTheDocument()
-    expect(screen.getByLabelText('More actions')).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Edit user' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'Delete user' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: 'More actions' })
+    ).toBeInTheDocument()
   })
 
   test('Edit fires onEdit only', async () => {
@@ -48,7 +65,7 @@ describe('ActionsCell', () => {
         onAssignOpDivs={jest.fn()}
       />
     )
-    await userEvent.click(screen.getByLabelText('Edit user'))
+    await userEvent.click(screen.getByRole('button', { name: 'Edit user' }))
     expect(onEdit).toHaveBeenCalledTimes(1)
     expect(onDelete).not.toHaveBeenCalled()
   })
@@ -64,7 +81,7 @@ describe('ActionsCell', () => {
         onAssignOpDivs={jest.fn()}
       />
     )
-    await userEvent.click(screen.getByLabelText('Delete user'))
+    await userEvent.click(screen.getByRole('button', { name: 'Delete user' }))
     expect(onDelete).toHaveBeenCalledTimes(1)
     expect(onEdit).not.toHaveBeenCalled()
   })

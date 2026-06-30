@@ -305,17 +305,20 @@ export default function UserTable() {
   const handleDeleteClick = (id: GridRowId) => () => {
     const curRow = apiRef.current.getRow(id) as users | undefined
     if (!curRow) return
-    // Belt-and-braces self-delete guard: the ActionsCell hides the button
-    // for the actor's own row, but a stale apiRef invocation or future
-    // caller could still land here. Block it.
-    if (String(curRow.userid) === String(userInfo.userid)) return
     modals.askDelete(curRow)
   }
   const handleConfirmDelete = async (confirm: boolean) => {
     const target = modals.pendingDelete
     modals.clearDelete()
     if (!confirm || !target) return
-    if (String(target.userid) === String(userInfo.userid)) return
+    // Backstop: the row-action icon for the current user is already
+    // disabled, but guard the handler in case it's invoked some other
+    // way (programmatic call, future refactor wiring a new entry point).
+    // Self-delete locks the user out of the app with no recovery path.
+    if (String(target.userid) === String(userInfo.userid)) {
+      notify("You can't delete your own account.", 'error')
+      return
+    }
     try {
       await axiosInstance.delete(`/users/${target.userid}`)
       setRows((prev) => prev.filter((row) => row.userid !== target.userid))
