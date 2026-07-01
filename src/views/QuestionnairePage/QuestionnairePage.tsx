@@ -29,6 +29,7 @@ import {
   STATUS_MESSAGES,
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   CONFIRMATION_MESSAGE_QUESTION,
+  NOTES_UPDATE_REQUIRED_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
@@ -40,7 +41,10 @@ import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
-import { shouldPersistResponse } from './saveGuard'
+import {
+  shouldPersistResponse,
+  needsNotesUpdateForChoiceChange,
+} from './saveGuard'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -206,6 +210,19 @@ export default function QuestionnarePage() {
   const saveResponse = async () => {
     if (
       !shouldPersistResponse({
+        selectQuestionOption,
+        initQuestionChoice,
+        notes,
+        initNotes,
+      })
+    ) {
+      return
+    }
+    // Backstop: the Next button is disabled when this fires, but a future
+    // save trigger (autosave, dedicated Save, route-leave hook) would
+    // reach saveResponse without knowing about the rule. Cheap insurance.
+    if (
+      needsNotesUpdateForChoiceChange({
         selectQuestionOption,
         initQuestionChoice,
         notes,
@@ -472,6 +489,15 @@ export default function QuestionnarePage() {
       </>
     )
   }
+  // Inline validation: when the user has flipped their answer without
+  // substantially editing the notes, we block the save (Next button) and
+  // surface the reason under the notes field. See saveGuard.ts for the rule.
+  const needsNotesUpdate = needsNotesUpdateForChoiceChange({
+    selectQuestionOption,
+    initQuestionChoice,
+    notes,
+    initNotes,
+  })
   return (
     <>
       <Box
@@ -615,6 +641,10 @@ export default function QuestionnarePage() {
                     fullWidth
                     value={notes}
                     disabled={isReadOnly}
+                    error={needsNotesUpdate}
+                    helperText={
+                      needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                    }
                     inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => {
                       setNotes(e.target.value)
@@ -708,6 +738,7 @@ export default function QuestionnarePage() {
                         }
                         setLoadingQuestion(false)
                       }}
+                      disabled={needsNotesUpdate}
                       style={{ marginBottom: '8px', marginTop: '8px' }}
                     >
                       {selectedIndex ===
