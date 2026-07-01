@@ -1,4 +1,5 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { SignInReasons } from '@/utils/authCodes'
 import { Routes } from '@/router/constants'
 
@@ -37,10 +38,12 @@ jest.mock('@/assets/ztmf-logo-login.png', () => 'ztmf-logo-login.png', {
 
 import { useLocation, useRouteLoaderData } from 'react-router-dom'
 import CONFIG from '@/utils/config'
+import { lookupIdpForEmail } from '@/utils/authLookup'
 import LoginPage from './LoginPage'
 
 const mockedUseLocation = useLocation as jest.Mock
 const mockedUseRouteLoaderData = useRouteLoaderData as jest.Mock
+const mockedLookup = lookupIdpForEmail as jest.Mock
 const mutableConfig = CONFIG as unknown as { IDP_ENABLED: boolean }
 
 beforeEach(() => {
@@ -179,5 +182,84 @@ describe('LoginPage EXPIRED / default state', () => {
     expect(
       screen.queryByText(/your session is missing/i)
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('IdpLookupLogin submit: routing and error mapping', () => {
+  const originalLocation = window.location
+
+  beforeEach(() => {
+    // Outer beforeEach sets IDP_ENABLED false and resets the router mocks;
+    // drive the email-lookup variant with a signed-out session here.
+    mutableConfig.IDP_ENABLED = true
+    mockedUseLocation.mockReturnValue({ pathname: '/signin', state: null })
+    mockedUseRouteLoaderData.mockReturnValue(undefined)
+    mockedLookup.mockReset()
+    // jsdom rejects an href assignment on the real window.location; swap in
+    // a writable stub so the redirect target is observable and no real
+    // navigation is attempted.
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: { href: '' },
+    })
+  })
+
+  afterEach(() => {
+    Object.defineProperty(window, 'location', {
+      configurable: true,
+      writable: true,
+      value: originalLocation,
+    })
+  })
+
+  async function submitEmail(email: string) {
+    const user = userEvent.setup()
+    render(<LoginPage />)
+    await user.type(screen.getByLabelText(/enter your email/i), email)
+    await user.click(screen.getByRole('button', { name: /continue/i }))
+  }
+
+  it('redirects to /login when the lookup resolves to okta', async () => {
+    mockedLookup.mockResolvedValue({ idp: 'okta' })
+    await submitEmail('user@okta.example')
+    await waitFor(() => expect(window.location.href).toBe('/login'))
+  })
+
+  it('redirects to /login/entra when the lookup resolves to entra', async () => {
+    mockedLookup.mockResolvedValue({ idp: 'entra' })
+    await submitEmail('user@entra.example')
+    await waitFor(() => expect(window.location.href).toBe('/login/entra'))
+  })
+
+  it('shows the generic message and does not navigate on a null result', async () => {
+    mockedLookup.mockResolvedValue({ idp: null })
+    await submitEmail('nobody@example.com')
+    expect(
+      await screen.findByText(/can't determine an identity provider/i)
+    ).toBeInTheDocument()
+    expect(window.location.href).toBe('')
+  })
+
+  it('shows the retry message and does not navigate when unavailable', async () => {
+    mockedLookup.mockResolvedValue({ unavailable: true })
+    await submitEmail('user@example.com')
+    expect(
+      await screen.findByText(/temporarily unavailable/i)
+    ).toBeInTheDocument()
+    expect(window.location.href).toBe('')
+  })
+
+  it('keeps a genuine null and an outage on distinct messages (non-enumeration lock)', async () => {
+    // A no-IdP answer must read as the generic "contact your admin" copy,
+    // never as the outage retry copy, so an outage can never be mistaken
+    // for - or reveal - a real account. Assert the null branch shows the
+    // generic message and NOT the outage message.
+    mockedLookup.mockResolvedValue({ idp: null })
+    await submitEmail('nobody@example.com')
+    expect(
+      await screen.findByText(/can't determine an identity provider/i)
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/temporarily unavailable/i)).toBeNull()
   })
 })

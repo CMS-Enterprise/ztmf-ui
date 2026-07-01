@@ -12,6 +12,14 @@ import ztmfLogo from '@/assets/ztmf-logo-login.png'
 const UNKNOWN_EMAIL_MESSAGE =
   "We can't determine an identity provider for that email. Contact your ZTMF administrator."
 
+// Shown only when the lookup fails at the transport/server level (timeout,
+// network, 4xx/5xx, malformed response) - never for a genuine "no IdP"
+// result. Keeping this distinct from UNKNOWN_EMAIL_MESSAGE lets a user
+// retry through a transient outage; because it fires independently of
+// whether the email exists, it leaks no enumeration signal.
+const LOOKUP_UNAVAILABLE_MESSAGE =
+  'The sign-in service is temporarily unavailable. Please try again in a moment.'
+
 // Fallback copy when the BE didn't send a message body (or the user
 // landed here without one passing through). The BE message is preferred
 // because it differentiates "no account" from "account deactivated" -
@@ -139,21 +147,28 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
     setIsSubmitting(true)
     setLookupError('')
 
-    const idp = await lookupIdpForEmail(trimmedEmail)
+    const result = await lookupIdpForEmail(trimmedEmail)
 
-    if (idp === 'okta') {
-      // Full-page navigation. /login is an ALB rule, not a router route.
-      window.location.href = '/login'
-      return
+    if ('idp' in result) {
+      if (result.idp === 'okta') {
+        // Full-page navigation. /login is an ALB rule, not a router route.
+        window.location.href = '/login'
+        return
+      }
+      if (result.idp === 'entra') {
+        window.location.href = '/login/entra'
+        return
+      }
+      // result.idp === null: the deliberate non-enumeration response.
+      // Unknown, unprovisioned, and soft-deleted emails all land here with
+      // the same generic message, so none can be told apart.
+      setLookupError(UNKNOWN_EMAIL_MESSAGE)
+    } else {
+      // result.unavailable: a transport/server failure. Distinct retryable
+      // copy - the only branch that differs from the generic message, and
+      // it does not depend on whether the email exists.
+      setLookupError(LOOKUP_UNAVAILABLE_MESSAGE)
     }
-    if (idp === 'entra') {
-      window.location.href = '/login/entra'
-      return
-    }
-
-    // idp === null collapses every failure mode (unknown email, error,
-    // timeout) into the same generic message. No enumeration signal.
-    setLookupError(UNKNOWN_EMAIL_MESSAGE)
     setIsSubmitting(false)
     // Return focus to the field so keyboard/SR users land on the input the
     // error refers to, not the now-disabled submit button.
