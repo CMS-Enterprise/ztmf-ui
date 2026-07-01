@@ -96,6 +96,7 @@ export default function OpDivGrantModal({
     } else {
       setFetchFailed(false)
       setLoading(false)
+      setLocalOpDivs([])
     }
   }, [open, userid, handleError])
 

@@ -196,6 +196,64 @@ test('save button stays disabled when the initial grant fetch fails', async () =
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
+test('autocomplete picker is disabled while the initial grant fetch is in flight', async () => {
+  mock
+    .onGet(`/users/${USER_ID}/assignedopdivs`)
+    .reply(() => new Promise(() => {}))
+
+  renderModal()
+
+  expect(screen.getByRole('combobox')).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+})
+
+test('autocomplete picker is disabled when the initial grant fetch fails', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(500)
+
+  renderModal()
+
+  // Snackbar proves .catch ran and setFetchFailed(true) has committed.
+  await screen.findByText(ERROR_MESSAGES.tryAgain)
+  expect(screen.getByRole('combobox')).toBeDisabled()
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+})
+
+test('closing after a fetch failure resets error state so Save re-enables on reopen', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).replyOnce(500)
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [] })
+
+  const { rerender } = renderModal()
+
+  await screen.findByText(ERROR_MESSAGES.tryAgain)
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+
+  rerender(
+    <OpDivGrantModal
+      open={false}
+      handleClose={jest.fn()}
+      userid={USER_ID}
+      userName="Test User"
+      opdivOptions={opdivOptions}
+      onChanged={jest.fn()}
+    />
+  )
+  rerender(
+    <OpDivGrantModal
+      open={true}
+      handleClose={jest.fn()}
+      userid={USER_ID}
+      userName="Test User"
+      opdivOptions={opdivOptions}
+      onChanged={jest.fn()}
+    />
+  )
+
+  // Second GET resolves successfully — Save must re-enable.
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
+  )
+})
+
 test('401 on the initial grant fetch redirects to sign-in without a generic error snackbar', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(401)
 
