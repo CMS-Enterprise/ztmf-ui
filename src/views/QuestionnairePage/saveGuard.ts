@@ -22,3 +22,30 @@ export const shouldPersistResponse = (s: ResponseState): boolean => {
     s.selectQuestionOption !== s.initQuestionChoice || s.notes !== s.initNotes
   )
 }
+
+/**
+ * True when the notes text differs beyond leading/trailing whitespace.
+ * Matches the ticket's bar ("not just adding a space to the end") without
+ * over-committing to a stricter definition. If we later need to reject
+ * runs of internal whitespace or short edits, this is the one place to
+ * tighten - callers see a boolean either way.
+ */
+export const isSubstantialNotesChange = (
+  current: string,
+  initial: string
+): boolean => current.trim() !== initial.trim()
+
+/**
+ * True when the user changed the radio answer but has not substantially
+ * updated the notes. Drives the inline error state under the notes field
+ * and disables the Next button until the user updates the notes.
+ *
+ * Returns false for unanswered questions (the `-1` sentinel) - the "must
+ * update notes" rule only applies when the user actually flipped an
+ * already-answered response.
+ */
+export const needsNotesUpdateForChoiceChange = (s: ResponseState): boolean => {
+  if (s.selectQuestionOption === -1) return false
+  if (s.selectQuestionOption === s.initQuestionChoice) return false
+  return !isSubstantialNotesChange(s.notes, s.initNotes)
+}

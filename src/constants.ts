@@ -56,6 +56,9 @@ export const CONFIRMATION_MESSAGE =
 export const CONFIRMATION_MESSAGE_QUESTION =
   'Your changes will not be saved! Are you sure you want to leave question without saving your changes?'
 
+export const NOTES_UPDATE_REQUIRED_MSG =
+  'Please update your notes to reflect the changed answer.'
+
 /**
  * Pillars hidden on the questionnaire for SaaS systems. Names must match the API's
  * `question.pillar.pillar` value exactly.
