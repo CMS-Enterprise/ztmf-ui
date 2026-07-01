@@ -147,28 +147,37 @@ function IdpLookupLogin({ sessionMessage }: { sessionMessage: string }) {
     setIsSubmitting(true)
     setLookupError('')
 
-    const result = await lookupIdpForEmail(trimmedEmail)
+    try {
+      const result = await lookupIdpForEmail(trimmedEmail)
 
-    if ('idp' in result) {
-      if (result.idp === 'okta') {
-        // Full-page navigation. /login is an ALB rule, not a router route.
-        window.location.href = '/login'
-        return
+      if ('idp' in result) {
+        if (result.idp === 'okta') {
+          // Full-page navigation. /login is an ALB rule, not a router route.
+          window.location.href = '/login'
+          return
+        }
+        if (result.idp === 'entra') {
+          window.location.href = '/login/entra'
+          return
+        }
+        // result.idp === null: the deliberate non-enumeration response.
+        // Unknown, unprovisioned, and soft-deleted emails all land here with
+        // the same generic message, so none can be told apart.
+        setLookupError(UNKNOWN_EMAIL_MESSAGE)
+      } else {
+        // result.unavailable: a transport/server failure. Distinct retryable
+        // copy - the only branch that differs from the generic message, and
+        // it does not depend on whether the email exists.
+        setLookupError(LOOKUP_UNAVAILABLE_MESSAGE)
       }
-      if (result.idp === 'entra') {
-        window.location.href = '/login/entra'
-        return
-      }
-      // result.idp === null: the deliberate non-enumeration response.
-      // Unknown, unprovisioned, and soft-deleted emails all land here with
-      // the same generic message, so none can be told apart.
-      setLookupError(UNKNOWN_EMAIL_MESSAGE)
-    } else {
-      // result.unavailable: a transport/server failure. Distinct retryable
-      // copy - the only branch that differs from the generic message, and
-      // it does not depend on whether the email exists.
+    } catch {
+      // lookupIdpForEmail resolves rather than throws, so this is not
+      // reachable today. It guards a future change that throws before the
+      // lookup's own catch, which would otherwise leave the form stuck in
+      // the submitting state with no error shown.
       setLookupError(LOOKUP_UNAVAILABLE_MESSAGE)
     }
+
     setIsSubmitting(false)
     // Return focus to the field so keyboard/SR users land on the input the
     // error refers to, not the now-disabled submit button.

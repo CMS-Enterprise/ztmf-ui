@@ -87,4 +87,11 @@ describe('lookupIdpForEmail - malformed 2xx is not a genuine null', () => {
       unavailable: true,
     })
   })
+
+  it('treats a present envelope with an absent idp marker as unavailable', async () => {
+    mock.onGet('/auth/lookup').reply(200, { data: {} })
+    await expect(lookupIdpForEmail('user@example.com')).resolves.toEqual({
+      unavailable: true,
+    })
+  })
 })

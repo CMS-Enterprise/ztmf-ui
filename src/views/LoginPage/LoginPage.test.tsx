@@ -241,12 +241,17 @@ describe('IdpLookupLogin submit: routing and error mapping', () => {
     expect(window.location.href).toBe('')
   })
 
-  it('shows the retry message and does not navigate when unavailable', async () => {
+  it('shows the retry message (and not the generic message) and does not navigate when unavailable', async () => {
     mockedLookup.mockResolvedValue({ unavailable: true })
     await submitEmail('user@example.com')
     expect(
       await screen.findByText(/temporarily unavailable/i)
     ).toBeInTheDocument()
+    // Other half of the non-enumeration lock: an outage must not fall back
+    // to the generic "no IdP" copy, so the two states stay distinguishable.
+    expect(
+      screen.queryByText(/can't determine an identity provider/i)
+    ).toBeNull()
     expect(window.location.href).toBe('')
   })
 
