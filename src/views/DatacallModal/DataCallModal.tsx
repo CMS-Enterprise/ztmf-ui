@@ -22,31 +22,54 @@ import axiosInstance from '@/axiosConfig'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 
+// Accepts both the CMS quarterly cadence (FYYYYY QN) and the HHS annual
+// ZTM cadence (FYYY ZTM). Widened when the HHS onboarding mock addon
+// introduced FY23/FY24/FY25 ZTM datacall names.
+const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q\d|ZTM)$/
+const DATACALL_MAX_LENGTH = 10 // "FY2025 ZTM" = 10 chars; longest valid form
+const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
+
 export default function DataCallModal({ open, onClose }: datacallModalProps) {
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
   const [deadlineError, setDeadlineError] = React.useState<string>('')
+
+  // Reset state when the modal is closed so the next open starts clean.
+  // Prevents stale errors and half-typed input from bleeding across sessions
+  // (see feedback: modals clear validation on close).
+  React.useEffect(() => {
+    if (!open) {
+      setDatacall('')
+      setDatacallError('')
+      setDeadline('')
+      setDeadlineError('')
+    }
+  }, [open])
+
   const datacallHint = () => {
     return (
       <Typography>
         Please use the format:{' '}
         <span>
           FY<i>XXXX</i> Q<i>X</i>
+        </span>{' '}
+        or{' '}
+        <span>
+          FY<i>XX</i> ZTM
         </span>
       </Typography>
     )
   }
   function isValidFormat(input: string) {
-    const pattern = /^FY\d{4} Q\d$/
-    if (input.length != 9) {
+    if (input.length < DATACALL_MIN_LENGTH) {
+      setDatacallError('')
+      return
+    }
+    if (DATACALL_NAME_PATTERN.test(input)) {
       setDatacallError('')
     } else {
-      if (input.length === 9 && pattern.test(input)) {
-        setDatacallError('')
-      } else {
-        setDatacallError('Invalid datacall format')
-      }
+      setDatacallError('Invalid datacall format')
     }
   }
   const handleDatacallChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -134,7 +157,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
         <DialogContent sx={{ pt: 0 }}>
           <CMSTextField
             label="Please enter a datacall name"
-            maxLength={9}
+            maxLength={DATACALL_MAX_LENGTH}
             hint={datacallHint()}
             name="datacall"
             onChange={handleDatacallChange}
@@ -165,12 +188,10 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
             variation="solid"
             type="submit"
             disabled={
-              datacall.length === 9 &&
-              deadline.length === 10 &&
-              datacallError.length === 0 &&
-              deadlineError.length === 0
-                ? false
-                : true
+              !DATACALL_NAME_PATTERN.test(datacall.toUpperCase()) ||
+              deadline.length !== 10 ||
+              datacallError.length !== 0 ||
+              deadlineError.length !== 0
             }
           >
             Create
