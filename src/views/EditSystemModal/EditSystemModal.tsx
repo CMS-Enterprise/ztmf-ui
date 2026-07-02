@@ -34,6 +34,22 @@ import axiosInstance from '@/axiosConfig'
 import { TEXTFIELD_HELPER_TEXT } from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { getFieldsBySection } from '@/views/SystemDetailPage/fieldConfig'
+
+const HHS_METADATA_KEYS = [
+  'hva',
+  'fips',
+  'system_type',
+  'cloud_system',
+  'cloud_service_model',
+  'cloud_vendor',
+  'system_operator',
+  'goco_coco_gogo',
+  'system_owner',
+  'system_owner_email',
+  'legacy',
+] as const
+
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -46,7 +62,9 @@ export default function EditSystemModal({
   onClose,
   system,
   mode,
+  hhsEditable = false,
 }: editSystemModalProps) {
+  const hhsFields = getFieldsBySection('hhs')
   const [formValid, setFormValid] = React.useState<FormValidType>({
     issoemail: false,
     datacallcontact: false,
@@ -261,7 +279,7 @@ export default function EditSystemModal({
       }
     } else if (mode === 'create') {
       try {
-        await axiosInstance.post(`fismasystems`, {
+        const body: Record<string, unknown> = {
           fismauid: editedFismaSystem.fismauid,
           fismaacronym: editedFismaSystem.fismaacronym,
           fismaname: editedFismaSystem.fismaname,
@@ -274,7 +292,16 @@ export default function EditSystemModal({
           datacallcontact: editedFismaSystem.datacallcontact,
           issoemail: editedFismaSystem.issoemail,
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
-        })
+        }
+        // HHS metadata is only sent when the caller is an HHS-wide admin.
+        // The backend also strips these on scoped users, so this is
+        // defense-in-depth for a cleaner request payload.
+        if (hhsEditable) {
+          for (const key of HHS_METADATA_KEYS) {
+            body[key] = editedFismaSystem[key] ?? null
+          }
+        }
+        await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
       } catch (error) {
@@ -1101,6 +1128,61 @@ export default function EditSystemModal({
                     </Box>
                   )}
                 </Grid>
+                {hhsEditable && (
+                  <Grid item xs={12}>
+                    <Box
+                      sx={{
+                        mt: 2,
+                        p: 2,
+                        border: 1,
+                        borderColor: 'divider',
+                        borderRadius: 1,
+                      }}
+                    >
+                      <Typography variant="h6" sx={{ mb: 0.5 }}>
+                        HHS Metadata
+                      </Typography>
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          display: 'block',
+                          mb: 2,
+                          color: 'text.secondary',
+                        }}
+                      >
+                        Populated by the HHS onboarding load. Set at create time
+                        only when you already have this information; otherwise
+                        leave blank and the load will fill it in.
+                      </Typography>
+                      <Grid container spacing={2}>
+                        {hhsFields.map((field) => (
+                          <Grid item xs={12} sm={6} md={4} key={field.key}>
+                            <TextField
+                              id={`create-${field.key}`}
+                              label={field.label}
+                              variant="standard"
+                              margin="normal"
+                              fullWidth
+                              value={
+                                (editedFismaSystem[field.key] as
+                                  | string
+                                  | null
+                                  | undefined) ?? ''
+                              }
+                              InputLabelProps={{ sx: { marginTop: 0 } }}
+                              onChange={(e) => {
+                                setEditedFismaSystem((prevState) => ({
+                                  ...prevState,
+                                  [field.key]: e.target.value || null,
+                                }))
+                              }}
+                            />
+                          </Grid>
+                        ))}
+                      </Grid>
+                    </Box>
+                  </Grid>
+                )}
               </Grid>
             </Box>
           </DialogContent>

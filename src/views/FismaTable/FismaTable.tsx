@@ -310,18 +310,24 @@ export default function FismaTable({ scores }: FismaTableProps) {
       maxWidth: 240,
       hideable: false,
       valueGetter: (value) => {
-        const name = value.row.issoemail.split('@')
+        // HHS-onboarded systems can have NULL issoemail Prior code assumed
+        // string and crashed the DataGrid on scroll when a null row rendered.
+        const email = value.row.issoemail
+        if (!email) return ''
+        const name = email.split('@')
         const fullName = name[0].replace(/[0-9]/g, '').split('.')
         return fullName.length > 1
           ? `${fullName[0]} ${fullName[1]}`
           : fullName[0]
       },
       renderCell: (params) => {
-        const name = params.row.issoemail.split('@')
+        const email = params.row.issoemail
+        if (!email) return '—'
+        const name = email.split('@')
         const fullName = name[0].replace(/[0-9]/g, '').split('.')
         let firstName = ''
         let lastName = ''
-        if (fullName.length > 1) {
+        if (fullName.length > 1 && fullName[0] && fullName[1]) {
           firstName = fullName[0][0].toUpperCase() + fullName[0].slice(1)
           lastName = fullName[1][0].toUpperCase() + fullName[1].slice(1)
         }

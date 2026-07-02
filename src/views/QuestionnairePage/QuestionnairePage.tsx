@@ -37,6 +37,7 @@ import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
@@ -606,9 +607,22 @@ export default function QuestionnarePage() {
               ) : (
                 <Box>
                   <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
-                  <Typography variant="h6" sx={{ mb: 1 }}>
-                    {notePrompt || ''}
-                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mb: 1,
+                    }}
+                  >
+                    <Typography variant="h6">{notePrompt || ''}</Typography>
+                    <AISummaryBadge
+                      show={
+                        selectQuestionOption >= 0 &&
+                        questionScores[selectQuestionOption]
+                          ?.notes_is_ai_summary === true
+                      }
+                    />
+                  </Box>
                   <CssTextField
                     multiline
                     rows={4}

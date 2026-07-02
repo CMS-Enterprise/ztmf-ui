@@ -1,6 +1,6 @@
 import { FismaSystemType } from '@/types'
 
-export type FieldSection = 'identity' | 'organization' | 'contacts'
+export type FieldSection = 'identity' | 'organization' | 'contacts' | 'hhs'
 
 export type FieldType = 'text' | 'email' | 'select'
 
@@ -94,6 +94,87 @@ export const fieldConfigs: FieldConfig[] = [
     section: 'contacts',
     required: true,
     type: 'email',
+  },
+
+  // HHS Metadata section. Populated by the HHS onboarding load; editable
+  // only by HHS-wide admins (gated in SystemDetailEditView / EditSystemModal
+  // via hasUnscopedRead).
+  {
+    key: 'hva',
+    label: 'HVA',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'fips',
+    label: 'FIPS Impact Level',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'system_type',
+    label: 'System Type',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'cloud_system',
+    label: 'Cloud System',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'cloud_service_model',
+    label: 'Cloud Service Model',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'cloud_vendor',
+    label: 'Cloud Vendor',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'system_operator',
+    label: 'System Operator',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'goco_coco_gogo',
+    label: 'GOCO/COCO/GOGO',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'system_owner',
+    label: 'System Owner',
+    section: 'hhs',
+    required: false,
+    type: 'text',
+  },
+  {
+    key: 'system_owner_email',
+    label: 'System Owner Email',
+    section: 'hhs',
+    required: false,
+    type: 'email',
+  },
+  {
+    key: 'legacy',
+    label: 'Legacy',
+    section: 'hhs',
+    required: false,
+    type: 'text',
   },
 ]
 

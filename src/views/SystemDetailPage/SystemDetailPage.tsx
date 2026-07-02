@@ -17,7 +17,7 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
-import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
+import { isAdmin as checkIsAdmin, hasUnscopedRead } from '@/utils/userRoles'
 
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
@@ -539,6 +539,7 @@ export default function SystemDetailPage() {
               prev ? { ...prev, sdl_sync_enabled: checked } : prev
             )
           }
+          hhsEditable={hasUnscopedRead(userInfo)}
         />
       ) : (
         <SystemDetailReadView
