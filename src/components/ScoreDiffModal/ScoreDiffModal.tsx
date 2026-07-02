@@ -27,6 +27,7 @@ import { Button as CmsButton } from '@cmsgov/design-system'
 import axiosInstance from '@/axiosConfig'
 import { isAuthHandled } from '@/utils/notify'
 import { PILLAR_ORDER, PILLAR_FUNCTION_MAP } from '@/constants'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import type {
   datacall,
   ScoreDiffEntry,
@@ -304,13 +305,16 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
           score {side.score}/5
         </Typography>
         {side.notes && (
-          <Typography
-            variant="caption"
-            display="block"
-            sx={{ color: 'text.secondary', fontStyle: 'italic', mt: 0.5 }}
-          >
-            {side.notes}
-          </Typography>
+          <Box sx={{ mt: 0.5 }}>
+            <AISummaryBadge show={side.notes_is_ai_summary === true} />
+            <Typography
+              variant="caption"
+              display="block"
+              sx={{ color: 'text.secondary', fontStyle: 'italic' }}
+            >
+              {side.notes}
+            </Typography>
+          </Box>
         )}
       </>
     )

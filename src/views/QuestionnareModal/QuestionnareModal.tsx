@@ -37,6 +37,7 @@ import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
     color: 'rgb(13, 36, 153)',
@@ -535,9 +536,24 @@ export default function QuestionnareModal({
                   >
                     {renderRadioGroup(options)}
                   </Box>
-                  <Typography variant="body1" sx={{ mb: 2 }}>
-                    {activeStep?.notesprompt || ''}
-                  </Typography>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mb: 2,
+                    }}
+                  >
+                    <Typography variant="body1">
+                      {activeStep?.notesprompt || ''}
+                    </Typography>
+                    <AISummaryBadge
+                      show={
+                        selectQuestionOption > 0 &&
+                        questionScores[selectQuestionOption]
+                          ?.notes_is_ai_summary === true
+                      }
+                    />
+                  </Box>
                   <CssTextField
                     multiline
                     label="Notes"
