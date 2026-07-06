@@ -23,7 +23,7 @@ export default function AISummaryBadge({ show = true }: AISummaryBadgeProps) {
         size="small"
         variant="outlined"
         color="info"
-        sx={{ height: 18, fontSize: '0.65rem', ml: 1 }}
+        sx={{ height: 18, fontSize: '0.65rem' }}
       />
     </Tooltip>
   )

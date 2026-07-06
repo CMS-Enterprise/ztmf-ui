@@ -607,22 +607,9 @@ export default function QuestionnarePage() {
               ) : (
                 <Box>
                   <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      mb: 1,
-                    }}
-                  >
-                    <Typography variant="h6">{notePrompt || ''}</Typography>
-                    <AISummaryBadge
-                      show={
-                        selectQuestionOption >= 0 &&
-                        questionScores[selectQuestionOption]
-                          ?.notes_is_ai_summary === true
-                      }
-                    />
-                  </Box>
+                  <Typography variant="h6" sx={{ mb: 1 }}>
+                    {notePrompt || ''}
+                  </Typography>
                   <CssTextField
                     multiline
                     rows={4}
@@ -634,24 +621,38 @@ export default function QuestionnarePage() {
                       setNotes(e.target.value)
                     }}
                   />
-                  {!isReadOnly && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color:
-                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                            ? 'error.main'
-                            : notes.length >=
-                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                              ? 'warning.main'
-                              : 'text.secondary',
-                        display: 'block',
-                        mt: 0.5,
-                      }}
-                    >
-                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                    </Typography>
-                  )}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mt: 0.5,
+                    }}
+                  >
+                    <AISummaryBadge
+                      show={
+                        selectQuestionOption >= 0 &&
+                        questionScores[selectQuestionOption]
+                          ?.notes_is_ai_summary === true
+                      }
+                    />
+                    {!isReadOnly && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          ml: 'auto',
+                          color:
+                            notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                              ? 'error.main'
+                              : notes.length >=
+                                  MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                                ? 'warning.main'
+                                : 'text.secondary',
+                        }}
+                      >
+                        {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                      </Typography>
+                    )}
+                  </Box>
                   <Box
                     position="relative"
                     display="flex"
