@@ -1,6 +1,7 @@
 import type { AxiosError } from 'axios'
 import { ERROR_MESSAGES } from '@/constants'
 import { Routes } from '@/router/constants'
+import { AuthCodes, SignInReasons } from '@/utils/authCodes'
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -24,7 +25,7 @@ function makeError(
   status: number | undefined,
   data?: unknown,
   config: { skipAuthHandling?: boolean } = {}
-): AxiosError<{ error?: string }> {
+): AxiosError<{ error?: string; code?: string }> {
   return {
     config,
     response:
@@ -35,7 +36,7 @@ function makeError(
     toJSON: () => ({}),
     name: 'AxiosError',
     message: 'mock',
-  } as unknown as AxiosError<{ error?: string }>
+  } as unknown as AxiosError<{ error?: string; code?: string }>
 }
 
 beforeEach(() => {
@@ -43,20 +44,72 @@ beforeEach(() => {
   mockedNotify.mockReset()
 })
 
-test('401 redirects to sign-in with the expired-session message', async () => {
-  const error = makeError(401)
+test('401 redirects to sign-in with the expired-session message and reason', async () => {
+  const error = makeError(401, { code: AuthCodes.UNAUTHORIZED })
 
   await expect(handleAuthError(error)).rejects.toMatchObject({
     __authHandled: true,
   })
   expect(mockedNavigate).toHaveBeenCalledWith(Routes.SIGNIN, {
     replace: true,
-    state: { message: ERROR_MESSAGES.expired },
+    state: {
+      message: ERROR_MESSAGES.expired,
+      reason: SignInReasons.EXPIRED,
+    },
   })
   expect(mockedNotify).not.toHaveBeenCalled()
 })
 
-test('403 fires the generic permission snackbar when no backend message', async () => {
+test('403 with ACCOUNT_NOT_PROVISIONED redirects to sign-in as NO_ACCOUNT and suppresses the toast', async () => {
+  const error = makeError(403, {
+    code: AuthCodes.ACCOUNT_NOT_PROVISIONED,
+    error:
+      'your authenticated identity does not have a ZTMF account; contact your administrator to request access',
+  })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).toHaveBeenCalledWith(Routes.SIGNIN, {
+    replace: true,
+    state: {
+      message:
+        'your authenticated identity does not have a ZTMF account; contact your administrator to request access',
+      reason: SignInReasons.NO_ACCOUNT,
+    },
+  })
+  expect(mockedNotify).not.toHaveBeenCalled()
+})
+
+test('403 with ACCOUNT_NOT_PROVISIONED and no message body falls back to the permission copy', async () => {
+  const error = makeError(403, { code: AuthCodes.ACCOUNT_NOT_PROVISIONED })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).toHaveBeenCalledWith(Routes.SIGNIN, {
+    replace: true,
+    state: {
+      message: ERROR_MESSAGES.permission,
+      reason: SignInReasons.NO_ACCOUNT,
+    },
+  })
+  expect(mockedNotify).not.toHaveBeenCalled()
+})
+
+test('403 with FORBIDDEN_ORIGIN fires the generic permission snackbar (defensive)', async () => {
+  const consoleSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
+  const error = makeError(403, { code: AuthCodes.FORBIDDEN_ORIGIN })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNotify).toHaveBeenCalledWith(ERROR_MESSAGES.permission, 'error')
+  expect(mockedNavigate).not.toHaveBeenCalled()
+  consoleSpy.mockRestore()
+})
+
+test('403 with no code fires the generic permission snackbar (controller-level path)', async () => {
   const error = makeError(403, {})
 
   await expect(handleAuthError(error)).rejects.toMatchObject({
@@ -66,7 +119,7 @@ test('403 fires the generic permission snackbar when no backend message', async 
   expect(mockedNavigate).not.toHaveBeenCalled()
 })
 
-test('403 surfaces the backend message when response.data.error is set', async () => {
+test('403 with no code surfaces the backend message when response.data.error is set', async () => {
   const error = makeError(403, { error: 'No access to this datacall' })
 
   await expect(handleAuthError(error)).rejects.toMatchObject({
@@ -78,8 +131,12 @@ test('403 surfaces the backend message when response.data.error is set', async (
   )
 })
 
-test('skipAuthHandling on the request config bypasses both branches', async () => {
-  const error = makeError(403, { error: 'ignored' }, { skipAuthHandling: true })
+test('skipAuthHandling on the request config bypasses every branch', async () => {
+  const error = makeError(
+    403,
+    { code: AuthCodes.ACCOUNT_NOT_PROVISIONED, error: 'ignored' },
+    { skipAuthHandling: true }
+  )
 
   await expect(handleAuthError(error)).rejects.toBe(error)
   expect(mockedNavigate).not.toHaveBeenCalled()

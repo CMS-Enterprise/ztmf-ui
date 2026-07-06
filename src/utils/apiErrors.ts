@@ -16,6 +16,12 @@ export type ParsedApiError = {
   fieldErrors?: Record<string, string>
   /** human-readable fallback for a toast */
   message: string
+  /**
+   * Stable error code from the BE auth middleware (e.g. ACCOUNT_NOT_PROVISIONED).
+   * Mirrored in src/utils/authCodes.ts. Present only on middleware rejections;
+   * controller-level errors do not set it.
+   */
+  code?: string
 }
 
 const isStringMap = (value: unknown): value is Record<string, string> =>
@@ -32,8 +38,9 @@ export function parseApiError(error: unknown): ParsedApiError {
 
   const status = error.response?.status
   const body = error.response?.data as
-    | { data?: unknown; error?: unknown }
+    | { data?: unknown; error?: unknown; code?: unknown }
     | undefined
+  const code = typeof body?.code === 'string' ? body.code : undefined
 
   // Field-level validation: a 400 whose data is a { field: reason } map.
   if (status === 400 && isStringMap(body?.data)) {
@@ -43,16 +50,24 @@ export function parseApiError(error: unknown): ParsedApiError {
       fieldErrors,
       message:
         typeof body?.error === 'string' ? body.error : ERROR_MESSAGES.tryAgain,
+      code,
     }
   }
 
+  // 403 with a code is a middleware rejection (e.g. ACCOUNT_NOT_PROVISIONED) and
+  // carries an honest backend message worth surfacing. 403 without a code is a
+  // controller-level rejection (IsAdmin etc.) whose body text is not user-facing,
+  // so fall back to the generic permission copy.
   if (status === 403) {
-    return { status, message: ERROR_MESSAGES.permission }
+    if (code && typeof body?.error === 'string' && body.error.length > 0) {
+      return { status, message: body.error, code }
+    }
+    return { status, message: ERROR_MESSAGES.permission, code }
   }
 
   if (typeof body?.error === 'string' && body.error.length > 0) {
-    return { status, message: body.error }
+    return { status, message: body.error, code }
   }
 
-  return { status, message: ERROR_MESSAGES.tryAgain }
+  return { status, message: ERROR_MESSAGES.tryAgain, code }
 }
