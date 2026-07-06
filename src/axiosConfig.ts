@@ -25,7 +25,11 @@ const axiosInstance: AxiosInstance = axios.create({
   headers: {
     'Content-Type': 'application/json',
   },
-  // withCredentials: true,
+  // Same-origin requests to /api/v1/ already carry cookies, so this has no
+  // effect while the API shares the app's origin. It is set explicitly so
+  // credentialed requests keep working if the API is served from a
+  // separate origin.
+  withCredentials: true,
 })
 
 // Local development only: bypass auth with token from .env
