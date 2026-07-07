@@ -23,6 +23,11 @@ import {
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
+import {
+  EXTENDED_METADATA_TITLE,
+  EXTENDED_METADATA_SUBHEADER,
+  EXTENDED_METADATA_LOCK_TOOLTIP,
+} from '@/constants'
 
 interface SystemDetailEditViewProps {
   system: FismaSystemType
@@ -52,15 +57,11 @@ interface SystemDetailEditViewProps {
   onReactivateRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
   onSdlSyncToggle: (checked: boolean) => void
-  // When false, HHS Metadata fields render as disabled inputs. Only HHS-wide
-  // admins (HasUnscopedRead) may edit; scoped admins and ISSO/ISSM see them
-  // populated but locked. Owned by the HHS onboarding load; the tooltip on
-  // each field explains the gate.
-  hhsEditable: boolean
+  // When false, Extended Metadata fields render as disabled inputs. Only
+  // organization-wide admins (HasUnscopedRead) may edit; scoped admins and
+  // ISSO/ISSM see them populated but locked. The tooltip on each field explains the gate.
+  extendedEditable: boolean
 }
-
-const HHS_LOCK_TOOLTIP =
-  'HHS metadata is populated by the HHS onboarding load; only HHS-wide admins can edit these fields.'
 
 function renderEditField(
   field: FieldConfig,
@@ -277,8 +278,8 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
-  const hhsFields = getFieldsBySection('hhs')
-  const { hhsEditable } = props
+  const extendedFields = getFieldsBySection('extended')
+  const { extendedEditable } = props
 
   return (
     <Grid container spacing={3}>
@@ -527,30 +528,34 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
         </Card>
       </Grid>
 
-      {/* HHS Metadata — full width, 3-col grid. Inputs disabled unless the
-          caller is an HHS-wide admin; scoped tiers see the values populated
-          but locked, with a tooltip explaining the gate. */}
+      {/* Extended Metadata — full width, 3-col grid. Inputs disabled unless the
+          caller is an organization-wide admin; scoped tiers see the values
+          populated but locked, with a tooltip explaining the gate. */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
-            title="HHS Metadata"
+            title={EXTENDED_METADATA_TITLE}
             titleTypographyProps={{ variant: 'h6' }}
             subheader={
-              hhsEditable
-                ? 'Populated by the HHS onboarding load'
-                : HHS_LOCK_TOOLTIP
+              extendedEditable
+                ? EXTENDED_METADATA_SUBHEADER
+                : EXTENDED_METADATA_LOCK_TOOLTIP
             }
             subheaderTypographyProps={{ variant: 'caption' }}
             sx={{ pb: 0 }}
           />
           <CardContent>
             <Grid container spacing={3}>
-              {hhsFields.map((field) => (
+              {extendedFields.map((field) => (
                 <Grid item xs={12} sm={6} md={4} key={field.key}>
-                  {hhsEditable ? (
+                  {extendedEditable ? (
                     renderEditField(field, props)
                   ) : (
-                    <Tooltip title={HHS_LOCK_TOOLTIP} arrow placement="top">
+                    <Tooltip
+                      title={EXTENDED_METADATA_LOCK_TOOLTIP}
+                      arrow
+                      placement="top"
+                    >
                       <Box>{renderEditField(field, props, true)}</Box>
                     </Tooltip>
                   )}

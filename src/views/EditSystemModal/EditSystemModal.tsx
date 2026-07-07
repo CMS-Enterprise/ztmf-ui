@@ -31,14 +31,19 @@ import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
-import { TEXTFIELD_HELPER_TEXT } from '@/constants'
+import {
+  TEXTFIELD_HELPER_TEXT,
+  EXTENDED_METADATA_TITLE,
+  EXTENDED_METADATA_CREATE_HINT,
+  EXTENDED_METADATA_EDIT_HINT,
+} from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { fetchOpDivs } from '@/utils/opdivs'
 import type { OpDiv } from '@/types'
 import {
   getFieldsBySection,
-  HHS_METADATA_KEYS,
+  EXTENDED_METADATA_KEYS,
 } from '@/views/SystemDetailPage/fieldConfig'
 
 /**
@@ -53,9 +58,9 @@ export default function EditSystemModal({
   onClose,
   system,
   mode,
-  hhsEditable = false,
+  extendedEditable = false,
 }: editSystemModalProps) {
-  const hhsFields = getFieldsBySection('hhs')
+  const extendedFields = getFieldsBySection('extended')
 
   const [formValid, setFormValid] = React.useState<FormValidType>({
     issoemail: false,
@@ -268,8 +273,8 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        if (hhsEditable) {
-          for (const key of HHS_METADATA_KEYS) {
+        if (extendedEditable) {
+          for (const key of EXTENDED_METADATA_KEYS) {
             editBody[key] = editedFismaSystem[key] ?? null
           }
         }
@@ -315,10 +320,10 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        // HHS metadata only sent when the caller is an HHS-wide admin.
+        // Extended metadata only sent when the caller is an organization-wide admin.
         // The backend also strips these on scoped users — defense-in-depth.
-        if (hhsEditable) {
-          for (const key of HHS_METADATA_KEYS) {
+        if (extendedEditable) {
+          for (const key of EXTENDED_METADATA_KEYS) {
             body[key] = editedFismaSystem[key] ?? null
           }
         }
@@ -1175,7 +1180,7 @@ export default function EditSystemModal({
                     </Box>
                   )}
                 </Grid>
-                {hhsEditable && (
+                {extendedEditable && (
                   <Grid item xs={12}>
                     <Box
                       sx={{
@@ -1187,7 +1192,7 @@ export default function EditSystemModal({
                       }}
                     >
                       <Typography variant="h6" sx={{ mb: 0.5 }}>
-                        HHS Metadata
+                        {EXTENDED_METADATA_TITLE}
                       </Typography>
                       <Typography
                         variant="caption"
@@ -1198,11 +1203,11 @@ export default function EditSystemModal({
                         }}
                       >
                         {mode === 'create'
-                          ? 'Populated by the HHS onboarding load. Set these only when you already have the information; otherwise leave blank and the load will fill them in.'
-                          : 'Populated by the HHS onboarding load. Edit only to correct a value.'}
+                          ? EXTENDED_METADATA_CREATE_HINT
+                          : EXTENDED_METADATA_EDIT_HINT}
                       </Typography>
                       <Grid container spacing={2}>
-                        {hhsFields.map((field) => (
+                        {extendedFields.map((field) => (
                           <Grid item xs={12} sm={6} md={4} key={field.key}>
                             <TextField
                               id={`${mode}-${field.key}`}

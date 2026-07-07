@@ -178,10 +178,10 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
-  // When true, render the HHS Metadata section. Only HHS-wide admins
-  // (HasUnscopedRead) see it; scoped tiers get the modal without those
+  // When true, render the Extended Metadata section. Only organization-wide
+  // admins (HasUnscopedRead) see it; scoped tiers get the modal without those
   // fields. Undefined defaults to false — fail closed.
-  hhsEditable?: boolean
+  extendedEditable?: boolean
 }
 
 export type datacallModalProps = {
