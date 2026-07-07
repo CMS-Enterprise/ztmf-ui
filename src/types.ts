@@ -77,7 +77,7 @@ export type FismaSystemType = {
   reactivated_date: string | null
   reactivation_notes: string | null
   opdiv_id?: number | null
-  // HHS expansion fields (migration 0044+)
+  // Extended metadata fields (migration 0044+)
   isso_name?: string | null
   hva?: string | null
   fips?: string | null

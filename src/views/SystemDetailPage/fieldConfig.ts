@@ -96,7 +96,7 @@ export const fieldConfigs: FieldConfig[] = [
     type: 'email',
   },
 
-  // Extended Metadata section. Populated by the HHS onboarding load; editable
+  // Extended Metadata section. Populated by the onboarding data load; editable
   // only by organization-wide admins (gated in SystemDetailEditView / EditSystemModal
   // via hasUnscopedRead).
   // isso_name depends on backend migration 0044 (#389) — coordinate before shipping.
