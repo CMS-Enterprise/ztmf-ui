@@ -189,3 +189,10 @@ export const fieldConfigs: FieldConfig[] = [
 export function getFieldsBySection(section: FieldSection): FieldConfig[] {
   return fieldConfigs.filter((f) => f.section === section)
 }
+
+// Single source of truth for the HHS metadata write list. Derived from the
+// `hhs` section above so a field added to fieldConfig can't silently
+// render-but-not-save (the modal/detail PUT loops consume this).
+export const HHS_METADATA_KEYS: (keyof FismaSystemType)[] = fieldConfigs
+  .filter((f) => f.section === 'hhs')
+  .map((f) => f.key)

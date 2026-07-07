@@ -25,7 +25,7 @@ import { isAuthHandled, notify } from '@/utils/notify'
 // Accepts both the CMS quarterly cadence (FYYYYY QN) and the HHS annual
 // ZTM cadence (FYYY ZTM). Widened when the HHS onboarding mock addon
 // introduced FY23/FY24/FY25 ZTM datacall names.
-const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q\d|ZTM)$/
+const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q[1-4]|ZTM)$/
 const DATACALL_MAX_LENGTH = 10 // "FY2025 ZTM" = 10 chars; longest valid form
 const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
 

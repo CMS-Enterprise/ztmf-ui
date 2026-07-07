@@ -159,6 +159,10 @@ export default function QuestionnareModal({
               notes: notes,
               functionoptionid: selectQuestionOption,
               datacallid: datacallID,
+              // The user is editing the note, so it is no longer an AI
+              // summary. The read-through dirty-check above skips this PUT
+              // when content is unchanged, so an identical "edit" keeps it.
+              notes_is_ai_summary: false,
             })
             notify(STATUS_MESSAGES.saved, 'success')
           } else {

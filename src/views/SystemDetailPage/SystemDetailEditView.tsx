@@ -16,7 +16,10 @@ import { Button as CmsButton } from '@cmsgov/design-system'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
 import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
-import { emailValidator } from '@/views/EditSystemModal/validators'
+import {
+  emailValidator,
+  optionalEmailValidator,
+} from '@/views/EditSystemModal/validators'
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
@@ -77,7 +80,8 @@ function renderEditField(
       <ValidatedTextField
         key={field.key}
         label={field.label}
-        validator={emailValidator}
+        validator={field.required ? emailValidator : optionalEmailValidator}
+        required={field.required}
         dfValue={String(editedSystem[field.key] ?? '')}
         isFullWidth={true}
         disabled={disabled}

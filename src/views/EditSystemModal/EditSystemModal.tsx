@@ -36,22 +36,10 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { fetchOpDivs } from '@/utils/opdivs'
 import type { OpDiv } from '@/types'
-import { getFieldsBySection } from '@/views/SystemDetailPage/fieldConfig'
-
-const HHS_METADATA_KEYS = [
-  'isso_name',
-  'hva',
-  'fips',
-  'system_type',
-  'cloud_system',
-  'cloud_service_model',
-  'cloud_vendor',
-  'system_operator',
-  'goco_coco_gogo',
-  'system_owner',
-  'system_owner_email',
-  'legacy',
-] as const
+import {
+  getFieldsBySection,
+  HHS_METADATA_KEYS,
+} from '@/views/SystemDetailPage/fieldConfig'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -115,9 +103,18 @@ export default function EditSystemModal({
   React.useEffect(() => {
     if (!open) return
     const controller = new AbortController()
-    fetchOpDivs()
+    fetchOpDivs(false, controller.signal)
       .then(setOpDivs)
-      .catch(() => {})
+      .catch((error) => {
+        // Ignore the abort fired by cleanup on close; surface real failures
+        // so an empty OpDiv list (which leaves Save stuck) isn't silent.
+        if (controller.signal.aborted || isAuthHandled(error)) return
+        const parsed = parseApiError(error)
+        notify(
+          parsed.message || 'Failed to load the OpDiv list. Please try again.',
+          'error'
+        )
+      })
     return () => controller.abort()
   }, [open])
 
@@ -1200,15 +1197,15 @@ export default function EditSystemModal({
                           color: 'text.secondary',
                         }}
                       >
-                        Populated by the HHS onboarding load. Set at create time
-                        only when you already have this information; otherwise
-                        leave blank and the load will fill it in.
+                        {mode === 'create'
+                          ? 'Populated by the HHS onboarding load. Set these only when you already have the information; otherwise leave blank and the load will fill them in.'
+                          : 'Populated by the HHS onboarding load. Edit only to correct a value.'}
                       </Typography>
                       <Grid container spacing={2}>
                         {hhsFields.map((field) => (
                           <Grid item xs={12} sm={6} md={4} key={field.key}>
                             <TextField
-                              id={`create-${field.key}`}
+                              id={`${mode}-${field.key}`}
                               label={field.label}
                               variant="standard"
                               margin="normal"

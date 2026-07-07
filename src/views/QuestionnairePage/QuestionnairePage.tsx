@@ -222,6 +222,10 @@ export default function QuestionnarePage() {
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
+          // The user is editing the note, so it is no longer an AI summary.
+          // The dirty-check above skips this PUT when content is unchanged,
+          // so an identical "edit" correctly keeps the badge.
+          notes_is_ai_summary: false,
         })
       } else {
         await axiosInstance.post(`scores`, {

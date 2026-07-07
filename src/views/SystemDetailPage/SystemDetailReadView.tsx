@@ -51,6 +51,13 @@ export default function SystemDetailReadView({
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
   const hhsFields = getFieldsBySection('hhs')
+  // Only show the HHS Metadata card when at least one field is populated.
+  // Non-HHS systems have every field null and would otherwise render an
+  // empty card. (Read view is not role-gated; the values are the system's
+  // own metadata, visible to anyone who can view the system.)
+  const hasAnyHhsData = hhsFields.some(
+    (field) => system[field.key] != null && system[field.key] !== ''
+  )
 
   return (
     <Grid container spacing={3}>
@@ -202,30 +209,33 @@ export default function SystemDetailReadView({
         </Card>
       </Grid>
 
-      {/* HHS Metadata — full width, 3-col grid */}
-      <Grid item xs={12}>
-        <Card variant="outlined">
-          <CardHeader
-            title="HHS Metadata"
-            titleTypographyProps={{ variant: 'h6' }}
-            subheader="Populated by the HHS onboarding load"
-            subheaderTypographyProps={{ variant: 'caption' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            <Grid container spacing={3}>
-              {hhsFields.map((field) => (
-                <Grid item xs={12} sm={6} md={4} key={field.key}>
-                  <FieldDisplay
-                    label={field.label}
-                    value={String(system[field.key] ?? '')}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          </CardContent>
-        </Card>
-      </Grid>
+      {/* HHS Metadata — full width, 3-col grid. Hidden entirely when the
+          system has no HHS data (i.e. non-HHS systems). */}
+      {hasAnyHhsData && (
+        <Grid item xs={12}>
+          <Card variant="outlined">
+            <CardHeader
+              title="HHS Metadata"
+              titleTypographyProps={{ variant: 'h6' }}
+              subheader="Populated by the HHS onboarding load"
+              subheaderTypographyProps={{ variant: 'caption' }}
+              sx={{ pb: 0 }}
+            />
+            <CardContent>
+              <Grid container spacing={3}>
+                {hhsFields.map((field) => (
+                  <Grid item xs={12} sm={6} md={4} key={field.key}>
+                    <FieldDisplay
+                      label={field.label}
+                      value={String(system[field.key] ?? '')}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
     </Grid>
   )
 }

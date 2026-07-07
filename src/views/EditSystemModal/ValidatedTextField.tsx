@@ -6,6 +6,7 @@ type ValidatedTextFieldProps = {
   dfValue?: string
   isFullWidth?: boolean
   disabled?: boolean
+  required?: boolean
   validator: (value: string) => string | false
   onChange: (isValid: boolean, value: string) => void
 }
@@ -15,6 +16,7 @@ const ValidatedTextField: React.FC<ValidatedTextFieldProps> = ({
   isFullWidth,
   dfValue,
   disabled,
+  required = true,
   onChange,
 }) => {
   const [value, setValue] = useState<string>(dfValue || '')
@@ -24,11 +26,18 @@ const ValidatedTextField: React.FC<ValidatedTextFieldProps> = ({
   useEffect(() => {
     if (isInitialMount.current) {
       isInitialMount.current = false
+      // A disabled field is not user-editable, so it must never gate the
+      // form. Report valid without running the validator, which would
+      // otherwise flag an empty optional field as required and lock Save.
+      if (disabled) {
+        onChange(true, dfValue || '')
+        return
+      }
       const errorMessage = validator(dfValue || '')
       setError(errorMessage)
       onChange(!errorMessage, dfValue || '')
     }
-  }, [dfValue, validator, onChange])
+  }, [dfValue, validator, onChange, disabled])
   const handleChange = (e: ChangeEvent<HTMLInputElement>) => {
     const newValue = e.target.value
     const errorMessage = validator(newValue)
@@ -45,7 +54,7 @@ const ValidatedTextField: React.FC<ValidatedTextFieldProps> = ({
       fullWidth={isFullWidth}
       margin="normal"
       onChange={handleChange}
-      required
+      required={required}
       disabled={disabled}
       InputLabelProps={{
         sx: {

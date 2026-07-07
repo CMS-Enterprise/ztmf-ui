@@ -62,7 +62,7 @@ export type FismaSystemType = {
   component: string
   mission: string
   fismaimpactlevel: string
-  issoemail: string
+  issoemail: string | null
   sdl_sync_enabled: boolean | null
   datacenterenvironment: string
   datacallcontact?: string
