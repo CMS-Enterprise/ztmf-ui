@@ -487,7 +487,7 @@ export default function Title() {
           onClose={handleCloseModal}
           system={EMPTY_SYSTEM}
           mode={'create'}
-          hhsEditable={hasUnscopedRead(userInfo)}
+          extendedEditable={hasUnscopedRead(userInfo)}
         />
         <EmailModal
           openModal={openEmailModal}

@@ -1,6 +1,6 @@
 import { FismaSystemType } from '@/types'
 
-export type FieldSection = 'identity' | 'organization' | 'contacts' | 'hhs'
+export type FieldSection = 'identity' | 'organization' | 'contacts' | 'extended'
 
 export type FieldType = 'text' | 'email' | 'select'
 
@@ -96,91 +96,91 @@ export const fieldConfigs: FieldConfig[] = [
     type: 'email',
   },
 
-  // HHS Metadata section. Populated by the HHS onboarding load; editable
-  // only by HHS-wide admins (gated in SystemDetailEditView / EditSystemModal
+  // Extended Metadata section. Populated by the onboarding data load; editable
+  // only by organization-wide admins (gated in SystemDetailEditView / EditSystemModal
   // via hasUnscopedRead).
   // isso_name depends on backend migration 0044 (#389) — coordinate before shipping.
   {
     key: 'isso_name',
     label: 'ISSO Name',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'hva',
     label: 'HVA',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'fips',
     label: 'FIPS Impact Level',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'system_type',
     label: 'System Type',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'cloud_system',
     label: 'Cloud System',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'cloud_service_model',
     label: 'Cloud Service Model',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'cloud_vendor',
     label: 'Cloud Vendor',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'system_operator',
     label: 'System Operator',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'goco_coco_gogo',
     label: 'GOCO/COCO/GOGO',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'system_owner',
     label: 'System Owner',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
   {
     key: 'system_owner_email',
     label: 'System Owner Email',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'email',
   },
   {
     key: 'legacy',
     label: 'Legacy',
-    section: 'hhs',
+    section: 'extended',
     required: false,
     type: 'text',
   },
@@ -190,9 +190,9 @@ export function getFieldsBySection(section: FieldSection): FieldConfig[] {
   return fieldConfigs.filter((f) => f.section === section)
 }
 
-// Single source of truth for the HHS metadata write list. Derived from the
-// `hhs` section above so a field added to fieldConfig can't silently
+// Single source of truth for the extended metadata write list. Derived from the
+// `extended` section above so a field added to fieldConfig can't silently
 // render-but-not-save (the modal/detail PUT loops consume this).
-export const HHS_METADATA_KEYS: (keyof FismaSystemType)[] = fieldConfigs
-  .filter((f) => f.section === 'hhs')
+export const EXTENDED_METADATA_KEYS: (keyof FismaSystemType)[] = fieldConfigs
+  .filter((f) => f.section === 'extended')
   .map((f) => f.key)

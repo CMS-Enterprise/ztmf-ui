@@ -22,7 +22,7 @@ import { isAdmin as checkIsAdmin, hasUnscopedRead } from '@/utils/userRoles'
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
-import { HHS_METADATA_KEYS } from './fieldConfig'
+import { EXTENDED_METADATA_KEYS } from './fieldConfig'
 import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
@@ -290,7 +290,7 @@ export default function SystemDetailPage() {
       // the same tier; without this the detail-page save silently drops them.
       // The backend also strips these on scoped users — defense-in-depth.
       if (hasUnscopedRead(userInfo)) {
-        for (const key of HHS_METADATA_KEYS) {
+        for (const key of EXTENDED_METADATA_KEYS) {
           putBody[key] = editedSystem[key] ?? null
         }
       }
@@ -554,7 +554,7 @@ export default function SystemDetailPage() {
               prev ? { ...prev, sdl_sync_enabled: checked } : prev
             )
           }
-          hhsEditable={hasUnscopedRead(userInfo)}
+          extendedEditable={hasUnscopedRead(userInfo)}
         />
       ) : (
         <SystemDetailReadView
