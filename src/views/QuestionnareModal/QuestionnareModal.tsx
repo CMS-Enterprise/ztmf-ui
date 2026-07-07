@@ -37,6 +37,7 @@ import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
     color: 'rgb(13, 36, 153)',
@@ -158,6 +159,10 @@ export default function QuestionnareModal({
               notes: notes,
               functionoptionid: selectQuestionOption,
               datacallid: datacallID,
+              // The user is editing the note, so it is no longer an AI
+              // summary. The read-through dirty-check above skips this PUT
+              // when content is unchanged, so an identical "edit" keeps it.
+              notes_is_ai_summary: false,
             })
             notify(STATUS_MESSAGES.saved, 'success')
           } else {
@@ -548,24 +553,38 @@ export default function QuestionnareModal({
                     inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => setNotes(e.target.value)}
                   />
-                  {!isReadOnly && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color:
-                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                            ? 'error.main'
-                            : notes.length >=
-                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                              ? 'warning.main'
-                              : 'text.secondary',
-                        display: 'block',
-                        mt: 0.5,
-                      }}
-                    >
-                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                    </Typography>
-                  )}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mt: 0.5,
+                    }}
+                  >
+                    <AISummaryBadge
+                      show={
+                        selectQuestionOption > 0 &&
+                        questionScores[selectQuestionOption]
+                          ?.notes_is_ai_summary === true
+                      }
+                    />
+                    {!isReadOnly && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          ml: 'auto',
+                          color:
+                            notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                              ? 'error.main'
+                              : notes.length >=
+                                  MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                                ? 'warning.main'
+                                : 'text.secondary',
+                        }}
+                      >
+                        {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                      </Typography>
+                    )}
+                  </Box>
                   <Box
                     position="relative"
                     display="flex"

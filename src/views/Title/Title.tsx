@@ -15,6 +15,7 @@ import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
   isUnscopedWriteAdmin,
+  hasUnscopedRead,
 } from '@/utils/userRoles'
 import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
@@ -486,6 +487,7 @@ export default function Title() {
           onClose={handleCloseModal}
           system={EMPTY_SYSTEM}
           mode={'create'}
+          hhsEditable={hasUnscopedRead(userInfo)}
         />
         <EmailModal
           openModal={openEmailModal}

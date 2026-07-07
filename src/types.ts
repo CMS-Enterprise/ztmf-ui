@@ -62,7 +62,7 @@ export type FismaSystemType = {
   component: string
   mission: string
   fismaimpactlevel: string
-  issoemail: string
+  issoemail: string | null
   sdl_sync_enabled: boolean | null
   datacenterenvironment: string
   datacallcontact?: string
@@ -77,6 +77,19 @@ export type FismaSystemType = {
   reactivated_date: string | null
   reactivation_notes: string | null
   opdiv_id?: number | null
+  // HHS expansion fields (migration 0044+)
+  isso_name?: string | null
+  hva?: string | null
+  fips?: string | null
+  system_type?: string | null
+  cloud_system?: string | null
+  cloud_service_model?: string | null
+  cloud_vendor?: string | null
+  system_operator?: string | null
+  goco_coco_gogo?: string | null
+  system_owner?: string | null
+  system_owner_email?: string | null
+  legacy?: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
@@ -130,6 +143,7 @@ export type QuestionScores = {
   datacallid: number
   last_edited_at?: string | null
   last_edited_by?: LastEditedBy | null
+  notes_is_ai_summary?: boolean
 }
 
 export type Question = {
@@ -164,6 +178,10 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
+  // When true, render the HHS Metadata section. Only HHS-wide admins
+  // (HasUnscopedRead) see it; scoped tiers get the modal without those
+  // fields. Undefined defaults to false — fail closed.
+  hhsEditable?: boolean
 }
 
 export type datacallModalProps = {
@@ -282,6 +300,7 @@ export type ScoreDiffSide = {
   optionname: string
   score: number
   notes: string | null
+  notes_is_ai_summary?: boolean
 }
 
 export type ScoreDiffEntry = {

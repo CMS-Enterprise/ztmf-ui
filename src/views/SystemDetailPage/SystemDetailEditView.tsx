@@ -10,12 +10,16 @@ import {
   Checkbox,
   Typography,
   Chip,
+  Tooltip,
 } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
 import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
-import { emailValidator } from '@/views/EditSystemModal/validators'
+import {
+  emailValidator,
+  optionalEmailValidator,
+} from '@/views/EditSystemModal/validators'
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
@@ -48,9 +52,21 @@ interface SystemDetailEditViewProps {
   onReactivateRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
   onSdlSyncToggle: (checked: boolean) => void
+  // When false, HHS Metadata fields render as disabled inputs. Only HHS-wide
+  // admins (HasUnscopedRead) may edit; scoped admins and ISSO/ISSM see them
+  // populated but locked. Owned by the HHS onboarding load; the tooltip on
+  // each field explains the gate.
+  hhsEditable: boolean
 }
 
-function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
+const HHS_LOCK_TOOLTIP =
+  'HHS metadata is populated by the HHS onboarding load; only HHS-wide admins can edit these fields.'
+
+function renderEditField(
+  field: FieldConfig,
+  props: SystemDetailEditViewProps,
+  disabled = false
+) {
   const {
     editedSystem,
     formValid,
@@ -64,9 +80,11 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
       <ValidatedTextField
         key={field.key}
         label={field.label}
-        validator={emailValidator}
+        validator={field.required ? emailValidator : optionalEmailValidator}
+        required={field.required}
         dfValue={String(editedSystem[field.key] ?? '')}
         isFullWidth={true}
+        disabled={disabled}
         onChange={(isValid, newValue) => {
           onValidatedFieldChange(field.key, isValid, newValue)
         }}
@@ -85,6 +103,7 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
         variant="standard"
         value={editedSystem[field.key] || ''}
         fullWidth
+        disabled={disabled}
         error={!formValid[field.key]}
         helperText={!formValid[field.key] ? formValidErrorText[field.key] : ''}
         InputLabelProps={{ sx: { marginTop: 0 } }}
@@ -110,6 +129,7 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
       fullWidth
       margin="normal"
       variant="standard"
+      disabled={disabled}
       value={editedSystem[field.key] ?? ''}
       error={field.required && !formValid[field.key]}
       helperText={
@@ -257,6 +277,8 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
+  const hhsFields = getFieldsBySection('hhs')
+  const { hhsEditable } = props
 
   return (
     <Grid container spacing={3}>
@@ -498,6 +520,40 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               {contactFields.map((field) => (
                 <Grid item xs={12} sm={6} key={field.key}>
                   {renderEditField(field, props)}
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+      </Grid>
+
+      {/* HHS Metadata — full width, 3-col grid. Inputs disabled unless the
+          caller is an HHS-wide admin; scoped tiers see the values populated
+          but locked, with a tooltip explaining the gate. */}
+      <Grid item xs={12}>
+        <Card variant="outlined">
+          <CardHeader
+            title="HHS Metadata"
+            titleTypographyProps={{ variant: 'h6' }}
+            subheader={
+              hhsEditable
+                ? 'Populated by the HHS onboarding load'
+                : HHS_LOCK_TOOLTIP
+            }
+            subheaderTypographyProps={{ variant: 'caption' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            <Grid container spacing={3}>
+              {hhsFields.map((field) => (
+                <Grid item xs={12} sm={6} md={4} key={field.key}>
+                  {hhsEditable ? (
+                    renderEditField(field, props)
+                  ) : (
+                    <Tooltip title={HHS_LOCK_TOOLTIP} arrow placement="top">
+                      <Box>{renderEditField(field, props, true)}</Box>
+                    </Tooltip>
+                  )}
                 </Grid>
               ))}
             </Grid>

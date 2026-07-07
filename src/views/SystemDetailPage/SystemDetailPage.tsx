@@ -17,11 +17,12 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
-import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
+import { isAdmin as checkIsAdmin, hasUnscopedRead } from '@/utils/userRoles'
 
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
+import { HHS_METADATA_KEYS } from './fieldConfig'
 import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
@@ -269,7 +270,7 @@ export default function SystemDetailPage() {
     if (!editedSystem) return
     setIsSaving(true)
     try {
-      await axiosInstance.put(`fismasystems/${editedSystem.fismasystemid}`, {
+      const putBody: Record<string, unknown> = {
         fismauid: editedSystem.fismauid,
         fismaacronym: editedSystem.fismaacronym,
         fismaname: editedSystem.fismaname,
@@ -282,7 +283,21 @@ export default function SystemDetailPage() {
         datacallcontact: editedSystem.datacallcontact,
         issoemail: editedSystem.issoemail,
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
-      })
+        opdiv_id: editedSystem.opdiv_id,
+      }
+      // HHS metadata only sent when the caller is an HHS-wide admin, matching
+      // the modal save path. The edit view renders these fields editable for
+      // the same tier; without this the detail-page save silently drops them.
+      // The backend also strips these on scoped users — defense-in-depth.
+      if (hasUnscopedRead(userInfo)) {
+        for (const key of HHS_METADATA_KEYS) {
+          putBody[key] = editedSystem[key] ?? null
+        }
+      }
+      await axiosInstance.put(
+        `fismasystems/${editedSystem.fismasystemid}`,
+        putBody
+      )
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setFismaSystems((prev) =>
         prev.map((s) =>
@@ -539,6 +554,7 @@ export default function SystemDetailPage() {
               prev ? { ...prev, sdl_sync_enabled: checked } : prev
             )
           }
+          hhsEditable={hasUnscopedRead(userInfo)}
         />
       ) : (
         <SystemDetailReadView
