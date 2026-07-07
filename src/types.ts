@@ -77,6 +77,19 @@ export type FismaSystemType = {
   reactivated_date: string | null
   reactivation_notes: string | null
   opdiv_id?: number | null
+  // HHS expansion fields (migration 0044+)
+  isso_name?: string | null
+  hva?: string | null
+  fips?: string | null
+  system_type?: string | null
+  cloud_system?: string | null
+  cloud_service_model?: string | null
+  cloud_vendor?: string | null
+  system_operator?: string | null
+  goco_coco_gogo?: string | null
+  system_owner?: string | null
+  system_owner_email?: string | null
+  legacy?: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]

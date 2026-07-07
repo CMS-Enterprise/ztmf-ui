@@ -5,7 +5,7 @@ import DialogActions from '@mui/material/DialogActions'
 import DialogContent from '@mui/material/DialogContent'
 import CustomDialogTitle from '../../components/DialogTitle/CustomDialogTitle'
 import { Button as CmsButton } from '@cmsgov/design-system'
-import { Box, Grid } from '@mui/material'
+import { Box, Divider, Grid } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
@@ -34,6 +34,10 @@ import axiosInstance from '@/axiosConfig'
 import { TEXTFIELD_HELPER_TEXT } from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { fetchOpDivs } from '@/utils/opdivs'
+import type { OpDiv } from '@/types'
+import { useContextProp } from '../Title/Context'
+import { isUnscopedWriteAdmin } from '@/utils/userRoles'
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -47,6 +51,9 @@ export default function EditSystemModal({
   system,
   mode,
 }: editSystemModalProps) {
+  const { userInfo } = useContextProp()
+  const hhsReadOnly = !isUnscopedWriteAdmin(userInfo)
+
   const [formValid, setFormValid] = React.useState<FormValidType>({
     issoemail: false,
     datacallcontact: false,
@@ -55,7 +62,9 @@ export default function EditSystemModal({
     datacenterenvironment: false,
     component: false,
     fismauid: false,
+    opdiv_id: false,
   })
+  const [opdivs, setOpDivs] = React.useState<OpDiv[]>([])
   const isFormValid = (): boolean => {
     return Object.values(formValid).every((value) => value === true)
   }
@@ -86,7 +95,17 @@ export default function EditSystemModal({
       datacenterenvironment: TEXTFIELD_HELPER_TEXT,
       component: TEXTFIELD_HELPER_TEXT,
       fismauid: TEXTFIELD_HELPER_TEXT,
+      opdiv_id: TEXTFIELD_HELPER_TEXT,
     })
+  React.useEffect(() => {
+    if (!open) return
+    const controller = new AbortController()
+    fetchOpDivs()
+      .then(setOpDivs)
+      .catch(() => {})
+    return () => controller.abort()
+  }, [open])
+
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)
@@ -141,6 +160,7 @@ export default function EditSystemModal({
           system?.component && system?.component.length > 0 ? true : false,
         fismauid:
           system?.fismauid && system?.fismauid.length > 0 ? true : false,
+        opdiv_id: system?.opdiv_id != null ? true : false,
       }))
       setEditedFismaSystem(system)
       const today = new Date()
@@ -236,6 +256,19 @@ export default function EditSystemModal({
             datacallcontact: editedFismaSystem.datacallcontact,
             issoemail: editedFismaSystem.issoemail,
             sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
+            opdiv_id: editedFismaSystem.opdiv_id,
+            isso_name: editedFismaSystem.isso_name,
+            hva: editedFismaSystem.hva,
+            fips: editedFismaSystem.fips,
+            system_type: editedFismaSystem.system_type,
+            cloud_system: editedFismaSystem.cloud_system,
+            cloud_service_model: editedFismaSystem.cloud_service_model,
+            cloud_vendor: editedFismaSystem.cloud_vendor,
+            system_operator: editedFismaSystem.system_operator,
+            goco_coco_gogo: editedFismaSystem.goco_coco_gogo,
+            system_owner: editedFismaSystem.system_owner,
+            system_owner_email: editedFismaSystem.system_owner_email,
+            legacy: editedFismaSystem.legacy,
           }
         )
         notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
@@ -274,6 +307,19 @@ export default function EditSystemModal({
           datacallcontact: editedFismaSystem.datacallcontact,
           issoemail: editedFismaSystem.issoemail,
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
+          opdiv_id: editedFismaSystem.opdiv_id,
+          isso_name: editedFismaSystem.isso_name,
+          hva: editedFismaSystem.hva,
+          fips: editedFismaSystem.fips,
+          system_type: editedFismaSystem.system_type,
+          cloud_system: editedFismaSystem.cloud_system,
+          cloud_service_model: editedFismaSystem.cloud_service_model,
+          cloud_vendor: editedFismaSystem.cloud_vendor,
+          system_operator: editedFismaSystem.system_operator,
+          goco_coco_gogo: editedFismaSystem.goco_coco_gogo,
+          system_owner: editedFismaSystem.system_owner,
+          system_owner_email: editedFismaSystem.system_owner_email,
+          legacy: editedFismaSystem.legacy,
         })
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
@@ -438,6 +484,32 @@ export default function EditSystemModal({
           <CustomDialogTitle title={`${title} Fisma System`} />
           <DialogContent>
             <Box sx={{ flexGrow: 1 }} component="form">
+              <TextField
+                id="opdiv_id"
+                select
+                required
+                label="OpDiv"
+                variant="standard"
+                fullWidth
+                value={editedFismaSystem.opdiv_id ?? ''}
+                error={!formValid.opdiv_id}
+                helperText={
+                  !formValid.opdiv_id ? formValidErrorText.opdiv_id : ''
+                }
+                sx={{ mb: 2 }}
+                onChange={(e) => {
+                  const val =
+                    e.target.value === '' ? null : Number(e.target.value)
+                  setEditedFismaSystem((prev) => ({ ...prev, opdiv_id: val }))
+                  setFormValid((prev) => ({ ...prev, opdiv_id: val != null }))
+                }}
+              >
+                {opdivs.map((o) => (
+                  <MenuItem key={o.opdiv_id} value={o.opdiv_id}>
+                    {o.code} — {o.name}
+                  </MenuItem>
+                ))}
+              </TextField>
               <Grid container spacing={2}>
                 <Grid item xs={7}>
                   <TextField
@@ -1100,6 +1172,197 @@ export default function EditSystemModal({
                       )}
                     </Box>
                   )}
+                </Grid>
+              </Grid>
+              <Divider sx={{ mt: 3, mb: 1 }} />
+              <Typography
+                variant="subtitle2"
+                sx={{ mb: 1, color: 'text.secondary' }}
+              >
+                HHS System Information
+                {hhsReadOnly && (
+                  <Typography
+                    component="span"
+                    variant="caption"
+                    sx={{ ml: 1, color: 'text.secondary' }}
+                  >
+                    (read-only for OpDiv admins)
+                  </Typography>
+                )}
+              </Typography>
+              <Grid container spacing={2}>
+                <Grid item xs={6}>
+                  <TextField
+                    label="ISSO Name"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.isso_name ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        isso_name: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="HVA"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.hva ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        hva: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="FIPS"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.fips ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        fips: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="System Type"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.system_type ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        system_type: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Legacy"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.legacy ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        legacy: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="System Owner"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.system_owner ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        system_owner: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="System Owner Email"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    type="email"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.system_owner_email ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        system_owner_email: e.target.value || null,
+                      }))
+                    }
+                  />
+                </Grid>
+                <Grid item xs={6}>
+                  <TextField
+                    label="Cloud System"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.cloud_system ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        cloud_system: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Cloud Service Model"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.cloud_service_model ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        cloud_service_model: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="Cloud Vendor"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.cloud_vendor ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        cloud_vendor: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="System Operator"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.system_operator ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        system_operator: e.target.value || null,
+                      }))
+                    }
+                  />
+                  <TextField
+                    label="GoCo/CoCo/GoGo"
+                    variant="standard"
+                    fullWidth
+                    margin="normal"
+                    disabled={hhsReadOnly}
+                    value={editedFismaSystem.goco_coco_gogo ?? ''}
+                    onChange={(e) =>
+                      setEditedFismaSystem((prev) => ({
+                        ...prev,
+                        goco_coco_gogo: e.target.value || null,
+                      }))
+                    }
+                  />
                 </Grid>
               </Grid>
             </Box>
