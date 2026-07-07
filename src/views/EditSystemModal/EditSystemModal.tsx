@@ -26,7 +26,7 @@ import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import ValidatedTextField from './ValidatedTextField'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
-import { datacenterenvironment } from './dataEnvironment'
+import { toDropdownOptions } from '@/utils/dataCenterEnvironments'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -59,7 +59,9 @@ export default function EditSystemModal({
   system,
   mode,
   extendedEditable = false,
+  datacenterEnvironments,
 }: editSystemModalProps) {
+  const datacenterEnvironmentOptions = toDropdownOptions(datacenterEnvironments)
   const extendedFields = getFieldsBySection('extended')
 
   const [formValid, setFormValid] = React.useState<FormValidType>({
@@ -743,7 +745,7 @@ export default function EditSystemModal({
                       handleInputChange(e, 'datacenterenvironment')
                     }}
                   >
-                    {datacenterenvironment.map((option) => (
+                    {datacenterEnvironmentOptions.map((option) => (
                       <MenuItem key={option.value} value={option.value}>
                         {option.label}
                       </MenuItem>

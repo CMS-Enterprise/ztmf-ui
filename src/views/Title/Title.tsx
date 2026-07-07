@@ -10,7 +10,7 @@ import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData, UserRole, datacall } from '@/types'
+import { userData, UserRole, datacall, DataCenterEnvironment } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -28,6 +28,7 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
+import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
@@ -70,6 +71,9 @@ export default function Title() {
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
+  const [datacenterEnvironments, setDatacenterEnvironments] = useState<
+    DataCenterEnvironment[]
+  >([])
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -127,6 +131,24 @@ export default function Title() {
       }
     }
     fetchDatacalls()
+    return () => {
+      controller.abort()
+    }
+  }, [loaderData.status])
+
+  // Datacenter-environment vocabulary is reference data shared by the system
+  // form (dropdown) and the questionnaire pillar filter, so it is fetched
+  // once here and passed down via context. Failure is non-fatal: consumers
+  // fall back to raw values when the list is empty.
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    fetchDataCenterEnvironments(controller.signal)
+      .then(setDatacenterEnvironments)
+      .catch((error) => {
+        if (controller.signal.aborted) return
+        console.error('Fetch datacenter environments error:', error)
+      })
     return () => {
       controller.abort()
     }
@@ -475,6 +497,7 @@ export default function Title() {
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,
+                  datacenterEnvironments,
                 }}
               />
             </Box>
@@ -488,6 +511,7 @@ export default function Title() {
           system={EMPTY_SYSTEM}
           mode={'create'}
           extendedEditable={hasUnscopedRead(userInfo)}
+          datacenterEnvironments={datacenterEnvironments}
         />
         <EmailModal
           openModal={openEmailModal}

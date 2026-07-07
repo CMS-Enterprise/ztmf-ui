@@ -13,14 +13,19 @@ import {
   Tooltip,
 } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
-import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
+import {
+  FismaSystemType,
+  FormValidType,
+  FormValidHelperText,
+  DataCenterEnvironment,
+} from '@/types'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
 import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
 import {
   emailValidator,
   optionalEmailValidator,
 } from '@/views/EditSystemModal/validators'
-import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
+import { toDropdownOptions } from '@/utils/dataCenterEnvironments'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import {
@@ -61,6 +66,9 @@ interface SystemDetailEditViewProps {
   // organization-wide admins (HasUnscopedRead) may edit; scoped admins and
   // ISSO/ISSM see them populated but locked. The tooltip on each field explains the gate.
   extendedEditable: boolean
+  // Datacenter-environment vocabulary for the select field, passed down from
+  // SystemDetailPage (which reads it from the outlet context).
+  datacenterEnvironments: DataCenterEnvironment[]
 }
 
 function renderEditField(
@@ -74,6 +82,7 @@ function renderEditField(
     formValidErrorText,
     onInputChange,
     onValidatedFieldChange,
+    datacenterEnvironments,
   } = props
 
   if (field.type === 'email') {
@@ -111,7 +120,7 @@ function renderEditField(
         sx={{ mt: 2 }}
         onChange={(e) => onInputChange(e, field.key)}
       >
-        {datacenterenvironment.map((option) => (
+        {toDropdownOptions(datacenterEnvironments).map((option) => (
           <MenuItem key={option.value} value={option.value}>
             {option.label}
           </MenuItem>

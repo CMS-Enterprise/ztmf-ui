@@ -27,7 +27,8 @@ import CfactsRecordCard from './CfactsRecordCard'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const { fismaSystems, setFismaSystems, userInfo } = useContextProp()
+  const { fismaSystems, setFismaSystems, userInfo, datacenterEnvironments } =
+    useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
@@ -530,6 +531,7 @@ export default function SystemDetailPage() {
           editedSystem={editedSystem}
           formValid={formValid}
           formValidErrorText={formValidErrorText}
+          datacenterEnvironments={datacenterEnvironments}
           decommissionDate={decommissionDate}
           decommissionDateError={decommissionDateError}
           decommissionNotes={decommissionNotes}
