@@ -50,6 +50,7 @@ export default function SystemDetailReadView({
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
+  const hhsFields = getFieldsBySection('hhs')
 
   return (
     <Grid container spacing={3}>
@@ -190,6 +191,31 @@ export default function SystemDetailReadView({
             <Grid container spacing={3}>
               {contactFields.map((field) => (
                 <Grid item xs={12} sm={6} key={field.key}>
+                  <FieldDisplay
+                    label={field.label}
+                    value={String(system[field.key] ?? '')}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+      </Grid>
+
+      {/* HHS Metadata — full width, 3-col grid */}
+      <Grid item xs={12}>
+        <Card variant="outlined">
+          <CardHeader
+            title="HHS Metadata"
+            titleTypographyProps={{ variant: 'h6' }}
+            subheader="Populated by the HHS onboarding load"
+            subheaderTypographyProps={{ variant: 'caption' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            <Grid container spacing={3}>
+              {hhsFields.map((field) => (
+                <Grid item xs={12} sm={6} md={4} key={field.key}>
                   <FieldDisplay
                     label={field.label}
                     value={String(system[field.key] ?? '')}

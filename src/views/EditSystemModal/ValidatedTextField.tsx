@@ -5,6 +5,7 @@ type ValidatedTextFieldProps = {
   label: string
   dfValue?: string
   isFullWidth?: boolean
+  disabled?: boolean
   validator: (value: string) => string | false
   onChange: (isValid: boolean, value: string) => void
 }
@@ -13,6 +14,7 @@ const ValidatedTextField: React.FC<ValidatedTextFieldProps> = ({
   validator,
   isFullWidth,
   dfValue,
+  disabled,
   onChange,
 }) => {
   const [value, setValue] = useState<string>(dfValue || '')
@@ -44,6 +46,7 @@ const ValidatedTextField: React.FC<ValidatedTextFieldProps> = ({
       margin="normal"
       onChange={handleChange}
       required
+      disabled={disabled}
       InputLabelProps={{
         sx: {
           marginTop: 0,

@@ -143,6 +143,7 @@ export type QuestionScores = {
   datacallid: number
   last_edited_at?: string | null
   last_edited_by?: LastEditedBy | null
+  notes_is_ai_summary?: boolean
 }
 
 export type Question = {
@@ -177,6 +178,10 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
+  // When true, render the HHS Metadata section. Only HHS-wide admins
+  // (HasUnscopedRead) see it; scoped tiers get the modal without those
+  // fields. Undefined defaults to false — fail closed.
+  hhsEditable?: boolean
 }
 
 export type datacallModalProps = {
@@ -295,6 +300,7 @@ export type ScoreDiffSide = {
   optionname: string
   score: number
   notes: string | null
+  notes_is_ai_summary?: boolean
 }
 
 export type ScoreDiffEntry = {

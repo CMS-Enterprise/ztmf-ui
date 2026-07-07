@@ -37,6 +37,7 @@ import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
@@ -620,24 +621,38 @@ export default function QuestionnarePage() {
                       setNotes(e.target.value)
                     }}
                   />
-                  {!isReadOnly && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color:
-                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                            ? 'error.main'
-                            : notes.length >=
-                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                              ? 'warning.main'
-                              : 'text.secondary',
-                        display: 'block',
-                        mt: 0.5,
-                      }}
-                    >
-                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                    </Typography>
-                  )}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mt: 0.5,
+                    }}
+                  >
+                    <AISummaryBadge
+                      show={
+                        selectQuestionOption >= 0 &&
+                        questionScores[selectQuestionOption]
+                          ?.notes_is_ai_summary === true
+                      }
+                    />
+                    {!isReadOnly && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          ml: 'auto',
+                          color:
+                            notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                              ? 'error.main'
+                              : notes.length >=
+                                  MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                                ? 'warning.main'
+                                : 'text.secondary',
+                        }}
+                      >
+                        {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                      </Typography>
+                    )}
+                  </Box>
                   <Box
                     position="relative"
                     display="flex"
