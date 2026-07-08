@@ -34,6 +34,7 @@ import {
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
+import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -107,6 +108,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     fismaSystems,
+    datacenterEnvironments,
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
@@ -194,6 +196,13 @@ export default function QuestionnarePage() {
   const system = location.state?.fismasystemid as number | undefined
   const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
+  // Resolve the system's raw datacenter environment to its scoring category
+  // for pillar filtering. Falls back to the raw value until the vocabulary
+  // loads or for any value not in the map.
+  const systemCategory =
+    toCategoryMap(datacenterEnvironments)[
+      systemInfo?.datacenterenvironment ?? ''
+    ] ?? systemInfo?.datacenterenvironment
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -325,7 +334,7 @@ export default function QuestionnarePage() {
               setQuestions(questionData)
               const sortedPillars = filterPillarsForSystem(
                 sortPillars(Object.keys(organizedData)),
-                systemInfo?.datacenterenvironment
+                systemCategory
               )
               let sortedFuncId: number[] = []
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
@@ -410,7 +419,7 @@ export default function QuestionnarePage() {
     latestDataCallId,
     latestDatacall,
     latestDeadline,
-    systemInfo?.datacenterenvironment,
+    systemCategory,
   ])
   React.useEffect(() => {
     if (questionId) {

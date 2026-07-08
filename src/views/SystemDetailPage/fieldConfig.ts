@@ -10,6 +10,9 @@ export interface FieldConfig {
   section: FieldSection
   required: boolean
   type: FieldType
+  // Display-only: rendered but never editable and excluded from the write
+  // payload. Used for values the backend resolves/owns (e.g. isso_name).
+  readOnly?: boolean
 }
 
 export const fieldConfigs: FieldConfig[] = [
@@ -96,16 +99,17 @@ export const fieldConfigs: FieldConfig[] = [
     type: 'email',
   },
 
-  // Extended Metadata section. Populated by the onboarding data load; editable
-  // only by organization-wide admins (gated in SystemDetailEditView / EditSystemModal
-  // via hasUnscopedRead).
-  // isso_name depends on backend migration 0044 (#389) — coordinate before shipping.
+  // Extended Metadata section. Standard system attributes editable by any
+  // write admin across all OpDivs. isso_name is the exception: the backend
+  // resolves it (from the ISSO user record for CMS, from the import for HHS),
+  // so it is display-only here and the edit form still edits issoemail.
   {
     key: 'isso_name',
     label: 'ISSO Name',
     section: 'extended',
     required: false,
     type: 'text',
+    readOnly: true,
   },
   {
     key: 'hva',
@@ -191,8 +195,10 @@ export function getFieldsBySection(section: FieldSection): FieldConfig[] {
 }
 
 // Single source of truth for the extended metadata write list. Derived from the
-// `extended` section above so a field added to fieldConfig can't silently
-// render-but-not-save (the modal/detail PUT loops consume this).
+// `extended` section above (excluding read-only fields like isso_name) so a
+// field added to fieldConfig can't silently render-but-not-save, and a
+// display-only field can't silently be written (the modal/detail PUT loops
+// consume this).
 export const EXTENDED_METADATA_KEYS: (keyof FismaSystemType)[] = fieldConfigs
-  .filter((f) => f.section === 'extended')
+  .filter((f) => f.section === 'extended' && !f.readOnly)
   .map((f) => f.key)

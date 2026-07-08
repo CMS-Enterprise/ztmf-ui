@@ -26,7 +26,7 @@ import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import ValidatedTextField from './ValidatedTextField'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
-import { datacenterenvironment } from './dataEnvironment'
+import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -58,8 +58,12 @@ export default function EditSystemModal({
   onClose,
   system,
   mode,
-  extendedEditable = false,
+  datacenterEnvironments,
 }: editSystemModalProps) {
+  const datacenterEnvironmentOptions = toDropdownOptionsWithCurrent(
+    datacenterEnvironments,
+    system?.datacenterenvironment
+  )
   const extendedFields = getFieldsBySection('extended')
 
   const [formValid, setFormValid] = React.useState<FormValidType>({
@@ -273,10 +277,11 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        if (extendedEditable) {
-          for (const key of EXTENDED_METADATA_KEYS) {
-            editBody[key] = editedFismaSystem[key] ?? null
-          }
+        // Extended metadata fields are editable across all OpDivs; send each,
+        // using null to leave a value unchanged (the backend writes only
+        // non-null fields, so imported data isn't clobbered).
+        for (const key of EXTENDED_METADATA_KEYS) {
+          editBody[key] = editedFismaSystem[key] ?? null
         }
         await axiosInstance.put(
           `fismasystems/${editedFismaSystem.fismasystemid}`,
@@ -320,12 +325,8 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        // Extended metadata only sent when the caller is an organization-wide admin.
-        // The backend also strips these on scoped users — defense-in-depth.
-        if (extendedEditable) {
-          for (const key of EXTENDED_METADATA_KEYS) {
-            body[key] = editedFismaSystem[key] ?? null
-          }
+        for (const key of EXTENDED_METADATA_KEYS) {
+          body[key] = editedFismaSystem[key] ?? null
         }
         await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
@@ -743,8 +744,12 @@ export default function EditSystemModal({
                       handleInputChange(e, 'datacenterenvironment')
                     }}
                   >
-                    {datacenterenvironment.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
+                    {datacenterEnvironmentOptions.map((option) => (
+                      <MenuItem
+                        key={option.value}
+                        value={option.value}
+                        disabled={option.disabled}
+                      >
                         {option.label}
                       </MenuItem>
                     ))}
@@ -1180,61 +1185,60 @@ export default function EditSystemModal({
                     </Box>
                   )}
                 </Grid>
-                {extendedEditable && (
-                  <Grid item xs={12}>
-                    <Box
+                <Grid item xs={12}>
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 2,
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ mb: 0.5 }}>
+                      {EXTENDED_METADATA_TITLE}
+                    </Typography>
+                    <Typography
+                      variant="caption"
                       sx={{
-                        mt: 2,
-                        p: 2,
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 1,
+                        display: 'block',
+                        mb: 2,
+                        color: 'text.secondary',
                       }}
                     >
-                      <Typography variant="h6" sx={{ mb: 0.5 }}>
-                        {EXTENDED_METADATA_TITLE}
-                      </Typography>
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          display: 'block',
-                          mb: 2,
-                          color: 'text.secondary',
-                        }}
-                      >
-                        {mode === 'create'
-                          ? EXTENDED_METADATA_CREATE_HINT
-                          : EXTENDED_METADATA_EDIT_HINT}
-                      </Typography>
-                      <Grid container spacing={2}>
-                        {extendedFields.map((field) => (
-                          <Grid item xs={12} sm={6} md={4} key={field.key}>
-                            <TextField
-                              id={`${mode}-${field.key}`}
-                              label={field.label}
-                              variant="standard"
-                              margin="normal"
-                              fullWidth
-                              value={
-                                (editedFismaSystem[field.key] as
-                                  | string
-                                  | null
-                                  | undefined) ?? ''
-                              }
-                              InputLabelProps={{ sx: { marginTop: 0 } }}
-                              onChange={(e) => {
-                                setEditedFismaSystem((prevState) => ({
-                                  ...prevState,
-                                  [field.key]: e.target.value || null,
-                                }))
-                              }}
-                            />
-                          </Grid>
-                        ))}
-                      </Grid>
-                    </Box>
-                  </Grid>
-                )}
+                      {mode === 'create'
+                        ? EXTENDED_METADATA_CREATE_HINT
+                        : EXTENDED_METADATA_EDIT_HINT}
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {extendedFields.map((field) => (
+                        <Grid item xs={12} sm={6} md={4} key={field.key}>
+                          <TextField
+                            id={`${mode}-${field.key}`}
+                            label={field.label}
+                            variant="standard"
+                            margin="normal"
+                            fullWidth
+                            disabled={field.readOnly}
+                            value={
+                              (editedFismaSystem[field.key] as
+                                | string
+                                | null
+                                | undefined) ?? ''
+                            }
+                            InputLabelProps={{ sx: { marginTop: 0 } }}
+                            onChange={(e) => {
+                              setEditedFismaSystem((prevState) => ({
+                                ...prevState,
+                                [field.key]: e.target.value || null,
+                              }))
+                            }}
+                          />
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
+                </Grid>
               </Grid>
             </Box>
           </DialogContent>

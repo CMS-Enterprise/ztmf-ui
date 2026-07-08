@@ -39,6 +39,19 @@ export type OpDiv = {
   active: boolean
 }
 
+// One known datacenter environment from GET /api/v1/datacenterenvironments.
+// `datacenterenvironment` is the raw value stored on a system; `category` is
+// the reporting bucket the raw value resolves to (and the dropdown label);
+// `selectable` marks values offered in the picker (legacy/alias values are
+// still returned so existing systems resolve). Rows arrive ordered by `ordr`.
+export type DataCenterEnvironment = {
+  datacenterenvironment: string
+  category: string
+  scoring_key: string | null
+  selectable: boolean
+  ordr: number
+}
+
 export type userData = {
   userid: string
   email: string
@@ -178,10 +191,9 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
-  // When true, render the Extended Metadata section. Only organization-wide
-  // admins (HasUnscopedRead) see it; scoped tiers get the modal without those
-  // fields. Undefined defaults to false — fail closed.
-  extendedEditable?: boolean
+  // Datacenter-environment vocabulary for the dropdown. Passed from Title
+  // (the modal renders outside the outlet, so it can't read context).
+  datacenterEnvironments: DataCenterEnvironment[]
 }
 
 export type datacallModalProps = {
