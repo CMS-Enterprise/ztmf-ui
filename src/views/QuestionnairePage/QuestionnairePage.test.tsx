@@ -130,4 +130,46 @@ describe('QuestionnairePage', () => {
       )
     ).toBeInTheDocument()
   })
+
+  test('shows the AI Summary badge when the saved answer notes are AI-generated', async () => {
+    mock.onGet('/fismasystems/42/questions').reply(200, {
+      data: [
+        {
+          questionid: 9001,
+          question: 'Do you require phishing-resistant MFA for every login?',
+          notesprompt: 'Document the MFA policy citation here.',
+          pillar: { pillar: 'Identity' },
+          function: {
+            functionid: 700,
+            function: 'AuthN',
+            description: 'Authentication function description.',
+          },
+        },
+      ],
+    })
+    // The saved answer (functionoptionid 55) carries an AI-generated note.
+    mock
+      .onGet('scores?datacallid=1&fismasystemid=42&include=functionoption')
+      .reply(200, {
+        data: [
+          {
+            scoreid: 9,
+            functionoptionid: 55,
+            notes: 'AI-generated summary text.',
+            datacallid: 1,
+            notes_is_ai_summary: true,
+          },
+        ],
+      })
+    mock.onGet('functions/700/options').reply(200, {
+      data: [
+        { functionoptionid: 54, description: 'Traditional', score: 0 },
+        { functionoptionid: 55, description: 'Optimal', score: 3 },
+      ],
+    })
+
+    renderWithProviders(<QuestionnairePage />)
+
+    expect(await screen.findByText('AI Summary')).toBeInTheDocument()
+  })
 })
