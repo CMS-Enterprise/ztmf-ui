@@ -245,7 +245,7 @@ export default function QuestionnarePage() {
 
   const clearCurrentDraft = () => {
     if (system && questionId && datacallID > 0) {
-      clearDraft(system, questionId, datacallID)
+      clearDraft(userInfo.userid, system, questionId, datacallID)
     }
     setDraftStatus('idle')
   }
@@ -502,11 +502,12 @@ export default function QuestionnarePage() {
           // server-side values set above. Skipped for read-only sessions.
           const sys = systemRef.current
           // Eagerly evict any stale draft when the session is now read-only.
+          const uid = userInfo.userid
           if (isReadOnly && sys && questionId && datacallID > 0)
-            clearDraft(sys, questionId, datacallID)
+            clearDraft(uid, sys, questionId, datacallID)
           const draft =
             !isReadOnly && sys && questionId && datacallID > 0
-              ? loadDraft(sys, questionId, datacallID)
+              ? await loadDraft(uid, sys, questionId, datacallID)
               : null
           if (draft) {
             if (draft.selectQuestionOption === -1) {
@@ -526,7 +527,7 @@ export default function QuestionnarePage() {
             } else {
               // Draft references an option that no longer exists — evict it.
               if (sys && questionId && datacallID > 0)
-                clearDraft(sys, questionId, datacallID)
+                clearDraft(uid, sys, questionId, datacallID)
               setDraftStatus('idle')
             }
           } else {
@@ -544,7 +545,14 @@ export default function QuestionnarePage() {
       fetchOptions()
       return () => controller.abort()
     }
-  }, [questionId, questionScores, questions, isReadOnly, datacallID])
+  }, [
+    questionId,
+    questionScores,
+    questions,
+    isReadOnly,
+    datacallID,
+    userInfo.userid,
+  ])
 
   // Debounced draft save: 1 second after the user pauses editing, persist
   // the current answer and notes to localStorage so a reload can recover them.
@@ -565,8 +573,12 @@ export default function QuestionnarePage() {
     if (selectQuestionOption === initQuestionChoice && notes === initNotes)
       return
     const timer = setTimeout(() => {
-      saveDraft(system, questionId, datacallID, { selectQuestionOption, notes })
-      if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
+      saveDraft(userInfo.userid, system, questionId, datacallID, {
+        selectQuestionOption,
+        notes,
+      }).then(() => {
+        if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
+      })
     }, 1000)
     return () => clearTimeout(timer)
   }, [
@@ -579,6 +591,7 @@ export default function QuestionnarePage() {
     initQuestionChoice,
     initNotes,
     loadingQuestion,
+    userInfo.userid,
   ])
 
   // Warn before tab close or hard refresh when the active question has edits
