@@ -103,6 +103,10 @@ export type FismaSystemType = {
   system_owner?: string | null
   system_owner_email?: string | null
   legacy?: string | null
+  // Risk-based target maturity (ztmf#398). null = no target asserted yet;
+  // the UI presents the Advanced default.
+  target_maturity_tier?: string | null
+  target_maturity_justification?: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
