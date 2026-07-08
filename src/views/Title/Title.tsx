@@ -28,6 +28,7 @@ import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
@@ -117,10 +118,8 @@ export default function Title() {
         // "Latest"/"current" is the call with the furthest-out deadline, not
         // the highest datacallid: historical loads can carry a higher id than
         // the real current call (#393). datacallid is only a tiebreak.
-        const sorted: datacall[] = [...res.data.data].sort(
-          (a: datacall, b: datacall) =>
-            new Date(b.deadline).getTime() - new Date(a.deadline).getTime() ||
-            b.datacallid - a.datacallid
+        const sorted: datacall[] = sortDatacallsByDeadline(
+          res.data.data as datacall[]
         )
         setDatacalls(sorted)
         if (sorted.length > 0) {

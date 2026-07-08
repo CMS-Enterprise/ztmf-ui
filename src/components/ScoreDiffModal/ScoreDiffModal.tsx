@@ -26,6 +26,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import axiosInstance from '@/axiosConfig'
 import { isAuthHandled } from '@/utils/notify'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { PILLAR_ORDER, PILLAR_FUNCTION_MAP } from '@/constants'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import type {
@@ -114,11 +115,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
           const res = await axiosInstance.get('/datacalls')
           // Order by deadline (furthest-out first), datacallid only as a
           // tiebreak: historical loads can out-id the real current call (#393).
-          sorted = [...res.data.data].sort(
-            (a: datacall, b: datacall) =>
-              new Date(b.deadline).getTime() - new Date(a.deadline).getTime() ||
-              b.datacallid - a.datacallid
-          )
+          sorted = sortDatacallsByDeadline(res.data.data as datacall[])
           datacallsCache.data = sorted
           datacallsCache.timestamp = now
         }
