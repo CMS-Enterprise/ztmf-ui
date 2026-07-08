@@ -58,7 +58,15 @@ export default function TrendRadar({
   }, [previousScore, latestScore])
 
   return (
-    <Box sx={{ width: '100%', height: 240, mt: 1 }} role="img">
+    <Box
+      sx={{ width: '100%', height: 240, mt: 1 }}
+      role="img"
+      aria-label={
+        hasPrevious
+          ? 'Radar chart comparing current and previous pillar scores. The same scores appear as text in the pillar grid.'
+          : 'Radar chart of current pillar scores. The same scores appear as text in the pillar grid.'
+      }
+    >
       <ResponsiveContainer width="100%" height="100%">
         <RadarChart data={radarData} cx="50%" cy="50%" outerRadius="72%">
           <PolarGrid stroke={colors.neutral200} />

@@ -682,7 +682,10 @@ export default function QuestionnarePage() {
                 disabled={isReadOnly}
               />
               <Typography
+                component="label"
+                htmlFor="questionnaire-notes"
                 sx={{
+                  display: 'block',
                   fontSize: 13,
                   fontWeight: 600,
                   color: colors.ink,
@@ -702,6 +705,7 @@ export default function QuestionnarePage() {
                 </Box>
               </Typography>
               <CssTextField
+                id="questionnaire-notes"
                 multiline
                 rows={4}
                 fullWidth

@@ -97,7 +97,9 @@ export const fieldInputSx = {
     alignItems: 'center',
     minHeight: '0 !important',
   },
-  '& fieldset': { borderColor: colors.neutral200 },
+  // colors.border keeps the input boundary at the 3:1 contrast Section 508
+  // requires (WCAG 1.4.11); neutral200 was too faint to count as a boundary.
+  '& fieldset': { borderColor: colors.border },
 }
 
 export function Field({
@@ -124,11 +126,19 @@ export function Field({
       </Typography>
       {children}
       {error ? (
-        <Typography variant="caption" sx={errorTextSx}>
+        // role="alert" announces the message to screen readers the moment it
+        // appears; the stable id lets consumers wire aria-describedby on the
+        // input for a persistent association.
+        <Typography
+          variant="caption"
+          id={`${id}-error`}
+          role="alert"
+          sx={errorTextSx}
+        >
           {error}
         </Typography>
       ) : helperText ? (
-        <Typography variant="caption" sx={helperTextSx}>
+        <Typography variant="caption" id={`${id}-helper`} sx={helperTextSx}>
           {helperText}
         </Typography>
       ) : null}

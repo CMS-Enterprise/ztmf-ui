@@ -374,7 +374,10 @@ export default function UserTable() {
       // Avatar + name + email stacked, matching the redesign.
       renderCell: (params) => (
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
+          {/* Initials avatar is decorative - the full name renders next to
+              it, so hide it from screen readers to avoid a stray "LO". */}
           <Box
+            aria-hidden="true"
             sx={{
               width: 32,
               height: 32,

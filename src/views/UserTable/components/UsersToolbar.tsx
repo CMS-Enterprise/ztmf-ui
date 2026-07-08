@@ -71,7 +71,7 @@ export default function UsersToolbar({
           gap: 1,
           px: 1.5,
           height: 30,
-          border: `1px solid ${colors.neutral200}`,
+          border: `1px solid ${colors.border}`,
           borderRadius: `${radius.md}px`,
         }}
       >

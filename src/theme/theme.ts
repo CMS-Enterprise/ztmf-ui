@@ -1298,11 +1298,14 @@ theme = createTheme(theme, {
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
+          // colors.border clears the WCAG 1.4.11 3:1 boundary-contrast bar;
+          // the old palette.divider (12% alpha) was nearly invisible and
+          // failed Section 508 for control boundaries.
           '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: theme.palette.divider,
+            borderColor: colors.border,
           },
           '&:hover:not(.Mui-disabled) .MuiOutlinedInput-notchedOutline': {
-            borderColor: colors.neutral400,
+            borderColor: colors.neutral700,
           },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
             borderColor: colors.primary,

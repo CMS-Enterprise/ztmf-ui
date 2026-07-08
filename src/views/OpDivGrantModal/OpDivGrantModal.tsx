@@ -41,7 +41,7 @@ const searchInputSx = {
   height: 36,
   fontSize: 13,
   '& .MuiOutlinedInput-input': { padding: '0 0' },
-  '& fieldset': { borderColor: colors.neutral200 },
+  '& fieldset': { borderColor: colors.border },
 }
 
 const rowSx = {
@@ -71,6 +71,7 @@ function PillTab({
       component="button"
       type="button"
       onClick={onClick}
+      aria-pressed={active}
       sx={{
         font: 'inherit',
         fontSize: 13,
