@@ -67,6 +67,36 @@ beforeEach(() => {
 })
 
 describe('EditSystemModal', () => {
+  test('extendedEditable renders the Extended Metadata section on create', async () => {
+    renderWithProviders(
+      <EditSystemModal
+        title="Add"
+        open
+        onClose={jest.fn()}
+        system={completeSystem}
+        mode="create"
+        extendedEditable
+      />
+    )
+    expect(await screen.findByText('Extended Metadata')).toBeInTheDocument()
+    expect(screen.getByText('ISSO Name')).toBeInTheDocument()
+    expect(screen.getByText('GOCO/COCO/GOGO')).toBeInTheDocument()
+  })
+
+  test('scoped tiers (extendedEditable=false) see no Extended Metadata section', async () => {
+    renderWithProviders(
+      <EditSystemModal
+        title="Add"
+        open
+        onClose={jest.fn()}
+        system={completeSystem}
+        mode="create"
+      />
+    )
+    await screen.findByText('Add FISMA system')
+    expect(screen.queryByText('Extended Metadata')).not.toBeInTheDocument()
+  })
+
   test('renders nothing while loading=true (open w/o system)', () => {
     renderWithProviders(
       <EditSystemModal
