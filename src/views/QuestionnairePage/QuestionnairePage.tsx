@@ -581,13 +581,7 @@ export default function QuestionnarePage() {
   React.useEffect(() => {
     if (isReadOnly) return
     const handle = (e: BeforeUnloadEvent) => {
-      const s = unsavedRef.current
-      if (
-        s.selectQuestionOption !== s.initQuestionChoice ||
-        s.notes !== s.initNotes
-      ) {
-        e.preventDefault()
-      }
+      if (shouldPersistResponse(unsavedRef.current)) e.preventDefault()
     }
     window.addEventListener('beforeunload', handle)
     return () => window.removeEventListener('beforeunload', handle)
