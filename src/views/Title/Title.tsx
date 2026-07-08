@@ -110,8 +110,13 @@ export default function Title() {
         const res = await axiosInstance.get('/datacalls', {
           signal: controller.signal,
         })
+        // "Latest"/"current" is the call with the furthest-out deadline, not
+        // the highest datacallid: historical loads can carry a higher id than
+        // the real current call (#393). datacallid is only a tiebreak.
         const sorted: datacall[] = [...res.data.data].sort(
-          (a: datacall, b: datacall) => b.datacallid - a.datacallid
+          (a: datacall, b: datacall) =>
+            new Date(b.deadline).getTime() - new Date(a.deadline).getTime() ||
+            b.datacallid - a.datacallid
         )
         setDatacalls(sorted)
         if (sorted.length > 0) {
@@ -390,7 +395,7 @@ export default function Title() {
                     if (dc) setSelectedDatacall(dc)
                   }}
                   renderOption={(props, option) => {
-                    const isCurrent = option.datacallid === latestDataCallId
+                    const isLatest = option.datacallid === latestDataCallId
                     const isClosed = new Date() > new Date(option.deadline)
                     const { key, ...rest } = props
                     const deadlineLabel = new Date(
@@ -415,12 +420,15 @@ export default function Title() {
                             <Typography variant="body2">
                               {option.datacall}
                             </Typography>
-                            {isCurrent && (
+                            {/* Only the latest-by-deadline call is badged:
+                                "Current" while still open, "Latest" once its
+                                deadline has passed (#393). */}
+                            {isLatest && (
                               <Chip
-                                label="Current"
+                                label={isClosed ? 'Latest' : 'Current'}
                                 size="small"
                                 variant="outlined"
-                                color="primary"
+                                color={isClosed ? 'default' : 'primary'}
                                 sx={{ height: 18, fontSize: '0.65rem' }}
                               />
                             )}

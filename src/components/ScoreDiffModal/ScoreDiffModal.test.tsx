@@ -183,6 +183,48 @@ describe('ScoreDiffModal', () => {
     expect(screen.getByLabelText('From datacall')).toHaveValue('FY2024')
   })
 
+  // #393 regression: a re-imported historical call can carry a higher
+  // datacallid than the real current call, so "latest" must follow the
+  // furthest-out deadline, not the id.
+  it('treats the furthest-out deadline as latest even when another call has a higher datacallid', async () => {
+    const OUT_OF_ORDER: datacall[] = [
+      // highest id but an already-passed deadline (the historical hijacker)
+      {
+        datacallid: 7,
+        datacall: 'FY23 ZTM',
+        datecreated: '2026-01-01T00:00:00Z',
+        deadline: '2023-06-30T00:00:00Z',
+      },
+      // lower id but the furthest-out deadline (the real current call)
+      {
+        datacallid: 6,
+        datacall: 'FY2025 Q3',
+        datecreated: '2025-01-01T00:00:00Z',
+        deadline: '2099-09-30T00:00:00Z',
+      },
+      {
+        datacallid: 2,
+        datacall: 'FY2022',
+        datecreated: '2022-01-01T00:00:00Z',
+        deadline: '2022-12-31T00:00:00Z',
+      },
+    ]
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/datacalls')
+        return Promise.resolve({ data: { data: OUT_OF_ORDER } })
+      if (url.includes('/questions'))
+        return Promise.resolve({ data: { data: QUESTIONS } })
+      if (url.includes('/scores/diff'))
+        return Promise.resolve({ data: { data: [] } })
+      return Promise.reject(new Error(`Unexpected URL: ${url}`))
+    })
+    render(<ScoreDiffModal {...DEFAULT_PROPS} selectedDataCallId={undefined} />)
+    // To defaults to the max-deadline call (FY2025 Q3), not the higher-id FY23 ZTM.
+    expect(await screen.findByLabelText('To datacall')).toHaveValue('FY2025 Q3')
+    // From is the next-older call by deadline (FY23 ZTM), not by id.
+    expect(screen.getByLabelText('From datacall')).toHaveValue('FY23 ZTM')
+  })
+
   it('fetches the diff with the correct query params', async () => {
     setupMocks()
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
