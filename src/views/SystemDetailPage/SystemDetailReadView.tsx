@@ -13,6 +13,7 @@ import { PILLAR_ORDER } from '@/constants'
 import { CodeBadge } from '@/components/ui/StatusChip'
 import CfactsRecordCard from './CfactsRecordCard'
 import InsightsEmptyState from './InsightsEmptyState'
+import { getFieldsBySection } from './fieldConfig'
 
 /**
  * Highest possible zero trust score on the user-facing scale, used to
@@ -54,6 +55,15 @@ export default function SystemDetailReadView({
   previousDatacallName,
 }: SystemDetailReadViewProps) {
   const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
+  const extendedFields = getFieldsBySection('extended')
+  // Only show the Extended Metadata card when at least one field is
+  // populated. Systems without extended metadata have every field null and
+  // would otherwise render an empty card. (Read view is not role-gated; the
+  // values are the system's own metadata, visible to anyone who can view
+  // the system.)
+  const hasAnyExtendedData = extendedFields.some(
+    (field) => system[field.key] != null && system[field.key] !== ''
+  )
 
   return (
     <Box>
@@ -109,6 +119,17 @@ export default function SystemDetailReadView({
           ]}
         />
       </Box>
+      {hasAnyExtendedData && (
+        <Box sx={{ mb: 1.75 }}>
+          <DetailCard
+            title="Extended metadata"
+            rows={extendedFields.map((field) => ({
+              label: field.label,
+              value: String(system[field.key] ?? '') || '-',
+            }))}
+          />
+        </Box>
+      )}
       <InsightsSection system={system} />
     </Box>
   )

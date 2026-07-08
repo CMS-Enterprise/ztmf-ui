@@ -45,6 +45,9 @@ const completeSystem: FismaSystemType = {
   divisionname: 'Death Star Division',
   fismasubsystem: '',
   decommissioned: false,
+  // Required since the owning-OpDiv selector landed; without it the seeded
+  // formValid.opdiv_id stays false and Save renders disabled.
+  opdiv_id: 5,
 } as FismaSystemType
 
 const decommissionedSystem: FismaSystemType = {

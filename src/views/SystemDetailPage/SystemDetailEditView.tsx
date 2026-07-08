@@ -6,15 +6,22 @@ import {
   MenuItem,
   OutlinedInput,
   Select,
+  Tooltip,
   Typography,
 } from '@mui/material'
 import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import Field, { fieldInputSx } from '@/components/ui/Field'
 import { StatusChip } from '@/components/ui/StatusChip'
 import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
+import { optionalEmailValidator } from '@/views/EditSystemModal/validators'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { colors, radius } from '@/theme/tokens'
+import {
+  EXTENDED_METADATA_SUBHEADER,
+  EXTENDED_METADATA_LOCK_TOOLTIP,
+} from '@/constants'
+import { getFieldsBySection } from './fieldConfig'
 
 /**
  * In-page edit view for the System Detail page. Renders the card-grouped
@@ -60,6 +67,12 @@ interface SystemDetailEditViewProps {
   onReactivateRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
   onSdlSyncToggle: (checked: boolean) => void
+  /**
+   * True for organization-wide admins: the Extended Metadata fields render
+   * editable. Scoped tiers see the values populated but locked, with a
+   * tooltip explaining the gate.
+   */
+  extendedEditable: boolean
 }
 
 /** Visual wrapper used by every card in the edit layout. */
@@ -108,6 +121,7 @@ function TextRow({
   showError,
   errorText,
   onChange,
+  disabled,
 }: {
   id: string
   label: string
@@ -118,6 +132,7 @@ function TextRow({
   onChange: (
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>
   ) => void
+  disabled?: boolean
 }) {
   return (
     <Field
@@ -132,6 +147,7 @@ function TextRow({
         value={value ?? ''}
         onChange={onChange}
         error={showError}
+        disabled={disabled}
         sx={fieldInputSx}
       />
     </Field>
@@ -163,7 +179,11 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     onReactivateRequest,
     validateDecommissionDate,
     onSdlSyncToggle,
+    onValidatedFieldChange,
+    extendedEditable,
   } = props
+
+  const extendedFields = getFieldsBySection('extended')
 
   const requiredError = (key: keyof FormValidType): boolean => !formValid[key]
   const requiredErrorText = (key: keyof FormValidType): string =>
@@ -462,7 +482,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               id="edit-issoemail"
               label="ISSO Email"
               required
-              value={editedSystem.issoemail}
+              value={editedSystem.issoemail ?? ''}
               showError={requiredError('issoemail')}
               errorText={requiredErrorText('issoemail')}
               onChange={(e) => onInputChange(e, 'issoemail')}
@@ -524,6 +544,79 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                 ))}
               </Select>
             </Field>
+          </Box>
+        </Card>
+      </Box>
+
+      {/* Extended Metadata - full width below both columns. Inputs are
+          disabled unless the caller is an organization-wide admin; scoped
+          tiers see the values populated but locked, with a tooltip
+          explaining the gate. */}
+      <Box sx={{ gridColumn: '1 / -1' }}>
+        <Card title="Extended Metadata">
+          <Typography
+            sx={{ fontSize: 12, color: colors.neutral500, mt: -1.5, mb: 2 }}
+          >
+            {extendedEditable
+              ? EXTENDED_METADATA_SUBHEADER
+              : EXTENDED_METADATA_LOCK_TOOLTIP}
+          </Typography>
+          <Box
+            sx={{
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: '1fr',
+                sm: '1fr 1fr',
+                md: '1fr 1fr 1fr',
+              },
+              gap: 2,
+            }}
+          >
+            {extendedFields.map((field) => {
+              const value = String(editedSystem[field.key] ?? '')
+              // Optional email fields validate on content only: empty is
+              // fine, a non-empty value must be a well-formed address. The
+              // validity feeds the page's formValid map so a bad address
+              // gates Save the same way the modal path does.
+              const emailError =
+                field.type === 'email' && extendedEditable
+                  ? optionalEmailValidator(value)
+                  : false
+              const row = (
+                <TextRow
+                  id={`edit-${field.key}`}
+                  label={field.label}
+                  value={value}
+                  showError={Boolean(emailError)}
+                  errorText={emailError || ''}
+                  disabled={!extendedEditable}
+                  onChange={(e) => {
+                    const next = e.target.value
+                    if (field.type === 'email') {
+                      onValidatedFieldChange(
+                        field.key,
+                        optionalEmailValidator(next) === false,
+                        next
+                      )
+                    } else {
+                      onFieldChange(field.key, next)
+                    }
+                  }}
+                />
+              )
+              return extendedEditable ? (
+                <Box key={field.key}>{row}</Box>
+              ) : (
+                <Tooltip
+                  key={field.key}
+                  title={EXTENDED_METADATA_LOCK_TOOLTIP}
+                  arrow
+                  placement="top"
+                >
+                  <Box>{row}</Box>
+                </Tooltip>
+              )
+            })}
           </Box>
         </Card>
       </Box>

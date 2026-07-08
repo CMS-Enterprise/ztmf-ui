@@ -8,6 +8,13 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { radius } from '@/theme/tokens'
 
+// Accepts both the CMS quarterly cadence (FYYYYY QN) and the HHS annual
+// ZTM cadence (FYYY ZTM). Widened when the HHS onboarding mock addon
+// introduced FY23/FY24/FY25 ZTM datacall names.
+const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q[1-4]|ZTM)$/
+const DATACALL_MAX_LENGTH = 10 // "FY2025 ZTM" = 10 chars; longest valid form
+const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
+
 /**
  * Create-datacall modal. Renders through the shared Modal shell and uses
  * label-above-input fields that resist the global CMS Design System
@@ -37,12 +44,14 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
   }, [open])
 
   function isValidFormat(input: string) {
-    const pattern = /^FY\d{4} Q\d$/
-    if (input.length !== 9) {
+    // Below the shortest valid form, stay quiet: the user is mid-typing.
+    if (input.length < DATACALL_MIN_LENGTH) {
       setDatacallError('')
       return
     }
-    setDatacallError(pattern.test(input) ? '' : 'Invalid datacall format')
+    setDatacallError(
+      DATACALL_NAME_PATTERN.test(input) ? '' : 'Invalid datacall format'
+    )
   }
 
   const handleDatacallChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -87,7 +96,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
   }
 
   const canSubmit =
-    datacall.length === 9 &&
+    DATACALL_NAME_PATTERN.test(datacall.toUpperCase()) &&
     deadline.length === 10 &&
     datacallError.length === 0 &&
     deadlineError.length === 0
@@ -123,14 +132,17 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
           label="Name"
           required
           error={datacallError}
-          helperText="Use the format FYXXXX QX, for example FY2024 Q1."
+          helperText="Use the format FYXXXX QX (FY2024 Q1) or FYXX ZTM (FY25 ZTM)."
         >
           <OutlinedInput
             id="datacall-name"
             name="datacall"
             fullWidth
             value={datacall}
-            inputProps={{ maxLength: 9, 'aria-label': 'Datacall name' }}
+            inputProps={{
+              maxLength: DATACALL_MAX_LENGTH,
+              'aria-label': 'Datacall name',
+            }}
             onChange={handleDatacallChange}
             error={!!datacallError}
             sx={fieldInputSx}

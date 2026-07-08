@@ -16,12 +16,16 @@ import DecommissionedSystemInfo from './components/DecommissionedSystemInfo'
 import DecommissionForm from './components/DecommissionForm'
 import ReactivateForm from './components/ReactivateForm'
 import SystemFormFields from './components/SystemFormFields'
+import ExtendedMetadataFields from './components/ExtendedMetadataFields'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { EXTENDED_METADATA_KEYS } from '@/views/SystemDetailPage/fieldConfig'
+import type { OpDiv } from '@/types'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -35,6 +39,7 @@ export default function EditSystemModal({
   onClose,
   system,
   mode,
+  extendedEditable = false,
 }: editSystemModalProps) {
   const {
     editedFismaSystem,
@@ -82,6 +87,27 @@ export default function EditSystemModal({
     handleReactivate: runReactivate,
     resetReactivateForm,
   } = useReactivateFlow()
+  // Options for the required owning-OpDiv selector, loaded on open so the
+  // list is always current (an admin may have created an OpDiv since the
+  // last open). Failures surface: an empty list leaves Save stuck.
+  const [opdivs, setOpDivs] = React.useState<OpDiv[]>([])
+  React.useEffect(() => {
+    if (!open) return
+    const controller = new AbortController()
+    fetchOpDivs(false, controller.signal)
+      .then(setOpDivs)
+      .catch((error) => {
+        // Ignore the abort fired by cleanup on close; surface real failures
+        // so an empty OpDiv list (which leaves Save stuck) isn't silent.
+        if (controller.signal.aborted || isAuthHandled(error)) return
+        const parsed = parseApiError(error)
+        notify(
+          parsed.message || 'Failed to load the OpDiv list. Please try again.',
+          'error'
+        )
+      })
+    return () => controller.abort()
+  }, [open])
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)
@@ -109,22 +135,32 @@ export default function EditSystemModal({
   const handleSave = async () => {
     if (mode === 'edit') {
       try {
+        const editBody: Record<string, unknown> = {
+          fismauid: editedFismaSystem.fismauid,
+          fismaacronym: editedFismaSystem.fismaacronym,
+          fismaname: editedFismaSystem.fismaname,
+          fismasubsystem: editedFismaSystem.fismasubsystem,
+          component: editedFismaSystem.component,
+          groupacronym: editedFismaSystem.groupacronym,
+          groupname: editedFismaSystem.groupname,
+          divisionname: editedFismaSystem.divisionname,
+          datacenterenvironment: editedFismaSystem.datacenterenvironment,
+          datacallcontact: editedFismaSystem.datacallcontact,
+          issoemail: editedFismaSystem.issoemail,
+          sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
+          opdiv_id: editedFismaSystem.opdiv_id,
+        }
+        // Extended metadata only sent when the caller is an
+        // organization-wide admin. The backend also strips these on scoped
+        // users - defense-in-depth.
+        if (extendedEditable) {
+          for (const key of EXTENDED_METADATA_KEYS) {
+            editBody[key] = editedFismaSystem[key] ?? null
+          }
+        }
         await axiosInstance.put(
           `fismasystems/${editedFismaSystem.fismasystemid}`,
-          {
-            fismauid: editedFismaSystem.fismauid,
-            fismaacronym: editedFismaSystem.fismaacronym,
-            fismaname: editedFismaSystem.fismaname,
-            fismasubsystem: editedFismaSystem.fismasubsystem,
-            component: editedFismaSystem.component,
-            groupacronym: editedFismaSystem.groupacronym,
-            groupname: editedFismaSystem.groupname,
-            divisionname: editedFismaSystem.divisionname,
-            datacenterenvironment: editedFismaSystem.datacenterenvironment,
-            datacallcontact: editedFismaSystem.datacallcontact,
-            issoemail: editedFismaSystem.issoemail,
-            sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
-          }
+          editBody
         )
         notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
@@ -145,7 +181,7 @@ export default function EditSystemModal({
       }
     } else if (mode === 'create') {
       try {
-        await axiosInstance.post(`fismasystems`, {
+        const body: Record<string, unknown> = {
           fismauid: editedFismaSystem.fismauid,
           fismaacronym: editedFismaSystem.fismaacronym,
           fismaname: editedFismaSystem.fismaname,
@@ -158,7 +194,17 @@ export default function EditSystemModal({
           datacallcontact: editedFismaSystem.datacallcontact,
           issoemail: editedFismaSystem.issoemail,
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
-        })
+          opdiv_id: editedFismaSystem.opdiv_id,
+        }
+        // Extended metadata only sent when the caller is an
+        // organization-wide admin. The backend also strips these on scoped
+        // users - defense-in-depth.
+        if (extendedEditable) {
+          for (const key of EXTENDED_METADATA_KEYS) {
+            body[key] = editedFismaSystem[key] ?? null
+          }
+        }
+        await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
       } catch (error) {
@@ -232,6 +278,7 @@ export default function EditSystemModal({
               markTouched={markTouched}
               setFormValid={setFormValid}
               setFormValidErrorText={setFormValidErrorText}
+              opdivs={opdivs}
             >
               {mode === 'edit' && (
                 <Box
@@ -343,6 +390,13 @@ export default function EditSystemModal({
                 </Box>
               )}
             </SystemFormFields>
+            {extendedEditable && (
+              <ExtendedMetadataFields
+                editedFismaSystem={editedFismaSystem}
+                setEditedFismaSystem={setEditedFismaSystem}
+                mode={mode}
+              />
+            )}
           </Box>
         </Modal>
         <ConfirmDialog

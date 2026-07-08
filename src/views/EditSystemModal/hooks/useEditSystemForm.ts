@@ -17,12 +17,16 @@ const REQUIRED_FIELDS: (keyof FormValidType)[] = [
   'fismauid',
 ]
 
-const INITIAL_VALID: FormValidType = REQUIRED_FIELDS.reduce(
+// opdiv_id is required too, but it is a numeric select rather than a text
+// input, so it is seeded and validated separately from the string loop.
+const ALL_REQUIRED_KEYS = [...REQUIRED_FIELDS, 'opdiv_id']
+
+const INITIAL_VALID: FormValidType = ALL_REQUIRED_KEYS.reduce(
   (acc, key) => ({ ...acc, [key]: false }),
   {} as FormValidType
 )
 
-const INITIAL_ERROR_TEXT: FormValidHelperText = REQUIRED_FIELDS.reduce(
+const INITIAL_ERROR_TEXT: FormValidHelperText = ALL_REQUIRED_KEYS.reduce(
   (acc, key) => ({ ...acc, [key]: TEXTFIELD_HELPER_TEXT }),
   {} as FormValidHelperText
 )
@@ -92,6 +96,7 @@ export function useEditSystemForm(
         const value = system[key as keyof FismaSystemType]
         seeded[key] = typeof value === 'string' && value.length > 0
       }
+      seeded.opdiv_id = system.opdiv_id != null
       setFormValid((prev) => ({ ...prev, ...seeded }))
       setEditedFismaSystem(system)
       setTouched({})

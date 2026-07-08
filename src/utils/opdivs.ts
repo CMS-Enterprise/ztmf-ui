@@ -12,9 +12,13 @@ import type { OpDiv } from '@/types'
  * selectors, admin grant management) can consume it without each
  * caller hand-rolling the request. There is no production caller yet.
  */
-export async function fetchOpDivs(includeInactive = false): Promise<OpDiv[]> {
+export async function fetchOpDivs(
+  includeInactive = false,
+  signal?: AbortSignal
+): Promise<OpDiv[]> {
   const response = await axiosInstance.get<{ data: OpDiv[] }>('/opdivs', {
     params: includeInactive ? { active_only: false } : undefined,
+    signal,
   })
   return response.data.data
 }

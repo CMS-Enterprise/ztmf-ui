@@ -3,19 +3,13 @@ import axiosInstance from '@/axiosConfig'
 /**
  * OpDiv grant management for a single user (users_opdivs membership).
  *
- * All three operations hit the dedicated /users/{userid}/assignedopdivs
- * endpoints, whose shape mirrors the existing assignedfismasystems endpoints
- * (GET returns { data: number[] }; POST body { opdiv_id }; DELETE by id).
- * Granting/revoking recomputes the user's derived identity_provider server-side.
+ * fetchUserOpDivs reads the current grant set for a user (used for post-save
+ * refresh and as a fallback for older backends that omit assignedopdivids inline
+ * on the list response).
  *
- * The list endpoint (GET /users) returns each row's grants inline as
- * assignedopdivids, so the users table reads them off the row directly.
- * fetchUserOpDivs is for single-user refresh (e.g. after the grant modal) and
- * as a fallback for older backends that omit the field.
- *
- * NOTE: these endpoints are built on the backend RBAC branch
- * (feature/opdiv-rbac-enforcement) but are not yet in backend/openapi.yaml, so
- * this is built to the documented contract and may 404 until that branch ships.
+ * setUserOpDivs replaces the full grant set in one batch request. The backend
+ * reconciles the desired set against current grants (adds missing, removes extra)
+ * in one transaction and re-derives identity_provider once.
  */
 
 export async function fetchUserOpDivs(userid: string): Promise<number[]> {
@@ -25,18 +19,9 @@ export async function fetchUserOpDivs(userid: string): Promise<number[]> {
   return response.data.data ?? []
 }
 
-export async function grantOpDiv(
+export async function setUserOpDivs(
   userid: string,
-  opdivId: number
+  opdivIds: number[]
 ): Promise<void> {
-  await axiosInstance.post(`/users/${userid}/assignedopdivs`, {
-    opdiv_id: opdivId,
-  })
-}
-
-export async function revokeOpDiv(
-  userid: string,
-  opdivId: number
-): Promise<void> {
-  await axiosInstance.delete(`/users/${userid}/assignedopdivs/${opdivId}`)
+  await axiosInstance.put(`/users/${userid}/opdivs`, { opdiv_ids: opdivIds })
 }

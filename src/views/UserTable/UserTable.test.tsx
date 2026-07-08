@@ -13,6 +13,12 @@ jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
 })
+// utils/config reads import.meta.env at module scope, which swc/jest can't
+// evaluate; the table only reads CONFIG.IDP_ENABLED (IdP column gating).
+jest.mock('@/utils/config', () => ({
+  __esModule: true,
+  default: { IDP_ENABLED: false },
+}))
 
 // Title/Context is consumed via useOutletContext; the renderWithProviders
 // MemoryRouter has no matching outlet, so stub the hook directly.
