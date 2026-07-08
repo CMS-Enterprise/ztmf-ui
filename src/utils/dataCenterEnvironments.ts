@@ -22,6 +22,12 @@ export async function fetchDataCenterEnvironments(
   return response.data.data
 }
 
+export type DataCenterEnvironmentOption = {
+  value: string
+  label: string
+  disabled?: boolean
+}
+
 /**
  * Dropdown options for the system form: only selectable environments,
  * labeled by their reporting category. Save still sends the raw
@@ -30,10 +36,32 @@ export async function fetchDataCenterEnvironments(
  */
 export function toDropdownOptions(
   rows: DataCenterEnvironment[]
-): { value: string; label: string }[] {
+): DataCenterEnvironmentOption[] {
   return rows
     .filter((row) => row.selectable)
     .map((row) => ({ value: row.datacenterenvironment, label: row.category }))
+}
+
+/**
+ * Dropdown options plus the system's current value when it is no longer
+ * selectable (a legacy or alias environment that #394 marks
+ * `selectable: false`). Without this, editing such a system would show a
+ * blank required Select and log a MUI out-of-range warning. The current
+ * value is appended as a disabled option so it renders and stays valid but
+ * cannot be re-picked; the untouched raw value is still what gets saved.
+ */
+export function toDropdownOptionsWithCurrent(
+  rows: DataCenterEnvironment[],
+  currentValue: string | null | undefined
+): DataCenterEnvironmentOption[] {
+  const options = toDropdownOptions(rows)
+  if (
+    currentValue &&
+    !options.some((option) => option.value === currentValue)
+  ) {
+    options.push({ value: currentValue, label: currentValue, disabled: true })
+  }
+  return options
 }
 
 /**

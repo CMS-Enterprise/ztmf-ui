@@ -159,8 +159,6 @@ export const INVALID_INPUT_TEXT = (key: string) =>
 export const EXTENDED_METADATA_TITLE = 'Extended Metadata'
 export const EXTENDED_METADATA_SUBHEADER =
   'Populated by the onboarding data load'
-export const EXTENDED_METADATA_LOCK_TOOLTIP =
-  'Extended metadata is populated by the onboarding data load; only organization-wide admins can edit these fields.'
 export const EXTENDED_METADATA_CREATE_HINT =
   'Populated by the onboarding data load. Set these only when you already have the information; otherwise leave blank and the load will fill them in.'
 export const EXTENDED_METADATA_EDIT_HINT =

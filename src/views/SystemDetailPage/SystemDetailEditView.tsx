@@ -10,7 +10,6 @@ import {
   Checkbox,
   Typography,
   Chip,
-  Tooltip,
 } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import {
@@ -25,13 +24,12 @@ import {
   emailValidator,
   optionalEmailValidator,
 } from '@/views/EditSystemModal/validators'
-import { toDropdownOptions } from '@/utils/dataCenterEnvironments'
+import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import {
   EXTENDED_METADATA_TITLE,
   EXTENDED_METADATA_SUBHEADER,
-  EXTENDED_METADATA_LOCK_TOOLTIP,
 } from '@/constants'
 
 interface SystemDetailEditViewProps {
@@ -62,10 +60,6 @@ interface SystemDetailEditViewProps {
   onReactivateRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
   onSdlSyncToggle: (checked: boolean) => void
-  // When false, Extended Metadata fields render as disabled inputs. Only
-  // organization-wide admins (HasUnscopedRead) may edit; scoped admins and
-  // ISSO/ISSM see them populated but locked. The tooltip on each field explains the gate.
-  extendedEditable: boolean
   // Datacenter-environment vocabulary for the select field, passed down from
   // SystemDetailPage (which reads it from the outlet context).
   datacenterEnvironments: DataCenterEnvironment[]
@@ -120,8 +114,15 @@ function renderEditField(
         sx={{ mt: 2 }}
         onChange={(e) => onInputChange(e, field.key)}
       >
-        {toDropdownOptions(datacenterEnvironments).map((option) => (
-          <MenuItem key={option.value} value={option.value}>
+        {toDropdownOptionsWithCurrent(
+          datacenterEnvironments,
+          editedSystem[field.key] as string | null | undefined
+        ).map((option) => (
+          <MenuItem
+            key={option.value}
+            value={option.value}
+            disabled={option.disabled}
+          >
             {option.label}
           </MenuItem>
         ))}
@@ -288,7 +289,6 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
   const extendedFields = getFieldsBySection('extended')
-  const { extendedEditable } = props
 
   return (
     <Grid container spacing={3}>
@@ -537,19 +537,15 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
         </Card>
       </Grid>
 
-      {/* Extended Metadata — full width, 3-col grid. Inputs disabled unless the
-          caller is an organization-wide admin; scoped tiers see the values
-          populated but locked, with a tooltip explaining the gate. */}
+      {/* Extended Metadata — full width, 3-col grid. Standard system
+          attributes editable across all OpDivs. isso_name is display-only
+          (backend-resolved), so it renders disabled. */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
             title={EXTENDED_METADATA_TITLE}
             titleTypographyProps={{ variant: 'h6' }}
-            subheader={
-              extendedEditable
-                ? EXTENDED_METADATA_SUBHEADER
-                : EXTENDED_METADATA_LOCK_TOOLTIP
-            }
+            subheader={EXTENDED_METADATA_SUBHEADER}
             subheaderTypographyProps={{ variant: 'caption' }}
             sx={{ pb: 0 }}
           />
@@ -557,17 +553,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             <Grid container spacing={3}>
               {extendedFields.map((field) => (
                 <Grid item xs={12} sm={6} md={4} key={field.key}>
-                  {extendedEditable ? (
-                    renderEditField(field, props)
-                  ) : (
-                    <Tooltip
-                      title={EXTENDED_METADATA_LOCK_TOOLTIP}
-                      arrow
-                      placement="top"
-                    >
-                      <Box>{renderEditField(field, props, true)}</Box>
-                    </Tooltip>
-                  )}
+                  {renderEditField(field, props, field.readOnly)}
                 </Grid>
               ))}
             </Grid>

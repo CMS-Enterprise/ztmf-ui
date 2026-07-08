@@ -303,36 +303,26 @@ export default function FismaTable({ scores }: FismaTableProps) {
       minWidth: 100,
     },
     {
-      field: 'issoemail',
+      // Bound directly to the backend-resolved isso_name (populated for both
+      // CMS and HHS systems). Replaces the old issoemail.split('@') derivation,
+      // which rendered blank for HHS systems and crashed the sort on null
+      // emails (ztmf-ui#450).
+      field: 'isso_name',
       headerName: 'ISSO Name',
       flex: 1.2,
       minWidth: 120,
       maxWidth: 240,
       hideable: false,
-      valueGetter: (value) => {
-        // HHS-onboarded systems can have NULL issoemail Prior code assumed
-        // string and crashed the DataGrid on scroll when a null row rendered.
-        const email = value.row.issoemail
-        if (!email) return ''
-        const name = email.split('@')
-        const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        return fullName.length > 1
-          ? `${fullName[0]} ${fullName[1]}`
-          : fullName[0]
-      },
-      renderCell: (params) => {
-        const email = params.row.issoemail
-        if (!email) return '—'
-        const name = email.split('@')
-        const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        let firstName = ''
-        let lastName = ''
-        if (fullName.length > 1 && fullName[0] && fullName[1]) {
-          firstName = fullName[0][0].toUpperCase() + fullName[0].slice(1)
-          lastName = fullName[1][0].toUpperCase() + fullName[1].slice(1)
-        }
-        return fullName.length > 1 ? `${firstName} ${lastName}` : fullName[0]
-      },
+      valueGetter: (value) => value.row.isso_name ?? '',
+      renderCell: (params) => params.row.isso_name || '—',
+    },
+    {
+      field: 'fips',
+      headerName: 'FIPS',
+      flex: 0.8,
+      minWidth: 100,
+      valueGetter: (value) => value.row.fips ?? '',
+      renderCell: (params) => params.row.fips || '—',
     },
     {
       field: 'Score',

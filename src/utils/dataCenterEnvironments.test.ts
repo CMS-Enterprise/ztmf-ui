@@ -11,6 +11,7 @@ import axiosInstance from '@/axiosConfig'
 import {
   fetchDataCenterEnvironments,
   toDropdownOptions,
+  toDropdownOptionsWithCurrent,
   toCategoryMap,
 } from './dataCenterEnvironments'
 import type { DataCenterEnvironment } from '@/types'
@@ -71,6 +72,39 @@ describe('toDropdownOptions', () => {
 
   it('returns an empty array for no rows', () => {
     expect(toDropdownOptions([])).toEqual([])
+  })
+})
+
+describe('toDropdownOptionsWithCurrent', () => {
+  it('appends a non-selectable current value as a disabled option', () => {
+    const options = toDropdownOptionsWithCurrent(
+      ROWS,
+      'Data Center: Gov-Owned, Multi-tenant'
+    )
+    expect(options).toEqual([
+      { value: 'CMS-Cloud-AWS', label: 'CMS-Cloud-AWS' },
+      { value: 'data-center-gov', label: 'data-center-gov' },
+      {
+        value: 'Data Center: Gov-Owned, Multi-tenant',
+        label: 'Data Center: Gov-Owned, Multi-tenant',
+        disabled: true,
+      },
+    ])
+  })
+
+  it('does not append when the current value is already selectable', () => {
+    expect(toDropdownOptionsWithCurrent(ROWS, 'CMS-Cloud-AWS')).toEqual(
+      toDropdownOptions(ROWS)
+    )
+  })
+
+  it('does not append for a null/empty current value', () => {
+    expect(toDropdownOptionsWithCurrent(ROWS, null)).toEqual(
+      toDropdownOptions(ROWS)
+    )
+    expect(toDropdownOptionsWithCurrent(ROWS, '')).toEqual(
+      toDropdownOptions(ROWS)
+    )
   })
 })
 

@@ -191,10 +191,6 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
-  // When true, render the Extended Metadata section. Only organization-wide
-  // admins (HasUnscopedRead) see it; scoped tiers get the modal without those
-  // fields. Undefined defaults to false — fail closed.
-  extendedEditable?: boolean
   // Datacenter-environment vocabulary for the dropdown. Passed from Title
   // (the modal renders outside the outlet, so it can't read context).
   datacenterEnvironments: DataCenterEnvironment[]
