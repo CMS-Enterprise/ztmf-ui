@@ -12,7 +12,7 @@ import DatacallContextCard from '@/components/DatacallContextCard/DatacallContex
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import { exportSystemAnswers } from '@/utils/exportSystems'
-import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
+import { isAdmin as checkIsAdmin, hasUnscopedRead } from '@/utils/userRoles'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
 import { colors } from '@/theme/tokens'
@@ -252,6 +252,7 @@ export default function HomePageContainer() {
         onClose={handleCloseAdd}
         system={EMPTY_SYSTEM}
         mode="create"
+        extendedEditable={hasUnscopedRead(userInfo)}
       />
     </Box>
   )
