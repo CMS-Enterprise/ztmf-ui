@@ -63,7 +63,12 @@ export default function SaveIndicator({
     ) : null
   return (
     <Tooltip title={tooltipBody ?? ''}>
-      <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}>
+      {/* aria-live announces "Saved just now" to screen readers after each
+          autosave without stealing focus (WCAG 4.1.3 status messages). */}
+      <Box
+        aria-live="polite"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+      >
         <CheckCircleIcon sx={{ fontSize: 12, color: colors.up }} />
         <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
           {text}

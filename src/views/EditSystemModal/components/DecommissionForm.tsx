@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
+import { colors } from '@/theme/tokens'
 import { getTodayISO } from '../helpers'
 
 /** Props for {@link DecommissionForm}. */
@@ -75,13 +76,21 @@ export default function DecommissionForm({
 }: DecommissionFormProps) {
   return (
     <Box sx={{ ml: marginLeft, mt: 1 }}>
-      <Typography variant="body2" sx={{ mb: 0.5, fontWeight: 500 }}>
+      <Typography
+        component="label"
+        htmlFor="decommission-date"
+        variant="body2"
+        sx={{ display: 'block', mb: 0.5, fontWeight: 500 }}
+      >
         Decommission Date
       </Typography>
       <input
+        id="decommission-date"
         type="date"
         value={date}
         max={getTodayISO()}
+        aria-invalid={Boolean(dateError)}
+        aria-describedby={dateError ? 'decommission-date-error' : undefined}
         onChange={(e) => {
           setDate(e.target.value)
           if (dateError) checkDate(e.target.value)
@@ -91,7 +100,11 @@ export default function DecommissionForm({
           width: '100%',
           padding: '8px',
           fontSize: '14px',
-          border: dateError ? '1px solid #d32f2f' : '1px solid #ccc',
+          // colors.border clears the 3:1 boundary-contrast bar; the danger
+          // token doubles as the error boundary and error text color.
+          border: dateError
+            ? `1px solid ${colors.danger}`
+            : `1px solid ${colors.border}`,
           borderRadius: '4px',
           boxSizing: 'border-box',
         }}
@@ -99,15 +112,23 @@ export default function DecommissionForm({
       {dateError && (
         <Typography
           variant="caption"
-          sx={{ color: '#d32f2f', mt: 0.5, display: 'block' }}
+          id="decommission-date-error"
+          role="alert"
+          sx={{ color: colors.danger, mt: 0.5, display: 'block' }}
         >
           {dateError}
         </Typography>
       )}
-      <Typography variant="body2" sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}>
+      <Typography
+        component="label"
+        htmlFor="decommission-notes"
+        variant="body2"
+        sx={{ display: 'block', mt: 2, mb: 0.5, fontWeight: 500 }}
+      >
         Notes (optional)
       </Typography>
       <textarea
+        id="decommission-notes"
         value={notes}
         maxLength={500}
         rows={3}
@@ -117,7 +138,7 @@ export default function DecommissionForm({
           width: '100%',
           padding: '8px',
           fontSize: '14px',
-          border: '1px solid #ccc',
+          border: `1px solid ${colors.border}`,
           borderRadius: '4px',
           boxSizing: 'border-box',
           fontFamily: 'inherit',

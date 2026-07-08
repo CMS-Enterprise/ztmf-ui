@@ -417,6 +417,7 @@ function DetailCard({
       }}
     >
       <Typography
+        component="h2"
         sx={{
           fontSize: 14,
           fontWeight: 700,
@@ -470,6 +471,7 @@ function InsightsSection({ system }: { system: FismaSystemType }) {
       }}
     >
       <Typography
+        component="h2"
         sx={{ fontSize: 14, fontWeight: 700, color: colors.ink, mb: 1.5 }}
       >
         ZTMF Insights

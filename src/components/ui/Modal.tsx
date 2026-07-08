@@ -71,6 +71,7 @@ export function Modal({
         if (disableBackdropClose && reason === 'backdropClick') return
         onClose()
       }}
+      aria-labelledby="ui-modal-title"
       PaperProps={{
         sx: { width: modalWidth[size], maxWidth: '92vw', m: 2 },
       }}
@@ -102,7 +103,11 @@ export function Modal({
               {eyebrow}
             </Typography>
           )}
-          <Typography sx={{ fontSize: 17, fontWeight: 700, color: colors.ink }}>
+          <Typography
+            id="ui-modal-title"
+            component="h2"
+            sx={{ fontSize: 17, fontWeight: 700, color: colors.ink }}
+          >
             {title}
           </Typography>
         </Box>

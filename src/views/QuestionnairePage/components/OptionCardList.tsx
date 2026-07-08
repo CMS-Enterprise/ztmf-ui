@@ -39,7 +39,11 @@ export default function OptionCardList({
 }: OptionCardListProps) {
   if (!options.length) return null
   return (
-    <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}>
+    <Box
+      role="radiogroup"
+      aria-label="Answer options"
+      sx={{ display: 'flex', flexDirection: 'column', gap: 1.25 }}
+    >
       {options.map((opt) => {
         const value = Number(opt.value)
         const selected = value === selectedValue
@@ -85,7 +89,7 @@ export default function OptionCardList({
               />
             ) : (
               <RadioButtonUncheckedIcon
-                sx={{ fontSize: 18, color: colors.neutral400, mt: 0.25 }}
+                sx={{ fontSize: 18, color: colors.neutral500, mt: 0.25 }}
               />
             )}
             <Typography

@@ -1,6 +1,7 @@
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
+import { colors } from '@/theme/tokens'
 
 /** Props for {@link ReactivateForm}. */
 export interface ReactivateFormProps {
@@ -30,10 +31,16 @@ export default function ReactivateForm({
 }: ReactivateFormProps) {
   return (
     <Box sx={{ ml: 2, mt: 2 }}>
-      <Typography variant="body2" sx={{ mt: 0, mb: 0.5, fontWeight: 500 }}>
+      <Typography
+        component="label"
+        htmlFor="reactivation-notes"
+        variant="body2"
+        sx={{ display: 'block', mt: 0, mb: 0.5, fontWeight: 500 }}
+      >
         Reactivation Notes (optional)
       </Typography>
       <textarea
+        id="reactivation-notes"
         value={notes}
         maxLength={500}
         rows={3}
@@ -43,7 +50,7 @@ export default function ReactivateForm({
           width: '100%',
           padding: '8px',
           fontSize: '14px',
-          border: '1px solid #ccc',
+          border: `1px solid ${colors.border}`,
           borderRadius: '4px',
           boxSizing: 'border-box',
           fontFamily: 'inherit',

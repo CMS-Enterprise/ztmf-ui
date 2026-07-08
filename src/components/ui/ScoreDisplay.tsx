@@ -46,8 +46,10 @@ export function ScoreDisplay({
   const resolvedTier: ScoreTier = tier ?? 'Not Assessed'
   const notAssessed = resolvedTier === 'Not Assessed' || !hasScore
   const fill = hasScore ? Math.max(0, Math.min(1, score / MAX_SCORE)) : 0
+  // neutral500 keeps the muted look while clearing the 4.5:1 text-contrast
+  // bar (neutral400 measures 2.54:1 on white and fails Section 508).
   const tierText = notAssessed
-    ? colors.neutral400
+    ? colors.neutral500
     : TIER_CHIP_STYLES[resolvedTier].color
 
   return (
@@ -83,7 +85,7 @@ export function ScoreDisplay({
           fontFamily: fonts.mono,
           fontSize: 14,
           fontWeight: 600,
-          color: notAssessed ? colors.neutral400 : colors.ink,
+          color: notAssessed ? colors.neutral500 : colors.ink,
           minWidth: 34,
         }}
       >

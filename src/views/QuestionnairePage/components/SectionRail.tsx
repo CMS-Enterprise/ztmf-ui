@@ -142,7 +142,7 @@ export default function SectionRail({
                   <CheckCircleIcon sx={{ fontSize: 14, color: colors.up }} />
                 ) : (
                   <RadioButtonUncheckedIcon
-                    sx={{ fontSize: 14, color: colors.neutral400 }}
+                    sx={{ fontSize: 14, color: colors.neutral500 }}
                   />
                 )}
                 <Typography

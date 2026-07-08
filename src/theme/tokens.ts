@@ -30,8 +30,11 @@ export const colors = {
   // Faint hairline / row-hover surface, lighter than neutral200.
   neutral100: '#F1F3F7',
   neutral50: '#F7F8FA',
-  // Input border and a faint blue-tinted surface used for highlighted rows.
-  border: '#C7CCD6',
+  // Input border. Section 508 (WCAG 1.4.11) requires a 3:1 contrast for
+  // control boundaries against the adjacent surface; this gray clears 3.35:1
+  // on white and 3.15:1 on neutral50, so inputs stay identifiable on both.
+  border: '#848D9C',
+  // Faint blue-tinted surface used for highlighted rows.
   surfaceAlt: '#FAFBFE',
   white: '#FFFFFF',
   // Semantic trend / value colors (used for deltas and emphasized counts).

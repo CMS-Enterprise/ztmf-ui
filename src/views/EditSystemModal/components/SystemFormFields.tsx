@@ -94,6 +94,7 @@ export default function SystemFormFields({
         >
           <Select
             id="opdiv_id"
+            labelId="opdiv_id-label"
             fullWidth
             value={editedFismaSystem.opdiv_id ?? ''}
             error={showError('opdiv_id')}
@@ -106,7 +107,7 @@ export default function SystemFormFields({
             sx={{
               height: 38,
               fontSize: 14,
-              '& fieldset': { borderColor: colors.neutral200 },
+              '& fieldset': { borderColor: colors.border },
             }}
           >
             {opdivs.map((o) => (
@@ -353,6 +354,7 @@ export default function SystemFormFields({
         >
           <Select
             id="datacenterenvironment"
+            labelId="datacenterenvironment-label"
             fullWidth
             value={editedFismaSystem.datacenterenvironment || ''}
             error={showError('datacenterenvironment')}
@@ -377,7 +379,7 @@ export default function SystemFormFields({
             sx={{
               height: 38,
               fontSize: 14,
-              '& fieldset': { borderColor: colors.neutral200 },
+              '& fieldset': { borderColor: colors.border },
             }}
           >
             {datacenterenvironment.map((option) => (

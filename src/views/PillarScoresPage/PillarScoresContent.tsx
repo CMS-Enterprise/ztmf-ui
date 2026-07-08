@@ -86,6 +86,7 @@ export default function PillarScoresContent({
     return (
       <Box sx={{ textAlign: 'center', py: 6 }}>
         <Typography
+          component="h2"
           sx={{ fontSize: 15, fontWeight: 700, color: colors.ink, mb: 1 }}
         >
           No score data available

@@ -102,7 +102,10 @@ function Card({
           mb: 2,
         }}
       >
-        <Typography sx={{ fontSize: 16, fontWeight: 700, color: colors.ink }}>
+        <Typography
+          component="h2"
+          sx={{ fontSize: 16, fontWeight: 700, color: colors.ink }}
+        >
           {title}
         </Typography>
         {action}

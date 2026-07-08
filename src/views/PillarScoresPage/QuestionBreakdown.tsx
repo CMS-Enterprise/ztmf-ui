@@ -78,7 +78,10 @@ export default function QuestionBreakdown({
         }}
       >
         <Box>
-          <Typography sx={{ fontSize: 15, fontWeight: 700, color: colors.ink }}>
+          <Typography
+            component="h2"
+            sx={{ fontSize: 15, fontWeight: 700, color: colors.ink }}
+          >
             Question-level breakdown
           </Typography>
           <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>

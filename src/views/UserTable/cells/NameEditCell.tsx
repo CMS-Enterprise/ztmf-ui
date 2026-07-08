@@ -45,6 +45,7 @@ export default function NameEditCell(props: GridRenderEditCellParams) {
       }}
     >
       <Box
+        aria-hidden="true"
         sx={{
           width: 32,
           height: 32,
