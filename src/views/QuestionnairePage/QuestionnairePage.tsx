@@ -508,19 +508,28 @@ export default function QuestionnarePage() {
             !isReadOnly && sys && questionId && datacallID > 0
               ? loadDraft(sys, questionId, datacallID)
               : null
-          if (
-            draft &&
-            choices.some((c) => c.value === draft.selectQuestionOption)
-          ) {
-            choices.forEach(
-              (c) => (c.defaultChecked = c.value === draft.selectQuestionOption)
-            )
-            setSelectQuestionOption(draft.selectQuestionOption)
-            setNotes(draft.notes)
-            setDraftStatus('restored')
+          if (draft) {
+            if (draft.selectQuestionOption === -1) {
+              // Notes-only draft — restore notes without pre-selecting an answer.
+              setNotes(draft.notes)
+              setDraftStatus('restored')
+            } else if (
+              choices.some((c) => c.value === draft.selectQuestionOption)
+            ) {
+              choices.forEach(
+                (c) =>
+                  (c.defaultChecked = c.value === draft.selectQuestionOption)
+              )
+              setSelectQuestionOption(draft.selectQuestionOption)
+              setNotes(draft.notes)
+              setDraftStatus('restored')
+            } else {
+              // Draft references an option that no longer exists — evict it.
+              if (sys && questionId && datacallID > 0)
+                clearDraft(sys, questionId, datacallID)
+              setDraftStatus('idle')
+            }
           } else {
-            if (draft && sys && questionId && datacallID > 0)
-              clearDraft(sys, questionId, datacallID)
             setDraftStatus('idle')
           }
           setOptions(choices)
@@ -553,10 +562,6 @@ export default function QuestionnarePage() {
       if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
       return
     }
-    // Never draft-save when no answer is selected: -1 is the "no answer"
-    // sentinel that shouldPersistResponse rejects, so a draft with -1 could
-    // never be promoted to a real save, leaving a permanent orphan in storage.
-    if (selectQuestionOption === -1) return
     if (selectQuestionOption === initQuestionChoice && notes === initNotes)
       return
     const timer = setTimeout(() => {
@@ -581,7 +586,14 @@ export default function QuestionnarePage() {
   React.useEffect(() => {
     if (isReadOnly) return
     const handle = (e: BeforeUnloadEvent) => {
-      if (shouldPersistResponse(unsavedRef.current)) e.preventDefault()
+      const s = unsavedRef.current
+      const hasPendingEdits =
+        shouldPersistResponse(s) ||
+        (s.selectQuestionOption === -1 && s.notes !== s.initNotes)
+      if (hasPendingEdits) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
     }
     window.addEventListener('beforeunload', handle)
     return () => window.removeEventListener('beforeunload', handle)
