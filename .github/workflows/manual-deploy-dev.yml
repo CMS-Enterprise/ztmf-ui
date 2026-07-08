@@ -1,0 +1,23 @@
+name: Manual Deploy to DEV
+
+# Deploy main to DEV on demand.
+#   - orchestration-dev (open/sync a PR): preview a feature branch on DEV.
+#   - this workflow: (re)deploy main to DEV, e.g. to reset DEV after branch deploys.
+# Run: gh workflow run "Manual Deploy to DEV" --ref main
+on:
+  workflow_dispatch:
+
+jobs:
+  analysis:
+    name: Analysis
+    uses: ./.github/workflows/analysis.yml
+    secrets: inherit
+
+  ui:
+    name: ui
+    needs:
+      - analysis
+    uses: ./.github/workflows/ui.yml
+    with:
+      environment: dev
+    secrets: inherit

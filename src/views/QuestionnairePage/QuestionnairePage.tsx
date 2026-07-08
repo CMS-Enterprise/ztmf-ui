@@ -35,6 +35,7 @@ import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import {
@@ -210,6 +211,10 @@ export default function QuestionnarePage() {
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
+          // The user is editing the note, so it is no longer an AI summary.
+          // The dirty-check above skips this PUT when content is unchanged,
+          // so an identical "edit" correctly keeps the badge.
+          notes_is_ai_summary: false,
         })
       } else {
         await axiosInstance.post(`scores`, {
@@ -718,14 +723,24 @@ export default function QuestionnarePage() {
                   display: 'flex',
                   alignItems: 'center',
                   justifyContent: 'space-between',
+                  gap: 1,
                   mt: 0.5,
                 }}
               >
-                <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                  {notePrompt
-                    ? notePrompt
-                    : 'Link policies or screenshots in your evidence repo.'}
-                </Typography>
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AISummaryBadge
+                    show={
+                      selectQuestionOption >= 0 &&
+                      questionScores[selectQuestionOption]
+                        ?.notes_is_ai_summary === true
+                    }
+                  />
+                  <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                    {notePrompt
+                      ? notePrompt
+                      : 'Link policies or screenshots in your evidence repo.'}
+                  </Typography>
+                </Box>
                 {!isReadOnly && (
                   <Typography
                     sx={{

@@ -23,11 +23,12 @@ import { users } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
+  hasUnscopedRead,
   selectableRoles,
   roleLabel,
 } from '@/utils/userRoles'
-import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
-import { parseApiError } from '@/utils/apiErrors'
+import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
+import CONFIG from '@/utils/config'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
 import Box from '@mui/material/Box'
@@ -74,6 +75,7 @@ export default function UserTable() {
   const canRead = hasAdminRead(userInfo)
   // Roles this admin may assign; also the valid option set for the role editor.
   const assignableRoles = selectableRoles(userInfo.role)
+  const showIdpSelector = CONFIG.IDP_ENABLED && hasUnscopedRead(userInfo)
   useEffect(() => {
     if (userInfo.role && !canRead) {
       navigate(Routes.ROOT, { replace: true })
@@ -205,41 +207,6 @@ export default function UserTable() {
     modals.closeOpDiv()
     refreshUserRow(targetId)
   }
-  /**
-   * Inline OpDiv grant from the edit-cell. Updates local state optimistically
-   * after the server confirms so the chip appears immediately, then refreshes
-   * the row (the backend may flip identity_provider as a side effect).
-   */
-  const handleInlineGrant = async (userid: string, opdivId: number) => {
-    try {
-      await grantOpDiv(userid, opdivId)
-      setUserOpDivMap((prev) => {
-        const current = prev[userid] ?? []
-        return current.includes(opdivId)
-          ? prev
-          : { ...prev, [userid]: [...current, opdivId] }
-      })
-      refreshUserRow(userid)
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      const parsed = parseApiError(error)
-      notify(parsed.message, 'error')
-    }
-  }
-  const handleInlineRevoke = async (userid: string, opdivId: number) => {
-    try {
-      await revokeOpDiv(userid, opdivId)
-      setUserOpDivMap((prev) => ({
-        ...prev,
-        [userid]: (prev[userid] ?? []).filter((id) => id !== opdivId),
-      }))
-      refreshUserRow(userid)
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      const parsed = parseApiError(error)
-      notify(parsed.message, 'error')
-    }
-  }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
       ...rowModesModel,
@@ -261,35 +228,76 @@ export default function UserTable() {
     const curRowUserId = updatedRow.userid
     if (newRow.isNew) {
       try {
-        const res = await axiosInstance.post('/users', {
+        const idpValue = newRow.identity_provider
+        const body = {
           email: updatedRow.email,
           fullname: updatedRow.fullname,
           role: updatedRow.role,
-        })
-        newRow = res.data.data
-        updatedRow.userid = newRow.userid
+          ...(showIdpSelector &&
+            (idpValue === 'okta' || idpValue === 'entra') && {
+              identity_provider: idpValue,
+            }),
+        }
+
+        const res = await axiosInstance.post('/users', body)
+        const createdUser = res.data.data
+        updatedRow.userid = createdUser.userid
+
+        const opdivIdsToGrant = (newRow.opdivs as number[] | undefined) ?? []
+        let grantsFailed = false
+
+        if (opdivIdsToGrant.length > 0) {
+          try {
+            await setUserOpDivs(createdUser.userid, opdivIdsToGrant)
+            setUserOpDivMap((prev) => ({
+              ...prev,
+              [createdUser.userid]: opdivIdsToGrant,
+            }))
+            updatedRow.assignedopdivids = opdivIdsToGrant
+            // Backend recomputes identity_provider after OpDiv grants — leave blank
+            // until refreshUserRow returns the authoritative value.
+            refreshUserRow(createdUser.userid)
+          } catch (grantError) {
+            if (isAuthHandled(grantError)) {
+              apiRef.current.updateRows([
+                { userid: curRowUserId, _action: 'delete' },
+              ])
+              return updatedRow
+            }
+            grantsFailed = true
+            updatedRow.identity_provider = createdUser.identity_provider ?? ''
+          }
+        } else {
+          updatedRow.identity_provider = createdUser.identity_provider ?? ''
+        }
+
         apiRef.current.updateRows([{ userid: curRowUserId, _action: 'delete' }])
         apiRef.current.updateRows([updatedRow])
-        snackbar.show(STATUS_MESSAGES.saved, 'success')
+        snackbar.show(
+          grantsFailed
+            ? 'User created, but OpDiv grants failed. Use Assign OpDivs to retry.'
+            : STATUS_MESSAGES.saved,
+          grantsFailed ? 'warning' : 'success'
+        )
       } catch (error) {
         if (isAuthHandled(error)) return updatedRow
-        console.error('Error updating score:', error)
+        console.error('Error creating user:', error)
         snackbar.showSaveError(error)
       }
     } else {
       try {
+        // identity_provider is intentionally absent: for existing rows the
+        // backend derives it from OpDiv membership, so the row PUT only
+        // carries the profile fields.
         await axiosInstance.put(`/users/${updatedRow?.userid}`, {
           email: updatedRow?.email,
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
-          // Send identity_provider when the inline IdP select changed it. The
-          // backend ignores the field for non-OWNER actors; for OWNER it acts
-          // as the override hook.
-          identity_provider: updatedRow?.identity_provider,
         })
         snackbar.show(STATUS_MESSAGES.saved, 'success')
       } catch (error) {
         if (isAuthHandled(error)) return updatedRow
+        console.error('Error saving user:', error)
         snackbar.showSaveError(error)
       }
     }
@@ -492,28 +500,23 @@ export default function UserTable() {
       minWidth: 160,
       sortable: false,
       filterable: false,
+      // Editable only on new rows (see isCellEditable): the edit cell
+      // builds the row-local `opdivs` set that processRowUpdate batch-grants
+      // after the user is created. Existing rows manage grants through the
+      // Assign OpDivs modal.
+      editable: isAdmin,
+      renderEditCell: (params) => (
+        <OpDivsEditCell
+          {...params}
+          opdivOptions={opdivOptions}
+          opdivCodeMap={opdivCodeMap}
+        />
+      ),
       renderCell: (params) => {
-        const isEditing = rowModesModel[params.id]?.mode === GridRowModes.Edit
         // Refresh override (post grant-modal) wins; otherwise use the grants the
         // list returned inline on the row.
         const ids =
           userOpDivMap[params.row.userid] ?? params.row.assignedopdivids ?? []
-        // While the row is in edit mode, switch to the inline chip editor
-        // (× to remove, "+ Add" menu). Grants/revokes commit eagerly, the
-        // same way the OpDivGrantModal does, since OpDiv membership is its
-        // own backend resource separate from the user PUT.
-        if (isEditing) {
-          return (
-            <OpDivsEditCell
-              userid={params.row.userid}
-              ids={ids}
-              opdivOptions={opdivOptions}
-              opdivCodeMap={opdivCodeMap}
-              onGrant={handleInlineGrant}
-              onRevoke={handleInlineRevoke}
-            />
-          )
-        }
         if (!ids.length) {
           return (
             <Typography variant="body2" color="text.secondary">
@@ -550,9 +553,11 @@ export default function UserTable() {
       headerName: 'Identity provider',
       flex: 1,
       minWidth: 140,
-      // Editable for admins so the inline edit row can flip Okta <-> Entra.
-      // Read view stays as the dot + label pattern.
-      editable: isAdmin,
+      // Editable only for HHS-wide admins when the IdP feature flag is on,
+      // and effectively only meaningful on new rows: for existing rows the
+      // backend derives identity_provider from OpDiv membership. Read view
+      // stays as the dot + label pattern.
+      editable: showIdpSelector,
       renderEditCell: (params: GridRenderEditCellParams) => (
         <IdpEditCell {...params} />
       ),
@@ -841,12 +846,29 @@ export default function UserTable() {
             // can't be blanked or downgraded on save. New rows (blank role,
             // mid-create) stay editable - valueOptions already limits the choices
             // to the admin's assignable set. The server enforces this too.
-            isCellEditable={(params) =>
-              params.field !== 'role' ||
-              params.row.isNew ||
-              !params.row.role ||
-              assignableRoles.includes(params.row.role)
-            }
+            // Cell-level edit gates (defense-in-depth; server enforces the
+            // same rules):
+            // - role: locked on existing rows whose current role is outside
+            //   this admin's assignable tier.
+            // - opdivs / identity_provider: locked to new rows only -
+            //   existing users' OpDiv memberships and derived IdP are
+            //   managed via the Assign OpDivs action, not inline editing.
+            isCellEditable={(params) => {
+              if (params.field === 'role') {
+                return (
+                  params.row.isNew ||
+                  !params.row.role ||
+                  assignableRoles.includes(params.row.role)
+                )
+              }
+              if (params.field === 'opdivs') {
+                return !!params.row.isNew
+              }
+              if (params.field === 'identity_provider') {
+                return !!params.row.isNew && showIdpSelector
+              }
+              return true
+            }}
             editMode="row"
             getRowId={(row) => row.userid}
             initialState={{

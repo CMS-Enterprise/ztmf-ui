@@ -149,4 +149,63 @@ describe('needsNotesUpdateForChoiceChange', () => {
       })
     ).toBe(false)
   })
+
+  it('returns false on a first-time answer (no prior choice), regardless of notes', () => {
+    // On any new data call every question starts at initQuestionChoice === -1.
+    // The "must update notes" rule only applies once a response exists, so
+    // first-time answers must never fire the guard.
+    expect(
+      needsNotesUpdateForChoiceChange({
+        selectQuestionOption: 7,
+        initQuestionChoice: -1,
+        notes: '',
+        initNotes: '',
+      })
+    ).toBe(false)
+    expect(
+      needsNotesUpdateForChoiceChange({
+        selectQuestionOption: 7,
+        initQuestionChoice: -1,
+        notes: 'first-time explanation',
+        initNotes: '',
+      })
+    ).toBe(false)
+  })
+
+  it('returns true when the choice changed and the notes were cleared', () => {
+    // Wiping the notes counts as a "substantial change" from the prior text,
+    // but the intent is that an explanation must ride along with the changed
+    // answer — an empty notes field cannot slip past the guard.
+    expect(
+      needsNotesUpdateForChoiceChange({
+        selectQuestionOption: 7,
+        initQuestionChoice: 5,
+        notes: '',
+        initNotes: 'old reason',
+      })
+    ).toBe(true)
+    // Whitespace-only after clearing counts the same.
+    expect(
+      needsNotesUpdateForChoiceChange({
+        selectQuestionOption: 7,
+        initQuestionChoice: 5,
+        notes: '   \n',
+        initNotes: 'old reason',
+      })
+    ).toBe(true)
+  })
+
+  it('returns true when the choice changed and the notes were empty on both sides', () => {
+    // Existing answer with no notes recorded; user flips the choice and does
+    // not add any notes. The guard must fire so the user is forced to
+    // explain the change.
+    expect(
+      needsNotesUpdateForChoiceChange({
+        selectQuestionOption: 7,
+        initQuestionChoice: 5,
+        notes: '',
+        initNotes: '',
+      })
+    ).toBe(true)
+  })
 })

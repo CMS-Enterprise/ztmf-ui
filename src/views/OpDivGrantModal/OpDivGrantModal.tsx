@@ -10,9 +10,8 @@ import {
 import Modal from '@/components/ui/Modal'
 import { GridRowId } from '@mui/x-data-grid'
 import SearchIcon from '@mui/icons-material/Search'
-import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { CodeBadge } from '@/components/ui/StatusChip'
-import { fetchUserOpDivs, grantOpDiv, revokeOpDiv } from '@/utils/userOpdivs'
+import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { colors, radius } from '@/theme/tokens'
@@ -30,9 +29,8 @@ type Props = {
    */
   opdivOptions: OpDiv[]
   /**
-   * Fired after a confirmed grant or revoke so the caller can refresh the
-   * user's row (grants + derived identity_provider) against post-mutation
-   * server state.
+   * Fired after a successful save so the caller can refresh the user's row
+   * (grants + derived identity_provider) against post-mutation server state.
    */
   onChanged?: (userid: string) => void
 }
@@ -93,10 +91,12 @@ function PillTab({
 
 /**
  * Assign OpDivs modal. Renders the pill-tab + checkbox list described by
- * the mockup (frame 17) in the shared Modal shell, replacing the legacy
- * SideDrawer + Autocomplete. Behavior is unchanged: checking a row grants
- * immediately, unchecking opens a confirm dialog before the revoke, and
- * the footer Done button just closes - nothing is queued.
+ * the mockup (frame 17) in the shared Modal shell.
+ *
+ * Grants are batched: checking and unchecking rows only mutates local
+ * state, and one PUT /users/{id}/opdivs commits the full desired set when
+ * the user clicks Save. Cancel discards everything - so unchecking needs
+ * no confirm dialog; nothing is destructive until Save.
  */
 export default function OpDivGrantModal({
   open,
@@ -106,10 +106,10 @@ export default function OpDivGrantModal({
   opdivOptions,
   onChanged,
 }: Props) {
-  const [assignedOpDivs, setAssignedOpDivs] = React.useState<number[]>([])
-  const [pendingRevoke, setPendingRevoke] = React.useState<{
-    opdivId: number
-  } | null>(null)
+  const [localOpDivs, setLocalOpDivs] = React.useState<number[]>([])
+  const [saving, setSaving] = React.useState(false)
+  const [loading, setLoading] = React.useState(false)
+  const [fetchFailed, setFetchFailed] = React.useState(false)
   const [view, setView] = React.useState<View>('all')
   const [search, setSearch] = React.useState<string>('')
 
@@ -134,7 +134,7 @@ export default function OpDivGrantModal({
   const visibleOpDivs = React.useMemo(() => {
     const scoped =
       view === 'selected'
-        ? sortedOptionIds.filter((id) => assignedOpDivs.includes(id))
+        ? sortedOptionIds.filter((id) => localOpDivs.includes(id))
         : sortedOptionIds
     const needle = search.trim().toLowerCase()
     if (!needle) return scoped
@@ -146,7 +146,7 @@ export default function OpDivGrantModal({
         od.name.toLowerCase().includes(needle)
       )
     })
-  }, [view, sortedOptionIds, assignedOpDivs, opdivMap, search])
+  }, [view, sortedOptionIds, localOpDivs, opdivMap, search])
 
   // Reset transient view state whenever the modal opens/closes so a
   // previous user's filter doesn't carry over and per the project rule
@@ -156,170 +156,199 @@ export default function OpDivGrantModal({
     if (!open) setSearch('')
   }, [open])
 
-  const handleError = (error: unknown) => {
+  const handleError = React.useCallback((error: unknown) => {
     if (isAuthHandled(error)) return
     const parsed = parseApiError(error)
     notify(parsed.message, 'error')
-  }
+  }, [])
 
   React.useEffect(() => {
     if (open && userid) {
+      let cancelled = false
+      setLoading(true)
+      setFetchFailed(false)
+      setLocalOpDivs([])
       fetchUserOpDivs(String(userid))
-        .then((grants) => setAssignedOpDivs(grants))
-        .catch((error) => handleError(error))
+        .then((grants) => {
+          if (!cancelled) setLocalOpDivs(grants)
+        })
+        .catch((error) => {
+          if (!cancelled) {
+            handleError(error)
+            setFetchFailed(true)
+          }
+        })
+        .finally(() => {
+          if (!cancelled) setLoading(false)
+        })
+      return () => {
+        cancelled = true
+      }
+    } else {
+      setFetchFailed(false)
+      setLoading(false)
+      setLocalOpDivs([])
     }
-  }, [open, userid])
-
-  const handleConfirmRevoke = (confirm: boolean) => {
-    const target = pendingRevoke
-    setPendingRevoke(null)
-    if (!confirm || !target) return
-    revokeOpDiv(String(userid), target.opdivId)
-      .then(() => {
-        // Functional update so a grant that resolved while the confirm was
-        // open is not dropped by a stale snapshot.
-        setAssignedOpDivs((prev) => prev.filter((id) => id !== target.opdivId))
-        notify('Saved - revoked OpDiv', 'success')
-        onChanged?.(String(userid))
-      })
-      .catch((error) => handleError(error))
-  }
+  }, [open, userid, handleError])
 
   const handleToggle = (opdivId: number, checked: boolean) => {
-    if (checked) {
-      grantOpDiv(String(userid), opdivId)
-        .then(() => {
-          setAssignedOpDivs((prev) =>
-            prev.includes(opdivId) ? prev : [...prev, opdivId]
-          )
-          notify('Saved - granted OpDiv', 'success')
-          onChanged?.(String(userid))
-        })
-        .catch((error) => handleError(error))
-    } else {
-      setPendingRevoke({ opdivId })
+    setLocalOpDivs((prev) =>
+      checked
+        ? prev.includes(opdivId)
+          ? prev
+          : [...prev, opdivId]
+        : prev.filter((id) => id !== opdivId)
+    )
+  }
+
+  const handleSave = async () => {
+    setSaving(true)
+    // An OPDIV_ADMIN's scope is already encoded in sortedOptionIds (only
+    // their own OpDivs appear as options). Filter localOpDivs to that set so
+    // the batch request never includes out-of-scope IDs the target user
+    // holds from another admin - the backend scope gate rejects any desired
+    // set that contains an ID the caller doesn't hold, even if they didn't
+    // add it.
+    const scopedIds = localOpDivs.filter((id) => sortedOptionIds.includes(id))
+    try {
+      await setUserOpDivs(String(userid), scopedIds)
+      notify('Saved', 'success')
+      onChanged?.(String(userid))
+      handleClose()
+    } catch (error) {
+      handleError(error)
+    } finally {
+      setSaving(false)
     }
   }
 
-  // Fall back to a stable placeholder when an assigned OpDiv is not present
-  // in the option set (e.g. an OPDIV_ADMIN viewing a target who has grants
-  // for OpDivs outside the actor's own scope, or a recently-deactivated
-  // OpDiv).
-  const optionLabel = (opdivId: number) => {
-    const od = opdivMap[opdivId]
-    return od ? `${od.code} - ${od.name}` : `OpDiv #${opdivId}`
-  }
-
-  const selectedCount = assignedOpDivs.length
+  const selectedCount = localOpDivs.length
   const totalCount = sortedOptionIds.length
+  const controlsDisabled = loading || fetchFailed
 
   return (
-    <>
-      <Modal
-        open={open}
-        onClose={handleClose}
-        title="Assign OpDivs"
-        eyebrow={userName || undefined}
-        size="md"
-        dense
-        footer={
+    <Modal
+      open={open}
+      onClose={handleClose}
+      title="Assign OpDivs"
+      eyebrow={userName || undefined}
+      size="md"
+      dense
+      footer={
+        <>
+          <Button variant="text" color="inherit" onClick={handleClose}>
+            Cancel
+          </Button>
           <Button
             variant="contained"
             color="primary"
-            onClick={handleClose}
+            onClick={handleSave}
+            disabled={saving || controlsDisabled}
             sx={{ borderRadius: `${radius.button}px` }}
           >
-            Done
+            Save
           </Button>
-        }
-      >
-        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
-            OpDiv Admins manage users and systems within their assigned OpDivs.
-          </Typography>
+        </>
+      }
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+          OpDiv Admins manage users and systems within their assigned OpDivs.
+        </Typography>
 
-          <OutlinedInput
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by code or name"
-            fullWidth
-            sx={searchInputSx}
-            startAdornment={
-              <InputAdornment position="start" sx={{ ml: 1.25, mr: 1 }}>
-                <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
-              </InputAdornment>
-            }
-            inputProps={{ 'aria-label': 'Search OpDivs' }}
-          />
+        <OutlinedInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by code or name"
+          fullWidth
+          disabled={controlsDisabled}
+          sx={searchInputSx}
+          startAdornment={
+            <InputAdornment position="start" sx={{ ml: 1.25, mr: 1 }}>
+              <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
+            </InputAdornment>
+          }
+          inputProps={{ 'aria-label': 'Search OpDivs' }}
+        />
 
-          <Box sx={{ display: 'flex', gap: 1 }}>
-            <PillTab
-              active={view === 'selected'}
-              onClick={() => setView('selected')}
-            >
-              Selected ({selectedCount})
-            </PillTab>
-            <PillTab active={view === 'all'} onClick={() => setView('all')}>
-              All OpDivs ({totalCount})
-            </PillTab>
-          </Box>
-
-          <Box
-            sx={{
-              border: `1px solid ${colors.neutral200}`,
-              borderRadius: 1,
-              maxHeight: 240,
-              overflow: 'auto',
-            }}
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <PillTab
+            active={view === 'selected'}
+            onClick={() => setView('selected')}
           >
-            {visibleOpDivs.length === 0 ? (
-              <Typography
-                sx={{
-                  fontSize: 13,
-                  color: colors.neutral500,
-                  textAlign: 'center',
-                  py: 3,
-                }}
-              >
-                {search.trim()
-                  ? 'No OpDivs match your search.'
-                  : view === 'selected'
-                    ? 'No OpDivs assigned yet.'
-                    : 'No OpDivs available.'}
-              </Typography>
-            ) : (
-              visibleOpDivs.map((opdivId) => {
-                const od = opdivMap[opdivId]
-                const isAssigned = assignedOpDivs.includes(opdivId)
-                return (
-                  <Box
-                    key={opdivId}
-                    component="label"
-                    htmlFor={`assign-opdiv-${opdivId}`}
-                    sx={rowSx}
-                  >
-                    <Checkbox
-                      id={`assign-opdiv-${opdivId}`}
-                      checked={isAssigned}
-                      onChange={(e) => handleToggle(opdivId, e.target.checked)}
-                      sx={{ p: 0.5 }}
-                    />
-                    {od ? (
-                      <>
-                        <CodeBadge code={od.code} />
-                        <Typography
-                          sx={{
-                            fontSize: 13,
-                            fontWeight: 600,
-                            color: colors.ink,
-                            flex: 1,
-                            minWidth: 0,
-                          }}
-                        >
-                          {od.name}
-                        </Typography>
-                      </>
-                    ) : (
+            Selected ({selectedCount})
+          </PillTab>
+          <PillTab active={view === 'all'} onClick={() => setView('all')}>
+            All OpDivs ({totalCount})
+          </PillTab>
+        </Box>
+
+        <Box
+          sx={{
+            border: `1px solid ${colors.neutral200}`,
+            borderRadius: 1,
+            maxHeight: 240,
+            overflow: 'auto',
+          }}
+        >
+          {fetchFailed ? (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.danger,
+                textAlign: 'center',
+                py: 3,
+              }}
+            >
+              Could not load this user&apos;s OpDivs. Close and try again.
+            </Typography>
+          ) : loading ? (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.neutral500,
+                textAlign: 'center',
+                py: 3,
+              }}
+            >
+              Loading OpDivs...
+            </Typography>
+          ) : visibleOpDivs.length === 0 ? (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.neutral500,
+                textAlign: 'center',
+                py: 3,
+              }}
+            >
+              {search.trim()
+                ? 'No OpDivs match your search.'
+                : view === 'selected'
+                  ? 'No OpDivs selected yet.'
+                  : 'No OpDivs available.'}
+            </Typography>
+          ) : (
+            visibleOpDivs.map((opdivId) => {
+              const od = opdivMap[opdivId]
+              const isAssigned = localOpDivs.includes(opdivId)
+              return (
+                <Box
+                  key={opdivId}
+                  component="label"
+                  htmlFor={`assign-opdiv-${opdivId}`}
+                  sx={rowSx}
+                >
+                  <Checkbox
+                    id={`assign-opdiv-${opdivId}`}
+                    checked={isAssigned}
+                    disabled={controlsDisabled}
+                    onChange={(e) => handleToggle(opdivId, e.target.checked)}
+                    sx={{ p: 0.5 }}
+                  />
+                  {od ? (
+                    <>
+                      <CodeBadge code={od.code} />
                       <Typography
                         sx={{
                           fontSize: 13,
@@ -329,30 +358,28 @@ export default function OpDivGrantModal({
                           minWidth: 0,
                         }}
                       >
-                        OpDiv #{opdivId}
+                        {od.name}
                       </Typography>
-                    )}
-                  </Box>
-                )
-              })
-            )}
-          </Box>
+                    </>
+                  ) : (
+                    <Typography
+                      sx={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: colors.ink,
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      OpDiv #{opdivId}
+                    </Typography>
+                  )}
+                </Box>
+              )
+            })
+          )}
         </Box>
-      </Modal>
-      <ConfirmDialog
-        title="Confirm Revoke OpDiv"
-        confirmationText={
-          pendingRevoke
-            ? `Are you sure you want to revoke ${
-                optionLabel(pendingRevoke.opdivId) || 'this OpDiv'
-              } from ${userName || 'this user'}?`
-            : ''
-        }
-        open={pendingRevoke !== null}
-        onClose={() => setPendingRevoke(null)}
-        confirmClick={handleConfirmRevoke}
-        confirmLabel="Revoke"
-      />
-    </>
+      </Box>
+    </Modal>
   )
 }

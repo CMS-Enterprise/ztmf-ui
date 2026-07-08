@@ -12,8 +12,9 @@ const completeSystem: FismaSystemType = {
   datacenterenvironment: 'on-prem',
   datacallcontact: 'Han Solo',
   issoemail: 'han@rebellion.gov',
+  opdiv_id: 5,
   // FismaSystemType has more optional fields; the hook only reads the
-  // seven required ones above.
+  // required ones above (seven strings + the numeric opdiv_id).
 } as FismaSystemType
 
 function changeEvent(value: string) {
@@ -27,8 +28,9 @@ describe('useEditSystemForm', () => {
     const { result } = renderHook(() => useEditSystemForm(undefined, false))
     expect(result.current.loading).toBe(true)
     expect(result.current.isFormValid()).toBe(false)
+    // Seven required text fields plus the numeric opdiv_id select.
     expect(Object.values(result.current.formValid)).toEqual(
-      Array(7).fill(false)
+      Array(8).fill(false)
     )
   })
 

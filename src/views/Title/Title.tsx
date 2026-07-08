@@ -8,6 +8,7 @@ import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
   isUnscopedWriteAdmin,
+  hasUnscopedRead,
 } from '@/utils/userRoles'
 import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
@@ -434,6 +435,7 @@ export default function Title() {
         onClose={handleCloseModal}
         system={EMPTY_SYSTEM}
         mode={'create'}
+        extendedEditable={hasUnscopedRead(userInfo)}
       />
       <EmailModal
         openModal={openEmailModal}

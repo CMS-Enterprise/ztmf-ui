@@ -15,6 +15,7 @@ import type {
 } from '@/types'
 import { emailValidator } from '../validators'
 import { datacenterenvironment } from '../dataEnvironment'
+import type { OpDiv } from '@/types'
 
 /** Props for {@link SystemFormFields}. */
 export interface SystemFormFieldsProps {
@@ -39,6 +40,11 @@ export interface SystemFormFieldsProps {
   setFormValidErrorText: React.Dispatch<
     React.SetStateAction<FormValidHelperText>
   >
+  /**
+   * OpDiv options for the required owning-OpDiv selector rendered at the
+   * top of the form. Loaded by the orchestrator when the modal opens.
+   */
+  opdivs: OpDiv[]
   /**
    * Content rendered at the bottom of the right column, below the SDL
    * sync toggle. Used by EditSystemModal to render the decommission /
@@ -72,10 +78,45 @@ export default function SystemFormFields({
   markTouched,
   setFormValid,
   setFormValidErrorText,
+  opdivs,
   children,
 }: SystemFormFieldsProps) {
   return (
     <Grid container spacing={3}>
+      <Grid item xs={12}>
+        <Field
+          id="opdiv_id"
+          label="OpDiv"
+          required
+          error={
+            showError('opdiv_id') ? formValidErrorText.opdiv_id : undefined
+          }
+        >
+          <Select
+            id="opdiv_id"
+            fullWidth
+            value={editedFismaSystem.opdiv_id ?? ''}
+            error={showError('opdiv_id')}
+            onChange={(e) => {
+              const val = e.target.value === '' ? null : Number(e.target.value)
+              markTouched('opdiv_id')
+              setEditedFismaSystem((prev) => ({ ...prev, opdiv_id: val }))
+              setFormValid((prev) => ({ ...prev, opdiv_id: val != null }))
+            }}
+            sx={{
+              height: 38,
+              fontSize: 14,
+              '& fieldset': { borderColor: colors.neutral200 },
+            }}
+          >
+            {opdivs.map((o) => (
+              <MenuItem key={o.opdiv_id} value={o.opdiv_id}>
+                {o.code} - {o.name}
+              </MenuItem>
+            ))}
+          </Select>
+        </Field>
+      </Grid>
       <Grid item xs={12} md={6}>
         <Field
           id="fismaname"
