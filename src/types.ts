@@ -244,6 +244,19 @@ export type SystemScoreEntry = {
   tier?: ScoreTier
 }
 
+// One system's questionnaire progress within a data call, as returned by
+// GET /scores/progress. "Updated" counts answers genuinely touched this
+// cycle - answers pre-populated from the previous data call do not count
+// until a user saves them, so a carried-over untouched questionnaire reads
+// as not updated (ztmf#299).
+export type ScoreProgress = {
+  fismasystemid: number
+  questionsexpected: number
+  questionsupdated: number
+  lastupdatedat?: string | null
+  updatedsincestart: boolean
+}
+
 export type QuestionChoice = {
   label: string
   value: number
@@ -278,6 +291,10 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, SystemScoreEntry>
+  // Per-system questionnaire progress for the active data call, keyed by
+  // fismasystemid. Optional so the table degrades to an em-dash column if
+  // the progress fetch fails - score display must not depend on it.
+  progress?: Record<number, ScoreProgress>
 }
 
 export type ThemeColor =
