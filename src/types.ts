@@ -3,11 +3,20 @@
  * @module types
  */
 
-// TODO: maybe provide environment and other things to log?
-export type AppConfig = AppFeatureFlags
+export type AppConfig = AppFeatureFlags & AppEnvironment
 
 export type AppFeatureFlags = {
   IDP_ENABLED: boolean
+}
+
+// Environment-derived settings. IS_NONPROD gates the development banner; the
+// DEV_* overrides let the deployed dev environment inject testing-specific copy
+// and contact links at build time without committing them to the repo.
+export type AppEnvironment = {
+  IS_NONPROD: boolean
+  DEV_BANNER_MESSAGE: string
+  DEV_FEEDBACK_URL: string
+  DEV_CONTACT_EMAIL: string
 }
 
 export type FormField = {
