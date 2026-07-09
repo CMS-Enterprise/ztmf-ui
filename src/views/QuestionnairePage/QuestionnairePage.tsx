@@ -424,7 +424,10 @@ export default function QuestionnarePage() {
             }
           } catch (error) {
             if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
+            if (isAuthHandled(error)) {
+              setLoadingQuestion(false)
+              return
+            }
             notify(ERROR_MESSAGES.tryAgain, 'error')
             setLoadingQuestion(false)
             return
@@ -446,7 +449,10 @@ export default function QuestionnarePage() {
             )
           } catch (error) {
             if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
+            if (isAuthHandled(error)) {
+              setLoadingQuestion(false)
+              return
+            }
             console.error('Error fetching question scores:', error)
             notify(ERROR_MESSAGES.tryAgain, 'error')
           }
@@ -461,7 +467,10 @@ export default function QuestionnarePage() {
           setQuestionId(sortedFuncId[0])
         } catch (error) {
           if (controller.signal.aborted) return
-          if (isAuthHandled(error)) return
+          if (isAuthHandled(error)) {
+            setLoadingQuestion(false)
+            return
+          }
           console.error('Error fetching data:', error)
           setLoadingQuestion(false)
         }
@@ -931,6 +940,7 @@ export default function QuestionnarePage() {
                     </CmsButton>
                     <CmsButton
                       onClick={() => {
+                        saveGenRef.current++
                         const id =
                           selectedIndex ===
                           stepFunctionId[stepFunctionId.length - 1]
