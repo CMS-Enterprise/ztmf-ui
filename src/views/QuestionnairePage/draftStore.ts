@@ -23,7 +23,10 @@ const DB_VERSION = 1
 const KEY_STORE = 'keys'
 
 // In-memory caches — avoids round-trips on repeated reads/writes within a session.
-const keyCache = new Map<string, CryptoKey>()
+// keyCache holds the in-flight key-resolution *promise* (not the resolved key) so
+// concurrent callers in one session share a single key instead of each racing to
+// generate and persist their own — see getOrCreateDeviceKey.
+const keyCache = new Map<string, Promise<CryptoKey>>()
 const hashedIdCache = new Map<string, string>()
 
 // Exported for test isolation only — clears both in-memory caches.
@@ -33,9 +36,10 @@ export function __resetKeyCache(): void {
 }
 
 // Exported for test isolation only — seeds the key cache directly, bypassing IDB
-// (IndexedDB is unavailable in JSDOM).
+// (IndexedDB is unavailable in JSDOM). Wrapped in a resolved promise to match the
+// cache's Promise<CryptoKey> shape.
 export function __setKeyForTesting(userid: string, key: CryptoKey): void {
-  keyCache.set(userid, key)
+  keyCache.set(userid, Promise.resolve(key))
 }
 
 // Exported for test isolation only — seeds the hash cache with a predictable value.
@@ -54,46 +58,67 @@ function openKeyDB(): Promise<IDBDatabase> {
   })
 }
 
+// Resolves the per-device key from IndexedDB, creating it on first use. Generate
+// the candidate before opening the transaction: awaiting generateKey mid-transaction
+// lets IDB auto-commit and throw on the put. The single readwrite transaction
+// re-checks for an existing key and keeps it if present — IndexedDB serializes
+// overlapping transactions on one store, so two tabs can't both persist a key and
+// clobber each other (the loser's drafts would fail to decrypt after reload and
+// be silently evicted). idbKey is the hashed userid, matching the localStorage
+// key format so the raw userid isn't exposed in DevTools.
+async function resolveDeviceKey(userid: string): Promise<CryptoKey> {
+  const idbKey = await hashUserId(userid)
+  const candidate = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    false, // non-extractable — cannot be exported as raw bytes via JS
+    ['encrypt', 'decrypt']
+  )
+  const db = await openKeyDB()
+  try {
+    return await new Promise<CryptoKey>((resolve, reject) => {
+      const store = db
+        .transaction(KEY_STORE, 'readwrite')
+        .objectStore(KEY_STORE)
+      const getReq = store.get(idbKey)
+      getReq.onerror = () => reject(getReq.error)
+      getReq.onsuccess = () => {
+        const found = getReq.result as CryptoKey | undefined
+        if (found) {
+          resolve(found)
+          return
+        }
+        // store.put can throw synchronously (e.g. DataCloneError, or an inactive
+        // transaction). This runs in an event callback after the executor
+        // returned, so an uncaught throw would leave the promise pending and hang
+        // saveDraft/loadDraft — reject explicitly instead.
+        try {
+          const putReq = store.put(candidate, idbKey)
+          putReq.onsuccess = () => resolve(candidate)
+          putReq.onerror = () => reject(putReq.error)
+        } catch (err) {
+          reject(err)
+        }
+      }
+    })
+  } finally {
+    db.close()
+  }
+}
+
+// Returns the per-user non-extractable AES-GCM key. The in-flight promise is
+// memoized (not just the resolved key) so concurrent callers in one session share
+// one resolution — otherwise each generates its own key and all but one are
+// orphaned, taking their encrypted drafts with them on the next reload.
 async function getOrCreateDeviceKey(userid: string): Promise<CryptoKey> {
   const cached = keyCache.get(userid)
   if (cached) return cached
-
-  // Hash the userid so the IDB key name is consistent with the localStorage
-  // key format and doesn't expose the raw userid in DevTools.
-  const idbKey = await hashUserId(userid)
-  const db = await openKeyDB()
+  const promise = resolveDeviceKey(userid)
+  keyCache.set(userid, promise)
   try {
-    const existing = await new Promise<CryptoKey | undefined>(
-      (resolve, reject) => {
-        const tx = db.transaction(KEY_STORE, 'readonly')
-        const req = tx.objectStore(KEY_STORE).get(idbKey)
-        req.onsuccess = () => resolve(req.result as CryptoKey | undefined)
-        req.onerror = () => reject(req.error)
-      }
-    )
-
-    if (existing) {
-      keyCache.set(userid, existing)
-      return existing
-    }
-
-    const key = await crypto.subtle.generateKey(
-      { name: 'AES-GCM', length: 256 },
-      false, // non-extractable — cannot be exported as raw bytes via JS
-      ['encrypt', 'decrypt']
-    )
-
-    await new Promise<void>((resolve, reject) => {
-      const tx = db.transaction(KEY_STORE, 'readwrite')
-      const req = tx.objectStore(KEY_STORE).put(key, idbKey)
-      req.onsuccess = () => resolve()
-      req.onerror = () => reject(req.error)
-    })
-
-    keyCache.set(userid, key)
-    return key
-  } finally {
-    db.close()
+    return await promise
+  } catch (err) {
+    keyCache.delete(userid) // don't cache a rejection — let the next caller retry
+    throw err
   }
 }
 
