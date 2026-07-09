@@ -374,6 +374,10 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
       // systems first, then by completion fraction.
       field: 'datacallprogress',
       headerName: 'Data Call Progress',
+      // valueGetter returns a numeric sort key, so the column must sort as a
+      // number - otherwise the grid string-compares and "1.5" sorts before
+      // "-1". type: 'number' also right-aligns by default, overridden below.
+      type: 'number',
       width: 190,
       align: 'center',
       headerAlign: 'center',
