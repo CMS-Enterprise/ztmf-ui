@@ -35,6 +35,8 @@ import { FismaTableProps } from '@/types'
 import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
 import { cellStyleForTier } from '@/utils/tierStyles'
+import { ProgressCell } from './progressColumn'
+import { progressSortValue } from './progressHelpers'
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
@@ -210,7 +212,7 @@ interface CachedScore {
 }
 const pillarScoresCache = new Map<number, CachedScore>()
 
-export default function FismaTable({ scores }: FismaTableProps) {
+export default function FismaTable({ scores, progress }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const { fismaSystems, latestDataCallId, selectedDatacall, userInfo } =
     useContextProp()
@@ -363,6 +365,27 @@ export default function FismaTable({ scores }: FismaTableProps) {
           </Box>
         )
       },
+    },
+    {
+      // Questionnaire progress for the active data call (ztmf#299). The
+      // fraction counts answers genuinely edited this cycle - answers
+      // pre-populated from the previous data call do not count until a
+      // user saves them. Ascending sort is the triage order: not-updated
+      // systems first, then by completion fraction.
+      field: 'datacallprogress',
+      headerName: 'Data Call Progress',
+      // valueGetter returns a numeric sort key, so the column must sort as a
+      // number - otherwise the grid string-compares and "1.5" sorts before
+      // "-1". type: 'number' also right-aligns by default, overridden below.
+      type: 'number',
+      width: 190,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value) =>
+        progressSortValue(progress?.[value.row.fismasystemid]),
+      renderCell: (params) => (
+        <ProgressCell entry={progress?.[params.row.fismasystemid]} />
+      ),
     },
     {
       field: 'datacenterenvironment',
