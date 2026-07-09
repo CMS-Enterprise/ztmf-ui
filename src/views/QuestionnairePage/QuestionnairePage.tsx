@@ -48,6 +48,7 @@ import {
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
 import { saveDraft, loadDraft, clearDraft } from './draftStore'
+import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -168,6 +169,16 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   }
+  // Refs so the out-of-band re-seed effect can read current options and loading
+  // state without enrolling them as effect dependencies.
+  const optionsRef = React.useRef(options)
+  optionsRef.current = options
+  const loadingQuestionRef = React.useRef(loadingQuestion)
+  loadingQuestionRef.current = loadingQuestion
+  // Bumped when a re-seed changes the answer so the uncontrolled radio ChoiceList
+  // (which only reflects defaultChecked on mount) remounts and shows the
+  // corrected selection.
+  const [radioKey, setRadioKey] = React.useState(0)
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
@@ -682,6 +693,47 @@ export default function QuestionnarePage() {
     return () => window.removeEventListener('beforeunload', handle)
   }, [isReadOnly])
 
+  // Re-seed the current question's answer when the scores map refreshes out of
+  // band — e.g. the user saves a question then navigates back before that save's
+  // scores GET resolves, so the questionId effect seeded from a stale snapshot.
+  // Only runs when idle (the questionId effect owns seeding while loading) with no
+  // unsaved edits and no restored draft, so an in-progress change is never
+  // overwritten. Without this the display can show a just-saved answer as
+  // unanswered, and re-answering it would POST a duplicate score.
+  React.useEffect(() => {
+    const u = unsavedRef.current
+    if (
+      !shouldReseedAnswer({
+        hasQuestion: !!questionId,
+        loadingQuestion: loadingQuestionRef.current,
+        hasUnsavedEdits:
+          u.selectQuestionOption !== u.initQuestionChoice ||
+          u.notes !== u.initNotes,
+        draftRestored: draftStatusRef.current === 'restored',
+      })
+    ) {
+      return
+    }
+    const sel = deriveScoreSelection(
+      optionsRef.current.map((o) => Number(o.value)),
+      questionScoresRef.current
+    )
+    // No change from the last-seeded state — nothing to correct.
+    if (sel.choice === u.initQuestionChoice && sel.notes === u.initNotes) return
+    setOptions((prev) =>
+      prev.map((o) => ({
+        ...o,
+        defaultChecked: Number(o.value) === sel.funcOptId,
+      }))
+    )
+    setSelectQuestionOption(sel.choice)
+    setInitQuestionChoice(sel.choice)
+    setNotes(sel.notes)
+    setInitNotes(sel.notes)
+    setScoreId(sel.scoreid)
+    setRadioKey((k) => k + 1)
+  }, [questionScores, questionId])
+
   const breadcrumbSegmentLabels = fismaacronym
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
     : undefined
@@ -854,7 +906,9 @@ export default function QuestionnarePage() {
                 </Box>
               ) : (
                 <Box>
-                  <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
+                  <Box key={radioKey} sx={{ mb: 2 }}>
+                    {renderRadioGroup(options)}
+                  </Box>
                   <Typography variant="h6" sx={{ mb: 1 }}>
                     {notePrompt || ''}
                   </Typography>
