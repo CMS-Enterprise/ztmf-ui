@@ -505,6 +505,11 @@ export default function EditSystemModal({
                   !formValid.opdiv_id ? formValidErrorText.opdiv_id : ''
                 }
                 sx={{ mb: 2 }}
+                InputLabelProps={{
+                  sx: {
+                    marginTop: 0,
+                  },
+                }}
                 onChange={(e) => {
                   const val =
                     e.target.value === '' ? null : Number(e.target.value)
