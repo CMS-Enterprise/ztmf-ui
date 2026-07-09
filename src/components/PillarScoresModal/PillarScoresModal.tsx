@@ -33,6 +33,7 @@ import {
 import axiosInstance from '@/axiosConfig'
 import type { ScoreAggregate } from '@/types'
 import { tierStyle, TIERS } from '@/utils/tierStyles'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 
 // Static cache for datacalls that persists across component instances
 const datacallsCache: { data: DataCall[] | null; timestamp: number | null } = {
@@ -94,12 +95,18 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   const radarData = useMemo(() => {
     if (!hasValidData || !latestScore?.pillarscores) return []
 
-    const previousDatacall = scores
-      .filter((s) => s.datacallid < latestScore.datacallid)
-      .sort((a, b) => b.datacallid - a.datacallid)[0]
+    const sortedDcs = sortDatacallsByDeadline(datacalls)
+    const currentIdx = sortedDcs.findIndex(
+      (dc) => dc.datacallid === latestScore.datacallid
+    )
+    const prevDcId = sortedDcs[currentIdx + 1]?.datacallid
+    const previousEntry =
+      prevDcId !== undefined
+        ? scores.find((s) => s.datacallid === prevDcId) ?? null
+        : null
 
     return latestScore.pillarscores.map((pillar) => {
-      const previousPillarScore = previousDatacall?.pillarscores?.find(
+      const previousPillarScore = previousEntry?.pillarscores?.find(
         (p) => p.pillarid === pillar.pillarid
       )?.score
 
@@ -109,7 +116,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
         previous: previousPillarScore ?? 0,
       }
     })
-  }, [scores, latestScore, hasValidData])
+  }, [scores, latestScore, hasValidData, datacalls])
 
   // Fetch datacalls when modal opens (with caching)
   useEffect(() => {
@@ -166,6 +173,27 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     const datacall = datacalls.find((dc) => dc.datacallid === datacallid)
     return datacall ? datacall.datacall : `Datacall ${datacallid}`
   }
+
+  const sortedDatacalls = sortDatacallsByDeadline(datacalls)
+  const currentDcIndex = latestScore
+    ? sortedDatacalls.findIndex(
+        (dc) => dc.datacallid === latestScore.datacallid
+      )
+    : -1
+  const previousScoreEntry =
+    currentDcIndex >= 0
+      ? scores.find(
+          (s) =>
+            s.datacallid === sortedDatacalls[currentDcIndex + 1]?.datacallid
+        ) ?? null
+      : null
+
+  const currentDatacallName = latestScore
+    ? getQuarterName(latestScore.datacallid)
+    : 'Current'
+  const previousDatacallName = previousScoreEntry
+    ? getQuarterName(previousScoreEntry.datacallid)
+    : 'Previous'
 
   // Helper function to get trend information
   const getTrendInfo = (currentScore: number, previousScore: number | null) => {
@@ -368,7 +396,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             mb: 0.3,
                           }}
                         >
-                          Previous: {previousSystemScore.toFixed(2)}
+                          {`${previousDatacallName}: ${previousSystemScore.toFixed(2)}`}
                         </Typography>
                         <Typography
                           variant="caption"
@@ -521,7 +549,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             fontSize: '0.75rem',
                           }}
                         >
-                          Previous: {previousPillarScore.toFixed(2)}
+                          {`${previousDatacallName}: ${previousPillarScore.toFixed(2)}`}
                         </Typography>
                       )}
 
@@ -570,7 +598,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               </Typography>
               <Box
                 role="img"
-                aria-label={`Radar chart showing pillar scores. Current scores: ${radarData.map((d) => `${d.pillar}: ${d.current.toFixed(2)}`).join(', ')}`}
+                aria-label={`Radar chart showing pillar scores. ${currentDatacallName} scores: ${radarData.map((d) => `${d.pillar}: ${d.current.toFixed(2)}`).join(', ')}`}
               >
                 <ResponsiveContainer width="100%" height={400}>
                   <RadarChart
@@ -588,7 +616,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       tickCount={6}
                     />
                     <Radar
-                      name="Current"
+                      name={currentDatacallName}
                       dataKey="current"
                       stroke="#8884d8"
                       fill="#8884d8"
@@ -597,7 +625,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                     />
                     {scores.length > 1 && (
                       <Radar
-                        name="Previous"
+                        name={previousDatacallName}
                         dataKey="previous"
                         stroke="#82ca9d"
                         fill="#82ca9d"
@@ -629,11 +657,13 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                                     height: 12,
                                     backgroundColor: entry.color,
                                     border:
-                                      entry.value === 'Previous'
+                                      entry.value === previousDatacallName
                                         ? '1px dashed'
                                         : 'none',
                                     opacity:
-                                      entry.value === 'Previous' ? 0.7 : 0.8,
+                                      entry.value === previousDatacallName
+                                        ? 0.7
+                                        : 0.8,
                                   }}
                                 />
                                 <Typography
@@ -651,7 +681,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                     <Tooltip
                       formatter={(value: number, name: string) => [
                         value.toFixed(2),
-                        name === 'current' ? 'Current Score' : 'Previous Score',
+                        name,
                       ]}
                     />
                   </RadarChart>
@@ -703,11 +733,11 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             <strong>Pillar Name</strong>
                           </TableCell>
                           <TableCell align="right">
-                            <strong>Current Score</strong>
+                            <strong>{currentDatacallName}</strong>
                           </TableCell>
                           {scores.length > 1 && (
                             <TableCell align="right">
-                              <strong>Previous Score</strong>
+                              <strong>{previousDatacallName}</strong>
                             </TableCell>
                           )}
                           <TableCell align="right">
