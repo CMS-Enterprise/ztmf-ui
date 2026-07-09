@@ -449,12 +449,16 @@ export default function QuestionnarePage() {
             )
           } catch (error) {
             if (controller.signal.aborted) return
-            if (isAuthHandled(error)) {
-              setLoadingQuestion(false)
-              return
+            if (!isAuthHandled(error)) {
+              console.error('Error fetching question scores:', error)
+              notify(ERROR_MESSAGES.tryAgain, 'error')
             }
-            console.error('Error fetching question scores:', error)
-            notify(ERROR_MESSAGES.tryAgain, 'error')
+            // Fall through to the batch below with an empty scores map so the
+            // sidebar/URL commit together with questions/datacallID/questionId,
+            // even when the scores call 403s without redirecting (auth-handled,
+            // component stays mounted). Returning here instead would leave the
+            // sidebar/URL on the new system while the content stayed on the old
+            // one. The [questionId] effect's finally clears the spinner.
           }
           // Batch questions + scores + datacallID + questionId so the questionId
           // effect fires exactly once with the correct scores already in
@@ -539,6 +543,15 @@ export default function QuestionnarePage() {
           const sys = systemRef.current
           const uid = userInfo.userid
           if (controller.signal.aborted) return
+          // Read-only sessions never load the draft again, so evict any lingering
+          // entry instead of letting it sit for the full TTL. Bump the save
+          // generation first: an autosave that fired just before isReadOnly
+          // flipped may still be mid-flight, and without the bump its isCurrent()
+          // checks would pass and rewrite the draft after this clear.
+          if (isReadOnly && sys && questionId && datacallID > 0) {
+            saveGenRef.current++
+            void clearDraft(uid, sys, questionId, datacallID)
+          }
           const draft =
             !isReadOnly && sys && questionId && datacallID > 0
               ? await loadDraft(uid, sys, questionId, datacallID)
