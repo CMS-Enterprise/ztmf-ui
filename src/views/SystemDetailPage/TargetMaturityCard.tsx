@@ -50,7 +50,8 @@ export default function TargetMaturityCard({
   onJustificationChange,
 }: TargetMaturityCardProps) {
   const hasExplicitTarget = !!system.target_maturity_tier
-  const justificationTooLong = justification.length > TARGET_JUSTIFICATION_MAX
+  const justificationTooLong =
+    justification.trim().length > TARGET_JUSTIFICATION_MAX
   // Required once the draft differs from what's stored; the page-level
   // isFormValid applies the same rule to gate Save.
   const justificationMissing = isEditing && justification.trim().length === 0

@@ -315,8 +315,26 @@ export default function SystemDetailPage() {
     if (!editedSystem) return
     setIsSaving(true)
     try {
+      // Target maturity goes first: it's the smaller, dedicated,
+      // ISSO-writable endpoint. Only sent when actually changed so an
+      // untouched save doesn't record a spurious audit event. Firing it
+      // before the full-system PUT means a failure here leaves nothing
+      // persisted yet, instead of silently persisting the system form
+      // while the UI reports "Not Saved".
+      let savedTarget: FismaSystemType | null = null
+      if (canEditTarget && targetTouched()) {
+        const res = await axiosInstance.put(
+          `fismasystems/${editedSystem.fismasystemid}/target-maturity`,
+          {
+            target_maturity_tier: editedTargetTier,
+            target_maturity_justification: editedTargetJustification.trim(),
+          }
+        )
+        savedTarget = res.data?.data ?? null
+      }
+
       // The full-system PUT is admin-only on the backend; an assigned ISSO's
-      // edit session can only have touched the target card below.
+      // edit session can only have touched the target card above.
       if (isAdmin) {
         const putBody: Record<string, unknown> = {
           fismauid: editedSystem.fismauid,
@@ -343,21 +361,6 @@ export default function SystemDetailPage() {
           `fismasystems/${editedSystem.fismasystemid}`,
           putBody
         )
-      }
-
-      // Target maturity rides the same Save but goes to its dedicated,
-      // ISSO-writable endpoint. Only sent when actually changed so an
-      // untouched save doesn't record a spurious audit event.
-      let savedTarget: FismaSystemType | null = null
-      if (canEditTarget && targetTouched()) {
-        const res = await axiosInstance.put(
-          `fismasystems/${editedSystem.fismasystemid}/target-maturity`,
-          {
-            target_maturity_tier: editedTargetTier,
-            target_maturity_justification: editedTargetJustification.trim(),
-          }
-        )
-        savedTarget = res.data?.data ?? null
       }
 
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
