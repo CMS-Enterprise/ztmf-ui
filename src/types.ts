@@ -3,11 +3,20 @@
  * @module types
  */
 
-// TODO: maybe provide environment and other things to log?
-export type AppConfig = AppFeatureFlags
+export type AppConfig = AppFeatureFlags & AppEnvironment
 
 export type AppFeatureFlags = {
   IDP_ENABLED: boolean
+}
+
+// Environment-derived settings. IS_NONPROD gates the development banner; the
+// DEV_* overrides let the deployed dev environment inject testing-specific copy
+// and contact links at build time without committing them to the repo.
+export type AppEnvironment = {
+  IS_NONPROD: boolean
+  DEV_BANNER_MESSAGE: string
+  DEV_FEEDBACK_URL: string
+  DEV_CONTACT_EMAIL: string
 }
 
 export type FormField = {
@@ -39,6 +48,19 @@ export type OpDiv = {
   active: boolean
 }
 
+// One known datacenter environment from GET /api/v1/datacenterenvironments.
+// `datacenterenvironment` is the raw value stored on a system; `category` is
+// the reporting bucket the raw value resolves to (and the dropdown label);
+// `selectable` marks values offered in the picker (legacy/alias values are
+// still returned so existing systems resolve). Rows arrive ordered by `ordr`.
+export type DataCenterEnvironment = {
+  datacenterenvironment: string
+  category: string
+  scoring_key: string | null
+  selectable: boolean
+  ordr: number
+}
+
 export type userData = {
   userid: string
   email: string
@@ -62,7 +84,7 @@ export type FismaSystemType = {
   component: string
   mission: string
   fismaimpactlevel: string
-  issoemail: string
+  issoemail: string | null
   sdl_sync_enabled: boolean | null
   datacenterenvironment: string
   datacallcontact?: string
@@ -77,6 +99,23 @@ export type FismaSystemType = {
   reactivated_date: string | null
   reactivation_notes: string | null
   opdiv_id?: number | null
+  // Extended metadata fields (migration 0044+)
+  isso_name?: string | null
+  hva?: string | null
+  fips?: string | null
+  system_type?: string | null
+  cloud_system?: string | null
+  cloud_service_model?: string | null
+  cloud_vendor?: string | null
+  system_operator?: string | null
+  goco_coco_gogo?: string | null
+  system_owner?: string | null
+  system_owner_email?: string | null
+  legacy?: string | null
+  // Risk-based target maturity (ztmf#398). null = no target asserted yet;
+  // the UI presents the Advanced default.
+  target_maturity_tier?: string | null
+  target_maturity_justification?: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
@@ -130,6 +169,7 @@ export type QuestionScores = {
   datacallid: number
   last_edited_at?: string | null
   last_edited_by?: LastEditedBy | null
+  notes_is_ai_summary?: boolean
 }
 
 export type Question = {
@@ -164,6 +204,9 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
+  // Datacenter-environment vocabulary for the dropdown. Passed from Title
+  // (the modal renders outside the outlet, so it can't read context).
+  datacenterEnvironments: DataCenterEnvironment[]
 }
 
 export type datacallModalProps = {
@@ -210,6 +253,19 @@ export type SystemScoreEntry = {
   tier?: ScoreTier
 }
 
+// One system's questionnaire progress within a data call, as returned by
+// GET /scores/progress. "Updated" counts answers genuinely touched this
+// cycle - answers pre-populated from the previous data call do not count
+// until a user saves them, so a carried-over untouched questionnaire reads
+// as not updated (ztmf#299).
+export type ScoreProgress = {
+  fismasystemid: number
+  questionsexpected: number
+  questionsupdated: number
+  lastupdatedat?: string | null
+  updatedsincestart: boolean
+}
+
 export type QuestionChoice = {
   label: string
   value: number
@@ -244,6 +300,10 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, SystemScoreEntry>
+  // Per-system questionnaire progress for the active data call, keyed by
+  // fismasystemid. Optional so the table degrades to an em-dash column if
+  // the progress fetch fails - score display must not depend on it.
+  progress?: Record<number, ScoreProgress>
 }
 
 export type ThemeColor =
@@ -282,6 +342,7 @@ export type ScoreDiffSide = {
   optionname: string
   score: number
   notes: string | null
+  notes_is_ai_summary?: boolean
 }
 
 export type ScoreDiffEntry = {

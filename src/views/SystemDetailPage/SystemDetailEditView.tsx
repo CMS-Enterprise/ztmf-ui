@@ -12,13 +12,25 @@ import {
   Chip,
 } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
-import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
+import {
+  FismaSystemType,
+  FormValidType,
+  FormValidHelperText,
+  DataCenterEnvironment,
+} from '@/types'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
 import ValidatedTextField from '@/views/EditSystemModal/ValidatedTextField'
-import { emailValidator } from '@/views/EditSystemModal/validators'
-import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
+import {
+  emailValidator,
+  optionalEmailValidator,
+} from '@/views/EditSystemModal/validators'
+import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
+import {
+  EXTENDED_METADATA_TITLE,
+  EXTENDED_METADATA_SUBHEADER,
+} from '@/constants'
 
 interface SystemDetailEditViewProps {
   system: FismaSystemType
@@ -48,15 +60,26 @@ interface SystemDetailEditViewProps {
   onReactivateRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
   onSdlSyncToggle: (checked: boolean) => void
+  // Datacenter-environment vocabulary for the select field, passed down from
+  // SystemDetailPage (which reads it from the outlet context).
+  datacenterEnvironments: DataCenterEnvironment[]
+  // Rendered in the right column between Data Lake Export and Organization,
+  // matching the read view's placement (ztmf#398).
+  targetMaturitySlot?: React.ReactNode
 }
 
-function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
+function renderEditField(
+  field: FieldConfig,
+  props: SystemDetailEditViewProps,
+  disabled = false
+) {
   const {
     editedSystem,
     formValid,
     formValidErrorText,
     onInputChange,
     onValidatedFieldChange,
+    datacenterEnvironments,
   } = props
 
   if (field.type === 'email') {
@@ -64,9 +87,11 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
       <ValidatedTextField
         key={field.key}
         label={field.label}
-        validator={emailValidator}
+        validator={field.required ? emailValidator : optionalEmailValidator}
+        required={field.required}
         dfValue={String(editedSystem[field.key] ?? '')}
         isFullWidth={true}
+        disabled={disabled}
         onChange={(isValid, newValue) => {
           onValidatedFieldChange(field.key, isValid, newValue)
         }}
@@ -85,14 +110,22 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
         variant="standard"
         value={editedSystem[field.key] || ''}
         fullWidth
+        disabled={disabled}
         error={!formValid[field.key]}
         helperText={!formValid[field.key] ? formValidErrorText[field.key] : ''}
         InputLabelProps={{ sx: { marginTop: 0 } }}
         sx={{ mt: 2 }}
         onChange={(e) => onInputChange(e, field.key)}
       >
-        {datacenterenvironment.map((option) => (
-          <MenuItem key={option.value} value={option.value}>
+        {toDropdownOptionsWithCurrent(
+          datacenterEnvironments,
+          editedSystem[field.key] as string | null | undefined
+        ).map((option) => (
+          <MenuItem
+            key={option.value}
+            value={option.value}
+            disabled={option.disabled}
+          >
             {option.label}
           </MenuItem>
         ))}
@@ -110,6 +143,7 @@ function renderEditField(field: FieldConfig, props: SystemDetailEditViewProps) {
       fullWidth
       margin="normal"
       variant="standard"
+      disabled={disabled}
       value={editedSystem[field.key] ?? ''}
       error={field.required && !formValid[field.key]}
       helperText={
@@ -253,10 +287,12 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     onReactivateRequest,
     validateDecommissionDate,
     onSdlSyncToggle,
+    targetMaturitySlot,
   } = props
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
+  const extendedFields = getFieldsBySection('extended')
 
   return (
     <Grid container spacing={3}>
@@ -473,6 +509,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             />
           </CardContent>
         </Card>
+        {targetMaturitySlot}
         <Card variant="outlined" sx={{ flex: 1 }}>
           <CardHeader
             title="Organization"
@@ -498,6 +535,30 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               {contactFields.map((field) => (
                 <Grid item xs={12} sm={6} key={field.key}>
                   {renderEditField(field, props)}
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
+        </Card>
+      </Grid>
+
+      {/* Extended Metadata — full width, 3-col grid. Standard system
+          attributes editable across all OpDivs. isso_name is display-only
+          (backend-resolved), so it renders disabled. */}
+      <Grid item xs={12}>
+        <Card variant="outlined">
+          <CardHeader
+            title={EXTENDED_METADATA_TITLE}
+            titleTypographyProps={{ variant: 'h6' }}
+            subheader={EXTENDED_METADATA_SUBHEADER}
+            subheaderTypographyProps={{ variant: 'caption' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            <Grid container spacing={3}>
+              {extendedFields.map((field) => (
+                <Grid item xs={12} sm={6} md={4} key={field.key}>
+                  {renderEditField(field, props, field.readOnly)}
                 </Grid>
               ))}
             </Grid>

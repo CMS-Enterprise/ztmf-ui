@@ -34,9 +34,11 @@ import { MAX_QUESTIONNAIRE_NOTES_LENGTH, STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
+import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 const CssTextField = styled(TextField)({
   '& label.Mui-focused': {
     color: 'rgb(13, 36, 153)',
@@ -74,7 +76,14 @@ export default function QuestionnareModal({
   onClose,
   system,
 }: SystemDetailsModalProps) {
-  const { userInfo } = useContextProp()
+  const { userInfo, datacenterEnvironments } = useContextProp()
+  // Resolve the system's raw datacenter environment to its scoring category
+  // for pillar filtering; fall back to the raw value until the vocabulary
+  // loads or for any unmapped value.
+  const systemCategory =
+    toCategoryMap(datacenterEnvironments)[
+      system?.datacenterenvironment ?? ''
+    ] ?? system?.datacenterenvironment
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
@@ -158,6 +167,10 @@ export default function QuestionnareModal({
               notes: notes,
               functionoptionid: selectQuestionOption,
               datacallid: datacallID,
+              // The user is editing the note, so it is no longer an AI
+              // summary. The read-through dirty-check above skips this PUT
+              // when content is unchanged, so an identical "edit" keeps it.
+              notes_is_ai_summary: false,
             })
             notify(STATUS_MESSAGES.saved, 'success')
           } else {
@@ -283,7 +296,7 @@ export default function QuestionnareModal({
           })
           const sortedPillars = filterPillarsForSystem(
             sortPillars(Object.keys(organizedData)),
-            system?.datacenterenvironment
+            systemCategory
           )
           const categoriesData: Category[] = sortedPillars.map((pillar) => ({
             name: pillar,
@@ -314,7 +327,7 @@ export default function QuestionnareModal({
       fetchData()
       return () => controller.abort()
     }
-  }, [open, system])
+  }, [open, system, systemCategory])
   React.useEffect(() => {
     if (questionId) {
       const controller = new AbortController()
@@ -548,24 +561,38 @@ export default function QuestionnareModal({
                     inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => setNotes(e.target.value)}
                   />
-                  {!isReadOnly && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color:
-                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                            ? 'error.main'
-                            : notes.length >=
-                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                              ? 'warning.main'
-                              : 'text.secondary',
-                        display: 'block',
-                        mt: 0.5,
-                      }}
-                    >
-                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                    </Typography>
-                  )}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mt: 0.5,
+                    }}
+                  >
+                    <AISummaryBadge
+                      show={
+                        selectQuestionOption > 0 &&
+                        questionScores[selectQuestionOption]
+                          ?.notes_is_ai_summary === true
+                      }
+                    />
+                    {!isReadOnly && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          ml: 'auto',
+                          color:
+                            notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                              ? 'error.main'
+                              : notes.length >=
+                                  MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                                ? 'warning.main'
+                                : 'text.secondary',
+                        }}
+                      >
+                        {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                      </Typography>
+                    )}
+                  </Box>
                   <Box
                     position="relative"
                     display="flex"

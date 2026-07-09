@@ -26,14 +26,26 @@ import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import ValidatedTextField from './ValidatedTextField'
 import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
-import { datacenterenvironment } from './dataEnvironment'
+import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
-import { TEXTFIELD_HELPER_TEXT } from '@/constants'
+import {
+  TEXTFIELD_HELPER_TEXT,
+  EXTENDED_METADATA_TITLE,
+  EXTENDED_METADATA_CREATE_HINT,
+  EXTENDED_METADATA_EDIT_HINT,
+} from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { fetchOpDivs } from '@/utils/opdivs'
+import type { OpDiv } from '@/types'
+import {
+  getFieldsBySection,
+  EXTENDED_METADATA_KEYS,
+} from '@/views/SystemDetailPage/fieldConfig'
+
 /**
  * Component that renders a modal to edit fisma systems.
  * @param {boolean, function, FismaSystemType} editSystemModalProps - props to get populate dialog and function .
@@ -46,7 +58,14 @@ export default function EditSystemModal({
   onClose,
   system,
   mode,
+  datacenterEnvironments,
 }: editSystemModalProps) {
+  const datacenterEnvironmentOptions = toDropdownOptionsWithCurrent(
+    datacenterEnvironments,
+    system?.datacenterenvironment
+  )
+  const extendedFields = getFieldsBySection('extended')
+
   const [formValid, setFormValid] = React.useState<FormValidType>({
     issoemail: false,
     datacallcontact: false,
@@ -55,7 +74,9 @@ export default function EditSystemModal({
     datacenterenvironment: false,
     component: false,
     fismauid: false,
+    opdiv_id: false,
   })
+  const [opdivs, setOpDivs] = React.useState<OpDiv[]>([])
   const isFormValid = (): boolean => {
     return Object.values(formValid).every((value) => value === true)
   }
@@ -86,7 +107,26 @@ export default function EditSystemModal({
       datacenterenvironment: TEXTFIELD_HELPER_TEXT,
       component: TEXTFIELD_HELPER_TEXT,
       fismauid: TEXTFIELD_HELPER_TEXT,
+      opdiv_id: TEXTFIELD_HELPER_TEXT,
     })
+  React.useEffect(() => {
+    if (!open) return
+    const controller = new AbortController()
+    fetchOpDivs(false, controller.signal)
+      .then(setOpDivs)
+      .catch((error) => {
+        // Ignore the abort fired by cleanup on close; surface real failures
+        // so an empty OpDiv list (which leaves Save stuck) isn't silent.
+        if (controller.signal.aborted || isAuthHandled(error)) return
+        const parsed = parseApiError(error)
+        notify(
+          parsed.message || 'Failed to load the OpDiv list. Please try again.',
+          'error'
+        )
+      })
+    return () => controller.abort()
+  }, [open])
+
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)
@@ -141,6 +181,7 @@ export default function EditSystemModal({
           system?.component && system?.component.length > 0 ? true : false,
         fismauid:
           system?.fismauid && system?.fismauid.length > 0 ? true : false,
+        opdiv_id: system?.opdiv_id != null ? true : false,
       }))
       setEditedFismaSystem(system)
       const today = new Date()
@@ -221,22 +262,30 @@ export default function EditSystemModal({
   const handleSave = async () => {
     if (mode === 'edit') {
       try {
+        const editBody: Record<string, unknown> = {
+          fismauid: editedFismaSystem.fismauid,
+          fismaacronym: editedFismaSystem.fismaacronym,
+          fismaname: editedFismaSystem.fismaname,
+          fismasubsystem: editedFismaSystem.fismasubsystem,
+          component: editedFismaSystem.component,
+          groupacronym: editedFismaSystem.groupacronym,
+          groupname: editedFismaSystem.groupname,
+          divisionname: editedFismaSystem.divisionname,
+          datacenterenvironment: editedFismaSystem.datacenterenvironment,
+          datacallcontact: editedFismaSystem.datacallcontact,
+          issoemail: editedFismaSystem.issoemail,
+          sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
+          opdiv_id: editedFismaSystem.opdiv_id,
+        }
+        // Extended metadata fields are editable across all OpDivs; send each,
+        // using null to leave a value unchanged (the backend writes only
+        // non-null fields, so imported data isn't clobbered).
+        for (const key of EXTENDED_METADATA_KEYS) {
+          editBody[key] = editedFismaSystem[key] ?? null
+        }
         await axiosInstance.put(
           `fismasystems/${editedFismaSystem.fismasystemid}`,
-          {
-            fismauid: editedFismaSystem.fismauid,
-            fismaacronym: editedFismaSystem.fismaacronym,
-            fismaname: editedFismaSystem.fismaname,
-            fismasubsystem: editedFismaSystem.fismasubsystem,
-            component: editedFismaSystem.component,
-            groupacronym: editedFismaSystem.groupacronym,
-            groupname: editedFismaSystem.groupname,
-            divisionname: editedFismaSystem.divisionname,
-            datacenterenvironment: editedFismaSystem.datacenterenvironment,
-            datacallcontact: editedFismaSystem.datacallcontact,
-            issoemail: editedFismaSystem.issoemail,
-            sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
-          }
+          editBody
         )
         notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
@@ -261,7 +310,7 @@ export default function EditSystemModal({
       }
     } else if (mode === 'create') {
       try {
-        await axiosInstance.post(`fismasystems`, {
+        const body: Record<string, unknown> = {
           fismauid: editedFismaSystem.fismauid,
           fismaacronym: editedFismaSystem.fismaacronym,
           fismaname: editedFismaSystem.fismaname,
@@ -274,7 +323,12 @@ export default function EditSystemModal({
           datacallcontact: editedFismaSystem.datacallcontact,
           issoemail: editedFismaSystem.issoemail,
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
-        })
+          opdiv_id: editedFismaSystem.opdiv_id,
+        }
+        for (const key of EXTENDED_METADATA_KEYS) {
+          body[key] = editedFismaSystem[key] ?? null
+        }
+        await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
       } catch (error) {
@@ -438,6 +492,37 @@ export default function EditSystemModal({
           <CustomDialogTitle title={`${title} Fisma System`} />
           <DialogContent>
             <Box sx={{ flexGrow: 1 }} component="form">
+              <TextField
+                id="opdiv_id"
+                select
+                required
+                label="OpDiv"
+                variant="standard"
+                fullWidth
+                value={editedFismaSystem.opdiv_id ?? ''}
+                error={!formValid.opdiv_id}
+                helperText={
+                  !formValid.opdiv_id ? formValidErrorText.opdiv_id : ''
+                }
+                sx={{ mb: 2 }}
+                InputLabelProps={{
+                  sx: {
+                    marginTop: 0,
+                  },
+                }}
+                onChange={(e) => {
+                  const val =
+                    e.target.value === '' ? null : Number(e.target.value)
+                  setEditedFismaSystem((prev) => ({ ...prev, opdiv_id: val }))
+                  setFormValid((prev) => ({ ...prev, opdiv_id: val != null }))
+                }}
+              >
+                {opdivs.map((o) => (
+                  <MenuItem key={o.opdiv_id} value={o.opdiv_id}>
+                    {o.code} — {o.name}
+                  </MenuItem>
+                ))}
+              </TextField>
               <Grid container spacing={2}>
                 <Grid item xs={7}>
                   <TextField
@@ -664,8 +749,12 @@ export default function EditSystemModal({
                       handleInputChange(e, 'datacenterenvironment')
                     }}
                   >
-                    {datacenterenvironment.map((option) => (
-                      <MenuItem key={option.value} value={option.value}>
+                    {datacenterEnvironmentOptions.map((option) => (
+                      <MenuItem
+                        key={option.value}
+                        value={option.value}
+                        disabled={option.disabled}
+                      >
                         {option.label}
                       </MenuItem>
                     ))}
@@ -1100,6 +1189,60 @@ export default function EditSystemModal({
                       )}
                     </Box>
                   )}
+                </Grid>
+                <Grid item xs={12}>
+                  <Box
+                    sx={{
+                      mt: 2,
+                      p: 2,
+                      border: 1,
+                      borderColor: 'divider',
+                      borderRadius: 1,
+                    }}
+                  >
+                    <Typography variant="h6" sx={{ mb: 0.5 }}>
+                      {EXTENDED_METADATA_TITLE}
+                    </Typography>
+                    <Typography
+                      variant="caption"
+                      sx={{
+                        display: 'block',
+                        mb: 2,
+                        color: 'text.secondary',
+                      }}
+                    >
+                      {mode === 'create'
+                        ? EXTENDED_METADATA_CREATE_HINT
+                        : EXTENDED_METADATA_EDIT_HINT}
+                    </Typography>
+                    <Grid container spacing={2}>
+                      {extendedFields.map((field) => (
+                        <Grid item xs={12} sm={6} md={4} key={field.key}>
+                          <TextField
+                            id={`${mode}-${field.key}`}
+                            label={field.label}
+                            variant="standard"
+                            margin="normal"
+                            fullWidth
+                            disabled={field.readOnly}
+                            value={
+                              (editedFismaSystem[field.key] as
+                                | string
+                                | null
+                                | undefined) ?? ''
+                            }
+                            InputLabelProps={{ sx: { marginTop: 0 } }}
+                            onChange={(e) => {
+                              setEditedFismaSystem((prevState) => ({
+                                ...prevState,
+                                [field.key]: e.target.value || null,
+                              }))
+                            }}
+                          />
+                        </Grid>
+                      ))}
+                    </Grid>
+                  </Box>
                 </Grid>
               </Grid>
             </Box>
