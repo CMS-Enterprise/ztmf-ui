@@ -63,6 +63,9 @@ interface SystemDetailEditViewProps {
   // Datacenter-environment vocabulary for the select field, passed down from
   // SystemDetailPage (which reads it from the outlet context).
   datacenterEnvironments: DataCenterEnvironment[]
+  // Rendered in the right column between Data Lake Export and Organization,
+  // matching the read view's placement (ztmf#398).
+  targetMaturitySlot?: React.ReactNode
 }
 
 function renderEditField(
@@ -284,6 +287,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     onReactivateRequest,
     validateDecommissionDate,
     onSdlSyncToggle,
+    targetMaturitySlot,
   } = props
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
@@ -505,6 +509,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             />
           </CardContent>
         </Card>
+        {targetMaturitySlot}
         <Card variant="outlined" sx={{ flex: 1 }}>
           <CardHeader
             title="Organization"

@@ -17,11 +17,16 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
-import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
+import { isAdmin as checkIsAdmin, isSystemScoped } from '@/utils/userRoles'
 
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
+import TargetMaturityCard from './TargetMaturityCard'
+import {
+  DEFAULT_TARGET_TIER,
+  TARGET_JUSTIFICATION_MAX,
+} from './targetMaturityConfig'
 import { EXTENDED_METADATA_KEYS } from './fieldConfig'
 import CfactsRecordCard from './CfactsRecordCard'
 
@@ -32,6 +37,14 @@ export default function SystemDetailPage() {
 
   const isAdmin = checkIsAdmin(userInfo)
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
+  // Target maturity is the one field pair an assigned ISSO may write
+  // (ztmf#398); the backend enforces assignment/OpDiv scope - this only
+  // gates display. Gate by tier, matching the app convention (the backend
+  // scopes an ISSO's fismaSystems list to their assignments, so a
+  // system-scoped user on this page is by definition assigned; the endpoint
+  // re-checks on write). An ISSO gets the page Edit button, but only the
+  // target card unlocks for them; the system form stays admin-only.
+  const canEditTarget = isAdmin || isSystemScoped(userInfo)
 
   const system = useMemo(
     () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
@@ -73,6 +86,9 @@ export default function SystemDetailPage() {
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
+  // Draft target maturity, edited via the shared page Edit/Save flow
+  const [editedTargetTier, setEditedTargetTier] = useState(DEFAULT_TARGET_TIER)
+  const [editedTargetJustification, setEditedTargetJustification] = useState('')
   const [isSaving, setIsSaving] = useState(false)
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
   const [openDecommissionDialog, setOpenDecommissionDialog] = useState(false)
@@ -133,6 +149,8 @@ export default function SystemDetailPage() {
       setShowDecommissionForm(false)
       setReactivationNotes('')
       setShowReactivateForm(false)
+      setEditedTargetTier(system.target_maturity_tier ?? DEFAULT_TARGET_TIER)
+      setEditedTargetJustification(system.target_maturity_justification ?? '')
     }
   }, [isEditing, system])
 
@@ -207,11 +225,37 @@ export default function SystemDetailPage() {
     return true
   }
 
+  // The target draft counts as touched when it differs from what's stored
+  // (NULL stored renders as the Advanced default with empty justification).
+  const targetTouched = (): boolean => {
+    if (!system) return false
+    return (
+      editedTargetTier !==
+        (system.target_maturity_tier ?? DEFAULT_TARGET_TIER) ||
+      editedTargetJustification.trim() !==
+        (system.target_maturity_justification ?? '')
+    )
+  }
+
+  // Justification is required on every explicit target save (it's the GAO
+  // deliverable); an untouched draft is always valid because it won't be sent.
+  const isTargetValid = (): boolean => {
+    if (!targetTouched()) return true
+    const trimmed = editedTargetJustification.trim()
+    return trimmed.length > 0 && trimmed.length <= TARGET_JUSTIFICATION_MAX
+  }
+
   const isFormValid = (): boolean => {
-    return Object.values(formValid).every((v) => v === true)
+    // Non-admin (assigned ISSO) edit sessions only touch the target card, so
+    // the system-form field validity doesn't apply to them.
+    const systemFormValid = isAdmin
+      ? Object.values(formValid).every((v) => v === true)
+      : true
+    return systemFormValid && isTargetValid()
   }
 
   const hasUnsavedChanges = (): boolean => {
+    if (targetTouched()) return true
     if (!editedSystem || !system) return false
     return !_.isEqual(system, editedSystem)
   }
@@ -271,45 +315,84 @@ export default function SystemDetailPage() {
     if (!editedSystem) return
     setIsSaving(true)
     try {
-      const putBody: Record<string, unknown> = {
-        fismauid: editedSystem.fismauid,
-        fismaacronym: editedSystem.fismaacronym,
-        fismaname: editedSystem.fismaname,
-        fismasubsystem: editedSystem.fismasubsystem,
-        component: editedSystem.component,
-        groupacronym: editedSystem.groupacronym,
-        groupname: editedSystem.groupname,
-        divisionname: editedSystem.divisionname,
-        datacenterenvironment: editedSystem.datacenterenvironment,
-        datacallcontact: editedSystem.datacallcontact,
-        issoemail: editedSystem.issoemail,
-        sdl_sync_enabled: editedSystem.sdl_sync_enabled,
-        opdiv_id: editedSystem.opdiv_id,
+      // Target maturity goes first: it's the smaller, dedicated,
+      // ISSO-writable endpoint. Only sent when actually changed so an
+      // untouched save doesn't record a spurious audit event. Firing it
+      // before the full-system PUT means a failure here leaves nothing
+      // persisted yet, instead of silently persisting the system form
+      // while the UI reports "Not Saved".
+      let savedTarget: FismaSystemType | null = null
+      if (canEditTarget && targetTouched()) {
+        const res = await axiosInstance.put(
+          `fismasystems/${editedSystem.fismasystemid}/target-maturity`,
+          {
+            target_maturity_tier: editedTargetTier,
+            target_maturity_justification: editedTargetJustification.trim(),
+          }
+        )
+        savedTarget = res.data?.data ?? null
       }
-      // Extended metadata fields are editable across all OpDivs; send each,
-      // using null to leave a value unchanged (the backend writes only
-      // non-null fields, so imported data isn't clobbered).
-      for (const key of EXTENDED_METADATA_KEYS) {
-        putBody[key] = editedSystem[key] ?? null
+
+      // The full-system PUT is admin-only on the backend; an assigned ISSO's
+      // edit session can only have touched the target card above.
+      if (isAdmin) {
+        const putBody: Record<string, unknown> = {
+          fismauid: editedSystem.fismauid,
+          fismaacronym: editedSystem.fismaacronym,
+          fismaname: editedSystem.fismaname,
+          fismasubsystem: editedSystem.fismasubsystem,
+          component: editedSystem.component,
+          groupacronym: editedSystem.groupacronym,
+          groupname: editedSystem.groupname,
+          divisionname: editedSystem.divisionname,
+          datacenterenvironment: editedSystem.datacenterenvironment,
+          datacallcontact: editedSystem.datacallcontact,
+          issoemail: editedSystem.issoemail,
+          sdl_sync_enabled: editedSystem.sdl_sync_enabled,
+          opdiv_id: editedSystem.opdiv_id,
+        }
+        // Extended metadata fields are editable across all OpDivs; send each,
+        // using null to leave a value unchanged (the backend writes only
+        // non-null fields, so imported data isn't clobbered).
+        for (const key of EXTENDED_METADATA_KEYS) {
+          putBody[key] = editedSystem[key] ?? null
+        }
+        await axiosInstance.put(
+          `fismasystems/${editedSystem.fismasystemid}`,
+          putBody
+        )
       }
-      await axiosInstance.put(
-        `fismasystems/${editedSystem.fismasystemid}`,
-        putBody
-      )
+
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setFismaSystems((prev) =>
-        prev.map((s) =>
-          s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
-        )
+        prev.map((s) => {
+          if (s.fismasystemid !== editedSystem.fismasystemid) return s
+          // editedSystem carries the target values from when edit began, so
+          // overlay the endpoint's response last.
+          const base = isAdmin ? editedSystem : s
+          return savedTarget
+            ? {
+                ...base,
+                target_maturity_tier: savedTarget.target_maturity_tier,
+                target_maturity_justification:
+                  savedTarget.target_maturity_justification,
+              }
+            : base
+        })
       )
     } catch (error) {
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
       // Backend 400 with a field map: render each reason inline under its
       // input via formValid + formValidErrorText. The 'Not Saved' toast
-      // is a status flag, not the detail.
-      if (parsed.fieldErrors) {
-        Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+      // is a status flag, not the detail. Only keys the system form owns are
+      // routed inline; target-maturity field errors fall through to the toast
+      // (they're client-validated, so a 400 here is unexpected).
+      const knownFieldErrors = Object.entries(parsed.fieldErrors ?? {}).filter(
+        ([key]) => key in formValid
+      )
+      if (knownFieldErrors.length > 0) {
+        knownFieldErrors.forEach(([key, message]) => {
           setFormValid((prev) => ({ ...prev, [key]: false }))
           setFormValidErrorText((prev) => ({ ...prev, [key]: message }))
         })
@@ -507,13 +590,28 @@ export default function SystemDetailPage() {
     )
   }
 
+  // Target maturity edits ride the page-level Edit/Save flow above, but save to
+  // the dedicated ISSO-writable endpoint. The card is slotted into the right
+  // column of whichever view renders (between Data Lake Export and
+  // Organization); for a non-admin assigned ISSO only this card unlocks.
+  const targetMaturityCard = (
+    <TargetMaturityCard
+      system={system}
+      isEditing={isEditing && canEditTarget}
+      tier={editedTargetTier}
+      justification={editedTargetJustification}
+      onTierChange={setEditedTargetTier}
+      onJustificationChange={setEditedTargetJustification}
+    />
+  )
+
   return (
     <Box sx={{ mt: 1, mb: 4 }}>
       <BreadCrumbs segmentLabels={{ [fismasystemid!]: system.fismaname }} />
 
       <SystemDetailHeader
         systemName={system.fismaname}
-        isAdmin={isAdmin}
+        canEdit={canEditTarget}
         isEditing={isEditing}
         isSaving={isSaving}
         isFormValid={isFormValid()}
@@ -522,7 +620,7 @@ export default function SystemDetailPage() {
         onCancel={handleCancel}
       />
 
-      {isEditing && editedSystem ? (
+      {isEditing && editedSystem && isAdmin ? (
         <SystemDetailEditView
           system={system}
           editedSystem={editedSystem}
@@ -553,11 +651,13 @@ export default function SystemDetailPage() {
               prev ? { ...prev, sdl_sync_enabled: checked } : prev
             )
           }
+          targetMaturitySlot={targetMaturityCard}
         />
       ) : (
         <SystemDetailReadView
           system={system}
           decommissionedByName={decommissionedByName}
+          targetMaturitySlot={targetMaturityCard}
         />
       )}
 

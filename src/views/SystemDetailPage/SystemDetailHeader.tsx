@@ -5,7 +5,9 @@ import { useNavigate } from 'react-router-dom'
 
 interface SystemDetailHeaderProps {
   systemName: string
-  isAdmin: boolean
+  /** Admins edit the whole form; an assigned ISSO gets the same Edit button
+   * but only the target-maturity card unlocks for them (ztmf#398). */
+  canEdit: boolean
   isEditing: boolean
   isSaving: boolean
   isFormValid: boolean
@@ -16,7 +18,7 @@ interface SystemDetailHeaderProps {
 
 export default function SystemDetailHeader({
   systemName,
-  isAdmin,
+  canEdit,
   isEditing,
   isSaving,
   isFormValid,
@@ -59,7 +61,7 @@ export default function SystemDetailHeader({
             </CmsButton>
           </>
         ) : (
-          isAdmin && (
+          canEdit && (
             <CmsButton variation="solid" onClick={onEdit}>
               Edit
             </CmsButton>

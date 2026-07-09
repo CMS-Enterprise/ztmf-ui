@@ -1,3 +1,4 @@
+import { ReactNode } from 'react'
 import {
   Card,
   CardContent,
@@ -19,6 +20,10 @@ import { getFieldsBySection, FieldConfig } from './fieldConfig'
 interface SystemDetailReadViewProps {
   system: FismaSystemType
   decommissionedByName: string
+  // Rendered in the right column between Data Lake Export and Organization.
+  // The page owns it (its edit state is independent of this view) and slots it
+  // here so it sits with the other system cards (ztmf#398).
+  targetMaturitySlot?: ReactNode
 }
 
 function FieldDisplay({
@@ -51,6 +56,7 @@ function renderFields(fields: FieldConfig[], system: FismaSystemType) {
 export default function SystemDetailReadView({
   system,
   decommissionedByName,
+  targetMaturitySlot,
 }: SystemDetailReadViewProps) {
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
@@ -181,6 +187,7 @@ export default function SystemDetailReadView({
             </Typography>
           </CardContent>
         </Card>
+        {targetMaturitySlot}
         <Card variant="outlined" sx={{ flex: 1 }}>
           <CardHeader
             title="Organization"
