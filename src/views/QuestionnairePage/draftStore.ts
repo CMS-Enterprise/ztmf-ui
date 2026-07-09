@@ -11,7 +11,7 @@ type StoredDraft = {
   savedAt: number
 }
 
-const DRAFT_VERSION = 1
+export const DRAFT_VERSION = 1
 const DRAFT_TTL_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
 const DRAFT_PREFIX = 'ztmf_draft_'
 
@@ -162,17 +162,24 @@ async function decryptDraft(
 // Returns true when the draft was successfully persisted, false on any failure
 // (storage quota, private browsing, crypto unavailable). The caller uses the
 // return value to decide whether to show a "saved" or "not saved" indicator.
+//
+// isCurrent is checked twice: once before async work begins and once before the
+// final write. This prevents a stale in-flight save from resurrecting a draft
+// that was explicitly cleared while encryption was running (~10 ms async window).
 export const saveDraft = async (
   userid: string,
   fismasystemid: number,
   functionid: number,
   datacallid: number,
-  draft: QuestionDraft
+  draft: QuestionDraft,
+  isCurrent: () => boolean = () => true
 ): Promise<boolean> => {
   try {
+    if (!isCurrent()) return false
     const hashedId = await hashUserId(userid)
     const key = await getOrCreateDeviceKey(userid)
     const { iv, ciphertext } = await encryptDraft(key, draft)
+    if (!isCurrent()) return false
     const stored: StoredDraft = {
       v: DRAFT_VERSION,
       iv,

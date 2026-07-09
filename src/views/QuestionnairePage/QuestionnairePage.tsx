@@ -426,6 +426,7 @@ export default function QuestionnarePage() {
             if (controller.signal.aborted) return
             if (isAuthHandled(error)) return
             notify(ERROR_MESSAGES.tryAgain, 'error')
+            setLoadingQuestion(false)
             return
           }
           if (questionsEmpty) {
@@ -462,6 +463,7 @@ export default function QuestionnarePage() {
           if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
+          setLoadingQuestion(false)
         }
       }
       fetchData()
@@ -567,7 +569,7 @@ export default function QuestionnarePage() {
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
         } finally {
-          setLoadingQuestion(false)
+          if (!controller.signal.aborted) setLoadingQuestion(false)
         }
       }
       fetchOptions()
@@ -610,10 +612,14 @@ export default function QuestionnarePage() {
     const currentGen = saveGenRef.current
     const timer = setTimeout(() => {
       if (saveGenRef.current !== currentGen) return
-      saveDraft(userInfo.userid, system, questionId, datacallID, {
-        selectQuestionOption,
-        notes,
-      }).then((saved) => {
+      saveDraft(
+        userInfo.userid,
+        system,
+        questionId,
+        datacallID,
+        { selectQuestionOption, notes },
+        () => saveGenRef.current === currentGen
+      ).then((saved) => {
         if (saveGenRef.current !== currentGen) return
         if (saved) {
           if (draftStatusRef.current !== 'restored') setDraftStatus('saved')

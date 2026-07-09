@@ -7,10 +7,10 @@ import {
   __setKeyForTesting,
   __setHashedIdForTesting,
   QuestionDraft,
+  DRAFT_VERSION,
 } from './draftStore'
 
 const FOURTEEN_DAYS_MS = 14 * 24 * 60 * 60 * 1000
-const DRAFT_VERSION = 1
 
 const USER = 'user-abc'
 const USER_A = 'user-a'
@@ -106,6 +106,33 @@ describe('saveDraft', () => {
       DRAFT
     )
     expect(result).toBe(true)
+  })
+
+  it('returns false without writing when isCurrent returns false before encryption', async () => {
+    const result = await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT,
+      () => false
+    )
+    expect(result).toBe(false)
+    expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
+  })
+
+  it('returns false without writing when isCurrent returns false after encryption', async () => {
+    let calls = 0
+    const result = await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT,
+      () => ++calls < 2 // true on first check (pre-encrypt), false on second (pre-write)
+    )
+    expect(result).toBe(false)
+    expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
   })
 
   it('returns false when localStorage is unavailable', async () => {
