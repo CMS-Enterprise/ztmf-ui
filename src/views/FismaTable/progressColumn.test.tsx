@@ -45,14 +45,36 @@ describe('progressSortValue', () => {
     )
   })
 
-  it('does not divide by zero when a system has no applicable questions', () => {
+  it('ranks a no-questionnaire system after complete but before missing data', () => {
+    // A 0/0 system is technically "not updated" but has nothing to update, so
+    // it must sort with the done pile, not the triage top - and ahead of a
+    // genuine no-data row.
     const empty: ScoreProgress = {
       fismasystemid: 3,
       questionsexpected: 0,
       questionsupdated: 0,
-      updatedsincestart: true,
+      updatedsincestart: false,
     }
-    expect(progressSortValue(empty)).toBe(0)
+    const complete: ScoreProgress = { ...updatedEntry, questionsupdated: 41 }
+    expect(progressSortValue(empty)).toBeGreaterThan(
+      progressSortValue(complete)
+    )
+    expect(progressSortValue(empty)).toBeLessThan(progressSortValue(undefined))
+  })
+
+  it('does not sort a no-questionnaire system to the triage top', () => {
+    // Regression: the guard for 0 expected must be checked BEFORE the
+    // not-updated branch, or a 0/0 system lands at the very top next to real
+    // laggards.
+    const empty: ScoreProgress = {
+      fismasystemid: 3,
+      questionsexpected: 0,
+      questionsupdated: 0,
+      updatedsincestart: false,
+    }
+    expect(progressSortValue(empty)).toBeGreaterThan(
+      progressSortValue(untouchedEntry)
+    )
   })
 })
 
@@ -71,10 +93,24 @@ describe('progressTooltip', () => {
     )
   })
 
-  it('falls back to no-updates on an unparseable timestamp', () => {
+  it('does not contradict the chip on an unparseable timestamp', () => {
+    // An updated system with a bad timestamp must not read "No updates" - that
+    // would disagree with its green Updated chip. It reports the state instead.
     expect(
       progressTooltip({ ...updatedEntry, lastupdatedat: 'not-a-date' })
-    ).toBe('No updates this data call')
+    ).toBe('Updated (time unavailable)')
+  })
+
+  it('describes a no-questionnaire system', () => {
+    const empty: ScoreProgress = {
+      fismasystemid: 3,
+      questionsexpected: 0,
+      questionsupdated: 0,
+      updatedsincestart: false,
+    }
+    expect(progressTooltip(empty)).toBe(
+      'No questionnaire applies to this system'
+    )
   })
 })
 
@@ -96,5 +132,20 @@ describe('ProgressCell', () => {
   it('renders an em-dash when progress data is missing', () => {
     render(<ProgressCell entry={undefined} />)
     expect(screen.getByLabelText('No progress data')).toBeInTheDocument()
+  })
+
+  it('renders a neutral N/A chip when no questionnaire applies', () => {
+    // A 0/0 system is not a laggard - it must not wear the orange "Not
+    // updated" chip, and it shows no misleading fraction.
+    const empty: ScoreProgress = {
+      fismasystemid: 3,
+      questionsexpected: 0,
+      questionsupdated: 0,
+      updatedsincestart: false,
+    }
+    render(<ProgressCell entry={empty} />)
+    expect(screen.getByText('N/A')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+    expect(screen.queryByText('0/0')).not.toBeInTheDocument()
   })
 })
