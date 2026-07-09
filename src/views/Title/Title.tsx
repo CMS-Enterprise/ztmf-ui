@@ -203,7 +203,7 @@ export default function Title() {
   return (
     <>
       <UsaBanner />
-      <DevEnvironmentBanner />
+      <DevEnvironmentBanner authenticated={loaderData.status === 200} />
       {/* Branded header bar. Hidden on the /signin route AND any time
           LoginPage is rendered as the body (loaderData.status !== 200),
           so the header never sits above a "please sign in" prompt at any

@@ -37,10 +37,28 @@ test('shows the default notice in a non-production environment', () => {
   expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
 })
 
-test('uses the injected override message when provided', () => {
+test('uses the injected override message for authenticated users', () => {
   mockConfig.DEV_BANNER_MESSAGE = 'OpDiv data loaded for testing.'
-  render(<DevEnvironmentBanner />)
+  render(<DevEnvironmentBanner authenticated />)
   expect(screen.getByText('OpDiv data loaded for testing.')).toBeInTheDocument()
+})
+
+test('hides override copy, feedback, and contact from pre-login visitors', () => {
+  mockConfig.DEV_BANNER_MESSAGE = 'OpDiv data loaded for testing.'
+  mockConfig.DEV_FEEDBACK_URL = 'https://forms.example.gov/feedback'
+  mockConfig.DEV_CONTACT_EMAIL = 'zerotrust@example.gov'
+  render(<DevEnvironmentBanner />)
+  // Generic marker shows, but nothing environment-specific leaks publicly.
+  expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
+  expect(
+    screen.queryByText('OpDiv data loaded for testing.')
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('link', { name: /share testing feedback/i })
+  ).not.toBeInTheDocument()
+  expect(
+    screen.queryByRole('link', { name: /contact us/i })
+  ).not.toBeInTheDocument()
 })
 
 test('falls back to the default when the override is whitespace only', () => {
@@ -49,10 +67,10 @@ test('falls back to the default when the override is whitespace only', () => {
   expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
 })
 
-test('renders feedback and contact links only when configured', () => {
+test('renders feedback and contact links for authenticated users when configured', () => {
   mockConfig.DEV_FEEDBACK_URL = 'https://forms.example.gov/feedback'
   mockConfig.DEV_CONTACT_EMAIL = 'zerotrust@example.gov'
-  render(<DevEnvironmentBanner />)
+  render(<DevEnvironmentBanner authenticated />)
   expect(
     screen.getByRole('link', { name: /share testing feedback/i })
   ).toHaveAttribute('href', 'https://forms.example.gov/feedback')
@@ -64,7 +82,7 @@ test('renders feedback and contact links only when configured', () => {
 
 test('rejects a non-https feedback URL', () => {
   mockConfig.DEV_FEEDBACK_URL = 'javascript:alert(1)'
-  render(<DevEnvironmentBanner />)
+  render(<DevEnvironmentBanner authenticated />)
   expect(
     screen.queryByRole('link', { name: /share testing feedback/i })
   ).not.toBeInTheDocument()

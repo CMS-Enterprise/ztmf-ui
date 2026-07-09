@@ -14,24 +14,40 @@ const DEFAULT_MESSAGE =
   'are for testing only. We deploy throughout the day, so if something looks ' +
   'off, pause and refresh.'
 
+type DevEnvironmentBannerProps = {
+  /**
+   * Whether an authenticated app session is active. The injected testing copy,
+   * feedback-form link, and contact address render only for signed-in users so
+   * they are never exposed on the public pre-login page; unauthenticated
+   * visitors see the generic marker with no links.
+   */
+  authenticated?: boolean
+}
+
 /**
  * Persistent warning banner that marks non-production environments so testers
  * do not mistake them for production or enter real data. Rendered once in the
  * app shell; hidden entirely in production and after a user dismisses it.
+ * @param {DevEnvironmentBannerProps} props Component props.
  * @returns {JSX.Element | null}
  */
-export default function DevEnvironmentBanner() {
+export default function DevEnvironmentBanner({
+  authenticated = false,
+}: DevEnvironmentBannerProps) {
   const [dismissed, setDismissed] = useState(false)
 
   if (!CONFIG.IS_NONPROD || dismissed) {
     return null
   }
 
-  // Trim guards against a whitespace-only override secret rendering a blank
-  // banner or an unusable link.
-  const message = CONFIG.DEV_BANNER_MESSAGE.trim() || DEFAULT_MESSAGE
-  const feedbackUrl = CONFIG.DEV_FEEDBACK_URL.trim()
-  const contactEmail = CONFIG.DEV_CONTACT_EMAIL.trim()
+  // Testing-specific copy and contact links are gated behind an authenticated
+  // session. Pre-login the banner falls back to the generic marker so the
+  // contact email, testing dates, and feedback URL are not shown publicly.
+  // Trim also guards against a whitespace-only override rendering blank.
+  const override = CONFIG.DEV_BANNER_MESSAGE.trim()
+  const message = authenticated && override ? override : DEFAULT_MESSAGE
+  const feedbackUrl = authenticated ? CONFIG.DEV_FEEDBACK_URL.trim() : ''
+  const contactEmail = authenticated ? CONFIG.DEV_CONTACT_EMAIL.trim() : ''
   // Only render an https link. The value comes from a trusted build-time
   // secret, but the allowlist forbids javascript:/data: hrefs as defense in
   // depth against a mis-set secret.
