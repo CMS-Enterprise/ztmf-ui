@@ -1,3 +1,4 @@
+import { ReactNode } from 'react'
 import {
   Card,
   CardContent,
@@ -8,12 +9,21 @@ import {
   Chip,
 } from '@mui/material'
 import { FismaSystemType } from '@/types'
-import { SDL_SYNC_DESCRIPTION_ON, SDL_SYNC_DESCRIPTION_OFF } from '@/constants'
+import {
+  SDL_SYNC_DESCRIPTION_ON,
+  SDL_SYNC_DESCRIPTION_OFF,
+  EXTENDED_METADATA_TITLE,
+  EXTENDED_METADATA_SUBHEADER,
+} from '@/constants'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
 
 interface SystemDetailReadViewProps {
   system: FismaSystemType
   decommissionedByName: string
+  // Rendered in the right column between Data Lake Export and Organization.
+  // The page owns it (its edit state is independent of this view) and slots it
+  // here so it sits with the other system cards (ztmf#398).
+  targetMaturitySlot?: ReactNode
 }
 
 function FieldDisplay({
@@ -46,10 +56,19 @@ function renderFields(fields: FieldConfig[], system: FismaSystemType) {
 export default function SystemDetailReadView({
   system,
   decommissionedByName,
+  targetMaturitySlot,
 }: SystemDetailReadViewProps) {
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
+  const extendedFields = getFieldsBySection('extended')
+  // Only show the Extended Metadata card when at least one field is populated.
+  // Systems without extended metadata have every field null and would otherwise
+  // render an empty card. (Read view is not role-gated; the values are the
+  // system's own metadata, visible to anyone who can view the system.)
+  const hasAnyExtendedData = extendedFields.some(
+    (field) => system[field.key] != null && system[field.key] !== ''
+  )
 
   return (
     <Grid container spacing={3}>
@@ -168,6 +187,7 @@ export default function SystemDetailReadView({
             </Typography>
           </CardContent>
         </Card>
+        {targetMaturitySlot}
         <Card variant="outlined" sx={{ flex: 1 }}>
           <CardHeader
             title="Organization"
@@ -200,6 +220,34 @@ export default function SystemDetailReadView({
           </CardContent>
         </Card>
       </Grid>
+
+      {/* Extended Metadata — full width, 3-col grid. Hidden entirely when the
+          system has no extended metadata fields populated. */}
+      {hasAnyExtendedData && (
+        <Grid item xs={12}>
+          <Card variant="outlined">
+            <CardHeader
+              title={EXTENDED_METADATA_TITLE}
+              titleTypographyProps={{ variant: 'h6' }}
+              subheader={EXTENDED_METADATA_SUBHEADER}
+              subheaderTypographyProps={{ variant: 'caption' }}
+              sx={{ pb: 0 }}
+            />
+            <CardContent>
+              <Grid container spacing={3}>
+                {extendedFields.map((field) => (
+                  <Grid item xs={12} sm={6} md={4} key={field.key}>
+                    <FieldDisplay
+                      label={field.label}
+                      value={String(system[field.key] ?? '')}
+                    />
+                  </Grid>
+                ))}
+              </Grid>
+            </CardContent>
+          </Card>
+        </Grid>
+      )}
     </Grid>
   )
 }

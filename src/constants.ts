@@ -56,6 +56,9 @@ export const CONFIRMATION_MESSAGE =
 export const CONFIRMATION_MESSAGE_QUESTION =
   'Your changes will not be saved! Are you sure you want to leave question without saving your changes?'
 
+export const NOTES_UPDATE_REQUIRED_MSG =
+  'Please update your notes to reflect the changed answer.'
+
 /**
  * Pillars hidden on the questionnaire for SaaS systems. Names must match the API's
  * `question.pillar.pillar` value exactly.
@@ -152,3 +155,11 @@ export const TEXTFIELD_HELPER_TEXT = 'This field is required'
 
 export const INVALID_INPUT_TEXT = (key: string) =>
   `Please provide a valid ${key}`
+
+export const EXTENDED_METADATA_TITLE = 'Extended Metadata'
+export const EXTENDED_METADATA_SUBHEADER =
+  'Populated by the onboarding data load'
+export const EXTENDED_METADATA_CREATE_HINT =
+  'Populated by the onboarding data load. Set these only when you already have the information; otherwise leave blank and the load will fill them in.'
+export const EXTENDED_METADATA_EDIT_HINT =
+  'Populated by the onboarding data load. Edit only to correct a value.'

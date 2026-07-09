@@ -5,7 +5,7 @@ import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { Box, CircularProgress } from '@mui/material'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
-import type { ScoreAggregate, SystemScoreEntry } from '@/types'
+import type { ScoreAggregate, ScoreProgress, SystemScoreEntry } from '@/types'
 /**
  * Component that renders the contents of the Home view.
  * @returns {JSX.Element} Component that renders the home contents.
@@ -14,6 +14,9 @@ import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 export default function HomePageContainer() {
   const [loading, setLoading] = useState<boolean>(true)
   const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
+  const [progressMap, setProgressMap] = useState<Record<number, ScoreProgress>>(
+    {}
+  )
   const { latestDataCallId, selectedDatacall } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   useEffect(() => {
@@ -41,7 +44,31 @@ export default function HomePageContainer() {
         }
       }
     }
+    // Questionnaire progress for the active data call (ztmf#299). Fetched
+    // alongside the aggregate but independent of it: a failure here leaves
+    // the progress column as em-dashes without blocking the score display,
+    // so it neither gates `loading` nor shares the aggregate's try/catch.
+    async function fetchProgress() {
+      if (activeDataCallId !== 0) {
+        try {
+          const res = await axiosInstance.get(
+            `/scores/progress?datacallid=${activeDataCallId}`,
+            { signal: controller.signal }
+          )
+          const map: Record<number, ScoreProgress> = {}
+          for (const obj of res.data.data as ScoreProgress[]) {
+            map[obj.fismasystemid] = obj
+          }
+          setProgressMap(map)
+        } catch (error) {
+          if (controller.signal.aborted) return
+          console.error('Error fetching data call progress:', error)
+          setProgressMap({})
+        }
+      }
+    }
     fetchScores()
+    fetchProgress()
     return () => {
       controller.abort()
     }
@@ -65,7 +92,7 @@ export default function HomePageContainer() {
     <Box>
       <StatisticsBlocks scores={scoreMap} />
       <BreadCrumbs />
-      <FismaTable scores={scoreMap} />
+      <FismaTable scores={scoreMap} progress={progressMap} />
     </Box>
   )
 }

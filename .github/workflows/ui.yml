@@ -58,6 +58,12 @@ jobs:
         # Default off; flip per environment as IdP rollout progresses.
         env:
           VITE_IDP_ENABLED: ${{ inputs.environment == 'dev' && 'true' || 'false' }}
+          # Dev-only banner overrides. Sourced from secrets so the feedback form
+          # URL and contact address stay out of the repo. Clear these secrets
+          # when the testing window ends and the banner reverts to default copy.
+          VITE_DEV_BANNER_MESSAGE: ${{ inputs.environment == 'dev' && secrets.DEV_BANNER_MESSAGE || '' }}
+          VITE_DEV_FEEDBACK_URL: ${{ inputs.environment == 'dev' && secrets.DEV_FEEDBACK_URL || '' }}
+          VITE_DEV_CONTACT_EMAIL: ${{ inputs.environment == 'dev' && secrets.DEV_CONTACT_EMAIL || '' }}
         run: yarn build:${{ inputs.environment }}
 
       - name: Get AWS Creds

@@ -29,18 +29,25 @@ import {
   STATUS_MESSAGES,
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   CONFIRMATION_MESSAGE_QUESTION,
+  NOTES_UPDATE_REQUIRED_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
+import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
+import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
-import { shouldPersistResponse } from './saveGuard'
+import {
+  shouldPersistResponse,
+  needsNotesUpdateForChoiceChange,
+} from './saveGuard'
+import { saveDraft, loadDraft, clearDraft } from './draftStore'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -102,6 +109,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     fismaSystems,
+    datacenterEnvironments,
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
@@ -133,6 +141,25 @@ export default function QuestionnarePage() {
   const [stepId, setStepId] = React.useState<number>(0)
   const [selectQuestionOption, setSelectQuestionOption] =
     React.useState<number>(-1)
+  const [draftStatus, setDraftStatus] = React.useState<
+    'idle' | 'restored' | 'saved'
+  >('idle')
+  // Refs read inside setTimeout/event callbacks to get the current value
+  // without enrolling the effects in those deps (prevents extra re-runs).
+  const draftStatusRef = React.useRef(draftStatus)
+  draftStatusRef.current = draftStatus
+  const unsavedRef = React.useRef({
+    selectQuestionOption,
+    initQuestionChoice,
+    notes,
+    initNotes,
+  })
+  unsavedRef.current = {
+    selectQuestionOption,
+    initQuestionChoice,
+    notes,
+    initNotes,
+  }
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
@@ -155,6 +182,7 @@ export default function QuestionnarePage() {
   }
   const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSelectQuestionOption(Number(event.target.value))
+    if (draftStatus === 'restored') setDraftStatus('idle')
   }
   const renderRadioGroup = (options: QuestionChoice[]) => {
     return (
@@ -187,11 +215,23 @@ export default function QuestionnarePage() {
   // location.state. Optional-chain instead of crashing on first render; the
   // missing-system path is handled by an early render guard below.
   const system = location.state?.fismasystemid as number | undefined
+  const systemRef = React.useRef(system)
+  systemRef.current = system
   const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
+  // Resolve the system's raw datacenter environment to its scoring category
+  // for pillar filtering. Falls back to the raw value until the vocabulary
+  // loads or for any value not in the map.
+  const systemCategory =
+    toCategoryMap(datacenterEnvironments)[
+      systemInfo?.datacenterenvironment ?? ''
+    ] ?? systemInfo?.datacenterenvironment
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
+      // User explicitly chose to abandon unsaved edits — clear the draft so it
+      // doesn't reappear if they navigate back to this question.
+      clearCurrentDraft()
       setLoadingQuestion(true)
       setSelectedIndex(stepId)
       setQuestionId(stepId)
@@ -203,9 +243,30 @@ export default function QuestionnarePage() {
     setQuestionId(index)
   }
 
+  const clearCurrentDraft = () => {
+    if (system && questionId && datacallID > 0) {
+      clearDraft(userInfo.userid, system, questionId, datacallID)
+    }
+    setDraftStatus('idle')
+  }
+
   const saveResponse = async () => {
     if (
       !shouldPersistResponse({
+        selectQuestionOption,
+        initQuestionChoice,
+        notes,
+        initNotes,
+      })
+    ) {
+      clearCurrentDraft()
+      return
+    }
+    // Backstop: the Next button is disabled when this fires, but a future
+    // save trigger (autosave, dedicated Save, route-leave hook) would
+    // reach saveResponse without knowing about the rule. Cheap insurance.
+    if (
+      needsNotesUpdateForChoiceChange({
         selectQuestionOption,
         initQuestionChoice,
         notes,
@@ -221,6 +282,10 @@ export default function QuestionnarePage() {
           notes: notes,
           functionoptionid: selectQuestionOption,
           datacallid: datacallID,
+          // The user is editing the note, so it is no longer an AI summary.
+          // The dirty-check above skips this PUT when content is unchanged,
+          // so an identical "edit" correctly keeps the badge.
+          notes_is_ai_summary: false,
         })
       } else {
         await axiosInstance.post(`scores`, {
@@ -231,6 +296,7 @@ export default function QuestionnarePage() {
         })
       }
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      clearCurrentDraft()
       fetchQuestionScores(system, setQuestionScores)
     } catch (error) {
       if (isAuthHandled(error)) return
@@ -303,7 +369,7 @@ export default function QuestionnarePage() {
               setQuestions(questionData)
               const sortedPillars = filterPillarsForSystem(
                 sortPillars(Object.keys(organizedData)),
-                systemInfo?.datacenterenvironment
+                systemCategory
               )
               let sortedFuncId: number[] = []
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
@@ -388,15 +454,17 @@ export default function QuestionnarePage() {
     latestDataCallId,
     latestDatacall,
     latestDeadline,
-    systemInfo?.datacenterenvironment,
+    systemCategory,
   ])
   React.useEffect(() => {
     if (questionId) {
       const controller = new AbortController()
       // Clear saved-state markers before async load so the last-edited
       // footer does not flash the previous question's editor during the
-      // refetch window.
+      // refetch window. Also resets draft indicators so stale status from
+      // a previous question or datacall doesn't bleed into the next render.
       setInitQuestionChoice(-1)
+      setDraftStatus('idle')
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
       async function fetchOptions() {
@@ -429,7 +497,43 @@ export default function QuestionnarePage() {
           setSelectQuestionOption(funcOptId ? funcOptId : -1)
           setInitQuestionChoice(funcOptId ? funcOptId : -1)
           setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
-          setOptions(choices ? choices : [])
+
+          // Restore any in-progress draft from localStorage, overriding the
+          // server-side values set above. Skipped for read-only sessions.
+          const sys = systemRef.current
+          // Eagerly evict any stale draft when the session is now read-only.
+          const uid = userInfo.userid
+          if (isReadOnly && sys && questionId && datacallID > 0)
+            clearDraft(uid, sys, questionId, datacallID)
+          const draft =
+            !isReadOnly && sys && questionId && datacallID > 0
+              ? await loadDraft(uid, sys, questionId, datacallID)
+              : null
+          if (draft) {
+            if (draft.selectQuestionOption === -1) {
+              // Notes-only draft — restore notes without pre-selecting an answer.
+              setNotes(draft.notes)
+              setDraftStatus('restored')
+            } else if (
+              choices.some((c) => c.value === draft.selectQuestionOption)
+            ) {
+              choices.forEach(
+                (c) =>
+                  (c.defaultChecked = c.value === draft.selectQuestionOption)
+              )
+              setSelectQuestionOption(draft.selectQuestionOption)
+              setNotes(draft.notes)
+              setDraftStatus('restored')
+            } else {
+              // Draft references an option that no longer exists — evict it.
+              if (sys && questionId && datacallID > 0)
+                clearDraft(uid, sys, questionId, datacallID)
+              setDraftStatus('idle')
+            }
+          } else {
+            setDraftStatus('idle')
+          }
+          setOptions(choices)
         } catch (error) {
           if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
@@ -441,7 +545,73 @@ export default function QuestionnarePage() {
       fetchOptions()
       return () => controller.abort()
     }
-  }, [questionId, questionScores, questions])
+  }, [
+    questionId,
+    questionScores,
+    questions,
+    isReadOnly,
+    datacallID,
+    userInfo.userid,
+  ])
+
+  // Debounced draft save: 1 second after the user pauses editing, persist
+  // the current answer and notes to localStorage so a reload can recover them.
+  // Only fires when the user has actually changed something from the server-side
+  // initial values — prevents question-load state transitions from being
+  // mistakenly recorded as drafts on questions the user never touched.
+  React.useEffect(() => {
+    if (
+      isReadOnly ||
+      !system ||
+      !questionId ||
+      datacallID <= 0 ||
+      loadingQuestion
+    ) {
+      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
+      return
+    }
+    if (selectQuestionOption === initQuestionChoice && notes === initNotes)
+      return
+    const timer = setTimeout(() => {
+      saveDraft(userInfo.userid, system, questionId, datacallID, {
+        selectQuestionOption,
+        notes,
+      }).then(() => {
+        if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
+      })
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [
+    selectQuestionOption,
+    notes,
+    isReadOnly,
+    system,
+    questionId,
+    datacallID,
+    initQuestionChoice,
+    initNotes,
+    loadingQuestion,
+    userInfo.userid,
+  ])
+
+  // Warn before tab close or hard refresh when the active question has edits
+  // that haven't been committed to the backend yet.
+  React.useEffect(() => {
+    if (isReadOnly) return
+    const handle = (e: BeforeUnloadEvent) => {
+      const s = unsavedRef.current
+      const hasPendingEdits =
+        shouldPersistResponse(s) ||
+        (s.selectQuestionOption === -1 && s.notes !== s.initNotes)
+      if (hasPendingEdits) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handle)
+    return () => window.removeEventListener('beforeunload', handle)
+  }, [isReadOnly])
+
   const breadcrumbSegmentLabels = fismaacronym
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
     : undefined
@@ -472,6 +642,15 @@ export default function QuestionnarePage() {
       </>
     )
   }
+  // Inline validation: when the user has flipped their answer without
+  // substantially editing the notes, we block the save (Next button) and
+  // surface the reason under the notes field. See saveGuard.ts for the rule.
+  const needsNotesUpdate = needsNotesUpdateForChoiceChange({
+    selectQuestionOption,
+    initQuestionChoice,
+    notes,
+    initNotes,
+  })
   return (
     <>
       <Box
@@ -615,29 +794,48 @@ export default function QuestionnarePage() {
                     fullWidth
                     value={notes}
                     disabled={isReadOnly}
+                    error={needsNotesUpdate}
+                    helperText={
+                      needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                    }
                     inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => {
                       setNotes(e.target.value)
+                      if (draftStatus === 'restored') setDraftStatus('idle')
                     }}
                   />
-                  {!isReadOnly && (
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        color:
-                          notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                            ? 'error.main'
-                            : notes.length >=
-                                MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                              ? 'warning.main'
-                              : 'text.secondary',
-                        display: 'block',
-                        mt: 0.5,
-                      }}
-                    >
-                      {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                    </Typography>
-                  )}
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      mt: 0.5,
+                    }}
+                  >
+                    <AISummaryBadge
+                      show={
+                        selectQuestionOption >= 0 &&
+                        questionScores[selectQuestionOption]
+                          ?.notes_is_ai_summary === true
+                      }
+                    />
+                    {!isReadOnly && (
+                      <Typography
+                        variant="caption"
+                        sx={{
+                          ml: 'auto',
+                          color:
+                            notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                              ? 'error.main'
+                              : notes.length >=
+                                  MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                                ? 'warning.main'
+                                : 'text.secondary',
+                        }}
+                      >
+                        {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                      </Typography>
+                    )}
+                  </Box>
                   <Box
                     position="relative"
                     display="flex"
@@ -700,14 +898,14 @@ export default function QuestionnarePage() {
                             }
                           )
                         }
-                        setLoadingQuestion(true)
+                        if (id !== questionId) setLoadingQuestion(true)
                         setQuestionId(id)
                         setSelectedIndex(id)
                         if (!isReadOnly) {
                           saveResponse()
                         }
-                        setLoadingQuestion(false)
                       }}
+                      disabled={needsNotesUpdate}
                       style={{ marginBottom: '8px', marginTop: '8px' }}
                     >
                       {selectedIndex ===
@@ -721,6 +919,17 @@ export default function QuestionnarePage() {
                       {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
                     </CmsButton>
                   </Box>
+                  {draftStatus !== 'idle' && !isReadOnly && (
+                    <Alert
+                      severity={draftStatus === 'saved' ? 'success' : 'warning'}
+                      icon={false}
+                      sx={{ mt: 1, py: 0.5 }}
+                    >
+                      {draftStatus === 'saved'
+                        ? 'Draft saved — click Next or Complete to save permanently.'
+                        : 'Draft restored — click Next or Complete to save permanently.'}
+                    </Alert>
+                  )}
                   <LastEditedFooter
                     lastEditedAt={
                       initQuestionChoice !== -1 &&

@@ -10,7 +10,7 @@ import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData, UserRole, datacall } from '@/types'
+import { userData, UserRole, datacall, DataCenterEnvironment } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -27,6 +27,8 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
+import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
@@ -34,7 +36,9 @@ import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
 import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
+import DevEnvironmentBanner from '@/components/DevEnvironmentBanner/DevEnvironmentBanner'
 import ztmfLogo from '@/assets/ztmf-logo-color.png'
+import { clearStaleUserDrafts } from '../QuestionnairePage/draftStore'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -69,6 +73,9 @@ export default function Title() {
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
+  const [datacenterEnvironments, setDatacenterEnvironments] = useState<
+    DataCenterEnvironment[]
+  >([])
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -103,6 +110,10 @@ export default function Title() {
   }, [showDecommissioned, fetchFismaSystems, loaderData.status])
 
   useEffect(() => {
+    if (loaderData.status === 200) clearStaleUserDrafts(userInfo.userid)
+  }, [loaderData.status, userInfo.userid])
+
+  useEffect(() => {
     if (loaderData.status !== 200) return
     const controller = new AbortController()
     async function fetchDatacalls() {
@@ -110,8 +121,11 @@ export default function Title() {
         const res = await axiosInstance.get('/datacalls', {
           signal: controller.signal,
         })
-        const sorted: datacall[] = [...res.data.data].sort(
-          (a: datacall, b: datacall) => b.datacallid - a.datacallid
+        // "Latest"/"current" is the call with the furthest-out deadline, not
+        // the highest datacallid: historical loads can carry a higher id than
+        // the real current call (#393). datacallid is only a tiebreak.
+        const sorted: datacall[] = sortDatacallsByDeadline(
+          res.data.data as datacall[]
         )
         setDatacalls(sorted)
         if (sorted.length > 0) {
@@ -126,6 +140,24 @@ export default function Title() {
       }
     }
     fetchDatacalls()
+    return () => {
+      controller.abort()
+    }
+  }, [loaderData.status])
+
+  // Datacenter-environment vocabulary is reference data shared by the system
+  // form (dropdown) and the questionnaire pillar filter, so it is fetched
+  // once here and passed down via context. Failure is non-fatal: consumers
+  // fall back to raw values when the list is empty.
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    fetchDataCenterEnvironments(controller.signal)
+      .then(setDatacenterEnvironments)
+      .catch((error) => {
+        if (controller.signal.aborted) return
+        console.error('Fetch datacenter environments error:', error)
+      })
     return () => {
       controller.abort()
     }
@@ -180,6 +212,7 @@ export default function Title() {
   return (
     <>
       <UsaBanner />
+      <DevEnvironmentBanner />
       {/* Branded header bar. Hidden on the /signin route AND any time
           LoginPage is rendered as the body (loaderData.status !== 200),
           so the header never sits above a "please sign in" prompt at any
@@ -390,7 +423,7 @@ export default function Title() {
                     if (dc) setSelectedDatacall(dc)
                   }}
                   renderOption={(props, option) => {
-                    const isCurrent = option.datacallid === latestDataCallId
+                    const isLatest = option.datacallid === latestDataCallId
                     const isClosed = new Date() > new Date(option.deadline)
                     const { key, ...rest } = props
                     const deadlineLabel = new Date(
@@ -415,12 +448,15 @@ export default function Title() {
                             <Typography variant="body2">
                               {option.datacall}
                             </Typography>
-                            {isCurrent && (
+                            {/* Only the latest-by-deadline call is badged:
+                                "Current" while still open, "Latest" once its
+                                deadline has passed (#393). */}
+                            {isLatest && (
                               <Chip
-                                label="Current"
+                                label={isClosed ? 'Latest' : 'Current'}
                                 size="small"
                                 variant="outlined"
-                                color="primary"
+                                color={isClosed ? 'default' : 'primary'}
                                 sx={{ height: 18, fontSize: '0.65rem' }}
                               />
                             )}
@@ -474,6 +510,7 @@ export default function Title() {
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,
+                  datacenterEnvironments,
                 }}
               />
             </Box>
@@ -486,6 +523,7 @@ export default function Title() {
           onClose={handleCloseModal}
           system={EMPTY_SYSTEM}
           mode={'create'}
+          datacenterEnvironments={datacenterEnvironments}
         />
         <EmailModal
           openModal={openEmailModal}

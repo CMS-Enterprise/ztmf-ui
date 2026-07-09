@@ -35,6 +35,8 @@ import { FismaTableProps } from '@/types'
 import type { ScoreAggregate, SystemScoreEntry } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
 import { cellStyleForTier } from '@/utils/tierStyles'
+import { ProgressCell } from './progressColumn'
+import { progressSortValue } from './progressHelpers'
 type selectedRowsType = GridRowId[]
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
@@ -210,7 +212,7 @@ interface CachedScore {
 }
 const pillarScoresCache = new Map<number, CachedScore>()
 
-export default function FismaTable({ scores }: FismaTableProps) {
+export default function FismaTable({ scores, progress }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const { fismaSystems, latestDataCallId, selectedDatacall, userInfo } =
     useContextProp()
@@ -303,30 +305,26 @@ export default function FismaTable({ scores }: FismaTableProps) {
       minWidth: 100,
     },
     {
-      field: 'issoemail',
+      // Bound directly to the backend-resolved isso_name (populated for both
+      // CMS and HHS systems). Replaces the old issoemail.split('@') derivation,
+      // which rendered blank for HHS systems and crashed the sort on null
+      // emails (ztmf-ui#450).
+      field: 'isso_name',
       headerName: 'ISSO Name',
       flex: 1.2,
       minWidth: 120,
       maxWidth: 240,
       hideable: false,
-      valueGetter: (value) => {
-        const name = value.row.issoemail.split('@')
-        const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        return fullName.length > 1
-          ? `${fullName[0]} ${fullName[1]}`
-          : fullName[0]
-      },
-      renderCell: (params) => {
-        const name = params.row.issoemail.split('@')
-        const fullName = name[0].replace(/[0-9]/g, '').split('.')
-        let firstName = ''
-        let lastName = ''
-        if (fullName.length > 1) {
-          firstName = fullName[0][0].toUpperCase() + fullName[0].slice(1)
-          lastName = fullName[1][0].toUpperCase() + fullName[1].slice(1)
-        }
-        return fullName.length > 1 ? `${firstName} ${lastName}` : fullName[0]
-      },
+      valueGetter: (value) => value.row.isso_name ?? '',
+      renderCell: (params) => params.row.isso_name || '—',
+    },
+    {
+      field: 'fips',
+      headerName: 'FIPS',
+      flex: 0.8,
+      minWidth: 100,
+      valueGetter: (value) => value.row.fips ?? '',
+      renderCell: (params) => params.row.fips || '—',
     },
     {
       field: 'Score',
@@ -367,6 +365,27 @@ export default function FismaTable({ scores }: FismaTableProps) {
           </Box>
         )
       },
+    },
+    {
+      // Questionnaire progress for the active data call (ztmf#299). The
+      // fraction counts answers genuinely edited this cycle - answers
+      // pre-populated from the previous data call do not count until a
+      // user saves them. Ascending sort is the triage order: not-updated
+      // systems first, then by completion fraction.
+      field: 'datacallprogress',
+      headerName: 'Data Call Progress',
+      // valueGetter returns a numeric sort key, so the column must sort as a
+      // number - otherwise the grid string-compares and "1.5" sorts before
+      // "-1". type: 'number' also right-aligns by default, overridden below.
+      type: 'number',
+      width: 190,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value) =>
+        progressSortValue(progress?.[value.row.fismasystemid]),
+      renderCell: (params) => (
+        <ProgressCell entry={progress?.[params.row.fismasystemid]} />
+      ),
     },
     {
       field: 'datacenterenvironment',
