@@ -211,8 +211,30 @@ export default function Title() {
   const LOGO_OPTICAL_OFFSET = Math.round(LOGO_HEIGHT * 0.1)
   return (
     <>
-      <UsaBanner />
-      <DevEnvironmentBanner />
+      {/* Left-align the USA banner's content with the ZTMF logo below it by
+          dropping the CMSDS max-width centering and matching the header's
+          responsive horizontal padding. */}
+      <Box
+        sx={{
+          '& .ds-c-usa-banner__header, & .ds-c-usa-banner__guidance': {
+            maxWidth: 'none',
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          },
+        }}
+      >
+        <UsaBanner />
+      </Box>
+      {/* Match the dev banner's text start to the logo/USA-banner content
+          while the coloured bar stays full-bleed. */}
+      <Box
+        sx={{
+          '& .MuiAlert-root': {
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          },
+        }}
+      >
+        <DevEnvironmentBanner />
+      </Box>
       {/* Branded header bar. Hidden on the /signin route AND any time
           LoginPage is rendered as the body (loaderData.status !== 200),
           so the header never sits above a "please sign in" prompt at any
