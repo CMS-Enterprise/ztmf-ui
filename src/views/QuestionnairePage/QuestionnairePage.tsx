@@ -239,6 +239,7 @@ export default function QuestionnarePage() {
   // the route state. Absent (deep link), fall back to the selected/latest call.
   const routeDatacallId = location.state?.datacallid as number | undefined
   const routeDatacall = location.state?.datacall as string | undefined
+  const routeDeadline = location.state?.deadline as string | undefined
   const systemRef = React.useRef(system)
   systemRef.current = system
   const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
@@ -346,16 +347,14 @@ export default function QuestionnarePage() {
           let datacall = ''
           let activeDataCallId: number
           if (routeDatacallId && routeDatacall) {
-            // Opened for a specific system's own call from the dashboard.
+            // Opened for a specific system's own call from the dashboard. Read
+            // only when that call's own deadline has passed - not by comparing
+            // to the global latest, since two calls can be open at once.
             datacall = routeDatacall.replaceAll(' ', '_')
             setDatacall(datacall)
             activeDataCallId = routeDatacallId
             setIsPastDeadline(
-              routeDatacallId === latestDataCallId
-                ? latestDeadline
-                  ? new Date() > new Date(latestDeadline)
-                  : true
-                : true // a non-latest call is historical and read-only
+              routeDeadline ? new Date() > new Date(routeDeadline) : true
             )
           } else {
             const isHistorical =
@@ -518,6 +517,7 @@ export default function QuestionnarePage() {
     fismaacronym,
     routeDatacallId,
     routeDatacall,
+    routeDeadline,
     selectedDatacall,
     latestDataCallId,
     latestDatacall,
@@ -1111,16 +1111,18 @@ export default function QuestionnarePage() {
           />
         </Grid>
       </Container>
-      {/* selectedDataCallId seeds the "To" picker default in ScoreDiffModal.
-          #417 renamed selectedDataCallId → selectedDatacall (datacall object)
-          on context; use the id off the object now that #408 has landed. */}
+      {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
+          questionnaire was opened for (the row's own call), since the dashboard
+          may be aggregating a whole year and selectedDatacall is then null. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
-        selectedDataCallId={selectedDatacall?.datacallid}
+        selectedDataCallId={
+          routeDatacallId ?? selectedDatacall?.datacallid ?? latestDataCallId
+        }
       />
     </>
   )

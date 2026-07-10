@@ -202,12 +202,17 @@ export default function Title() {
       return
     }
     setActiveDatacallIds((prev) => {
-      if (prev.includes(call.datacallid)) {
-        return prev.length === 1
-          ? prev
-          : prev.filter((id) => id !== call.datacallid)
+      const removing = prev.includes(call.datacallid)
+      if (removing && prev.length === 1) return prev // never empty the year
+      const next = new Set(prev)
+      if (removing) {
+        next.delete(call.datacallid)
+      } else {
+        next.add(call.datacallid)
       }
-      return [...prev, call.datacallid]
+      // Keep the group's deadline order (newest first) so the dashboard merge
+      // deterministically resolves a multi-call system to its newest call.
+      return group.calls.map((c) => c.datacallid).filter((id) => next.has(id))
     })
   }
 
@@ -496,7 +501,8 @@ export default function Title() {
                       borderColor: 'rgba(0,0,0,0.23)',
                     }}
                   >
-                    {activeYear ?? 'Data call'}
+                    {activeYear ??
+                      (activeDatacallIds.length ? 'Other' : 'Data call')}
                     {selectedDatacall
                       ? ` · ${selectedDatacall.datacall}`
                       : activeDatacallIds.length > 1
@@ -507,6 +513,7 @@ export default function Title() {
                     anchorEl={datacallMenuAnchor}
                     open={Boolean(datacallMenuAnchor)}
                     onClose={() => setDatacallMenuAnchor(null)}
+                    MenuListProps={{ 'aria-label': 'Select data call by year' }}
                   >
                     {datacallsByYear.flatMap((group) => [
                       <ListSubheader key={`year-${group.year ?? 'other'}`}>

@@ -2,10 +2,12 @@ import type { ScoreAggregate, ScoreProgress, SystemScoreEntry } from '@/types'
 
 /**
  * Merge the score rows from several data calls into one map keyed by
- * fismasystemid. A system belongs to exactly one call per year, so the keys
- * are disjoint across calls and there is no meaningful collision; if one ever
- * occurred, the later call wins. Pure so the aggregation is unit-testable.
- * @param {ScoreAggregate[][]} rowsPerCall - Aggregate rows, one array per call.
+ * fismasystemid. A system may appear in more than one of a year's calls
+ * (e.g. an annual ZTM call and a Q# call); when it does, the newest call
+ * wins. Callers pass `rowsPerCall` newest-call-first, so the first write for a
+ * system is kept and later (older) calls do not overwrite it. Pure so the
+ * aggregation is unit-testable.
+ * @param {ScoreAggregate[][]} rowsPerCall - Aggregate rows, newest call first.
  * @returns {Record<number, SystemScoreEntry>} Score entry per system.
  */
 export function buildScoreMap(
@@ -14,6 +16,7 @@ export function buildScoreMap(
   const map: Record<number, SystemScoreEntry> = {}
   for (const rows of rowsPerCall) {
     for (const row of rows) {
+      if (row.fismasystemid in map) continue // keep the newer call's score
       map[row.fismasystemid] = {
         score: row.systemscore ?? 0,
         tier: row.systemtier,
@@ -25,8 +28,9 @@ export function buildScoreMap(
 
 /**
  * Merge the progress rows from several data calls into one map keyed by
- * fismasystemid (disjoint keys, later call wins on any collision).
- * @param {ScoreProgress[][]} rowsPerCall - Progress rows, one array per call.
+ * fismasystemid. Newest call wins for a system in more than one call: callers
+ * pass `rowsPerCall` newest-call-first, so the first write is kept.
+ * @param {ScoreProgress[][]} rowsPerCall - Progress rows, newest call first.
  * @returns {Record<number, ScoreProgress>} Progress per system.
  */
 export function buildProgressMap(
@@ -35,6 +39,7 @@ export function buildProgressMap(
   const map: Record<number, ScoreProgress> = {}
   for (const rows of rowsPerCall) {
     for (const row of rows) {
+      if (row.fismasystemid in map) continue // keep the newer call's progress
       map[row.fismasystemid] = row
     }
   }

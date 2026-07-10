@@ -71,9 +71,11 @@ export default function HomePageContainer() {
       setProgressMap(buildProgressMap(rowsPerCall))
     }
 
-    if (ids.length === 0) {
-      setLoading(false)
-    } else {
+    // Keep the spinner until the active calls resolve — activeDatacallIds is
+    // empty on the first paint while Title is still fetching /datacalls, so
+    // don't clear loading (which would flash an empty dashboard) until there
+    // are calls to fetch.
+    if (ids.length > 0) {
       fetchScores()
       fetchProgress()
     }

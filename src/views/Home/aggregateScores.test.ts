@@ -38,6 +38,15 @@ describe('buildScoreMap', () => {
   it('returns an empty map for no calls', () => {
     expect(buildScoreMap([])).toEqual({})
   })
+
+  it('keeps the newest call for a system in more than one call', () => {
+    // rowsPerCall is passed newest-call-first, so the first write wins.
+    const map = buildScoreMap([
+      [agg(1, 90)], // newer call (e.g. FY25 ZTM)
+      [agg(1, 55)], // older call (e.g. FY2025 Q3)
+    ])
+    expect(map[1].score).toBe(90)
+  })
 })
 
 describe('buildProgressMap', () => {

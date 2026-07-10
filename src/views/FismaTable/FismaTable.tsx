@@ -439,6 +439,7 @@ export default function FismaTable({
         fismasystemid,
         datacallid: call?.datacallid ?? activeDataCallId,
         datacall: call?.datacall,
+        deadline: call?.deadline,
       },
     })
   }
@@ -886,6 +887,7 @@ export default function FismaTable({
         anchorEl={callPicker?.anchor ?? null}
         open={Boolean(callPicker)}
         onClose={() => setCallPicker(null)}
+        MenuListProps={{ 'aria-label': 'Open which data call' }}
       >
         <ListSubheader>Open which data call?</ListSubheader>
         {callPicker?.calls.map((call) => {
