@@ -27,6 +27,7 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
+import { notify } from '@/utils/notify'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
@@ -173,17 +174,29 @@ export default function Title() {
     setAnchorEl(null)
   }
   // Ends the session: calls the backend logout endpoint that clears the
-  // ztmf_session and ALB OIDC cookies, then forces a full reload
-  // onto the sign-in route. The reload is deliberate - it re-runs the root
-  // authLoader against the now-cleared cookie so Title re-renders LoginPage.
-  // A client-side hash change alone would not re-run the loader, and a full
-  // reload also guarantees no in-memory session state lingers. Logout is
-  // best-effort: even if the request fails we still drop the user to sign-in;
-  // a still-valid session simply lands them back on the dashboard.
+  // ztmf_session and ALB OIDC cookies, then forces a full reload onto the
+  // sign-in route. The reload is deliberate - it re-runs the root authLoader
+  // against the now-cleared cookie so Title re-renders LoginPage. A client-
+  // side hash change alone would not re-run the loader, and a full reload
+  // also guarantees no in-memory session state lingers. Logout is best-
+  // effort: even if the request fails we still drop the user to sign-in.
+  //
+  // skipAuthHandling short-circuits the centralized 401 interceptor - if the
+  // session has already expired, the interceptor's own /signin redirect is
+  // redundant with the reload we do below and only causes a flash of the
+  // "Session expired" message before the reload lands.
+  //
+  // The timeout caps a hung logout so a dead or slow backend cannot leave
+  // the user stuck with no visible feedback. The notify toast covers the
+  // gap between click and reload on any connection speed.
   const handleLogout = async () => {
     setAnchorEl(null)
+    notify('Signing out...', 'info')
     try {
-      await axiosInstance.post('/auth/logout')
+      await axiosInstance.post('/auth/logout', null, {
+        skipAuthHandling: true,
+        timeout: 5000,
+      })
     } catch (error) {
       console.error('Error logging out:', error)
     }
@@ -348,14 +361,14 @@ export default function Title() {
               <>
                 <IconButton
                   aria-label="Account menu"
-                  aria-controls="long-menu"
+                  aria-controls="account-menu"
                   aria-haspopup="true"
                   onClick={handleClick}
                 >
                   <MoreVertIcon />
                 </IconButton>
                 <Menu
-                  id="long-menu"
+                  id="account-menu"
                   anchorEl={anchorEl}
                   keepMounted
                   open={Boolean(anchorEl)}

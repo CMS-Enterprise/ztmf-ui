@@ -35,6 +35,14 @@ jest.mock('@/views/QuestionnairePage/draftStore', () => ({
   clearOtherUserDrafts: jest.fn(),
 }))
 
+// notify is fired to bridge the gap between click and page reload; mock so
+// the tests can assert the toast without pulling in notistack.
+jest.mock('@/utils/notify', () => ({
+  __esModule: true,
+  notify: jest.fn(),
+  isAuthHandled: jest.fn(),
+}))
+
 // Heavy children the logout affordance does not depend on. Stubbing them keeps
 // the test focused on the header menu and avoids their own asset/network deps.
 jest.mock('@/components/EmailModal/EmailModal', () => ({
@@ -77,6 +85,7 @@ import { useLoaderData, useLocation } from 'react-router-dom'
 import axiosInstance from '@/axiosConfig'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
+import { notify } from '@/utils/notify'
 import Title from './Title'
 
 const mockedUseLoaderData = useLoaderData as jest.Mock
@@ -85,6 +94,7 @@ const mockedGet = axiosInstance.get as jest.Mock
 const mockedPost = axiosInstance.post as jest.Mock
 const mockedFetchEnvs = fetchDataCenterEnvironments as jest.Mock
 const mockedClearDrafts = clearOtherUserDrafts as jest.Mock
+const mockedNotify = notify as jest.Mock
 
 function makeUser(role: UserRole): userData {
   return {
@@ -170,11 +180,26 @@ describe('Title logout affordance', () => {
       await screen.findByRole('menuitem', { name: /log out/i })
     )
 
-    await waitFor(() => expect(mockedPost).toHaveBeenCalledWith('/auth/logout'))
+    await waitFor(() =>
+      expect(mockedPost).toHaveBeenCalledWith(
+        '/auth/logout',
+        null,
+        expect.objectContaining({
+          // skipAuthHandling avoids the 401-interceptor cascade when the
+          // session has already expired.
+          skipAuthHandling: true,
+          // timeout caps a hung logout so a slow BE cannot strand the user.
+          timeout: 5000,
+        })
+      )
+    )
     await waitFor(() =>
       expect(window.location.reload as jest.Mock).toHaveBeenCalled()
     )
     expect(window.location.hash).toBe(Routes.SIGNIN)
+    // Toast fires immediately (before the await), covering the click-to-
+    // reload gap with visible feedback.
+    expect(mockedNotify).toHaveBeenCalledWith('Signing out...', 'info')
   })
 
   it('still redirects to sign-in when the logout request fails', async () => {
