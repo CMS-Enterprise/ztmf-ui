@@ -172,6 +172,24 @@ export default function Title() {
   const handleClose = () => {
     setAnchorEl(null)
   }
+  // Ends the session: calls the backend logout endpoint that clears the
+  // ztmf_session and ALB OIDC cookies, then forces a full reload
+  // onto the sign-in route. The reload is deliberate - it re-runs the root
+  // authLoader against the now-cleared cookie so Title re-renders LoginPage.
+  // A client-side hash change alone would not re-run the loader, and a full
+  // reload also guarantees no in-memory session state lingers. Logout is
+  // best-effort: even if the request fails we still drop the user to sign-in;
+  // a still-valid session simply lands them back on the dashboard.
+  const handleLogout = async () => {
+    setAnchorEl(null)
+    try {
+      await axiosInstance.post('/auth/logout')
+    } catch (error) {
+      console.error('Error logging out:', error)
+    }
+    window.location.hash = Routes.SIGNIN
+    window.location.reload()
+  }
   // Display name for the IdP that minted the user's session. Surfaced
   // as a small badge next to the name so support can debug "I logged
   // in but the dashboard looks wrong" without DevTools.
@@ -323,84 +341,85 @@ export default function Title() {
                   )}
                 </span>
               )}
-              {hasAdminRead && (
-                <>
-                  <IconButton
-                    aria-label="more"
-                    aria-controls="long-menu"
-                    aria-haspopup="true"
-                    onClick={handleClick}
+              {/* Account menu is rendered for every logged-in user so the
+                  logout affordance is always available. The admin-only items
+                  inside remain individually gated; a non-admin sees just
+                  Dashboard and Log out. */}
+              <>
+                <IconButton
+                  aria-label="Account menu"
+                  aria-controls="long-menu"
+                  aria-haspopup="true"
+                  onClick={handleClick}
+                >
+                  <MoreVertIcon />
+                </IconButton>
+                <Menu
+                  id="long-menu"
+                  anchorEl={anchorEl}
+                  keepMounted
+                  open={Boolean(anchorEl)}
+                  onClose={handleClose}
+                >
+                  <Link
+                    to={Routes.ROOT}
+                    style={{ textDecoration: 'none', color: 'black' }}
                   >
-                    <MoreVertIcon />
-                  </IconButton>
-                  <Menu
-                    id="long-menu"
-                    anchorEl={anchorEl}
-                    keepMounted
-                    open={Boolean(anchorEl)}
-                    onClose={handleClose}
-                  >
+                    <MenuItem onClick={() => handleOption()}>
+                      Dashboard
+                    </MenuItem>
+                  </Link>
+                  {hasAdminRead && (
                     <Link
-                      to={Routes.ROOT}
+                      to={Routes.USERS}
+                      style={{ textDecoration: 'none', color: 'black' }}
+                    >
+                      <MenuItem onClick={() => handleOption()}>Users</MenuItem>
+                    </Link>
+                  )}
+                  {userInfo.role === 'OWNER' && (
+                    <Link
+                      to={Routes.ADMIN_OPDIVS}
                       style={{ textDecoration: 'none', color: 'black' }}
                     >
                       <MenuItem onClick={() => handleOption()}>
-                        Dashboard
+                        Manage OpDivs
                       </MenuItem>
                     </Link>
-                    {hasAdminRead && (
-                      <Link
-                        to={Routes.USERS}
-                        style={{ textDecoration: 'none', color: 'black' }}
-                      >
-                        <MenuItem onClick={() => handleOption()}>
-                          Users
-                        </MenuItem>
-                      </Link>
-                    )}
-                    {userInfo.role === 'OWNER' && (
-                      <Link
-                        to={Routes.ADMIN_OPDIVS}
-                        style={{ textDecoration: 'none', color: 'black' }}
-                      >
-                        <MenuItem onClick={() => handleOption()}>
-                          Manage OpDivs
-                        </MenuItem>
-                      </Link>
-                    )}
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => {
-                          setAnchorEl(null)
-                          setOpenModal(true)
-                        }}
-                      >
-                        Add Fisma System
-                      </MenuItem>
-                    )}
-                    {isUnscopedWriteAdmin(userInfo) && (
-                      <MenuItem
-                        onClick={() => {
-                          setAnchorEl(null)
-                          setOpenEmailModal(true)
-                        }}
-                      >
-                        {'Email Users'}
-                      </MenuItem>
-                    )}
-                    {isAdmin && (
-                      <MenuItem
-                        onClick={() => {
-                          handleClose()
-                          setOpenDataCallModal(true)
-                        }}
-                      >
-                        Create Datacall
-                      </MenuItem>
-                    )}
-                  </Menu>
-                </>
-              )}
+                  )}
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenModal(true)
+                      }}
+                    >
+                      Add Fisma System
+                    </MenuItem>
+                  )}
+                  {isUnscopedWriteAdmin(userInfo) && (
+                    <MenuItem
+                      onClick={() => {
+                        setAnchorEl(null)
+                        setOpenEmailModal(true)
+                      }}
+                    >
+                      {'Email Users'}
+                    </MenuItem>
+                  )}
+                  {isAdmin && (
+                    <MenuItem
+                      onClick={() => {
+                        handleClose()
+                        setOpenDataCallModal(true)
+                      }}
+                    >
+                      Create Datacall
+                    </MenuItem>
+                  )}
+                  <MenuItem onClick={handleLogout}>Log out</MenuItem>
+                </Menu>
+              </>
             </Box>
           )}
         </Box>
