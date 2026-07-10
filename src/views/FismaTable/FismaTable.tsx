@@ -21,6 +21,8 @@ import {
   Select,
   MenuItem,
   ListItemText,
+  ListSubheader,
+  Menu,
   Button,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
@@ -42,13 +44,14 @@ import BarChartIcon from '@mui/icons-material/BarChart'
 import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresModal'
 // import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { FismaTableProps } from '@/types'
-import type { ScoreAggregate, SystemScoreEntry } from '@/types'
+import type { ScoreAggregate, SystemScoreEntry, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
 import { cellStyleForTier } from '@/utils/tierStyles'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
+import { parseDatacallName } from '@/utils/datacallGrouping'
 import type { OpDiv } from '@/types'
 import {
   applyDashboardFilters,
@@ -418,6 +421,28 @@ export default function FismaTable({
   const [opdivs, setOpDivs] = useState<OpDiv[]>([])
   const navigate = useNavigate()
 
+  // When a system has scores in more than one active call, the questionnaire
+  // button opens a small picker (#467) instead of guessing which call to open.
+  const [callPicker, setCallPicker] = useState<{
+    anchor: HTMLElement
+    fismasystemid: number
+    fismaacronym: string
+    calls: datacall[]
+  } | null>(null)
+  const openQuestionnaire = (
+    fismasystemid: number,
+    fismaacronym: string,
+    call: datacall | undefined
+  ) => {
+    navigate(`/${RouteNames.QUESTIONNAIRE}/${fismaacronym.toLowerCase()}`, {
+      state: {
+        fismasystemid,
+        datacallid: call?.datacallid ?? activeDataCallId,
+        datacall: call?.datacall,
+      },
+    })
+  }
+
   // OpDiv list is only needed to label the OpDiv filter. Include inactive
   // OpDivs so a system tied to a since-deactivated OpDiv still shows a name,
   // not a bare id. Fetched once; failure is non-fatal.
@@ -688,22 +713,19 @@ export default function FismaTable({
       sortable: false,
       disableColumnMenu: true,
       renderCell: (params: GridRenderCellParams) => {
-        // Each system belongs to one call, so the questionnaire opens that
-        // system's own call. A system with data in more than one active call
-        // is genuinely ambiguous and is gated until the selector is narrowed.
-        const rowCalls = systemCallMap[params.row.fismasystemid] ?? []
-        const questionnaireAmbiguous = rowCalls.length > 1
-        const rowCallId = rowCalls[0] ?? activeDataCallId
-        const rowCall = datacalls.find((d) => d.datacallid === rowCallId)
+        // The system's own call(s) among the active ones, newest first. One
+        // call opens directly; more than one opens a picker so the user
+        // chooses which to open (#467).
+        const rowCallObjs = (systemCallMap[params.row.fismasystemid] ?? [])
+          .map((id) => datacalls.find((d) => d.datacallid === id))
+          .filter((d): d is datacall => Boolean(d))
+          .sort(
+            (a, b) =>
+              new Date(b.deadline).getTime() - new Date(a.deadline).getTime()
+          )
         return (
           <>
-            <Tooltip
-              title={
-                questionnaireAmbiguous
-                  ? 'This system has more than one data call this year — pick a single call in the selector to open its questionnaire'
-                  : 'Questionnaire'
-              }
-            >
+            <Tooltip title="Questionnaire">
               <span>
                 <GridActionsCellItem
                   icon={<QuestionAnswerOutlinedIcon />}
@@ -711,18 +733,22 @@ export default function FismaTable({
                   label={`View Questionnaire for ${params.row.fismaname}`}
                   className="textPrimary"
                   role="button"
-                  disabled={questionnaireAmbiguous}
                   onClick={(event) => {
                     event.stopPropagation()
-                    navigate(
-                      `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
-                      {
-                        state: {
-                          fismasystemid: params.row.fismasystemid,
-                          datacallid: rowCallId,
-                          datacall: rowCall?.datacall,
-                        },
-                      }
+                    if (rowCallObjs.length > 1) {
+                      setCallPicker({
+                        anchor: event.currentTarget,
+                        fismasystemid: params.row.fismasystemid,
+                        fismaacronym: params.row.fismaacronym,
+                        calls: rowCallObjs,
+                      })
+                      return
+                    }
+                    openQuestionnaire(
+                      params.row.fismasystemid,
+                      params.row.fismaacronym,
+                      rowCallObjs[0] ??
+                        datacalls.find((d) => d.datacallid === activeDataCallId)
                     )
                   }}
                   color="inherit"
@@ -856,6 +882,38 @@ export default function FismaTable({
         scores={pillarScoresModal.scores}
         selectedDataCallId={activeDataCallId}
       />
+      <Menu
+        anchorEl={callPicker?.anchor ?? null}
+        open={Boolean(callPicker)}
+        onClose={() => setCallPicker(null)}
+      >
+        <ListSubheader>Open which data call?</ListSubheader>
+        {callPicker?.calls.map((call) => {
+          const isClosed = new Date() > new Date(call.deadline)
+          const deadlineLabel = new Date(call.deadline).toLocaleDateString(
+            'en-US',
+            { month: 'short', day: 'numeric', year: 'numeric' }
+          )
+          return (
+            <MenuItem
+              key={call.datacallid}
+              onClick={() => {
+                openQuestionnaire(
+                  callPicker.fismasystemid,
+                  callPicker.fismaacronym,
+                  call
+                )
+                setCallPicker(null)
+              }}
+            >
+              <ListItemText
+                primary={`${call.datacall} · ${parseDatacallName(call.datacall).tenant}`}
+                secondary={`${isClosed ? 'Closed' : 'Active'} · deadline ${deadlineLabel}`}
+              />
+            </MenuItem>
+          )
+        })}
+      </Menu>
     </Box>
   )
 }
