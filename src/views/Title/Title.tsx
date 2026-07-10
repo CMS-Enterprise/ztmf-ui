@@ -38,7 +38,7 @@ import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
 import DevEnvironmentBanner from '@/components/DevEnvironmentBanner/DevEnvironmentBanner'
 import ztmfLogo from '@/assets/ztmf-logo-color.png'
-import { clearStaleUserDrafts } from '../QuestionnairePage/draftStore'
+import { clearOtherUserDrafts } from '../QuestionnairePage/draftStore'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -110,7 +110,7 @@ export default function Title() {
   }, [showDecommissioned, fetchFismaSystems, loaderData.status])
 
   useEffect(() => {
-    if (loaderData.status === 200) clearStaleUserDrafts(userInfo.userid)
+    if (loaderData.status === 200) void clearOtherUserDrafts(userInfo.userid)
   }, [loaderData.status, userInfo.userid])
 
   useEffect(() => {
