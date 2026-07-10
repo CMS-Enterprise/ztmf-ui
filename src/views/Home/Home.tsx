@@ -44,7 +44,13 @@ export default function HomePageContainer() {
               signal: controller.signal,
             })
             .then((res) => res.data.data as ScoreAggregate[])
-            .catch(() => [] as ScoreAggregate[])
+            .catch((error) => {
+              // Log so a single call's failure (which shows its systems as 0)
+              // is diagnosable rather than silent.
+              if (!controller.signal.aborted)
+                console.error(`scores/aggregate ${id} failed:`, error)
+              return [] as ScoreAggregate[]
+            })
         )
       )
       if (controller.signal.aborted) return
@@ -64,7 +70,11 @@ export default function HomePageContainer() {
               signal: controller.signal,
             })
             .then((res) => res.data.data as ScoreProgress[])
-            .catch(() => [] as ScoreProgress[])
+            .catch((error) => {
+              if (!controller.signal.aborted)
+                console.error(`scores/progress ${id} failed:`, error)
+              return [] as ScoreProgress[]
+            })
         )
       )
       if (controller.signal.aborted) return

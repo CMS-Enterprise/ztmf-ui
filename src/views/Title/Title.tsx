@@ -540,6 +540,7 @@ export default function Title() {
                           >
                             <Checkbox
                               checked={checked}
+                              readOnly
                               size="small"
                               sx={{ mr: 1 }}
                             />

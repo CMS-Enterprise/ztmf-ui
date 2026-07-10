@@ -303,6 +303,7 @@ function QuickSearchToolbar(props: {
                 <MenuItem key={opt} value={opt}>
                   <Checkbox
                     checked={filters.environments.includes(opt)}
+                    readOnly
                     size="small"
                   />
                   <ListItemText primary={opt} />
@@ -341,6 +342,7 @@ function QuickSearchToolbar(props: {
                 <MenuItem key={o.id} value={o.id}>
                   <Checkbox
                     checked={filters.opdivIds.includes(o.id)}
+                    readOnly
                     size="small"
                   />
                   <ListItemText primary={o.label} />
