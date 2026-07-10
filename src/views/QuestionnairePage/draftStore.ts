@@ -5,52 +5,150 @@ export type QuestionDraft = {
 
 // Shape written to localStorage — callers only see QuestionDraft.
 type StoredDraft = {
+  v: number // format version — entries with a mismatched version are evicted
   iv: string
   ciphertext: string
   savedAt: number
 }
 
+export const DRAFT_VERSION = 1
 const DRAFT_TTL_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
 const DRAFT_PREFIX = 'ztmf_draft_'
-const PBKDF2_SALT = new TextEncoder().encode('ztmf-draft-v1')
-const PBKDF2_ITERATIONS = 100_000
+
+// IndexedDB database that holds one non-extractable CryptoKey per user.
+// Non-extractable keys cannot be exported via JS API — an attacker needs a
+// live browser session, not just a disk dump of the profile directory.
+const DB_NAME = 'ztmf-draft-keys'
+const DB_VERSION = 1
+const KEY_STORE = 'keys'
+
+// In-memory caches — avoids round-trips on repeated reads/writes within a session.
+// keyCache holds the in-flight key-resolution *promise* (not the resolved key) so
+// concurrent callers in one session share a single key instead of each racing to
+// generate and persist their own — see getOrCreateDeviceKey.
+const keyCache = new Map<string, Promise<CryptoKey>>()
+const hashedIdCache = new Map<string, string>()
+
+// Exported for test isolation only — clears both in-memory caches.
+export function __resetKeyCache(): void {
+  keyCache.clear()
+  hashedIdCache.clear()
+}
+
+// Exported for test isolation only — seeds the key cache directly, bypassing IDB
+// (IndexedDB is unavailable in JSDOM). Wrapped in a resolved promise to match the
+// cache's Promise<CryptoKey> shape.
+export function __setKeyForTesting(userid: string, key: CryptoKey): void {
+  keyCache.set(userid, Promise.resolve(key))
+}
+
+// Exported for test isolation only — seeds the hash cache with a predictable value.
+export function __setHashedIdForTesting(userid: string, hash: string): void {
+  hashedIdCache.set(userid, hash)
+}
+
+function openKeyDB(): Promise<IDBDatabase> {
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION)
+    req.onupgradeneeded = () => {
+      req.result.createObjectStore(KEY_STORE)
+    }
+    req.onsuccess = () => resolve(req.result)
+    req.onerror = () => reject(req.error)
+  })
+}
+
+// Resolves the per-device key from IndexedDB, creating it on first use. Generate
+// the candidate before opening the transaction: awaiting generateKey mid-transaction
+// lets IDB auto-commit and throw on the put. The single readwrite transaction
+// re-checks for an existing key and keeps it if present — IndexedDB serializes
+// overlapping transactions on one store, so two tabs can't both persist a key and
+// clobber each other (the loser's drafts would fail to decrypt after reload and
+// be silently evicted). idbKey is the hashed userid, matching the localStorage
+// key format so the raw userid isn't exposed in DevTools.
+async function resolveDeviceKey(userid: string): Promise<CryptoKey> {
+  const idbKey = await hashUserId(userid)
+  const candidate = await crypto.subtle.generateKey(
+    { name: 'AES-GCM', length: 256 },
+    false, // non-extractable — cannot be exported as raw bytes via JS
+    ['encrypt', 'decrypt']
+  )
+  const db = await openKeyDB()
+  try {
+    return await new Promise<CryptoKey>((resolve, reject) => {
+      const store = db
+        .transaction(KEY_STORE, 'readwrite')
+        .objectStore(KEY_STORE)
+      const getReq = store.get(idbKey)
+      getReq.onerror = () => reject(getReq.error)
+      getReq.onsuccess = () => {
+        const found = getReq.result as CryptoKey | undefined
+        if (found) {
+          resolve(found)
+          return
+        }
+        // store.put can throw synchronously (e.g. DataCloneError, or an inactive
+        // transaction). This runs in an event callback after the executor
+        // returned, so an uncaught throw would leave the promise pending and hang
+        // saveDraft/loadDraft — reject explicitly instead.
+        try {
+          const putReq = store.put(candidate, idbKey)
+          putReq.onsuccess = () => resolve(candidate)
+          putReq.onerror = () => reject(putReq.error)
+        } catch (err) {
+          reject(err)
+        }
+      }
+    })
+  } finally {
+    db.close()
+  }
+}
+
+// Returns the per-user non-extractable AES-GCM key. The in-flight promise is
+// memoized (not just the resolved key) so concurrent callers in one session share
+// one resolution — otherwise each generates its own key and all but one are
+// orphaned, taking their encrypted drafts with them on the next reload.
+async function getOrCreateDeviceKey(userid: string): Promise<CryptoKey> {
+  const cached = keyCache.get(userid)
+  if (cached) return cached
+  const promise = resolveDeviceKey(userid)
+  keyCache.set(userid, promise)
+  try {
+    return await promise
+  } catch (err) {
+    keyCache.delete(userid) // don't cache a rejection — let the next caller retry
+    throw err
+  }
+}
+
+// Hashes the userid with SHA-256 and returns the first 16 base64url characters
+// (~96 bits). Used as the user segment of localStorage key names so raw user
+// IDs are not visible in DevTools on a shared machine.
+async function hashUserId(userid: string): Promise<string> {
+  const cached = hashedIdCache.get(userid)
+  if (cached) return cached
+
+  const buf = await crypto.subtle.digest(
+    'SHA-256',
+    new TextEncoder().encode(userid)
+  )
+  const hash = btoa(String.fromCharCode(...new Uint8Array(buf)))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=/g, '')
+    .slice(0, 16)
+
+  hashedIdCache.set(userid, hash)
+  return hash
+}
 
 const draftKey = (
-  userid: string,
+  hashedId: string,
   fismasystemid: number,
   functionid: number,
   datacallid: number
-) => `${DRAFT_PREFIX}${userid}_${fismasystemid}_${functionid}_${datacallid}`
-
-// Cache derived keys by userid — PBKDF2 is intentionally slow at 100k
-// iterations; re-deriving on every read/write would add ~100ms per call.
-const keyCache = new Map<string, CryptoKey>()
-
-async function deriveKey(userid: string): Promise<CryptoKey> {
-  const cached = keyCache.get(userid)
-  if (cached) return cached
-  const keyMaterial = await crypto.subtle.importKey(
-    'raw',
-    new TextEncoder().encode(userid),
-    'PBKDF2',
-    false,
-    ['deriveKey']
-  )
-  const key = await crypto.subtle.deriveKey(
-    {
-      name: 'PBKDF2',
-      salt: PBKDF2_SALT,
-      iterations: PBKDF2_ITERATIONS,
-      hash: 'SHA-256',
-    },
-    keyMaterial,
-    { name: 'AES-GCM', length: 256 },
-    false,
-    ['encrypt', 'decrypt']
-  )
-  keyCache.set(userid, key)
-  return key
-}
+) => `${DRAFT_PREFIX}${hashedId}_${fismasystemid}_${functionid}_${datacallid}`
 
 async function encryptDraft(
   key: CryptoKey,
@@ -86,23 +184,40 @@ async function decryptDraft(
   return JSON.parse(new TextDecoder().decode(decrypted)) as QuestionDraft
 }
 
+// Returns true when the draft was successfully persisted, false on any failure
+// (storage quota, private browsing, crypto unavailable). The caller uses the
+// return value to decide whether to show a "saved" or "not saved" indicator.
+//
+// isCurrent is checked twice: once before async work begins and once before the
+// final write. This prevents a stale in-flight save from resurrecting a draft
+// that was explicitly cleared while encryption was running (~10 ms async window).
 export const saveDraft = async (
   userid: string,
   fismasystemid: number,
   functionid: number,
   datacallid: number,
-  draft: QuestionDraft
-): Promise<void> => {
+  draft: QuestionDraft,
+  isCurrent: () => boolean = () => true
+): Promise<boolean> => {
   try {
-    const key = await deriveKey(userid)
+    if (!isCurrent()) return false
+    const hashedId = await hashUserId(userid)
+    const key = await getOrCreateDeviceKey(userid)
     const { iv, ciphertext } = await encryptDraft(key, draft)
-    const stored: StoredDraft = { iv, ciphertext, savedAt: Date.now() }
+    if (!isCurrent()) return false
+    const stored: StoredDraft = {
+      v: DRAFT_VERSION,
+      iv,
+      ciphertext,
+      savedAt: Date.now(),
+    }
     localStorage.setItem(
-      draftKey(userid, fismasystemid, functionid, datacallid),
+      draftKey(hashedId, fismasystemid, functionid, datacallid),
       JSON.stringify(stored)
     )
+    return true
   } catch {
-    // localStorage unavailable or crypto unsupported — degrade silently
+    return false
   }
 }
 
@@ -113,44 +228,71 @@ export const loadDraft = async (
   datacallid: number
 ): Promise<QuestionDraft | null> => {
   try {
+    const hashedId = await hashUserId(userid)
     const raw = localStorage.getItem(
-      draftKey(userid, fismasystemid, functionid, datacallid)
+      draftKey(hashedId, fismasystemid, functionid, datacallid)
     )
     if (!raw) return null
     const stored = JSON.parse(raw) as StoredDraft
-    if (!stored.savedAt || Date.now() - stored.savedAt > DRAFT_TTL_MS) {
-      clearDraft(userid, fismasystemid, functionid, datacallid)
+    // Evict entries from a different format version before any other checks.
+    if (stored.v !== DRAFT_VERSION) {
+      await clearDraft(userid, fismasystemid, functionid, datacallid)
       return null
     }
-    const key = await deriveKey(userid)
-    return await decryptDraft(key, stored.iv, stored.ciphertext)
+    if (!stored.savedAt || Date.now() - stored.savedAt > DRAFT_TTL_MS) {
+      await clearDraft(userid, fismasystemid, functionid, datacallid)
+      return null
+    }
+    const key = await getOrCreateDeviceKey(userid)
+    const draft = await decryptDraft(key, stored.iv, stored.ciphertext)
+    // Runtime shape guard — evict and ignore if the decrypted payload doesn't
+    // match the expected structure (format migration, bit-flip, schema change).
+    if (
+      typeof draft?.selectQuestionOption !== 'number' ||
+      typeof draft?.notes !== 'string'
+    ) {
+      await clearDraft(userid, fismasystemid, functionid, datacallid)
+      return null
+    }
+    return draft
   } catch {
+    // Evict the corrupt entry so it isn't retried on every question load
+    // for the remaining TTL. Ignore secondary storage failures.
+    try {
+      await clearDraft(userid, fismasystemid, functionid, datacallid)
+    } catch {
+      // ignore
+    }
     return null
   }
 }
 
-export const clearDraft = (
+export const clearDraft = async (
   userid: string,
   fismasystemid: number,
   functionid: number,
   datacallid: number
-): void => {
+): Promise<void> => {
   try {
+    const hashedId = await hashUserId(userid)
     localStorage.removeItem(
-      draftKey(userid, fismasystemid, functionid, datacallid)
+      draftKey(hashedId, fismasystemid, functionid, datacallid)
     )
   } catch {
     // ignore
   }
 }
 
-// Removes all drafts in localStorage saved under a different user account.
+// Removes localStorage draft entries that belong to a different user.
 // Called on app mount so a shared-machine login switch doesn't expose one
-// user's notes to another.
-export const clearStaleUserDrafts = (currentUserid: string): void => {
+// user's drafts to another.
+export const clearOtherUserDrafts = async (
+  currentUserid: string
+): Promise<void> => {
   if (!currentUserid) return
   try {
-    const userPrefix = `${DRAFT_PREFIX}${currentUserid}_`
+    const hashedId = await hashUserId(currentUserid)
+    const userPrefix = `${DRAFT_PREFIX}${hashedId}_`
     const toRemove: string[] = []
     for (let i = 0; i < localStorage.length; i++) {
       const key = localStorage.key(i)

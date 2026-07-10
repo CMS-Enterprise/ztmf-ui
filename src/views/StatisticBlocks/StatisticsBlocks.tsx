@@ -6,13 +6,17 @@ import { styled } from '@mui/material/styles'
 import { useContextProp } from '../Title/Context'
 import type { SystemScoreEntry } from '@/types'
 const StatisticsPaper = styled(Paper)(({ theme }) => ({
-  width: 120,
-  height: 120,
   padding: theme.spacing(2),
   ...theme.typography.body2,
+  // Center the numeral + label and let the card grow with its content so long
+  // system names wrap instead of clipping past a fixed height. The wrapper's
+  // stretch + minHeight keeps every card the same size.
+  display: 'flex',
+  flexDirection: 'column',
+  justifyContent: 'center',
+  alignItems: 'center',
   textAlign: 'center',
   overflowWrap: 'break-word',
-  elevation: 3,
 }))
 export default function StatisticsBlocks({
   scores,
@@ -72,10 +76,11 @@ export default function StatisticsBlocks({
         display: 'flex',
         flexWrap: 'wrap',
         justifyContent: 'space-evenly',
+        alignItems: 'stretch',
         '& > :not(style)': {
           m: 1,
           width: 270,
-          height: 128,
+          minHeight: 128,
           borderWidth: 2,
         },
       }}
