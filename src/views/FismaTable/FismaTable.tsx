@@ -64,6 +64,7 @@ declare module '@mui/x-data-grid' {
     fismaSystems: FismaSystemType[]
     activeDataCallId: number
     scores: Record<number, SystemScoreEntry>
+    systemCallMap?: Record<number, number[]>
   }
   interface ToolbarPropsOverrides {
     filters: DashboardFilterState
@@ -86,8 +87,27 @@ export function CustomFooterSaveComponent(
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
   }
+  // The export endpoint targets one data call. Derive it from the selected
+  // rows' own call(s): if they all share one call, export that; an empty
+  // provenance falls back to the active call; a selection that spans more than
+  // one call has no single export target, so the button is disabled.
+  const selectedCallIds = new Set<number>()
+  const callMap = props.systemCallMap ?? {}
+  for (const id of props.selectedRows ?? []) {
+    for (const cid of callMap[id as number] ?? []) selectedCallIds.add(cid)
+  }
+  const exportCallId =
+    selectedCallIds.size === 1
+      ? [...selectedCallIds][0]
+      : selectedCallIds.size === 0
+        ? props.activeDataCallId
+        : null
+  const exportBlocked =
+    !props.selectedRows ||
+    props.selectedRows.length === 0 ||
+    exportCallId === null
   const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${props.activeDataCallId}/export`
+    let exportUrl = `/datacalls/${exportCallId}/export`
     if (props.selectedRows && props.selectedRows.length > 0) {
       exportUrl += '?'
       let idString: string = ''
@@ -136,14 +156,18 @@ export function CustomFooterSaveComponent(
             position: 'relative',
           }}
         >
-          <Tooltip title="Download selected system answers">
+          <Tooltip
+            title={
+              exportCallId === null
+                ? 'Selected systems span more than one data call — narrow the selection or the data-call selector'
+                : 'Download selected system answers'
+            }
+          >
             <span role="presentation">
               <IconButton
                 sx={{ color: '#004297' }}
                 onClick={saveSystemAnswers}
-                disabled={
-                  !props.selectedRows || props.selectedRows.length === 0
-                }
+                disabled={exportBlocked}
                 aria-label={`Download selected system answers${props.selectedRows && props.selectedRows.length > 0 ? ` (${props.selectedRows.length} selected)` : ' (no systems selected)'}`}
               >
                 <FileDownloadSharpIcon />
@@ -369,12 +393,17 @@ interface CachedScore {
 }
 const pillarScoresCache = new Map<number, CachedScore>()
 
-export default function FismaTable({ scores, progress }: FismaTableProps) {
+export default function FismaTable({
+  scores,
+  progress,
+  systemCallMap = {},
+}: FismaTableProps) {
   const apiRef = useGridApiRef()
   const {
     fismaSystems,
     latestDataCallId,
     selectedDatacall,
+    datacalls,
     userInfo,
     datacenterEnvironments,
   } = useContextProp()
@@ -658,65 +687,85 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
       hideable: false,
       sortable: false,
       disableColumnMenu: true,
-      renderCell: (params: GridRenderCellParams) => (
-        <>
-          <Tooltip title="Questionnaire">
-            <span>
-              <GridActionsCellItem
-                icon={<QuestionAnswerOutlinedIcon />}
-                key={`question-${params.row.fismasystemid}`}
-                label={`View Questionnaire for ${params.row.fismaname}`}
-                className="textPrimary"
-                role="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  navigate(
-                    `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
-                    {
-                      state: { fismasystemid: params.row.fismasystemid },
-                    }
-                  )
-                }}
-                color="inherit"
-              />
-            </span>
-          </Tooltip>
-          <Tooltip title="Pillar Scores">
-            <span>
-              <GridActionsCellItem
-                icon={<BarChartIcon />}
-                key={`chart-${params.row.fismasystemid}`}
-                label={`View Pillar Scores for ${params.row.fismaname}`}
-                className="textPrimary"
-                role="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  handleOpenPillarScores(params.row as FismaSystemType)
-                }}
-                color="inherit"
-              />
-            </span>
-          </Tooltip>
-          {hasSystemDetailAccess && (
-            <Tooltip title="System Details">
+      renderCell: (params: GridRenderCellParams) => {
+        // Each system belongs to one call, so the questionnaire opens that
+        // system's own call. A system with data in more than one active call
+        // is genuinely ambiguous and is gated until the selector is narrowed.
+        const rowCalls = systemCallMap[params.row.fismasystemid] ?? []
+        const questionnaireAmbiguous = rowCalls.length > 1
+        const rowCallId = rowCalls[0] ?? activeDataCallId
+        const rowCall = datacalls.find((d) => d.datacallid === rowCallId)
+        return (
+          <>
+            <Tooltip
+              title={
+                questionnaireAmbiguous
+                  ? 'This system has more than one data call this year — pick a single call in the selector to open its questionnaire'
+                  : 'Questionnaire'
+              }
+            >
               <span>
                 <GridActionsCellItem
-                  icon={<VisibilityIcon />}
-                  key={`view-${params.row.fismasystemid}`}
-                  label={`View system details for ${params.row.fismaname}`}
+                  icon={<QuestionAnswerOutlinedIcon />}
+                  key={`question-${params.row.fismasystemid}`}
+                  label={`View Questionnaire for ${params.row.fismaname}`}
                   className="textPrimary"
                   role="button"
+                  disabled={questionnaireAmbiguous}
                   onClick={(event) => {
                     event.stopPropagation()
-                    navigate(`/systems/${params.row.fismasystemid}`)
+                    navigate(
+                      `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
+                      {
+                        state: {
+                          fismasystemid: params.row.fismasystemid,
+                          datacallid: rowCallId,
+                          datacall: rowCall?.datacall,
+                        },
+                      }
+                    )
                   }}
                   color="inherit"
                 />
               </span>
             </Tooltip>
-          )}
-        </>
-      ),
+            <Tooltip title="Pillar Scores">
+              <span>
+                <GridActionsCellItem
+                  icon={<BarChartIcon />}
+                  key={`chart-${params.row.fismasystemid}`}
+                  label={`View Pillar Scores for ${params.row.fismaname}`}
+                  className="textPrimary"
+                  role="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleOpenPillarScores(params.row as FismaSystemType)
+                  }}
+                  color="inherit"
+                />
+              </span>
+            </Tooltip>
+            {hasSystemDetailAccess && (
+              <Tooltip title="System Details">
+                <span>
+                  <GridActionsCellItem
+                    icon={<VisibilityIcon />}
+                    key={`view-${params.row.fismasystemid}`}
+                    label={`View system details for ${params.row.fismaname}`}
+                    className="textPrimary"
+                    role="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      navigate(`/systems/${params.row.fismasystemid}`)
+                    }}
+                    color="inherit"
+                  />
+                </span>
+              </Tooltip>
+            )}
+          </>
+        )
+      },
     },
   ]
 
@@ -736,7 +785,13 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems, activeDataCallId, scores },
+          footer: {
+            selectedRows,
+            fismaSystems,
+            activeDataCallId,
+            scores,
+            systemCallMap,
+          },
           toolbar: {
             filters,
             onFiltersChange: setFilters,
