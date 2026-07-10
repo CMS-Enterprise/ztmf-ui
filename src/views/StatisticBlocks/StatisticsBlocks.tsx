@@ -124,7 +124,7 @@ export default function StatisticsBlocks({
         <Typography
           variant="h2"
           sx={{
-            color: TIERS[maxSystemTier ?? 'Not Assessed'].chip.color,
+            color: maxSystemTier ? TIERS[maxSystemTier].chip.color : 'inherit',
             fontSize: '50px',
           }}
         >
@@ -144,7 +144,7 @@ export default function StatisticsBlocks({
         <Typography
           variant="h2"
           sx={{
-            color: TIERS[minSystemTier ?? 'Not Assessed'].chip.color,
+            color: minSystemTier ? TIERS[minSystemTier].chip.color : 'inherit',
             fontSize: '50px',
           }}
         >
