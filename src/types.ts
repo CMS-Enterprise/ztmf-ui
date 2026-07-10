@@ -316,7 +316,7 @@ export type ThemeColor =
 
 export type ThemeSkin = 'filled' | 'light' | 'light-static'
 
-export type CfactsSystemType = {
+export type SystemEnrichmentType = {
   fisma_uuid: string
   fisma_acronym: string
   authorization_package_name: string | null

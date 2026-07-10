@@ -28,7 +28,7 @@ import {
   TARGET_JUSTIFICATION_MAX,
 } from './targetMaturityConfig'
 import { EXTENDED_METADATA_KEYS } from './fieldConfig'
-import CfactsRecordCard from './CfactsRecordCard'
+import SystemEnrichmentCard from './SystemEnrichmentCard'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
@@ -669,7 +669,7 @@ export default function SystemDetailPage() {
           <Typography variant="h6" sx={{ mb: 2 }}>
             ZTMF Insights
           </Typography>
-          <CfactsRecordCard fismaUid={system.fismauid} />
+          <SystemEnrichmentCard fismaUid={system.fismauid} />
         </>
       )}
 
