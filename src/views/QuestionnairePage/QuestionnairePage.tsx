@@ -48,6 +48,7 @@ import {
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
 import { saveDraft, loadDraft, clearDraft } from './draftStore'
+import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -142,12 +143,20 @@ export default function QuestionnarePage() {
   const [selectQuestionOption, setSelectQuestionOption] =
     React.useState<number>(-1)
   const [draftStatus, setDraftStatus] = React.useState<
-    'idle' | 'restored' | 'saved'
+    'idle' | 'restored' | 'saved' | 'error'
   >('idle')
   // Refs read inside setTimeout/event callbacks to get the current value
   // without enrolling the effects in those deps (prevents extra re-runs).
   const draftStatusRef = React.useRef(draftStatus)
   draftStatusRef.current = draftStatus
+  // Stable ref so fetchOptions always reads the latest scores without enrolling
+  // questionScores as a dep of the questionId effect. Stale-closure-safe because
+  // the ref updates synchronously on every render before any effect runs.
+  const questionScoresRef = React.useRef(questionScores)
+  questionScoresRef.current = questionScores
+  // Incremented on every explicit draft clear so in-flight debounced saves
+  // that fire after a clear don't resurrect the just-removed draft.
+  const saveGenRef = React.useRef(0)
   const unsavedRef = React.useRef({
     selectQuestionOption,
     initQuestionChoice,
@@ -160,6 +169,16 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   }
+  // Refs so the out-of-band re-seed effect can read current options and loading
+  // state without enrolling them as effect dependencies.
+  const optionsRef = React.useRef(options)
+  optionsRef.current = options
+  const loadingQuestionRef = React.useRef(loadingQuestion)
+  loadingQuestionRef.current = loadingQuestion
+  // Bumped when a re-seed changes the answer so the uncontrolled radio ChoiceList
+  // (which only reflects defaultChecked on mount) remounts and shows the
+  // corrected selection.
+  const [radioKey, setRadioKey] = React.useState(0)
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
@@ -238,14 +257,16 @@ export default function QuestionnarePage() {
     }
   }
   const handleListItemClick = (index: number) => {
+    saveGenRef.current++
     setLoadingQuestion(true)
     setSelectedIndex(index)
     setQuestionId(index)
   }
 
   const clearCurrentDraft = () => {
+    saveGenRef.current++
     if (system && questionId && datacallID > 0) {
-      clearDraft(userInfo.userid, system, questionId, datacallID)
+      void clearDraft(userInfo.userid, system, questionId, datacallID)
     }
     setDraftStatus('idle')
   }
@@ -312,6 +333,9 @@ export default function QuestionnarePage() {
       // view does not bleed into the next render when system changes.
       setNoQuestions(false)
       const fetchData = async () => {
+        // Gate the debounce effect during the entire system/datacall transition
+        // so stale pending saves don't fire while the question list reloads.
+        setLoadingQuestion(true)
         try {
           let questionsEmpty = false
           let datacall = ''
@@ -320,13 +344,11 @@ export default function QuestionnarePage() {
             selectedDatacall.datacallid !== latestDataCallId
           let activeDataCallId: number
           if (isHistorical && selectedDatacall) {
-            setDatacallID(selectedDatacall.datacallid)
             datacall = selectedDatacall.datacall.replaceAll(' ', '_')
             setDatacall(datacall)
             setIsPastDeadline(true)
             activeDataCallId = selectedDatacall.datacallid
           } else {
-            setDatacallID(latestDataCallId)
             datacall = latestDatacall.replaceAll(' ', '_')
             setDatacall(datacall)
             setIsPastDeadline(
@@ -334,6 +356,9 @@ export default function QuestionnarePage() {
             )
             activeDataCallId = latestDataCallId
           }
+          // Hoisted so both the questions block and the final batch can access them.
+          const questionData: Record<number, Question> = {}
+          let sortedFuncId: number[] = []
           try {
             const response = await axiosInstance.get(
               `/fismasystems/${system}/questions`,
@@ -352,7 +377,6 @@ export default function QuestionnarePage() {
               setLoadingQuestion(false)
             } else {
               const organizedData: Record<string, FismaQuestion[]> = {}
-              const questionData: Record<number, Question> = {}
               data.forEach((question: FismaQuestion) => {
                 if (!organizedData[question.pillar.pillar]) {
                   organizedData[question.pillar.pillar] = []
@@ -366,12 +390,10 @@ export default function QuestionnarePage() {
                 }
                 organizedData[question.pillar.pillar].push(question)
               })
-              setQuestions(questionData)
               const sortedPillars = filterPillarsForSystem(
                 sortPillars(Object.keys(organizedData)),
                 systemCategory
               )
-              let sortedFuncId: number[] = []
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
                 const sortedSteps = sortFunctions(pillar, organizedData[pillar])
                 const sortedStepFuncId = sortedSteps.map(
@@ -394,9 +416,13 @@ export default function QuestionnarePage() {
                 },
                 {}
               )
-              setFunctionIdIdx(funcIdToIdx) // set a map of functionid -> index in sortedFunctId
-              setQuestionId(sortedFuncId[0]) // sets the questionid(functionid) to the first value in the array
-              setStepFunctionId(sortedFuncId) // contains an array of all functionid in order of render
+              // Update sidebar/nav state immediately so the question list
+              // renders while scores are still loading. setQuestions,
+              // setDatacallID, and setQuestionId are deferred to the batch
+              // below — after scores arrive — so the questionId effect fires
+              // exactly once with the correct scores already in the ref.
+              setFunctionIdIdx(funcIdToIdx)
+              setStepFunctionId(sortedFuncId)
               setCategories(categoriesData)
               navigate(
                 `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
@@ -405,42 +431,63 @@ export default function QuestionnarePage() {
                   replace: true,
                 }
               )
-              setSelectedIndex(sortedFuncId[0]) // set the first selected item in the list (rendered) to be selected(highlighted)
-              setQuestion(questionData[sortedFuncId[0]].question) // set the first question value to the page
-              setDescription(questionData[sortedFuncId[0]].description)
-              setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
+              setSelectedIndex(sortedFuncId[0])
             }
           } catch (error) {
             if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
+            if (isAuthHandled(error)) {
+              setLoadingQuestion(false)
+              return
+            }
             notify(ERROR_MESSAGES.tryAgain, 'error')
+            setLoadingQuestion(false)
             return
           }
           if (questionsEmpty) {
             return
           }
+          let hashTable: questionScoreMap = {}
           try {
             const res = await axiosInstance.get(
               `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`,
               { signal: controller.signal }
             )
-            const hashTable: questionScoreMap = Object.assign(
+            hashTable = Object.assign(
               {},
               ...res.data.data.map((item: QuestionScores) => ({
                 [item.functionoptionid]: item,
               }))
             )
-            setQuestionScores(hashTable)
           } catch (error) {
             if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
-            console.error('Error fetching question scores:', error)
-            notify(ERROR_MESSAGES.tryAgain, 'error')
+            if (!isAuthHandled(error)) {
+              console.error('Error fetching question scores:', error)
+              notify(ERROR_MESSAGES.tryAgain, 'error')
+            }
+            // Fall through to the batch below with an empty scores map so the
+            // sidebar/URL commit together with questions/datacallID/questionId,
+            // even when the scores call 403s without redirecting (auth-handled,
+            // component stays mounted). Returning here instead would leave the
+            // sidebar/URL on the new system while the content stayed on the old
+            // one. The [questionId] effect's finally clears the spinner.
           }
+          // Batch questions + scores + datacallID + questionId so the questionId
+          // effect fires exactly once with the correct scores already in
+          // questionScoresRef. This prevents a second effect run (and its
+          // accompanying draft-clearing race) that would occur if questionScores
+          // arrived as a separate update after questionId was already set.
+          setQuestions(questionData)
+          setQuestionScores(hashTable)
+          setDatacallID(activeDataCallId)
+          setQuestionId(sortedFuncId[0])
         } catch (error) {
           if (controller.signal.aborted) return
-          if (isAuthHandled(error)) return
+          if (isAuthHandled(error)) {
+            setLoadingQuestion(false)
+            return
+          }
           console.error('Error fetching data:', error)
+          setLoadingQuestion(false)
         }
       }
       fetchData()
@@ -478,37 +525,52 @@ export default function QuestionnarePage() {
               label: item.description,
               value: item.functionoptionid,
             }
-            if (item.functionoptionid in questionScores) {
+            if (item.functionoptionid in questionScoresRef.current) {
               funcOptId = item.functionoptionid
               choiceOpt.defaultChecked = true
             }
             choices.push(choiceOpt)
           })
           // Foundation of question
-          setDescription(questionId ? questions[questionId].description : '')
-          setQuestion(questionId ? questions[questionId].question : '')
-          setNotePrompt(questionId ? questions[questionId].notesprompt : '')
+          setDescription(questions[questionId ?? 0]?.description ?? '')
+          setQuestion(questions[questionId ?? 0]?.question ?? '')
+          setNotePrompt(questions[questionId ?? 0]?.notesprompt ?? '')
 
           // Notes
-          setNotes(funcOptId ? questionScores[funcOptId].notes : '')
-          setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
+          setNotes(funcOptId ? questionScoresRef.current[funcOptId].notes : '')
+          setInitNotes(
+            funcOptId ? questionScoresRef.current[funcOptId].notes : ''
+          )
 
           // Question options
           setSelectQuestionOption(funcOptId ? funcOptId : -1)
           setInitQuestionChoice(funcOptId ? funcOptId : -1)
-          setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
+          setScoreId(
+            funcOptId ? questionScoresRef.current[funcOptId].scoreid : 0
+          )
 
           // Restore any in-progress draft from localStorage, overriding the
           // server-side values set above. Skipped for read-only sessions.
           const sys = systemRef.current
-          // Eagerly evict any stale draft when the session is now read-only.
           const uid = userInfo.userid
-          if (isReadOnly && sys && questionId && datacallID > 0)
-            clearDraft(uid, sys, questionId, datacallID)
+          if (controller.signal.aborted) return
+          // Read-only sessions never load the draft again, so evict any lingering
+          // entry instead of letting it sit for the full TTL. Bump the save
+          // generation first: an autosave that fired just before isReadOnly
+          // flipped may still be mid-flight, and without the bump its isCurrent()
+          // checks would pass and rewrite the draft after this clear.
+          if (isReadOnly && sys && questionId && datacallID > 0) {
+            saveGenRef.current++
+            void clearDraft(uid, sys, questionId, datacallID)
+          }
           const draft =
             !isReadOnly && sys && questionId && datacallID > 0
               ? await loadDraft(uid, sys, questionId, datacallID)
               : null
+          // Guard: if the user navigated away while loadDraft was running
+          // (crypto.subtle.decrypt is genuinely async), discard its result
+          // rather than writing it into the now-active question's state.
+          if (controller.signal.aborted) return
           if (draft) {
             if (draft.selectQuestionOption === -1) {
               // Notes-only draft — restore notes without pre-selecting an answer.
@@ -527,7 +589,8 @@ export default function QuestionnarePage() {
             } else {
               // Draft references an option that no longer exists — evict it.
               if (sys && questionId && datacallID > 0)
-                clearDraft(uid, sys, questionId, datacallID)
+                await clearDraft(uid, sys, questionId, datacallID)
+              if (controller.signal.aborted) return
               setDraftStatus('idle')
             }
           } else {
@@ -539,20 +602,13 @@ export default function QuestionnarePage() {
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
         } finally {
-          setLoadingQuestion(false)
+          if (!controller.signal.aborted) setLoadingQuestion(false)
         }
       }
       fetchOptions()
       return () => controller.abort()
     }
-  }, [
-    questionId,
-    questionScores,
-    questions,
-    isReadOnly,
-    datacallID,
-    userInfo.userid,
-  ])
+  }, [questionId, questions, isReadOnly, datacallID, userInfo.userid])
 
   // Debounced draft save: 1 second after the user pauses editing, persist
   // the current answer and notes to localStorage so a reload can recover them.
@@ -570,14 +626,39 @@ export default function QuestionnarePage() {
       if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
       return
     }
-    if (selectQuestionOption === initQuestionChoice && notes === initNotes)
+    if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
+      saveGenRef.current++
+      // Skip clearDraft when a draft was just restored from storage — the draft
+      // values matching the server state does not mean the user reverted manually.
+      // Clearing it here would delete a valid in-progress draft on every page load
+      // when the server happens to be at the same state as the draft.
+      if (
+        system &&
+        questionId &&
+        datacallID > 0 &&
+        draftStatusRef.current !== 'restored'
+      )
+        void clearDraft(userInfo.userid, system, questionId, datacallID)
+      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
       return
+    }
+    const currentGen = saveGenRef.current
     const timer = setTimeout(() => {
-      saveDraft(userInfo.userid, system, questionId, datacallID, {
-        selectQuestionOption,
-        notes,
-      }).then(() => {
-        if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
+      if (saveGenRef.current !== currentGen) return
+      saveDraft(
+        userInfo.userid,
+        system,
+        questionId,
+        datacallID,
+        { selectQuestionOption, notes },
+        () => saveGenRef.current === currentGen
+      ).then((saved) => {
+        if (saveGenRef.current !== currentGen) return
+        if (saved) {
+          if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
+        } else {
+          setDraftStatus('error')
+        }
       })
     }, 1000)
     return () => clearTimeout(timer)
@@ -611,6 +692,47 @@ export default function QuestionnarePage() {
     window.addEventListener('beforeunload', handle)
     return () => window.removeEventListener('beforeunload', handle)
   }, [isReadOnly])
+
+  // Re-seed the current question's answer when the scores map refreshes out of
+  // band — e.g. the user saves a question then navigates back before that save's
+  // scores GET resolves, so the questionId effect seeded from a stale snapshot.
+  // Only runs when idle (the questionId effect owns seeding while loading) with no
+  // unsaved edits and no restored draft, so an in-progress change is never
+  // overwritten. Without this the display can show a just-saved answer as
+  // unanswered, and re-answering it would POST a duplicate score.
+  React.useEffect(() => {
+    const u = unsavedRef.current
+    if (
+      !shouldReseedAnswer({
+        hasQuestion: !!questionId,
+        loadingQuestion: loadingQuestionRef.current,
+        hasUnsavedEdits:
+          u.selectQuestionOption !== u.initQuestionChoice ||
+          u.notes !== u.initNotes,
+        draftRestored: draftStatusRef.current === 'restored',
+      })
+    ) {
+      return
+    }
+    const sel = deriveScoreSelection(
+      optionsRef.current.map((o) => Number(o.value)),
+      questionScoresRef.current
+    )
+    // No change from the last-seeded state — nothing to correct.
+    if (sel.choice === u.initQuestionChoice && sel.notes === u.initNotes) return
+    setOptions((prev) =>
+      prev.map((o) => ({
+        ...o,
+        defaultChecked: Number(o.value) === sel.funcOptId,
+      }))
+    )
+    setSelectQuestionOption(sel.choice)
+    setInitQuestionChoice(sel.choice)
+    setNotes(sel.notes)
+    setInitNotes(sel.notes)
+    setScoreId(sel.scoreid)
+    setRadioKey((k) => k + 1)
+  }, [questionScores, questionId])
 
   const breadcrumbSegmentLabels = fismaacronym
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
@@ -784,7 +906,9 @@ export default function QuestionnarePage() {
                 </Box>
               ) : (
                 <Box>
-                  <Box sx={{ mb: 2 }}>{renderRadioGroup(options)}</Box>
+                  <Box key={radioKey} sx={{ mb: 2 }}>
+                    {renderRadioGroup(options)}
+                  </Box>
                   <Typography variant="h6" sx={{ mb: 1 }}>
                     {notePrompt || ''}
                   </Typography>
@@ -856,6 +980,7 @@ export default function QuestionnarePage() {
                           )
                           setOpenAlert(true)
                         } else {
+                          saveGenRef.current++
                           const id =
                             stepFunctionId[functionIdIdx[selectedIndex] - 1]
                           if (questions[id]) {
@@ -882,6 +1007,7 @@ export default function QuestionnarePage() {
                     </CmsButton>
                     <CmsButton
                       onClick={() => {
+                        saveGenRef.current++
                         const id =
                           selectedIndex ===
                           stepFunctionId[stepFunctionId.length - 1]
@@ -921,13 +1047,21 @@ export default function QuestionnarePage() {
                   </Box>
                   {draftStatus !== 'idle' && !isReadOnly && (
                     <Alert
-                      severity={draftStatus === 'saved' ? 'success' : 'warning'}
+                      severity={
+                        draftStatus === 'saved'
+                          ? 'success'
+                          : draftStatus === 'error'
+                            ? 'error'
+                            : 'warning'
+                      }
                       icon={false}
                       sx={{ mt: 1, py: 0.5 }}
                     >
                       {draftStatus === 'saved'
                         ? 'Draft saved — click Next or Complete to save permanently.'
-                        : 'Draft restored — click Next or Complete to save permanently.'}
+                        : draftStatus === 'error'
+                          ? 'Draft could not be saved — click Next or Complete to save permanently.'
+                          : 'Draft restored — click Next or Complete to save permanently.'}
                     </Alert>
                   )}
                   <LastEditedFooter
