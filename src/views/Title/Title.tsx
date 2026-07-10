@@ -1,10 +1,12 @@
 import {
   Container,
   Typography,
-  Autocomplete,
-  TextField,
-  Chip,
+  Button,
+  Checkbox,
+  ListSubheader,
+  ListItemText,
 } from '@mui/material'
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
@@ -21,7 +23,11 @@ import IconButton from '@mui/material/IconButton'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import {
+  groupDatacallsByYear,
+  parseDatacallName,
+} from '@/utils/datacallGrouping'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
@@ -66,9 +72,13 @@ export default function Title() {
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
-  const [selectedDatacall, setSelectedDatacall] = useState<datacall | null>(
-    null
-  )
+  // The dashboard aggregates the active year's data calls. activeYear is the
+  // selected fiscal year; activeDatacallIds are the toggled-on calls within it
+  // (all on by default). See groupDatacallsByYear / #467.
+  const [activeYear, setActiveYear] = useState<number | null>(null)
+  const [activeDatacallIds, setActiveDatacallIds] = useState<number[]>([])
+  const [datacallMenuAnchor, setDatacallMenuAnchor] =
+    useState<null | HTMLElement>(null)
   const [latestDeadline, setLatestDeadline] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
@@ -133,7 +143,12 @@ export default function Title() {
           setLatestDataCallId(sorted[0].datacallid)
           setLatestDatacall(sorted[0].datacall)
           setLatestDeadline(sorted[0].deadline)
-          setSelectedDatacall(sorted[0])
+          // Default to the latest year with data, all of its calls toggled on.
+          const [firstGroup] = groupDatacallsByYear(sorted)
+          if (firstGroup) {
+            setActiveYear(firstGroup.year)
+            setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+          }
         }
       } catch (error) {
         if (controller.signal.aborted) return
@@ -163,6 +178,45 @@ export default function Title() {
       controller.abort()
     }
   }, [loaderData.status])
+  const datacallsByYear = useMemo(
+    () => groupDatacallsByYear(datacalls),
+    [datacalls]
+  )
+  // Single active call when exactly one is toggled on, else null. Drives the
+  // single-id flows (questionnaire, export, diff); null signals aggregation.
+  const selectedDatacall = useMemo<datacall | null>(
+    () =>
+      activeDatacallIds.length === 1
+        ? datacalls.find((d) => d.datacallid === activeDatacallIds[0]) ?? null
+        : null,
+    [activeDatacallIds, datacalls]
+  )
+  // Selecting a call in a different year switches to that whole year (all on);
+  // within the active year, toggle a call but never leave the year empty.
+  const handleDatacallToggle = (
+    group: (typeof datacallsByYear)[number],
+    call: datacall
+  ) => {
+    if (group.year !== activeYear) {
+      setActiveYear(group.year)
+      setActiveDatacallIds(group.calls.map((c) => c.datacallid))
+      return
+    }
+    setActiveDatacallIds((prev) => {
+      const removing = prev.includes(call.datacallid)
+      if (removing && prev.length === 1) return prev // never empty the year
+      const next = new Set(prev)
+      if (removing) {
+        next.delete(call.datacallid)
+      } else {
+        next.add(call.datacallid)
+      }
+      // Keep the group's deadline order (newest first) so the dashboard merge
+      // deterministically resolves a multi-call system to its newest call.
+      return group.calls.map((c) => c.datacallid).filter((id) => next.has(id))
+    })
+  }
+
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
@@ -465,73 +519,75 @@ export default function Title() {
               </Typography>
             ) : (
               datacalls.length > 0 && (
-                <Autocomplete
-                  size="small"
-                  options={datacalls}
-                  getOptionLabel={(dc) => dc.datacall}
-                  isOptionEqualToValue={(option, value) =>
-                    option.datacallid === value.datacallid
-                  }
-                  value={selectedDatacall ?? datacalls[0]}
-                  onChange={(_, dc) => {
-                    if (dc) setSelectedDatacall(dc)
-                  }}
-                  renderOption={(props, option) => {
-                    const isLatest = option.datacallid === latestDataCallId
-                    const isClosed = new Date() > new Date(option.deadline)
-                    const { key, ...rest } = props
-                    const deadlineLabel = new Date(
-                      option.deadline
-                    ).toLocaleDateString('en-US', {
-                      month: 'short',
-                      day: 'numeric',
-                      year: 'numeric',
-                    })
-                    return (
-                      <li key={key} {...rest}>
-                        <Box sx={{ width: '100%' }}>
-                          <Box
-                            sx={{
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'space-between',
-                              width: '100%',
-                              gap: 1,
-                            }}
+                <>
+                  <Button
+                    size="small"
+                    variant="outlined"
+                    onClick={(e) => setDatacallMenuAnchor(e.currentTarget)}
+                    endIcon={<ArrowDropDownIcon />}
+                    sx={{
+                      minWidth: 260,
+                      justifyContent: 'space-between',
+                      textTransform: 'none',
+                      color: 'text.primary',
+                      borderColor: 'rgba(0,0,0,0.23)',
+                    }}
+                  >
+                    {activeYear ??
+                      (activeDatacallIds.length ? 'Other' : 'Data call')}
+                    {selectedDatacall
+                      ? ` · ${selectedDatacall.datacall}`
+                      : activeDatacallIds.length > 1
+                        ? ` · ${activeDatacallIds.length} calls`
+                        : ''}
+                  </Button>
+                  <Menu
+                    anchorEl={datacallMenuAnchor}
+                    open={Boolean(datacallMenuAnchor)}
+                    onClose={() => setDatacallMenuAnchor(null)}
+                    MenuListProps={{ 'aria-label': 'Select data call by year' }}
+                  >
+                    {datacallsByYear.flatMap((group) => [
+                      <ListSubheader key={`year-${group.year ?? 'other'}`}>
+                        {group.year ?? 'Other'}
+                      </ListSubheader>,
+                      ...group.calls.map((call) => {
+                        const checked =
+                          group.year === activeYear &&
+                          activeDatacallIds.includes(call.datacallid)
+                        const { tenant } = parseDatacallName(call.datacall)
+                        const isClosed = new Date() > new Date(call.deadline)
+                        const deadlineLabel = new Date(
+                          call.deadline
+                        ).toLocaleDateString('en-US', {
+                          month: 'short',
+                          day: 'numeric',
+                          year: 'numeric',
+                        })
+                        return (
+                          <MenuItem
+                            key={call.datacallid}
+                            dense
+                            onClick={() => handleDatacallToggle(group, call)}
                           >
-                            <Typography variant="body2">
-                              {option.datacall}
-                            </Typography>
-                            {/* Only the latest-by-deadline call is badged:
-                                "Current" while still open, "Latest" once its
-                                deadline has passed (#393). */}
-                            {isLatest && (
-                              <Chip
-                                label={isClosed ? 'Latest' : 'Current'}
-                                size="small"
-                                variant="outlined"
-                                color={isClosed ? 'default' : 'primary'}
-                                sx={{ height: 18, fontSize: '0.65rem' }}
-                              />
-                            )}
-                          </Box>
-                          <Typography
-                            variant="caption"
-                            sx={{ color: 'text.secondary' }}
-                          >
-                            {isClosed ? 'Closed' : 'Active'} · deadline{' '}
-                            {deadlineLabel}
-                          </Typography>
-                        </Box>
-                      </li>
-                    )
-                  }}
-                  disableClearable
-                  sx={{ minWidth: 260 }}
-                  renderInput={(params) => (
-                    <TextField {...params} size="small" />
-                  )}
-                />
+                            <Checkbox
+                              checked={checked}
+                              readOnly
+                              size="small"
+                              sx={{ mr: 1 }}
+                            />
+                            <ListItemText
+                              primary={`${call.datacall} · ${tenant}`}
+                              secondary={`${
+                                isClosed ? 'Closed' : 'Active'
+                              } · deadline ${deadlineLabel}`}
+                            />
+                          </MenuItem>
+                        )
+                      }),
+                    ])}
+                  </Menu>
+                </>
               )
             )}
           </Box>
@@ -559,8 +615,9 @@ export default function Title() {
                   latestDataCallId,
                   latestDatacall,
                   latestDeadline,
+                  datacalls,
+                  activeDatacallIds,
                   selectedDatacall,
-                  setSelectedDatacall,
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,

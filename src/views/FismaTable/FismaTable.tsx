@@ -21,6 +21,8 @@ import {
   Select,
   MenuItem,
   ListItemText,
+  ListSubheader,
+  Menu,
   Button,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
@@ -42,13 +44,14 @@ import BarChartIcon from '@mui/icons-material/BarChart'
 import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresModal'
 // import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { FismaTableProps } from '@/types'
-import type { ScoreAggregate, SystemScoreEntry } from '@/types'
+import type { ScoreAggregate, SystemScoreEntry, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
 import { cellStyleForTier } from '@/utils/tierStyles'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
+import { parseDatacallName } from '@/utils/datacallGrouping'
 import type { OpDiv } from '@/types'
 import {
   applyDashboardFilters,
@@ -64,6 +67,7 @@ declare module '@mui/x-data-grid' {
     fismaSystems: FismaSystemType[]
     activeDataCallId: number
     scores: Record<number, SystemScoreEntry>
+    systemCallMap?: Record<number, number[]>
   }
   interface ToolbarPropsOverrides {
     filters: DashboardFilterState
@@ -86,8 +90,27 @@ export function CustomFooterSaveComponent(
   const handleCloseSnackbar = () => {
     setOpenSnackbar(false)
   }
+  // The export endpoint targets one data call. Derive it from the selected
+  // rows' own call(s): if they all share one call, export that; an empty
+  // provenance falls back to the active call; a selection that spans more than
+  // one call has no single export target, so the button is disabled.
+  const selectedCallIds = new Set<number>()
+  const callMap = props.systemCallMap ?? {}
+  for (const id of props.selectedRows ?? []) {
+    for (const cid of callMap[id as number] ?? []) selectedCallIds.add(cid)
+  }
+  const exportCallId =
+    selectedCallIds.size === 1
+      ? [...selectedCallIds][0]
+      : selectedCallIds.size === 0
+        ? props.activeDataCallId
+        : null
+  const exportBlocked =
+    !props.selectedRows ||
+    props.selectedRows.length === 0 ||
+    exportCallId === null
   const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${props.activeDataCallId}/export`
+    let exportUrl = `/datacalls/${exportCallId}/export`
     if (props.selectedRows && props.selectedRows.length > 0) {
       exportUrl += '?'
       let idString: string = ''
@@ -136,14 +159,18 @@ export function CustomFooterSaveComponent(
             position: 'relative',
           }}
         >
-          <Tooltip title="Download selected system answers">
+          <Tooltip
+            title={
+              exportCallId === null
+                ? 'Selected systems span more than one data call — narrow the selection or the data-call selector'
+                : 'Download selected system answers'
+            }
+          >
             <span role="presentation">
               <IconButton
                 sx={{ color: '#004297' }}
                 onClick={saveSystemAnswers}
-                disabled={
-                  !props.selectedRows || props.selectedRows.length === 0
-                }
+                disabled={exportBlocked}
                 aria-label={`Download selected system answers${props.selectedRows && props.selectedRows.length > 0 ? ` (${props.selectedRows.length} selected)` : ' (no systems selected)'}`}
               >
                 <FileDownloadSharpIcon />
@@ -276,6 +303,7 @@ function QuickSearchToolbar(props: {
                 <MenuItem key={opt} value={opt}>
                   <Checkbox
                     checked={filters.environments.includes(opt)}
+                    readOnly
                     size="small"
                   />
                   <ListItemText primary={opt} />
@@ -314,6 +342,7 @@ function QuickSearchToolbar(props: {
                 <MenuItem key={o.id} value={o.id}>
                   <Checkbox
                     checked={filters.opdivIds.includes(o.id)}
+                    readOnly
                     size="small"
                   />
                   <ListItemText primary={o.label} />
@@ -369,12 +398,17 @@ interface CachedScore {
 }
 const pillarScoresCache = new Map<number, CachedScore>()
 
-export default function FismaTable({ scores, progress }: FismaTableProps) {
+export default function FismaTable({
+  scores,
+  progress,
+  systemCallMap = {},
+}: FismaTableProps) {
   const apiRef = useGridApiRef()
   const {
     fismaSystems,
     latestDataCallId,
     selectedDatacall,
+    datacalls,
     userInfo,
     datacenterEnvironments,
   } = useContextProp()
@@ -388,6 +422,29 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
   )
   const [opdivs, setOpDivs] = useState<OpDiv[]>([])
   const navigate = useNavigate()
+
+  // When a system has scores in more than one active call, the questionnaire
+  // button opens a small picker (#467) instead of guessing which call to open.
+  const [callPicker, setCallPicker] = useState<{
+    anchor: HTMLElement
+    fismasystemid: number
+    fismaacronym: string
+    calls: datacall[]
+  } | null>(null)
+  const openQuestionnaire = (
+    fismasystemid: number,
+    fismaacronym: string,
+    call: datacall | undefined
+  ) => {
+    navigate(`/${RouteNames.QUESTIONNAIRE}/${fismaacronym.toLowerCase()}`, {
+      state: {
+        fismasystemid,
+        datacallid: call?.datacallid ?? activeDataCallId,
+        datacall: call?.datacall,
+        deadline: call?.deadline,
+      },
+    })
+  }
 
   // OpDiv list is only needed to label the OpDiv filter. Include inactive
   // OpDivs so a system tied to a since-deactivated OpDiv still shows a name,
@@ -658,65 +715,86 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
       hideable: false,
       sortable: false,
       disableColumnMenu: true,
-      renderCell: (params: GridRenderCellParams) => (
-        <>
-          <Tooltip title="Questionnaire">
-            <span>
-              <GridActionsCellItem
-                icon={<QuestionAnswerOutlinedIcon />}
-                key={`question-${params.row.fismasystemid}`}
-                label={`View Questionnaire for ${params.row.fismaname}`}
-                className="textPrimary"
-                role="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  navigate(
-                    `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
-                    {
-                      state: { fismasystemid: params.row.fismasystemid },
-                    }
-                  )
-                }}
-                color="inherit"
-              />
-            </span>
-          </Tooltip>
-          <Tooltip title="Pillar Scores">
-            <span>
-              <GridActionsCellItem
-                icon={<BarChartIcon />}
-                key={`chart-${params.row.fismasystemid}`}
-                label={`View Pillar Scores for ${params.row.fismaname}`}
-                className="textPrimary"
-                role="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  handleOpenPillarScores(params.row as FismaSystemType)
-                }}
-                color="inherit"
-              />
-            </span>
-          </Tooltip>
-          {hasSystemDetailAccess && (
-            <Tooltip title="System Details">
+      renderCell: (params: GridRenderCellParams) => {
+        // The system's own call(s) among the active ones, newest first. One
+        // call opens directly; more than one opens a picker so the user
+        // chooses which to open (#467).
+        const rowCallObjs = (systemCallMap[params.row.fismasystemid] ?? [])
+          .map((id) => datacalls.find((d) => d.datacallid === id))
+          .filter((d): d is datacall => Boolean(d))
+          .sort(
+            (a, b) =>
+              new Date(b.deadline).getTime() - new Date(a.deadline).getTime()
+          )
+        return (
+          <>
+            <Tooltip title="Questionnaire">
               <span>
                 <GridActionsCellItem
-                  icon={<VisibilityIcon />}
-                  key={`view-${params.row.fismasystemid}`}
-                  label={`View system details for ${params.row.fismaname}`}
+                  icon={<QuestionAnswerOutlinedIcon />}
+                  key={`question-${params.row.fismasystemid}`}
+                  label={`View Questionnaire for ${params.row.fismaname}`}
                   className="textPrimary"
                   role="button"
                   onClick={(event) => {
                     event.stopPropagation()
-                    navigate(`/systems/${params.row.fismasystemid}`)
+                    if (rowCallObjs.length > 1) {
+                      setCallPicker({
+                        anchor: event.currentTarget,
+                        fismasystemid: params.row.fismasystemid,
+                        fismaacronym: params.row.fismaacronym,
+                        calls: rowCallObjs,
+                      })
+                      return
+                    }
+                    openQuestionnaire(
+                      params.row.fismasystemid,
+                      params.row.fismaacronym,
+                      rowCallObjs[0] ??
+                        datacalls.find((d) => d.datacallid === activeDataCallId)
+                    )
                   }}
                   color="inherit"
                 />
               </span>
             </Tooltip>
-          )}
-        </>
-      ),
+            <Tooltip title="Pillar Scores">
+              <span>
+                <GridActionsCellItem
+                  icon={<BarChartIcon />}
+                  key={`chart-${params.row.fismasystemid}`}
+                  label={`View Pillar Scores for ${params.row.fismaname}`}
+                  className="textPrimary"
+                  role="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    handleOpenPillarScores(params.row as FismaSystemType)
+                  }}
+                  color="inherit"
+                />
+              </span>
+            </Tooltip>
+            {hasSystemDetailAccess && (
+              <Tooltip title="System Details">
+                <span>
+                  <GridActionsCellItem
+                    icon={<VisibilityIcon />}
+                    key={`view-${params.row.fismasystemid}`}
+                    label={`View system details for ${params.row.fismaname}`}
+                    className="textPrimary"
+                    role="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      navigate(`/systems/${params.row.fismasystemid}`)
+                    }}
+                    color="inherit"
+                  />
+                </span>
+              </Tooltip>
+            )}
+          </>
+        )
+      },
     },
   ]
 
@@ -736,7 +814,13 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
           setSelectedRows(selectedIDs)
         }}
         slotProps={{
-          footer: { selectedRows, fismaSystems, activeDataCallId, scores },
+          footer: {
+            selectedRows,
+            fismaSystems,
+            activeDataCallId,
+            scores,
+            systemCallMap,
+          },
           toolbar: {
             filters,
             onFiltersChange: setFilters,
@@ -801,6 +885,39 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
         scores={pillarScoresModal.scores}
         selectedDataCallId={activeDataCallId}
       />
+      <Menu
+        anchorEl={callPicker?.anchor ?? null}
+        open={Boolean(callPicker)}
+        onClose={() => setCallPicker(null)}
+        MenuListProps={{ 'aria-label': 'Open which data call' }}
+      >
+        <ListSubheader>Open which data call?</ListSubheader>
+        {callPicker?.calls.map((call) => {
+          const isClosed = new Date() > new Date(call.deadline)
+          const deadlineLabel = new Date(call.deadline).toLocaleDateString(
+            'en-US',
+            { month: 'short', day: 'numeric', year: 'numeric' }
+          )
+          return (
+            <MenuItem
+              key={call.datacallid}
+              onClick={() => {
+                openQuestionnaire(
+                  callPicker.fismasystemid,
+                  callPicker.fismaacronym,
+                  call
+                )
+                setCallPicker(null)
+              }}
+            >
+              <ListItemText
+                primary={`${call.datacall} · ${parseDatacallName(call.datacall).tenant}`}
+                secondary={`${isClosed ? 'Closed' : 'Active'} · deadline ${deadlineLabel}`}
+              />
+            </MenuItem>
+          )
+        })}
+      </Menu>
     </Box>
   )
 }

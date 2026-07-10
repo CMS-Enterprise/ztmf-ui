@@ -304,6 +304,9 @@ export type FismaTableProps = {
   // fismasystemid. Optional so the table degrades to an em-dash column if
   // the progress fetch fails - score display must not depend on it.
   progress?: Record<number, ScoreProgress>
+  // Which active data call(s) each system has scores in, keyed by
+  // fismasystemid, so per-row actions target the system's own call.
+  systemCallMap?: Record<number, number[]>
 }
 
 export type ThemeColor =
