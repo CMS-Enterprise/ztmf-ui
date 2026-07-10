@@ -1,9 +1,5 @@
 import type { ScoreAggregate, ScoreProgress } from '@/types'
-import {
-  buildScoreMap,
-  buildProgressMap,
-  buildSystemCallMap,
-} from './aggregateScores'
+import { buildDashboardMaps } from './aggregateScores'
 
 const agg = (fismasystemid: number, systemscore: number): ScoreAggregate => ({
   fismasystemid,
@@ -11,80 +7,84 @@ const agg = (fismasystemid: number, systemscore: number): ScoreAggregate => ({
   datacallid: 0,
 })
 
-const prog = (fismasystemid: number, questionsupdated: number): ScoreProgress =>
+const prog = (
+  fismasystemid: number,
+  questionsupdated: number,
+  lastupdatedat: string | null
+): ScoreProgress =>
   ({
     fismasystemid,
     questionsexpected: 40,
     questionsupdated,
+    lastupdatedat,
     updatedsincestart: questionsupdated > 0,
   }) as ScoreProgress
 
-describe('buildScoreMap', () => {
-  it('unions disjoint systems across calls (CMS call + HHS call)', () => {
-    const map = buildScoreMap([
-      [agg(1, 80), agg(2, 60)], // CMS call
-      [agg(3, 90)], // HHS call
-    ])
-    expect(Object.keys(map)).toEqual(['1', '2', '3'])
-    expect(map[1].score).toBe(80)
-    expect(map[3].score).toBe(90)
+// callIds newest-first: 38 = newer (FY25 ZTM), 3 = older (FY2025 Q3)
+const CALL_IDS = [38, 3]
+
+describe('buildDashboardMaps', () => {
+  it('unions disjoint single-call systems', () => {
+    const { scoreMap, systemCallMap } = buildDashboardMaps(
+      CALL_IDS,
+      [[agg(1, 80)], [agg(2, 60)]],
+      [[prog(1, 40, '2025-09-01')], [prog(2, 40, '2025-05-01')]]
+    )
+    expect(scoreMap[1].score).toBe(80)
+    expect(scoreMap[2].score).toBe(60)
+    expect(systemCallMap[1]).toEqual([38])
+    expect(systemCallMap[2]).toEqual([3])
+  })
+
+  it('shows the call a multi-call system most recently updated, not the newest', () => {
+    // System 1 is in both calls; it completed the OLDER call (3) recently and
+    // never touched the newer call (38). Expect the older call's score/progress.
+    const { scoreMap, progressMap, systemCallMap } = buildDashboardMaps(
+      CALL_IDS,
+      [[agg(1, 0)], [agg(1, 89)]], // newer call score 0, older call score 89
+      [
+        [prog(1, 0, null)], // newer call: never updated
+        [prog(1, 40, '2025-05-07')], // older call: completed
+      ]
+    )
+    expect(scoreMap[1].score).toBe(89) // older call wins
+    expect(progressMap[1].questionsupdated).toBe(40)
+    expect(systemCallMap[1]).toEqual([38, 3]) // both calls recorded
+  })
+
+  it('falls back to the newest call when a system never updated any call', () => {
+    const { scoreMap } = buildDashboardMaps(
+      CALL_IDS,
+      [[agg(1, 12)], [agg(1, 99)]],
+      [[prog(1, 0, null)], [prog(1, 0, null)]]
+    )
+    expect(scoreMap[1].score).toBe(12) // newest (idx 0) fallback
   })
 
   it('defaults a missing score to 0', () => {
-    const map = buildScoreMap([[{ fismasystemid: 5 } as ScoreAggregate]])
-    expect(map[5].score).toBe(0)
+    const { scoreMap } = buildDashboardMaps(
+      [1],
+      [[{ fismasystemid: 5 } as ScoreAggregate]],
+      [[]]
+    )
+    expect(scoreMap[5].score).toBe(0)
   })
 
-  it('returns an empty map for no calls', () => {
-    expect(buildScoreMap([])).toEqual({})
+  it('returns empty maps for no calls', () => {
+    expect(buildDashboardMaps([], [], [])).toEqual({
+      scoreMap: {},
+      progressMap: {},
+      systemCallMap: {},
+    })
   })
 
-  it('keeps the newest call for a system in more than one call', () => {
-    // rowsPerCall is passed newest-call-first, so the first write wins.
-    const map = buildScoreMap([
-      [agg(1, 90)], // newer call (e.g. FY25 ZTM)
-      [agg(1, 55)], // older call (e.g. FY2025 Q3)
-    ])
-    expect(map[1].score).toBe(90)
-  })
-})
-
-describe('buildProgressMap', () => {
-  it('unions progress from several calls, keyed by system', () => {
-    const map = buildProgressMap([[prog(1, 0)], [prog(2, 40)]])
-    expect(map[1].questionsupdated).toBe(0)
-    expect(map[2].questionsupdated).toBe(40)
-  })
-
-  it('tolerates an empty call result (partial failure fallback)', () => {
-    const map = buildProgressMap([[prog(1, 10)], []])
-    expect(Object.keys(map)).toEqual(['1'])
-  })
-})
-
-describe('buildSystemCallMap', () => {
-  const row = (fismasystemid: number, datacallid: number): ScoreAggregate => ({
-    fismasystemid,
-    datacallid,
-    systemscore: 0,
-  })
-
-  it('records the single call each system belongs to', () => {
-    const map = buildSystemCallMap([
-      [row(1, 42), row(2, 42)], // CMS call 42
-      [row(3, 43)], // HHS call 43
-    ])
-    expect(map[1]).toEqual([42])
-    expect(map[3]).toEqual([43])
-  })
-
-  it('flags a system that appears in more than one active call', () => {
-    const map = buildSystemCallMap([[row(1, 42)], [row(1, 43)]])
-    expect(map[1]).toEqual([42, 43])
-  })
-
-  it('does not duplicate a call id for the same system', () => {
-    const map = buildSystemCallMap([[row(1, 42), row(1, 42)]])
-    expect(map[1]).toEqual([42])
+  it('tolerates a failed (empty) call result', () => {
+    const { scoreMap, progressMap } = buildDashboardMaps(
+      CALL_IDS,
+      [[agg(1, 70)], []], // older call failed -> []
+      [[prog(1, 10, '2025-09-01')], []]
+    )
+    expect(scoreMap[1].score).toBe(70)
+    expect(progressMap[1].questionsupdated).toBe(10)
   })
 })

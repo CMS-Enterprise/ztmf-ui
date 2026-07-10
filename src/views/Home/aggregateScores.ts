@@ -1,68 +1,89 @@
 import type { ScoreAggregate, ScoreProgress, SystemScoreEntry } from '@/types'
 
+export type DashboardMaps = {
+  scoreMap: Record<number, SystemScoreEntry>
+  progressMap: Record<number, ScoreProgress>
+  /** Which active data call(s) each system has scores in, for per-row actions. */
+  systemCallMap: Record<number, number[]>
+}
+
+const lastUpdatedMs = (entry: ScoreProgress | undefined): number => {
+  if (!entry?.lastupdatedat) return -1
+  const t = new Date(entry.lastupdatedat).getTime()
+  return Number.isNaN(t) ? -1 : t
+}
+
 /**
- * Merge the score rows from several data calls into one map keyed by
- * fismasystemid. A system may appear in more than one of a year's calls
- * (e.g. an annual ZTM call and a Q# call); when it does, the newest call
- * wins. Callers pass `rowsPerCall` newest-call-first, so the first write for a
- * system is kept and later (older) calls do not overwrite it. Pure so the
- * aggregation is unit-testable.
- * @param {ScoreAggregate[][]} rowsPerCall - Aggregate rows, newest call first.
- * @returns {Record<number, SystemScoreEntry>} Score entry per system.
+ * Build the dashboard's score, progress, and system→calls maps from the active
+ * data calls, aggregated per system.
+ *
+ * A system can appear in more than one of a year's calls (e.g. an annual ZTM
+ * call and a Q# call). We display the call the system **most recently updated**
+ * (max `lastupdatedat`), so a system that completed one call is shown as such
+ * rather than as 0 against a newer call it never touched. A system that never
+ * updated any call falls back to the newest call available. Score and progress
+ * are taken from that same chosen call so they stay consistent.
+ *
+ * Inputs are aligned by index and ordered newest-call-first, which is both the
+ * tiebreak for the fallback and the order `callIds` is passed in.
+ * @param {number[]} callIds - Active data-call ids, newest first.
+ * @param {ScoreAggregate[][]} scoresPerCall - Aggregate rows, aligned to callIds.
+ * @param {ScoreProgress[][]} progressPerCall - Progress rows, aligned to callIds.
+ * @returns {DashboardMaps} The per-system score, progress, and call maps.
  */
-export function buildScoreMap(
-  rowsPerCall: ScoreAggregate[][]
-): Record<number, SystemScoreEntry> {
-  const map: Record<number, SystemScoreEntry> = {}
-  for (const rows of rowsPerCall) {
-    for (const row of rows) {
-      if (row.fismasystemid in map) continue // keep the newer call's score
-      map[row.fismasystemid] = {
-        score: row.systemscore ?? 0,
-        tier: row.systemtier,
+export function buildDashboardMaps(
+  callIds: number[],
+  scoresPerCall: ScoreAggregate[][],
+  progressPerCall: ScoreProgress[][]
+): DashboardMaps {
+  // Per-call lookups keyed by system for O(1) access.
+  const scoreByCall = scoresPerCall.map((rows) => {
+    const m = new Map<number, ScoreAggregate>()
+    for (const row of rows) m.set(row.fismasystemid, row)
+    return m
+  })
+  const progressByCall = progressPerCall.map((rows) => {
+    const m = new Map<number, ScoreProgress>()
+    for (const row of rows) m.set(row.fismasystemid, row)
+    return m
+  })
+
+  // The call indices each system appears in (scores drive the table), newest
+  // first since callIds is newest first.
+  const systemIdxs = new Map<number, number[]>()
+  scoreByCall.forEach((m, idx) => {
+    for (const sys of m.keys()) {
+      const arr = systemIdxs.get(sys)
+      if (arr) arr.push(idx)
+      else systemIdxs.set(sys, [idx])
+    }
+  })
+
+  const scoreMap: Record<number, SystemScoreEntry> = {}
+  const progressMap: Record<number, ScoreProgress> = {}
+  const systemCallMap: Record<number, number[]> = {}
+
+  for (const [sys, idxs] of systemIdxs) {
+    // Choose the call this system most recently updated; ties and
+    // never-updated systems keep the newest call (idxs[0]).
+    let chosen = idxs[0]
+    let bestT = lastUpdatedMs(progressByCall[chosen]?.get(sys))
+    for (const idx of idxs) {
+      const t = lastUpdatedMs(progressByCall[idx]?.get(sys))
+      if (t > bestT) {
+        bestT = t
+        chosen = idx
       }
     }
-  }
-  return map
-}
 
-/**
- * Merge the progress rows from several data calls into one map keyed by
- * fismasystemid. Newest call wins for a system in more than one call: callers
- * pass `rowsPerCall` newest-call-first, so the first write is kept.
- * @param {ScoreProgress[][]} rowsPerCall - Progress rows, newest call first.
- * @returns {Record<number, ScoreProgress>} Progress per system.
- */
-export function buildProgressMap(
-  rowsPerCall: ScoreProgress[][]
-): Record<number, ScoreProgress> {
-  const map: Record<number, ScoreProgress> = {}
-  for (const rows of rowsPerCall) {
-    for (const row of rows) {
-      if (row.fismasystemid in map) continue // keep the newer call's progress
-      map[row.fismasystemid] = row
+    const score = scoreByCall[chosen]?.get(sys)
+    if (score) {
+      scoreMap[sys] = { score: score.systemscore ?? 0, tier: score.systemtier }
     }
+    const progress = progressByCall[chosen]?.get(sys)
+    if (progress) progressMap[sys] = progress
+    systemCallMap[sys] = idxs.map((idx) => callIds[idx])
   }
-  return map
-}
 
-/**
- * Record which data call(s) each system has scores in across the active calls.
- * Normally a system is in exactly one call per year, so this lets a per-row
- * action open that system's own call. A system in more than one active call is
- * genuinely ambiguous and its single-call actions should be gated.
- * @param {ScoreAggregate[][]} rowsPerCall - Aggregate rows, one array per call.
- * @returns {Record<number, number[]>} Distinct datacallids per system.
- */
-export function buildSystemCallMap(
-  rowsPerCall: ScoreAggregate[][]
-): Record<number, number[]> {
-  const map: Record<number, number[]> = {}
-  for (const rows of rowsPerCall) {
-    for (const row of rows) {
-      const list = map[row.fismasystemid] ?? (map[row.fismasystemid] = [])
-      if (!list.includes(row.datacallid)) list.push(row.datacallid)
-    }
-  }
-  return map
+  return { scoreMap, progressMap, systemCallMap }
 }
