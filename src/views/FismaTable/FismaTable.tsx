@@ -13,8 +13,18 @@ import {
   GridRowParams,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
-import { Box, IconButton } from '@mui/material'
-import { useState } from 'react'
+import {
+  Box,
+  IconButton,
+  Checkbox,
+  FormControl,
+  Select,
+  MenuItem,
+  ListItemText,
+  Button,
+} from '@mui/material'
+import CloseIcon from '@mui/icons-material/Close'
+import { useState, useEffect, useMemo } from 'react'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
@@ -37,13 +47,31 @@ import { hasSystemAccess } from '@/utils/userRoles'
 import { cellStyleForTier } from '@/utils/tierStyles'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
+import { fetchOpDivs } from '@/utils/opdivs'
+import { toCategoryMap } from '@/utils/dataCenterEnvironments'
+import type { OpDiv } from '@/types'
+import {
+  applyDashboardFilters,
+  hasNoActiveFilters,
+  EMPTY_DASHBOARD_FILTERS,
+  type DashboardFilterState,
+} from './dashboardFilters'
 type selectedRowsType = GridRowId[]
+type OpDivOption = { id: number; label: string }
 declare module '@mui/x-data-grid' {
   interface FooterPropsOverrides {
     selectedRows: selectedRowsType
     fismaSystems: FismaSystemType[]
     activeDataCallId: number
     scores: Record<number, SystemScoreEntry>
+  }
+  interface ToolbarPropsOverrides {
+    filters: DashboardFilterState
+    onFiltersChange: (next: DashboardFilterState) => void
+    envOptions: string[]
+    opdivOptions: OpDivOption[]
+    showEnvFilter: boolean
+    showOpDivFilter: boolean
   }
 }
 
@@ -152,15 +180,46 @@ export function CustomFooterSaveComponent(
   )
 }
 
-function QuickSearchToolbar() {
+function QuickSearchToolbar(props: {
+  filters?: DashboardFilterState
+  onFiltersChange?: (next: DashboardFilterState) => void
+  envOptions?: string[]
+  opdivOptions?: OpDivOption[]
+  showEnvFilter?: boolean
+  showOpDivFilter?: boolean
+}) {
   const { showDecommissioned, setShowDecommissioned } = useContextProp()
+  const filters = props.filters ?? EMPTY_DASHBOARD_FILTERS
+  const onFiltersChange = props.onFiltersChange ?? (() => {})
+  const envOptions = props.envOptions ?? []
+  const opdivOptions = props.opdivOptions ?? []
+  const showEnvFilter = props.showEnvFilter ?? false
+  const showOpDivFilter = props.showOpDivFilter ?? false
+
+  const switchSx = {
+    '& .MuiSwitch-switchBase.Mui-checked': { color: '#004297' },
+    '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+      backgroundColor: '#004297',
+    },
+  }
+  // Keep the collapsed value on a single line so a multi-select never grows the
+  // control's height — the summary ellipsizes instead of wrapping into chips.
+  const selectValueSx = {
+    '& .MuiSelect-select': {
+      whiteSpace: 'nowrap',
+      overflow: 'hidden',
+      textOverflow: 'ellipsis',
+    },
+  }
 
   return (
     <Box
       sx={{
-        py: 0.5,
-        pl: 1,
+        py: 1,
+        px: 1,
         display: 'flex',
+        flexWrap: 'wrap',
+        gap: 1.5,
         justifyContent: 'space-between',
         alignItems: 'center',
       }}
@@ -168,40 +227,138 @@ function QuickSearchToolbar() {
       <GridToolbarQuickFilter
         debounceMs={250}
         sx={{
-          // '& .MuiInputBase-root:before': {
-          //   borderBottomColor: '#5666b8',
-          //   borderBottomWidth: 2,
-          // },
           '& .MuiInputBase-input::placeholder': {
-            color: '#404040', // Change placeholder color to red
-            opacity: 0.8, // Ensure it is fully visible (MUI reduces opacity by default)
+            color: '#404040',
+            opacity: 0.8,
           },
           '& .MuiInputBase-root:after': {
-            borderBottomColor: '#5666b8', // Changes the underline color when active
+            borderBottomColor: '#5666b8',
           },
           '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: '#5666b8', // Changes the underline color on hover
+            borderBottomColor: '#5666b8',
           },
         }}
       />
-      <FormControlLabel
-        control={
-          <Switch
-            checked={showDecommissioned}
-            onChange={(e) => setShowDecommissioned(e.target.checked)}
-            sx={{
-              '& .MuiSwitch-switchBase.Mui-checked': {
-                color: '#004297',
-              },
-              '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-                backgroundColor: '#004297',
-              },
-            }}
-          />
-        }
-        label="Show Decommissioned"
-        sx={{ mr: 2 }}
-      />
+      {/* All facet filters live in one right-aligned cluster next to the
+          Show Decommissioned toggle. */}
+      <Box
+        sx={{
+          display: 'flex',
+          flexWrap: 'wrap',
+          gap: 1.5,
+          alignItems: 'center',
+          justifyContent: 'flex-end',
+        }}
+      >
+        {showEnvFilter && (
+          <FormControl size="small" sx={{ width: 200 }}>
+            <Select
+              multiple
+              displayEmpty
+              value={filters.environments}
+              onChange={(e) =>
+                onFiltersChange({
+                  ...filters,
+                  environments: e.target.value as string[],
+                })
+              }
+              inputProps={{ 'aria-label': 'Filter by environment' }}
+              renderValue={(selected) => {
+                const vals = selected as string[]
+                if (vals.length === 0)
+                  return <span style={{ color: '#6b6b6b' }}>Environment</span>
+                if (vals.length === 1) return vals[0]
+                return `${vals.length} environments`
+              }}
+              sx={selectValueSx}
+            >
+              {envOptions.map((opt) => (
+                <MenuItem key={opt} value={opt}>
+                  <Checkbox
+                    checked={filters.environments.includes(opt)}
+                    size="small"
+                  />
+                  <ListItemText primary={opt} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+        {showOpDivFilter && (
+          <FormControl size="small" sx={{ width: 200 }}>
+            <Select
+              multiple
+              displayEmpty
+              value={filters.opdivIds}
+              onChange={(e) =>
+                onFiltersChange({
+                  ...filters,
+                  opdivIds: e.target.value as number[],
+                })
+              }
+              inputProps={{ 'aria-label': 'Filter by OpDiv' }}
+              renderValue={(selected) => {
+                const ids = selected as number[]
+                if (ids.length === 0)
+                  return <span style={{ color: '#6b6b6b' }}>OpDiv</span>
+                if (ids.length === 1)
+                  return (
+                    opdivOptions.find((o) => o.id === ids[0])?.label ??
+                    String(ids[0])
+                  )
+                return `${ids.length} OpDivs`
+              }}
+              sx={selectValueSx}
+            >
+              {opdivOptions.map((o) => (
+                <MenuItem key={o.id} value={o.id}>
+                  <Checkbox
+                    checked={filters.opdivIds.includes(o.id)}
+                    size="small"
+                  />
+                  <ListItemText primary={o.label} />
+                </MenuItem>
+              ))}
+            </Select>
+          </FormControl>
+        )}
+        <FormControlLabel
+          control={
+            <Switch
+              checked={filters.notUpdatedOnly}
+              onChange={(e) =>
+                onFiltersChange({
+                  ...filters,
+                  notUpdatedOnly: e.target.checked,
+                })
+              }
+              sx={switchSx}
+            />
+          }
+          label="Not updated only"
+          sx={{ m: 0 }}
+        />
+        <FormControlLabel
+          control={
+            <Switch
+              checked={showDecommissioned}
+              onChange={(e) => setShowDecommissioned(e.target.checked)}
+              sx={switchSx}
+            />
+          }
+          label="Show Decommissioned"
+          sx={{ m: 0 }}
+        />
+        <Button
+          size="small"
+          startIcon={<CloseIcon />}
+          onClick={() => onFiltersChange(EMPTY_DASHBOARD_FILTERS)}
+          disabled={hasNoActiveFilters(filters)}
+          sx={{ color: '#004297', textTransform: 'none', mr: 2, flexShrink: 0 }}
+        >
+          Clear filters
+        </Button>
+      </Box>
     </Box>
   )
 }
@@ -214,14 +371,111 @@ const pillarScoresCache = new Map<number, CachedScore>()
 
 export default function FismaTable({ scores, progress }: FismaTableProps) {
   const apiRef = useGridApiRef()
-  const { fismaSystems, latestDataCallId, selectedDatacall, userInfo } =
-    useContextProp()
+  const {
+    fismaSystems,
+    latestDataCallId,
+    selectedDatacall,
+    userInfo,
+    datacenterEnvironments,
+  } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
   const [selectedRows, setSelectedRows] = useState<GridRowId[]>([])
+  const [filters, setFilters] = useState<DashboardFilterState>(
+    EMPTY_DASHBOARD_FILTERS
+  )
+  const [opdivs, setOpDivs] = useState<OpDiv[]>([])
   const navigate = useNavigate()
+
+  // OpDiv list is only needed to label the OpDiv filter. Include inactive
+  // OpDivs so a system tied to a since-deactivated OpDiv still shows a name,
+  // not a bare id. Fetched once; failure is non-fatal.
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchOpDivs(true, controller.signal)
+      .then(setOpDivs)
+      .catch((error) => {
+        if (controller.signal.aborted) return
+        console.error('Fetch opdivs error:', error)
+      })
+    return () => controller.abort()
+  }, [])
+
+  // Raw datacenterenvironment -> category label, from the vocabulary already in
+  // context. Drives both the Environment filter options and row matching.
+  const categoryMap = useMemo(
+    () => toCategoryMap(datacenterEnvironments),
+    [datacenterEnvironments]
+  )
+
+  // Only offer facet values that actually appear in the current rows, in the
+  // vocabulary's curated order (datacenterEnvironments arrives sorted by `ordr`)
+  // so the filter matches the system-form dropdown order rather than alphabetical.
+  const envOptions = useMemo(() => {
+    const present = new Set<string>()
+    for (const system of fismaSystems) {
+      const category = categoryMap[system.datacenterenvironment]
+      if (category) present.add(category)
+    }
+    const ordered: string[] = []
+    const seen = new Set<string>()
+    for (const dce of datacenterEnvironments) {
+      if (present.has(dce.category) && !seen.has(dce.category)) {
+        seen.add(dce.category)
+        ordered.push(dce.category)
+      }
+    }
+    return ordered
+  }, [fismaSystems, categoryMap, datacenterEnvironments])
+
+  const opdivOptions = useMemo<OpDivOption[]>(() => {
+    const byId = new Map(opdivs.map((o) => [o.opdiv_id, o]))
+    const present = new Set<number>()
+    for (const system of fismaSystems) {
+      if (system.opdiv_id != null) present.add(system.opdiv_id)
+    }
+    return Array.from(present)
+      .map((id) => {
+        const od = byId.get(id)
+        return { id, label: od ? `${od.code} — ${od.name}` : String(id) }
+      })
+      .sort((a, b) => a.label.localeCompare(b.label))
+  }, [fismaSystems, opdivs])
+
+  // Hide a facet filter when the visible systems span a single value — the
+  // control gains nothing and only costs toolbar width (and an empty menu).
+  const showEnvFilter = envOptions.length > 1
+  const showOpDivFilter = opdivOptions.length > 1
+
+  // Keep selections valid as the option sets change (e.g. Show Decommissioned
+  // refetches the rows, or a filter hides). Drop any selected value no longer
+  // offered so the grid never over-filters via an invisible control and MUI
+  // never warns about a value outside its options.
+  useEffect(() => {
+    setFilters((prev) => {
+      const environments = showEnvFilter
+        ? prev.environments.filter((e) => envOptions.includes(e))
+        : []
+      const opdivIds = showOpDivFilter
+        ? prev.opdivIds.filter((id) => opdivOptions.some((o) => o.id === id))
+        : []
+      if (
+        environments.length === prev.environments.length &&
+        opdivIds.length === prev.opdivIds.length
+      ) {
+        return prev
+      }
+      return { ...prev, environments, opdivIds }
+    })
+  }, [envOptions, opdivOptions, showEnvFilter, showOpDivFilter])
+
+  const filteredRows = useMemo(
+    () =>
+      applyDashboardFilters(fismaSystems, progress ?? {}, categoryMap, filters),
+    [fismaSystems, progress, categoryMap, filters]
+  )
   const [pillarScoresModal, setPillarScoresModal] = useState<{
     open: boolean
     systemName: string
@@ -469,7 +723,7 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
   return (
     <Box sx={{ height: 600, width: '100%', mb: 2 }}>
       <DataGrid
-        rows={fismaSystems}
+        rows={filteredRows}
         isRowSelectable={(params: GridRowParams) =>
           params.row.fismasystemid in scores
         }
@@ -483,6 +737,14 @@ export default function FismaTable({ scores, progress }: FismaTableProps) {
         }}
         slotProps={{
           footer: { selectedRows, fismaSystems, activeDataCallId, scores },
+          toolbar: {
+            filters,
+            onFiltersChange: setFilters,
+            envOptions,
+            opdivOptions,
+            showEnvFilter,
+            showOpDivFilter,
+          },
           filterPanel: {
             sx: {
               '& .MuiFormLabel-root': {
