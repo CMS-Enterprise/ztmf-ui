@@ -166,6 +166,19 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
   )
 }
 
+// Normalize a data-call name for comparison: fold underscores/whitespace and
+// case so "FY2025_Q3" (the viewed call slug) matches "FY2025 Q3" (the payload's
+// label form).
+function sameDatacall(a?: string | null, b?: string | null): boolean {
+  if (!a || !b) return false
+  const norm = (s: string) =>
+    s
+      .replace(/[_\s]+/g, ' ')
+      .trim()
+      .toLowerCase()
+  return norm(a) === norm(b)
+}
+
 // Inline badges for a single answer option, matched by maturity score against
 // the question's insight. Rendered next to the option label in the radio group
 // so a scorer sees, at the point of choosing, which answer the evidence points
@@ -173,14 +186,23 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
 export function OptionInsightBadges({
   score,
   insight,
+  viewedDatacall,
 }: {
   score?: number
   insight?: InsightPayload
+  // The data call currently being viewed. The prior-answer badge is only
+  // meaningful when the insight's last answer is from an EARLIER call; if the
+  // insight's last_datacall is the call on screen, the badge would label the
+  // current call as "prior", so it is suppressed.
+  viewedDatacall?: string
 }) {
   if (!insight || score == null) return null
   const isSuggested =
     insight.suggested_score != null && score === insight.suggested_score
-  const isPrior = insight.last_score != null && score === insight.last_score
+  const isPrior =
+    insight.last_score != null &&
+    score === insight.last_score &&
+    !sameDatacall(insight.last_datacall, viewedDatacall)
   if (!isSuggested && !isPrior) return null
 
   const priorLabel = insight.last_datacall

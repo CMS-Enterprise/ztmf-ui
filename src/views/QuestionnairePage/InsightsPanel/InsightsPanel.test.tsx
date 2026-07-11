@@ -143,6 +143,46 @@ describe('OptionInsightBadges', () => {
     const { container } = render(<OptionInsightBadges score={1} />)
     expect(container).toBeEmptyDOMElement()
   })
+
+  it('suppresses the prior-answer badge when viewing the call it names (slug form)', () => {
+    render(
+      <OptionInsightBadges
+        score={2}
+        insight={insight}
+        viewedDatacall="FY2024_Q1"
+      />
+    )
+    expect(screen.queryByText('FY2024 Q1 answer')).not.toBeInTheDocument()
+  })
+
+  it('still shows the prior-answer badge when viewing a different call', () => {
+    render(
+      <OptionInsightBadges
+        score={2}
+        insight={insight}
+        viewedDatacall="FY25_ZTM"
+      />
+    )
+    expect(screen.getByText('FY2024 Q1 answer')).toBeInTheDocument()
+  })
+
+  it('keeps the recommendation badge even when the prior badge is suppressed', () => {
+    // suggested (1) and prior (1) coincide on the same option; viewing the prior
+    // call should drop only the prior badge, not the recommendation.
+    render(
+      <OptionInsightBadges
+        score={1}
+        insight={{
+          suggested_score: 1,
+          last_score: 1,
+          last_datacall: 'FY2024 Q1',
+        }}
+        viewedDatacall="FY2024_Q1"
+      />
+    )
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    expect(screen.queryByText('FY2024 Q1 answer')).not.toBeInTheDocument()
+  })
 })
 
 describe('InsightsPanel resilience (opaque payload)', () => {

@@ -240,7 +240,11 @@ export default function QuestionnarePage() {
           }}
         >
           <Box component="span">{o.label}</Box>
-          <OptionInsightBadges score={o.score} insight={currentInsight} />
+          <OptionInsightBadges
+            score={o.score}
+            insight={currentInsight}
+            viewedDatacall={datacall}
+          />
         </Box>
       ),
       value: o.value,
