@@ -186,6 +186,17 @@ export default function QuestionnarePage() {
   optionsRef.current = options
   const loadingQuestionRef = React.useRef(loadingQuestion)
   loadingQuestionRef.current = loadingQuestion
+  // Persisted data-call context so in-questionnaire navigation (Next/Back/
+  // sidebar) can re-supply it via router state. Without this, the first
+  // click-through drops location.state.datacall* and the load effect reverts to
+  // the global data-call selector — opening a system for a specific picked call
+  // (e.g. FY2025 Q3) would silently fall back to the latest call (FY25) on the
+  // next click.
+  const datacallStateRef = React.useRef<{
+    datacallid: number
+    datacall: string
+    deadline?: string
+  }>({ datacallid: 0, datacall: '' })
   // Bumped when a re-seed changes the answer so the uncontrolled radio ChoiceList
   // (which only reflects defaultChecked on mount) remounts and shows the
   // corrected selection.
@@ -419,6 +430,11 @@ export default function QuestionnarePage() {
             setIsPastDeadline(
               routeDeadline ? new Date() > new Date(routeDeadline) : true
             )
+            datacallStateRef.current = {
+              datacallid: routeDatacallId,
+              datacall,
+              deadline: routeDeadline,
+            }
           } else {
             const isHistorical =
               selectedDatacall !== null &&
@@ -428,6 +444,11 @@ export default function QuestionnarePage() {
               setDatacall(datacall)
               setIsPastDeadline(true)
               activeDataCallId = selectedDatacall.datacallid
+              datacallStateRef.current = {
+                datacallid: selectedDatacall.datacallid,
+                datacall,
+                deadline: selectedDatacall.deadline,
+              }
             } else {
               datacall = latestDatacall.replaceAll(' ', '_')
               setDatacall(datacall)
@@ -435,6 +456,11 @@ export default function QuestionnarePage() {
                 latestDeadline ? new Date() > new Date(latestDeadline) : true
               )
               activeDataCallId = latestDataCallId
+              datacallStateRef.current = {
+                datacallid: latestDataCallId,
+                datacall,
+                deadline: latestDeadline ?? undefined,
+              }
             }
           }
           // Hoisted so both the questions block and the final batch can access them.
@@ -509,7 +535,12 @@ export default function QuestionnarePage() {
               navigate(
                 `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
                 {
-                  state: { fismasystemid: system },
+                  state: {
+                    fismasystemid: system,
+                    datacallid: datacallStateRef.current.datacallid,
+                    datacall: datacallStateRef.current.datacall,
+                    deadline: datacallStateRef.current.deadline,
+                  },
                   replace: true,
                 }
               )
@@ -952,7 +983,15 @@ export default function QuestionnarePage() {
                                 navigate(
                                   `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
                                   {
-                                    state: { fismasystemid: system },
+                                    state: {
+                                      fismasystemid: system,
+                                      datacallid:
+                                        datacallStateRef.current.datacallid,
+                                      datacall:
+                                        datacallStateRef.current.datacall,
+                                      deadline:
+                                        datacallStateRef.current.deadline,
+                                    },
                                     replace: true,
                                   }
                                 )
@@ -1083,7 +1122,13 @@ export default function QuestionnarePage() {
                             navigate(
                               `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                               {
-                                state: { fismasystemid: system },
+                                state: {
+                                  fismasystemid: system,
+                                  datacallid:
+                                    datacallStateRef.current.datacallid,
+                                  datacall: datacallStateRef.current.datacall,
+                                  deadline: datacallStateRef.current.deadline,
+                                },
                                 replace: true,
                               }
                             )
@@ -1114,7 +1159,12 @@ export default function QuestionnarePage() {
                           navigate(
                             `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                             {
-                              state: { fismasystemid: system },
+                              state: {
+                                fismasystemid: system,
+                                datacallid: datacallStateRef.current.datacallid,
+                                datacall: datacallStateRef.current.datacall,
+                                deadline: datacallStateRef.current.deadline,
+                              },
                               replace: true,
                             }
                           )
