@@ -46,7 +46,7 @@ import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresMo
 import { FismaTableProps } from '@/types'
 import type { ScoreAggregate, SystemScoreEntry, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
-import { cellStyleForTier } from '@/utils/tierStyles'
+import { TIERS } from '@/utils/tierStyles'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
 import { fetchOpDivs } from '@/utils/opdivs'
@@ -659,8 +659,9 @@ export default function FismaTable({
         // it from the numeric score. Cells without a tier render with no
         // background fill so a transient deploy mismatch reads as
         // "unknown" rather than a misleading color.
-        const backgroundColor =
-          cellStyleForTier(entry?.tier)?.backgroundColor ?? 'transparent'
+        const backgroundColor = entry?.tier
+          ? TIERS[entry.tier]?.cell.backgroundColor ?? 'transparent'
+          : 'transparent'
         return (
           <Box
             sx={{
