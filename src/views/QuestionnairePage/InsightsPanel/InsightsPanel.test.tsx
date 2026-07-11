@@ -144,3 +144,41 @@ describe('OptionInsightBadges', () => {
     expect(container).toBeEmptyDOMElement()
   })
 })
+
+describe('InsightsPanel resilience (opaque payload)', () => {
+  it('degrades gracefully when a findings field is not an array', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 2,
+          evidence_sources: 'ARS, CFACTS',
+          findings: { kion: 'not-an-array' as unknown as [] },
+        }}
+      />
+    )
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    // The malformed findings block is skipped, not thrown on.
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText(/ARS, CFACTS/)).toBeInTheDocument()
+  })
+
+  it('renders nothing (no page crash) when a rendered field throws', () => {
+    // evidence_sources arriving as an object would throw "Objects are not valid
+    // as a React child" when details opens; the error boundary must swallow it
+    // so the surrounding questionnaire is never taken down.
+    const spy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 2,
+          evidence_sources: { bad: true } as unknown as string,
+        }}
+      />
+    )
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Boundary caught the throw and rendered nothing in place of the panel.
+    expect(screen.queryByText('ZTMF Insights')).not.toBeInTheDocument()
+    spy.mockRestore()
+  })
+})

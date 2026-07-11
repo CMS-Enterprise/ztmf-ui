@@ -4,7 +4,12 @@ import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
 import Collapse from '@mui/material/Collapse'
 import Link from '@mui/material/Link'
-import type { InsightPayload } from '@/types'
+import type {
+  InsightPayload,
+  InsightKionFinding,
+  InsightSecHubFinding,
+  InsightHardenizeFinding,
+} from '@/types'
 
 type Props = {
   payload: InsightPayload
@@ -137,6 +142,7 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
     <Tooltip title={title} placement="top" arrow>
       <Box
         component="span"
+        aria-label={title}
         sx={{
           display: 'inline-flex',
           alignItems: 'center',
@@ -178,7 +184,7 @@ export function OptionInsightBadges({
   if (!isSuggested && !isPrior) return null
 
   const priorLabel = insight.last_datacall
-    ? `${insight.last_datacall} answer`
+    ? `${String(insight.last_datacall).replaceAll('_', ' ')} answer`
     : "Last year's answer"
 
   return (
@@ -233,7 +239,7 @@ export function OptionInsightBadges({
   )
 }
 
-export default function InsightsPanel({ payload }: Props) {
+function InsightsPanelInner({ payload }: Props) {
   const [open, setOpen] = React.useState(false)
 
   // Parent already gates on payload presence, but guard so the component is
@@ -258,12 +264,25 @@ export default function InsightsPanel({ payload }: Props) {
         }`
       : 'No suggestion'
 
+  // The payload is opaque/additive, so a sub-field the type declares as an
+  // array could arrive as something else. Coerce to real arrays before mapping
+  // so a malformed findings block degrades to "no findings" instead of throwing
+  // during render (which the route errorElement would turn into a full-page
+  // error for the whole questionnaire).
   const findings = payload.findings
+  const kionFindings = Array.isArray(findings?.kion)
+    ? (findings?.kion as InsightKionFinding[])
+    : []
+  const sechubFindings = Array.isArray(findings?.sechub)
+    ? (findings?.sechub as InsightSecHubFinding[])
+    : []
+  const hardenizeFindings = Array.isArray(findings?.hardenize)
+    ? (findings?.hardenize as InsightHardenizeFinding[])
+    : []
   const hasFindings =
-    !!findings &&
-    ((findings.kion?.length ?? 0) > 0 ||
-      (findings.sechub?.length ?? 0) > 0 ||
-      (findings.hardenize?.length ?? 0) > 0)
+    kionFindings.length > 0 ||
+    sechubFindings.length > 0 ||
+    hardenizeFindings.length > 0
   const hasDetail =
     hasFindings ||
     !!payload.cfacts_reasoning ||
@@ -373,7 +392,7 @@ export default function InsightsPanel({ payload }: Props) {
             </Typography>
           )}
 
-          {findings?.kion?.map((f, i) => (
+          {kionFindings.map((f, i) => (
             <FindingRow
               key={`kion-${f.id ?? i}`}
               source="Kion"
@@ -383,7 +402,7 @@ export default function InsightsPanel({ payload }: Props) {
               nistControls={f.nist_controls}
             />
           ))}
-          {findings?.sechub?.map((f, i) => (
+          {sechubFindings.map((f, i) => (
             <FindingRow
               key={`sechub-${f.id ?? i}`}
               source="SecurityHub"
@@ -393,7 +412,7 @@ export default function InsightsPanel({ payload }: Props) {
               remediation={f.remediation}
             />
           ))}
-          {findings?.hardenize?.map((f, i) => (
+          {hardenizeFindings.map((f, i) => (
             <FindingRow
               key={`hardenize-${f.id ?? i}`}
               source="Hardenize"
@@ -405,6 +424,32 @@ export default function InsightsPanel({ payload }: Props) {
         </Box>
       </Collapse>
     </Box>
+  )
+}
+
+// Error boundary around the panel: a render throw (e.g. an opaque payload field
+// arriving in an unexpected shape) degrades to rendering nothing instead of
+// bubbling to the route's errorElement and replacing the entire questionnaire
+// with an error page. The panel is purely additive — failing to render it must
+// never take down the page.
+class InsightPanelBoundary extends React.Component<
+  { children: React.ReactNode },
+  { failed: boolean }
+> {
+  state = { failed: false }
+  static getDerivedStateFromError() {
+    return { failed: true }
+  }
+  render() {
+    return this.state.failed ? null : <>{this.props.children}</>
+  }
+}
+
+export default function InsightsPanel(props: Props) {
+  return (
+    <InsightPanelBoundary>
+      <InsightsPanelInner {...props} />
+    </InsightPanelBoundary>
   )
 }
 

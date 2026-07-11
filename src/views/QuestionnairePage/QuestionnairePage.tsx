@@ -293,6 +293,9 @@ export default function QuestionnarePage() {
   React.useEffect(() => {
     if (!system) return
     const controller = new AbortController()
+    // Clear the previous system's insights up front so a system change can't
+    // briefly render stale badges/panel while the new fetch is in flight.
+    setInsightsByQuestion(new Map())
     const load = async () => {
       try {
         const res = await axiosInstance.get<{ data: Insight[] }>('insights', {
