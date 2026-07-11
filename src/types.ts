@@ -173,6 +173,7 @@ export type QuestionScores = {
 }
 
 export type Question = {
+  questionid: number
   question: string
   notesprompt: string
   description: string
@@ -269,6 +270,9 @@ export type ScoreProgress = {
 export type QuestionChoice = {
   label: string
   value: number
+  // Maturity score (1-4) of this answer option. Carried so the radio group can
+  // match an option against a ZTMF Insight's suggested/prior score for badging.
+  score?: number
   defaultChecked?: boolean
 }
 export type users = {
@@ -304,6 +308,9 @@ export type FismaTableProps = {
   // fismasystemid. Optional so the table degrades to an em-dash column if
   // the progress fetch fails - score display must not depend on it.
   progress?: Record<number, ScoreProgress>
+  // Which active data call(s) each system has scores in, keyed by
+  // fismasystemid, so per-row actions target the system's own call.
+  systemCallMap?: Record<number, number[]>
 }
 
 export type ThemeColor =
@@ -359,4 +366,95 @@ export type ScoreDiffEntry = {
     email: string
     role: string
   }
+}
+
+// ── ZTMF Insights (GET /api/v1/insights) ───────────────────────────────
+// Evidence-backed maturity suggestion per system x question, synced daily
+// from Snowflake. The endpoint returns [] for every "should not show" case
+// (OpDiv not enabled, caller not entitled, not yet synced), so the UI is
+// driven purely off row presence — see InsightsPanel.
+//
+// `payload` is an opaque, additive document owned by the pipeline. Treat
+// every key as optional and render defensively; the string index signature
+// keeps forward-added keys type-safe without an API change here.
+
+export type InsightKionFinding = {
+  id?: string
+  nist_controls?: string
+  description?: string
+  remediation?: string
+}
+
+export type InsightSecHubFinding = {
+  id?: string
+  title?: string
+  severity?: string
+  description?: string
+  remediation?: string
+}
+
+export type InsightHardenizeFinding = {
+  id?: string
+  title?: string
+  severity?: string
+}
+
+export type InsightFindings = {
+  kion?: InsightKionFinding[]
+  sechub?: InsightSecHubFinding[]
+  hardenize?: InsightHardenizeFinding[]
+}
+
+export type InsightPayload = {
+  // The suggestion
+  suggested_score?: number | null
+  suggested_label?: string | null
+  evidence_sources?: string | null
+  score_floor_source?: string | null
+  score_direction?: string | null
+
+  // Prior self-reported score (for comparison)
+  last_score?: number | null
+  last_score_label?: string | null
+  last_score_date?: string | null
+  last_score_notes?: string | null
+  last_datacall?: string | null
+
+  // Per-source suggested scores + availability flags
+  has_kion_data?: boolean
+  kion_suggested_score?: number | null
+  kion_suggested_label?: string | null
+  kion_remediation?: string | null
+
+  has_sechub_data?: boolean
+  sechub_suggested_score?: number | null
+  sechub_suggested_label?: string | null
+  sechub_remediation?: string | null
+
+  has_hardenize_data?: boolean
+  hardenize_suggested_score?: number | null
+  hardenize_suggested_label?: string | null
+  hardenize_remediation?: string | null
+
+  cfacts_suggested_score?: number | null
+  cfacts_suggested_label?: string | null
+  cfacts_auth_methods?: string | null
+  cfacts_reasoning?: string | null
+
+  ars_maturity?: number | null
+  ars_control_score?: number | null
+  ars_controls_total?: number | null
+  ars_controls_satisfied?: number | null
+
+  findings?: InsightFindings
+
+  // Additive: the pipeline may add keys at any time.
+  [key: string]: unknown
+}
+
+export type Insight = {
+  fismasystemid: number
+  questionid: number
+  payload: InsightPayload
+  synced_at: string
 }

@@ -6,6 +6,7 @@ import { useContextProp } from '../Title/Context'
 import { Box, CircularProgress } from '@mui/material'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import type { ScoreAggregate, ScoreProgress, SystemScoreEntry } from '@/types'
+import { buildDashboardMaps } from './aggregateScores'
 /**
  * Component that renders the contents of the Home view.
  * @returns {JSX.Element} Component that renders the home contents.
@@ -17,62 +18,71 @@ export default function HomePageContainer() {
   const [progressMap, setProgressMap] = useState<Record<number, ScoreProgress>>(
     {}
   )
-  const { latestDataCallId, selectedDatacall } = useContextProp()
-  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
+  // Which active call(s) each system has scores in, so per-row actions open the
+  // system's own data call instead of a globally-selected one.
+  const [systemCallMap, setSystemCallMap] = useState<Record<number, number[]>>(
+    {}
+  )
+  const { activeDatacallIds } = useContextProp()
   useEffect(() => {
     const controller = new AbortController()
-    async function fetchScores() {
-      if (activeDataCallId !== 0) {
-        try {
-          const res = await axiosInstance.get(
-            `/scores/aggregate?datacallid=${activeDataCallId}`,
-            { signal: controller.signal }
+    const ids = activeDatacallIds
+
+    // Aggregate every active call in the year. Each call is fetched
+    // independently (per-request .catch so one failure doesn't sink the batch
+    // or block the others), then buildDashboardMaps merges them per system,
+    // choosing the call each system most recently updated. Scores and progress
+    // are fetched together because the chosen call depends on both.
+    async function load() {
+      const [scoresPerCall, progressPerCall] = await Promise.all([
+        Promise.all(
+          ids.map((id) =>
+            axiosInstance
+              .get(`/scores/aggregate?datacallid=${id}`, {
+                signal: controller.signal,
+              })
+              .then((res) => res.data.data as ScoreAggregate[])
+              .catch((error) => {
+                if (!controller.signal.aborted)
+                  console.error(`scores/aggregate ${id} failed:`, error)
+                return [] as ScoreAggregate[]
+              })
           )
-          const scoresMap: Record<number, SystemScoreEntry> = {}
-          for (const obj of res.data.data as ScoreAggregate[]) {
-            scoresMap[obj.fismasystemid] = {
-              score: obj.systemscore ?? 0,
-              tier: obj.systemtier,
-            }
-          }
-          setScoreMap(scoresMap)
-        } catch (error) {
-          if (controller.signal.aborted) return
-          console.error('Error fetching scores:', error)
-        } finally {
-          if (!controller.signal.aborted) setLoading(false)
-        }
-      }
-    }
-    // Questionnaire progress for the active data call (ztmf#299). Fetched
-    // alongside the aggregate but independent of it: a failure here leaves
-    // the progress column as em-dashes without blocking the score display,
-    // so it neither gates `loading` nor shares the aggregate's try/catch.
-    async function fetchProgress() {
-      if (activeDataCallId !== 0) {
-        try {
-          const res = await axiosInstance.get(
-            `/scores/progress?datacallid=${activeDataCallId}`,
-            { signal: controller.signal }
+        ),
+        Promise.all(
+          ids.map((id) =>
+            axiosInstance
+              .get(`/scores/progress?datacallid=${id}`, {
+                signal: controller.signal,
+              })
+              .then((res) => res.data.data as ScoreProgress[])
+              .catch((error) => {
+                if (!controller.signal.aborted)
+                  console.error(`scores/progress ${id} failed:`, error)
+                return [] as ScoreProgress[]
+              })
           )
-          const map: Record<number, ScoreProgress> = {}
-          for (const obj of res.data.data as ScoreProgress[]) {
-            map[obj.fismasystemid] = obj
-          }
-          setProgressMap(map)
-        } catch (error) {
-          if (controller.signal.aborted) return
-          console.error('Error fetching data call progress:', error)
-          setProgressMap({})
-        }
-      }
+        ),
+      ])
+      if (controller.signal.aborted) return
+      const maps = buildDashboardMaps(ids, scoresPerCall, progressPerCall)
+      setScoreMap(maps.scoreMap)
+      setProgressMap(maps.progressMap)
+      setSystemCallMap(maps.systemCallMap)
+      setLoading(false)
     }
-    fetchScores()
-    fetchProgress()
+
+    // Keep the spinner until the active calls resolve — activeDatacallIds is
+    // empty on the first paint while Title is still fetching /datacalls, so
+    // don't clear loading (which would flash an empty dashboard) until there
+    // are calls to fetch.
+    if (ids.length > 0) {
+      load()
+    }
     return () => {
       controller.abort()
     }
-  }, [activeDataCallId])
+  }, [activeDatacallIds])
 
   if (loading) {
     return (
@@ -92,7 +102,11 @@ export default function HomePageContainer() {
     <Box>
       <StatisticsBlocks scores={scoreMap} />
       <BreadCrumbs />
-      <FismaTable scores={scoreMap} progress={progressMap} />
+      <FismaTable
+        scores={scoreMap}
+        progress={progressMap}
+        systemCallMap={systemCallMap}
+      />
     </Box>
   )
 }

@@ -5,7 +5,6 @@ export enum RouteIds {
   QUESTIONNAIRE = 'questionnaire',
   AUTH = 'auth',
   LOGIN = 'login',
-  LOGOUT = 'logout',
   HOME = 'home',
   DATA = 'data',
   USERS = 'users',
@@ -18,7 +17,6 @@ export enum RouteNames {
   DASHBOARD = 'Dashboard',
   QUESTIONNAIRE = 'questionnaire',
   LOGIN = 'Login',
-  LOGOUT = 'Logout',
   SIGNIN = 'Sign In',
 }
 
@@ -30,7 +28,6 @@ export enum Routes {
   QUESTIONNAIRE = `/${RouteIds.QUESTIONNAIRE}/:fismaacronym/:datacallid?/:pillar?/:function?`,
   AUTH = `/${RouteIds.AUTH}/*`,
   AUTH_LOGIN = `/${RouteIds.AUTH}/${RouteIds.LOGIN}`,
-  AUTH_LOGOUT = `/${RouteIds.AUTH}/${RouteIds.LOGOUT}`,
   SIGNIN = `/${RouteIds.SIGNIN}`,
   SYSTEM_DETAIL = '/systems/:fismasystemid',
   ADMIN_OPDIVS = '/admin/opdivs',

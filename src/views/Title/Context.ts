@@ -14,8 +14,13 @@ type ContextType = {
   latestDataCallId: number
   latestDatacall: string
   latestDeadline: string
+  // All data calls (deadline-sorted) for resolving a call id to its name.
+  datacalls: datacall[]
+  // The data calls whose scores/progress the dashboard aggregates — the active
+  // year's calls, toggleable. selectedDatacall is the single active call when
+  // exactly one is on (drives the single-id flows), else null while aggregating.
+  activeDatacallIds: number[]
   selectedDatacall: datacall | null
-  setSelectedDatacall: React.Dispatch<React.SetStateAction<datacall | null>>
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
   fetchFismaSystems: (decommissioned?: boolean) => Promise<void>

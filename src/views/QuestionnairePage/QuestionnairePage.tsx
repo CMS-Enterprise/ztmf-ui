@@ -17,6 +17,8 @@ import {
   Question,
   QuestionChoice,
   QuestionScores,
+  Insight,
+  InsightPayload,
 } from '@/types'
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
@@ -43,6 +45,9 @@ import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
+import InsightsPanel, {
+  OptionInsightBadges,
+} from './InsightsPanel/InsightsPanel'
 import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
@@ -123,6 +128,12 @@ export default function QuestionnarePage() {
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
   const [questions, setQuestions] = React.useState<Record<number, Question>>([])
+  // ZTMF Insights keyed by DB questionid. Empty for every "off" case (OpDiv not
+  // enabled, not entitled, not yet synced) — the endpoint returns [] and the
+  // panel simply never renders, leaving the page unchanged.
+  const [insightsByQuestion, setInsightsByQuestion] = React.useState<
+    Map<number, InsightPayload>
+  >(new Map())
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
@@ -175,6 +186,17 @@ export default function QuestionnarePage() {
   optionsRef.current = options
   const loadingQuestionRef = React.useRef(loadingQuestion)
   loadingQuestionRef.current = loadingQuestion
+  // Persisted data-call context so in-questionnaire navigation (Next/Back/
+  // sidebar) can re-supply it via router state. Without this, the first
+  // click-through drops location.state.datacall* and the load effect reverts to
+  // the global data-call selector — opening a system for a specific picked call
+  // (e.g. FY2025 Q3) would silently fall back to the latest call (FY25) on the
+  // next click.
+  const datacallStateRef = React.useRef<{
+    datacallid: number
+    datacall: string
+    deadline?: string
+  }>({ datacallid: 0, datacall: '' })
   // Bumped when a re-seed changes the answer so the uncontrolled radio ChoiceList
   // (which only reflects defaultChecked on mount) remounts and shows the
   // corrected selection.
@@ -204,6 +226,26 @@ export default function QuestionnarePage() {
     if (draftStatus === 'restored') setDraftStatus('idle')
   }
   const renderRadioGroup = (options: QuestionChoice[]) => {
+    // Enrich each option label with insight badges (recommended answer / last
+    // year's answer). When there is no insight for this question, the badge
+    // component renders nothing and labels are just the option text.
+    const choices = options.map((o) => ({
+      label: (
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <Box component="span">{o.label}</Box>
+          <OptionInsightBadges score={o.score} insight={currentInsight} />
+        </Box>
+      ),
+      value: o.value,
+      defaultChecked: o.defaultChecked,
+    }))
     return (
       <Box
         sx={{
@@ -213,7 +255,7 @@ export default function QuestionnarePage() {
         }}
       >
         <ChoiceList
-          choices={options}
+          choices={choices}
           name={'radio-choices'}
           type={'radio'}
           label={undefined}
@@ -234,10 +276,51 @@ export default function QuestionnarePage() {
   // location.state. Optional-chain instead of crashing on first render; the
   // missing-system path is handled by an early render guard below.
   const system = location.state?.fismasystemid as number | undefined
+  // The dashboard opens the questionnaire for the system's own data call
+  // (year-aggregated view, #467): the specific call id and name ride along in
+  // the route state. Absent (deep link), fall back to the selected/latest call.
+  const routeDatacallId = location.state?.datacallid as number | undefined
+  const routeDatacall = location.state?.datacall as string | undefined
+  const routeDeadline = location.state?.deadline as string | undefined
   const systemRef = React.useRef(system)
   systemRef.current = system
   const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
+
+  // Fetch ZTMF Insights for this system once (not per question — one call
+  // returns every question's row). Failures and empty responses both leave the
+  // map empty so the questionnaire is never blocked or altered by insights.
+  React.useEffect(() => {
+    if (!system) return
+    const controller = new AbortController()
+    // Clear the previous system's insights up front so a system change can't
+    // briefly render stale badges/panel while the new fetch is in flight.
+    setInsightsByQuestion(new Map())
+    const load = async () => {
+      try {
+        const res = await axiosInstance.get<{ data: Insight[] }>('insights', {
+          params: { fismasystemid: system },
+          signal: controller.signal,
+        })
+        const map = new Map<number, InsightPayload>()
+        for (const row of res.data?.data ?? []) {
+          if (row?.questionid != null && row.payload) {
+            map.set(row.questionid, row.payload)
+          }
+        }
+        setInsightsByQuestion(map)
+      } catch {
+        if (!controller.signal.aborted) {
+          // Insights are additive and optional; swallow errors and render the
+          // page exactly as it is without them.
+          setInsightsByQuestion(new Map())
+        }
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [system])
+
   // Resolve the system's raw datacenter environment to its scoring category
   // for pillar filtering. Falls back to the raw value until the vocabulary
   // loads or for any value not in the map.
@@ -339,22 +422,49 @@ export default function QuestionnarePage() {
         try {
           let questionsEmpty = false
           let datacall = ''
-          const isHistorical =
-            selectedDatacall !== null &&
-            selectedDatacall.datacallid !== latestDataCallId
           let activeDataCallId: number
-          if (isHistorical && selectedDatacall) {
-            datacall = selectedDatacall.datacall.replaceAll(' ', '_')
+          if (routeDatacallId && routeDatacall) {
+            // Opened for a specific system's own call from the dashboard. Read
+            // only when that call's own deadline has passed - not by comparing
+            // to the global latest, since two calls can be open at once.
+            datacall = routeDatacall.replaceAll(' ', '_')
             setDatacall(datacall)
-            setIsPastDeadline(true)
-            activeDataCallId = selectedDatacall.datacallid
-          } else {
-            datacall = latestDatacall.replaceAll(' ', '_')
-            setDatacall(datacall)
+            activeDataCallId = routeDatacallId
             setIsPastDeadline(
-              latestDeadline ? new Date() > new Date(latestDeadline) : true
+              routeDeadline ? new Date() > new Date(routeDeadline) : true
             )
-            activeDataCallId = latestDataCallId
+            datacallStateRef.current = {
+              datacallid: routeDatacallId,
+              datacall,
+              deadline: routeDeadline,
+            }
+          } else {
+            const isHistorical =
+              selectedDatacall !== null &&
+              selectedDatacall.datacallid !== latestDataCallId
+            if (isHistorical && selectedDatacall) {
+              datacall = selectedDatacall.datacall.replaceAll(' ', '_')
+              setDatacall(datacall)
+              setIsPastDeadline(true)
+              activeDataCallId = selectedDatacall.datacallid
+              datacallStateRef.current = {
+                datacallid: selectedDatacall.datacallid,
+                datacall,
+                deadline: selectedDatacall.deadline,
+              }
+            } else {
+              datacall = latestDatacall.replaceAll(' ', '_')
+              setDatacall(datacall)
+              setIsPastDeadline(
+                latestDeadline ? new Date() > new Date(latestDeadline) : true
+              )
+              activeDataCallId = latestDataCallId
+              datacallStateRef.current = {
+                datacallid: latestDataCallId,
+                datacall,
+                deadline: latestDeadline ?? undefined,
+              }
+            }
           }
           // Hoisted so both the questions block and the final batch can access them.
           const questionData: Record<number, Question> = {}
@@ -382,6 +492,7 @@ export default function QuestionnarePage() {
                   organizedData[question.pillar.pillar] = []
                 }
                 questionData[question.function.functionid] = {
+                  questionid: question.questionid,
                   question: question.question,
                   notesprompt: question.notesprompt,
                   description: question.function.description,
@@ -427,7 +538,12 @@ export default function QuestionnarePage() {
               navigate(
                 `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
                 {
-                  state: { fismasystemid: system },
+                  state: {
+                    fismasystemid: system,
+                    datacallid: datacallStateRef.current.datacallid,
+                    datacall: datacallStateRef.current.datacall,
+                    deadline: datacallStateRef.current.deadline,
+                  },
                   replace: true,
                 }
               )
@@ -497,6 +613,9 @@ export default function QuestionnarePage() {
     system,
     navigate,
     fismaacronym,
+    routeDatacallId,
+    routeDatacall,
+    routeDeadline,
     selectedDatacall,
     latestDataCallId,
     latestDatacall,
@@ -524,6 +643,7 @@ export default function QuestionnarePage() {
             const choiceOpt: QuestionChoice = {
               label: item.description,
               value: item.functionoptionid,
+              score: item.score,
             }
             if (item.functionoptionid in questionScoresRef.current) {
               funcOptId = item.functionoptionid
@@ -773,6 +893,14 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
+  // Insight for the question currently on screen. questionId holds the current
+  // functionid; the Question record carries the DB questionid the insight rows
+  // are keyed by. Undefined for any question without a synced insight row, in
+  // which case the panel is not rendered and the page is unchanged.
+  const currentInsight =
+    questionId != null
+      ? insightsByQuestion.get(questions[questionId]?.questionid ?? -1)
+      : undefined
   return (
     <>
       <Box
@@ -858,7 +986,15 @@ export default function QuestionnarePage() {
                                 navigate(
                                   `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
                                   {
-                                    state: { fismasystemid: system },
+                                    state: {
+                                      fismasystemid: system,
+                                      datacallid:
+                                        datacallStateRef.current.datacallid,
+                                      datacall:
+                                        datacallStateRef.current.datacall,
+                                      deadline:
+                                        datacallStateRef.current.deadline,
+                                    },
                                     replace: true,
                                   }
                                 )
@@ -893,6 +1029,7 @@ export default function QuestionnarePage() {
               <Typography variant="h6" sx={{ mt: 1, mb: 0 }}>
                 {question}
               </Typography>
+              {currentInsight && <InsightsPanel payload={currentInsight} />}
               {loadingQuestion ? (
                 <Box
                   sx={{
@@ -988,7 +1125,13 @@ export default function QuestionnarePage() {
                             navigate(
                               `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                               {
-                                state: { fismasystemid: system },
+                                state: {
+                                  fismasystemid: system,
+                                  datacallid:
+                                    datacallStateRef.current.datacallid,
+                                  datacall: datacallStateRef.current.datacall,
+                                  deadline: datacallStateRef.current.deadline,
+                                },
                                 replace: true,
                               }
                             )
@@ -1019,7 +1162,12 @@ export default function QuestionnarePage() {
                           navigate(
                             `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                             {
-                              state: { fismasystemid: system },
+                              state: {
+                                fismasystemid: system,
+                                datacallid: datacallStateRef.current.datacallid,
+                                datacall: datacallStateRef.current.datacall,
+                                deadline: datacallStateRef.current.deadline,
+                              },
                               replace: true,
                             }
                           )
@@ -1090,16 +1238,18 @@ export default function QuestionnarePage() {
           />
         </Grid>
       </Container>
-      {/* selectedDataCallId seeds the "To" picker default in ScoreDiffModal.
-          #417 renamed selectedDataCallId → selectedDatacall (datacall object)
-          on context; use the id off the object now that #408 has landed. */}
+      {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
+          questionnaire was opened for (the row's own call), since the dashboard
+          may be aggregating a whole year and selectedDatacall is then null. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
-        selectedDataCallId={selectedDatacall?.datacallid}
+        selectedDataCallId={
+          routeDatacallId ?? selectedDatacall?.datacallid ?? latestDataCallId
+        }
       />
     </>
   )
