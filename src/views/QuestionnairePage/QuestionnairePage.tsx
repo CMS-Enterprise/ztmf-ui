@@ -17,6 +17,8 @@ import {
   Question,
   QuestionChoice,
   QuestionScores,
+  Insight,
+  InsightPayload,
 } from '@/types'
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
@@ -43,6 +45,7 @@ import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
+import InsightsPanel from './InsightsPanel/InsightsPanel'
 import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
@@ -123,6 +126,12 @@ export default function QuestionnarePage() {
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
   const [questions, setQuestions] = React.useState<Record<number, Question>>([])
+  // ZTMF Insights keyed by DB questionid. Empty for every "off" case (OpDiv not
+  // enabled, not entitled, not yet synced) — the endpoint returns [] and the
+  // panel simply never renders, leaving the page unchanged.
+  const [insightsByQuestion, setInsightsByQuestion] = React.useState<
+    Map<number, InsightPayload>
+  >(new Map())
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
@@ -244,6 +253,38 @@ export default function QuestionnarePage() {
   systemRef.current = system
   const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
+
+  // Fetch ZTMF Insights for this system once (not per question — one call
+  // returns every question's row). Failures and empty responses both leave the
+  // map empty so the questionnaire is never blocked or altered by insights.
+  React.useEffect(() => {
+    if (!system) return
+    const controller = new AbortController()
+    const load = async () => {
+      try {
+        const res = await axiosInstance.get<{ data: Insight[] }>('insights', {
+          params: { fismasystemid: system },
+          signal: controller.signal,
+        })
+        const map = new Map<number, InsightPayload>()
+        for (const row of res.data?.data ?? []) {
+          if (row?.questionid != null && row.payload) {
+            map.set(row.questionid, row.payload)
+          }
+        }
+        setInsightsByQuestion(map)
+      } catch {
+        if (!controller.signal.aborted) {
+          // Insights are additive and optional; swallow errors and render the
+          // page exactly as it is without them.
+          setInsightsByQuestion(new Map())
+        }
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [system])
+
   // Resolve the system's raw datacenter environment to its scoring category
   // for pillar filtering. Falls back to the raw value until the vocabulary
   // loads or for any value not in the map.
@@ -400,6 +441,7 @@ export default function QuestionnarePage() {
                   organizedData[question.pillar.pillar] = []
                 }
                 questionData[question.function.functionid] = {
+                  questionid: question.questionid,
                   question: question.question,
                   notesprompt: question.notesprompt,
                   description: question.function.description,
@@ -794,6 +836,14 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
+  // Insight for the question currently on screen. questionId holds the current
+  // functionid; the Question record carries the DB questionid the insight rows
+  // are keyed by. Undefined for any question without a synced insight row, in
+  // which case the panel is not rendered and the page is unchanged.
+  const currentInsight =
+    questionId != null
+      ? insightsByQuestion.get(questions[questionId]?.questionid ?? -1)
+      : undefined
   return (
     <>
       <Box
@@ -914,6 +964,7 @@ export default function QuestionnarePage() {
               <Typography variant="h6" sx={{ mt: 1, mb: 0 }}>
                 {question}
               </Typography>
+              {currentInsight && <InsightsPanel payload={currentInsight} />}
               {loadingQuestion ? (
                 <Box
                   sx={{
