@@ -1,5 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import InsightsPanel from './InsightsPanel'
+import InsightsPanel, { OptionInsightBadges } from './InsightsPanel'
 import type { InsightPayload } from '@/types'
 
 const fullPayload: InsightPayload = {
@@ -94,5 +94,53 @@ describe('InsightsPanel', () => {
     expect(
       screen.queryByRole('button', { name: /details/i })
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('OptionInsightBadges', () => {
+  const insight: InsightPayload = {
+    suggested_score: 1,
+    last_score: 2,
+    last_datacall: 'FY2024 Q1',
+  }
+
+  it('renders the recommendation badge on the suggested option', () => {
+    render(<OptionInsightBadges score={1} insight={insight} />)
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    expect(screen.queryByText(/FY2024 Q1 answer/)).not.toBeInTheDocument()
+  })
+
+  it("renders the prior-answer badge on last year's option", () => {
+    render(<OptionInsightBadges score={2} insight={insight} />)
+    expect(screen.getByText('FY2024 Q1 answer')).toBeInTheDocument()
+    expect(screen.queryByText('ZTMF Insights')).not.toBeInTheDocument()
+  })
+
+  it('renders both badges when the suggestion and prior score coincide', () => {
+    render(
+      <OptionInsightBadges
+        score={3}
+        insight={{ suggested_score: 3, last_score: 3, last_datacall: 'FY2024' }}
+      />
+    )
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    expect(screen.getByText('FY2024 answer')).toBeInTheDocument()
+  })
+
+  it('falls back to a generic prior label when last_datacall is absent', () => {
+    render(<OptionInsightBadges score={2} insight={{ last_score: 2 }} />)
+    expect(screen.getByText("Last year's answer")).toBeInTheDocument()
+  })
+
+  it('renders nothing for an option matching neither score', () => {
+    const { container } = render(
+      <OptionInsightBadges score={4} insight={insight} />
+    )
+    expect(container).toBeEmptyDOMElement()
+  })
+
+  it('renders nothing when there is no insight', () => {
+    const { container } = render(<OptionInsightBadges score={1} />)
+    expect(container).toBeEmptyDOMElement()
   })
 })

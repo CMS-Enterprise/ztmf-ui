@@ -45,7 +45,9 @@ import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
-import InsightsPanel from './InsightsPanel/InsightsPanel'
+import InsightsPanel, {
+  OptionInsightBadges,
+} from './InsightsPanel/InsightsPanel'
 import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
@@ -213,6 +215,26 @@ export default function QuestionnarePage() {
     if (draftStatus === 'restored') setDraftStatus('idle')
   }
   const renderRadioGroup = (options: QuestionChoice[]) => {
+    // Enrich each option label with insight badges (recommended answer / last
+    // year's answer). When there is no insight for this question, the badge
+    // component renders nothing and labels are just the option text.
+    const choices = options.map((o) => ({
+      label: (
+        <Box
+          component="span"
+          sx={{
+            display: 'inline-flex',
+            alignItems: 'center',
+            flexWrap: 'wrap',
+          }}
+        >
+          <Box component="span">{o.label}</Box>
+          <OptionInsightBadges score={o.score} insight={currentInsight} />
+        </Box>
+      ),
+      value: o.value,
+      defaultChecked: o.defaultChecked,
+    }))
     return (
       <Box
         sx={{
@@ -222,7 +244,7 @@ export default function QuestionnarePage() {
         }}
       >
         <ChoiceList
-          choices={options}
+          choices={choices}
           name={'radio-choices'}
           type={'radio'}
           label={undefined}
@@ -587,6 +609,7 @@ export default function QuestionnarePage() {
             const choiceOpt: QuestionChoice = {
               label: item.description,
               value: item.functionoptionid,
+              score: item.score,
             }
             if (item.functionoptionid in questionScoresRef.current) {
               funcOptId = item.functionoptionid

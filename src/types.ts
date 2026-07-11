@@ -270,6 +270,9 @@ export type ScoreProgress = {
 export type QuestionChoice = {
   label: string
   value: number
+  // Maturity score (1-4) of this answer option. Carried so the radio group can
+  // match an option against a ZTMF Insight's suggested/prior score for badging.
+  score?: number
   defaultChecked?: boolean
 }
 export type users = {

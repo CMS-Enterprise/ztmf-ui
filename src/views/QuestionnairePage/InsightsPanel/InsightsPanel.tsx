@@ -160,6 +160,79 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
   )
 }
 
+// Inline badges for a single answer option, matched by maturity score against
+// the question's insight. Rendered next to the option label in the radio group
+// so a scorer sees, at the point of choosing, which answer the evidence points
+// to and which answer they gave last cycle.
+export function OptionInsightBadges({
+  score,
+  insight,
+}: {
+  score?: number
+  insight?: InsightPayload
+}) {
+  if (!insight || score == null) return null
+  const isSuggested =
+    insight.suggested_score != null && score === insight.suggested_score
+  const isPrior = insight.last_score != null && score === insight.last_score
+  if (!isSuggested && !isPrior) return null
+
+  const priorLabel = insight.last_datacall
+    ? `${insight.last_datacall} answer`
+    : "Last year's answer"
+
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        gap: 0.5,
+        ml: 0.75,
+        verticalAlign: 'middle',
+      }}
+    >
+      {isSuggested && (
+        <Box
+          component="span"
+          sx={{
+            px: 0.75,
+            py: 0.125,
+            borderRadius: '4px',
+            fontSize: 10,
+            fontWeight: 700,
+            textTransform: 'uppercase',
+            letterSpacing: '0.3px',
+            color: '#2c5282',
+            bgcolor: '#eaf1fb',
+            border: '1px dashed #5666b8',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          ZTMF Insights
+        </Box>
+      )}
+      {isPrior && (
+        <Box
+          component="span"
+          sx={{
+            px: 0.75,
+            py: 0.125,
+            borderRadius: '4px',
+            fontSize: 10,
+            fontWeight: 600,
+            color: '#555',
+            bgcolor: '#f0f0f0',
+            border: '1px solid #ddd',
+            whiteSpace: 'nowrap',
+          }}
+        >
+          {priorLabel}
+        </Box>
+      )}
+    </Box>
+  )
+}
+
 export default function InsightsPanel({ payload }: Props) {
   const [open, setOpen] = React.useState(false)
 
