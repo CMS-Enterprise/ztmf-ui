@@ -242,6 +242,15 @@ export default function QuestionnarePage() {
   const routeDeadline = location.state?.deadline as string | undefined
   const systemRef = React.useRef(system)
   systemRef.current = system
+  // The in-survey navigate() calls (Next, Back, sidebar, canonical redirect)
+  // reset router state and would drop the chosen data call, reverting the
+  // survey to the latest call (#501). Persist the resolved call here and
+  // re-supply it in every internal navigation so the choice survives.
+  const datacallStateRef = React.useRef<{
+    datacallid?: number
+    datacall?: string
+    deadline?: string
+  }>({})
   const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
   // Resolve the system's raw datacenter environment to its scoring category
@@ -356,6 +365,11 @@ export default function QuestionnarePage() {
             setIsPastDeadline(
               routeDeadline ? new Date() > new Date(routeDeadline) : true
             )
+            datacallStateRef.current = {
+              datacallid: routeDatacallId,
+              datacall: routeDatacall,
+              deadline: routeDeadline,
+            }
           } else {
             const isHistorical =
               selectedDatacall !== null &&
@@ -365,6 +379,11 @@ export default function QuestionnarePage() {
               setDatacall(datacall)
               setIsPastDeadline(true)
               activeDataCallId = selectedDatacall.datacallid
+              datacallStateRef.current = {
+                datacallid: selectedDatacall.datacallid,
+                datacall: selectedDatacall.datacall,
+                deadline: selectedDatacall.deadline,
+              }
             } else {
               datacall = latestDatacall.replaceAll(' ', '_')
               setDatacall(datacall)
@@ -372,6 +391,11 @@ export default function QuestionnarePage() {
                 latestDeadline ? new Date() > new Date(latestDeadline) : true
               )
               activeDataCallId = latestDataCallId
+              datacallStateRef.current = {
+                datacallid: latestDataCallId,
+                datacall: latestDatacall,
+                deadline: latestDeadline,
+              }
             }
           }
           // Hoisted so both the questions block and the final batch can access them.
@@ -445,7 +469,7 @@ export default function QuestionnarePage() {
               navigate(
                 `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
                 {
-                  state: { fismasystemid: system },
+                  state: { fismasystemid: system, ...datacallStateRef.current },
                   replace: true,
                 }
               )
@@ -879,7 +903,10 @@ export default function QuestionnarePage() {
                                 navigate(
                                   `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
                                   {
-                                    state: { fismasystemid: system },
+                                    state: {
+                                      fismasystemid: system,
+                                      ...datacallStateRef.current,
+                                    },
                                     replace: true,
                                   }
                                 )
@@ -1009,7 +1036,10 @@ export default function QuestionnarePage() {
                             navigate(
                               `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                               {
-                                state: { fismasystemid: system },
+                                state: {
+                                  fismasystemid: system,
+                                  ...datacallStateRef.current,
+                                },
                                 replace: true,
                               }
                             )
@@ -1040,7 +1070,10 @@ export default function QuestionnarePage() {
                           navigate(
                             `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                             {
-                              state: { fismasystemid: system },
+                              state: {
+                                fismasystemid: system,
+                                ...datacallStateRef.current,
+                              },
                               replace: true,
                             }
                           )
