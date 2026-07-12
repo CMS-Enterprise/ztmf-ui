@@ -445,10 +445,11 @@ export type InsightPayload = {
   ars_control_score?: number | null
   ars_controls_total?: number | null
   ars_controls_satisfied?: number | null
-  // Applicable ARS control IDs (e.g. ["IA-01","IA-02(01)"]). NOT yet emitted by
-  // the pipeline as of 2026-07 — the payload currently carries only the counts.
-  // Rendered defensively so it appears once the backend populates it.
-  ars_controls?: string[] | null
+  // The actual ARS control IDs behind the counts. Additive passthrough from the
+  // pipeline; may be undefined (before it ships / on non-ARS questions), null,
+  // or []. `ars_satisfied_controls` length == `ars_controls_satisfied`.
+  ars_satisfied_controls?: string[] | null
+  ars_failing_controls?: string[] | null
 
   findings?: InsightFindings
 
