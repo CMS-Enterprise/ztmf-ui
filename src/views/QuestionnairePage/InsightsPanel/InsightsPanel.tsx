@@ -310,6 +310,14 @@ function InsightsPanelInner({ payload }: Props) {
     kionFindings.length > 0 ||
     sechubFindings.length > 0 ||
     hardenizeFindings.length > 0
+  // ARS control IDs behind the counts. Optional/additive — undefined, null, or
+  // [] until the pipeline emits them; render only when non-empty. The payload is
+  // opaque, so filter to strings: a non-string element would otherwise render as
+  // a React child and throw, blanking the whole panel via the boundary.
+  const toStringArray = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((c): c is string => typeof c === 'string') : []
+  const arsSatisfied = toStringArray(payload.ars_satisfied_controls)
+  const arsFailing = toStringArray(payload.ars_failing_controls)
   const hasDetail =
     hasFindings ||
     !!payload.cfacts_reasoning ||
@@ -410,20 +418,36 @@ function InsightsPanelInner({ payload }: Props) {
           )}
 
           {payload.ars_controls_total != null && (
-            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                ARS Controls:
-              </Box>{' '}
-              {payload.ars_controls_satisfied ?? 0} of{' '}
-              {payload.ars_controls_total} satisfied
-              {Array.isArray(payload.ars_controls) &&
-                payload.ars_controls.length > 0 && (
-                  <Box
-                    component="span"
-                    sx={{ color: '#777' }}
-                  >{` (${payload.ars_controls.join(', ')})`}</Box>
-                )}
-            </Typography>
+            <Box sx={{ mb: 0.75 }}>
+              <Typography sx={{ fontSize: 12, color: '#555' }}>
+                <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                  ARS Controls:
+                </Box>{' '}
+                {payload.ars_controls_satisfied ?? 0} of{' '}
+                {payload.ars_controls_total} satisfied
+              </Typography>
+              {(arsSatisfied.length > 0 || arsFailing.length > 0) && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: 0.5,
+                    mt: 0.5,
+                  }}
+                >
+                  {arsSatisfied.map((id, i) => (
+                    <ControlChip key={`sat-${id}-${i}`} id={id} passed />
+                  ))}
+                  {arsFailing.map((id, i) => (
+                    <ControlChip
+                      key={`fail-${id}-${i}`}
+                      id={id}
+                      passed={false}
+                    />
+                  ))}
+                </Box>
+              )}
+            </Box>
           )}
 
           {kionFindings.map((f, i) => (
@@ -484,6 +508,33 @@ export default function InsightsPanel(props: Props) {
     <InsightPanelBoundary>
       <InsightsPanelInner {...props} />
     </InsightPanelBoundary>
+  )
+}
+
+// A single ARS control ID pill — green when satisfied, red when failing.
+function ControlChip({ id, passed }: { id: string; passed: boolean }) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.375,
+        px: 0.75,
+        py: 0.125,
+        borderRadius: '4px',
+        fontSize: 10,
+        fontWeight: 600,
+        fontFamily: 'monospace',
+        whiteSpace: 'nowrap',
+        bgcolor: passed ? '#e6f4ea' : '#fdecec',
+        color: passed ? '#1e7e34' : '#b02a37',
+        border: passed ? '1px solid #b7dfc2' : '1px solid #f1b0b0',
+      }}
+    >
+      <Box component="span">{passed ? '✓' : '✗'}</Box>
+      {id}
+    </Box>
   )
 }
 

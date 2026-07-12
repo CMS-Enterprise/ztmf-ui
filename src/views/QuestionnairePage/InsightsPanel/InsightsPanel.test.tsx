@@ -85,21 +85,47 @@ describe('InsightsPanel', () => {
     expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
   })
 
-  it('lists ARS control IDs in the details when the pipeline provides them', () => {
+  it('lists satisfied and failing ARS control IDs when the pipeline provides them', () => {
     render(
       <InsightsPanel
-        payload={{ ...fullPayload, ars_controls: ['IA-01', 'IA-02(01)'] }}
+        payload={{
+          ...fullPayload,
+          ars_satisfied_controls: ['IA-01', 'IA-02(01)'],
+          ars_failing_controls: ['AC-17'],
+        }}
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    expect(screen.getByText(/IA-01, IA-02\(01\)/)).toBeInTheDocument()
+    // Satisfied controls render with a ✓; the failing one with a ✗.
+    expect(screen.getByText('IA-01').textContent).toContain('✓')
+    expect(screen.getByText('IA-02(01)').textContent).toContain('✓')
+    expect(screen.getByText('AC-17').textContent).toContain('✗')
   })
 
-  it('shows the ARS Controls count with no list when ars_controls is absent', () => {
+  it('drops non-string control IDs instead of throwing', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          ...fullPayload,
+          ars_satisfied_controls: [
+            'IA-01',
+            { bad: true },
+            42,
+          ] as unknown as string[],
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // The valid string still renders; the panel is not blanked.
+    expect(screen.getByText('IA-01')).toBeInTheDocument()
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+  })
+
+  it('shows the ARS Controls count with no chips when the control arrays are absent', () => {
     render(<InsightsPanel payload={fullPayload} />)
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
     expect(screen.getByText(/4 of 4 satisfied/)).toBeInTheDocument()
-    expect(screen.queryByText(/IA-01/)).not.toBeInTheDocument()
+    expect(screen.queryByText('IA-01')).not.toBeInTheDocument()
   })
 
   it('renders a minimal payload without a details toggle', () => {
