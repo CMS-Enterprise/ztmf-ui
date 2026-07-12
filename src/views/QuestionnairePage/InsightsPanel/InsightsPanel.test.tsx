@@ -246,11 +246,9 @@ describe('InsightsPanel resilience (opaque payload)', () => {
     expect(screen.getByText(/ARS, CFACTS/)).toBeInTheDocument()
   })
 
-  it('renders nothing (no page crash) when a rendered field throws', () => {
+  it('degrades a malformed non-string text field instead of blanking the panel', () => {
     // evidence_sources arriving as an object would throw "Objects are not valid
-    // as a React child" when details opens; the error boundary must swallow it
-    // so the surrounding questionnaire is never taken down.
-    const spy = jest.spyOn(console, 'error').mockImplementation(() => {})
+    // as a React child"; asText coerces it so the panel stays intact.
     render(
       <InsightsPanel
         payload={{
@@ -259,10 +257,24 @@ describe('InsightsPanel resilience (opaque payload)', () => {
         }}
       />
     )
-    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    // Boundary caught the throw and rendered nothing in place of the panel.
-    expect(screen.queryByText('ZTMF Insights')).not.toBeInTheDocument()
-    spy.mockRestore()
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    expect(screen.getByText(/Based on:/)).toBeInTheDocument()
+  })
+
+  it('coerces a non-string finding field instead of throwing', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 2,
+          findings: {
+            sechub: [{ id: 'IAM.10', title: { x: 1 } as unknown as string }],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
   })
 })
