@@ -17,7 +17,8 @@ const fullPayload: InsightPayload = {
   has_hardenize_data: false,
   cfacts_suggested_score: 2,
   cfacts_reasoning: 'IDM-Okta detected. MFA required, PR-MFA not available.',
-  ars_maturity: 2,
+  ars_maturity: 'Initial',
+  ars_control_score: 2,
   ars_controls_total: 4,
   ars_controls_satisfied: 4,
   findings: {
@@ -82,6 +83,23 @@ describe('InsightsPanel', () => {
       screen.getByText(/iam-user-without-mfa-device-enabled/)
     ).toBeInTheDocument()
     expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
+  })
+
+  it('lists ARS control IDs in the details when the pipeline provides them', () => {
+    render(
+      <InsightsPanel
+        payload={{ ...fullPayload, ars_controls: ['IA-01', 'IA-02(01)'] }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText(/IA-01, IA-02\(01\)/)).toBeInTheDocument()
+  })
+
+  it('shows the ARS Controls count with no list when ars_controls is absent', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText(/4 of 4 satisfied/)).toBeInTheDocument()
+    expect(screen.queryByText(/IA-01/)).not.toBeInTheDocument()
   })
 
   it('renders a minimal payload without a details toggle', () => {

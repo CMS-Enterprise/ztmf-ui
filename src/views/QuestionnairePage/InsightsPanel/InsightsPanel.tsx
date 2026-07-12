@@ -82,11 +82,16 @@ function buildSources(p: InsightPayload): SourceConfig[] {
       active: p.cfacts_suggested_score != null || p.cfacts_auth_methods != null,
     },
     {
+      // ARS dot shows the numeric maturity score (ars_control_score, 1-4) —
+      // NOT ars_maturity (the string label like "Initial", which won't fit the
+      // dot) and NOT the controls-satisfied count (which is coverage, not
+      // maturity: 4/4 controls can still be Initial=2). The label is surfaced in
+      // the chip tooltip via maturityLabel(score).
       key: 'ars',
       label: 'ARS',
       color: '#7c5cbf',
-      score: p.ars_maturity ?? p.ars_control_score,
-      active: p.ars_maturity != null || p.ars_controls_total != null,
+      score: p.ars_control_score,
+      active: p.ars_control_score != null || p.ars_controls_total != null,
     },
   ]
 }
@@ -411,6 +416,13 @@ function InsightsPanelInner({ payload }: Props) {
               </Box>{' '}
               {payload.ars_controls_satisfied ?? 0} of{' '}
               {payload.ars_controls_total} satisfied
+              {Array.isArray(payload.ars_controls) &&
+                payload.ars_controls.length > 0 && (
+                  <Box
+                    component="span"
+                    sx={{ color: '#777' }}
+                  >{` (${payload.ars_controls.join(', ')})`}</Box>
+                )}
             </Typography>
           )}
 

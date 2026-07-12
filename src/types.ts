@@ -441,10 +441,14 @@ export type InsightPayload = {
   cfacts_auth_methods?: string | null
   cfacts_reasoning?: string | null
 
-  ars_maturity?: number | null
+  ars_maturity?: number | string | null
   ars_control_score?: number | null
   ars_controls_total?: number | null
   ars_controls_satisfied?: number | null
+  // Applicable ARS control IDs (e.g. ["IA-01","IA-02(01)"]). NOT yet emitted by
+  // the pipeline as of 2026-07 — the payload currently carries only the counts.
+  // Rendered defensively so it appears once the backend populates it.
+  ars_controls?: string[] | null
 
   findings?: InsightFindings
 
