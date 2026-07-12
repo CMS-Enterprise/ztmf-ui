@@ -442,18 +442,18 @@ function InsightsPanelInner({ payload }: Props) {
           )}
 
           {kionFindings.map((f, i) => (
-            <FindingRow key={`kion-${f.id ?? i}`} source="Kion" finding={f} />
+            <FindingRow key={`kion-${f?.id ?? i}`} source="Kion" finding={f} />
           ))}
           {sechubFindings.map((f, i) => (
             <FindingRow
-              key={`sechub-${f.id ?? i}`}
+              key={`sechub-${f?.id ?? i}`}
               source="SecurityHub"
               finding={f}
             />
           ))}
           {hardenizeFindings.map((f, i) => (
             <FindingRow
-              key={`hardenize-${f.id ?? i}`}
+              key={`hardenize-${f?.id ?? i}`}
               source="Hardenize"
               finding={f}
             />
@@ -549,13 +549,38 @@ function formatHardenizeDetail(detail?: string): string | undefined {
 
 // Severity → chip color. error/high/critical = red, warning/medium = amber,
 // everything else (low, powerup, unknown) = neutral.
-function severityStyle(sev?: string): { bg: string; fg: string } {
+export function severityStyle(sev?: string): { bg: string; fg: string } {
   const s = (sev ?? '').toLowerCase()
   if (s === 'error' || s === 'high' || s === 'critical')
     return { bg: '#fdecec', fg: '#b02a37' }
   if (s === 'warning' || s === 'warn' || s === 'medium')
     return { bg: '#fff4e5', fg: '#b26a00' }
   return { bg: '#f0f0f0', fg: '#666' }
+}
+
+// TEMPORARY stopgap severity glossary shown on hover when a finding has no
+// dictionary description yet. The long-term home for this copy is the findings
+// dictionary / Snowflake view (ztmf-insights#32) — remove this map once the
+// dictionary covers findings and the scoring-treatment classification lands.
+const SEVERITY_HELP: Record<string, string> = {
+  error:
+    'A failing check — the scanner found a condition that does not meet the control. Review the finding and affected hosts; some (e.g. connection failures) may reflect reachability rather than a security weakness.',
+  critical: 'A critical failing check — remediate urgently.',
+  high: 'A high-severity failing check — prioritize remediation.',
+  warning: 'A moderate issue worth addressing, lower priority than an error.',
+  medium: 'A moderate issue worth addressing, lower priority than high/error.',
+  low: 'A low-severity or informational finding.',
+  notice:
+    'An informational notice — a best-practice observation, not a failing check.',
+  powerup:
+    'A recommended enhancement, not a failure — an opportunity to further harden this host beyond the baseline.',
+  inconclusive:
+    'Inconclusive — the scanner could not reach the host to test it, often because the domain is private/internal or retired. This is not a pass or a fail and does not count against the score.',
+  unknown:
+    'Inconclusive — the scanner could not reach the host to test it, often because the domain is private/internal or retired. This is not a pass or a fail and does not count against the score.',
+}
+function severityHelp(sev?: string): string | undefined {
+  return SEVERITY_HELP[(sev ?? '').toLowerCase()]
 }
 
 // One structured finding, uniform across sources. Card = id (code) + title +
@@ -569,11 +594,21 @@ function FindingRow({
   source: string
   finding: InsightFinding
 }) {
+  // The payload is opaque — a findings array could contain a null/non-object
+  // element. Guard so it degrades to nothing instead of throwing on field
+  // access (which the boundary would turn into a blanked panel).
+  if (!finding || typeof finding !== 'object') return null
   const code = asText(finding.id)
   const heading = asText(finding.title)
   const severity = asText(finding.severity)
   const sevStyle = severityStyle(severity)
   const description = asText(finding.description)
+  // The severity badge's hover carries the "what it means" text: prefer the
+  // finding's dictionary-seeded description; fall back to the temporary generic
+  // per-severity glossary until the dictionary covers everything (see
+  // ztmf-insights#32). This lets an alarming badge (e.g. a red "error" that is
+  // really a reachability finding) be honestly contextualized on hover.
+  const sevTooltip = description ?? severityHelp(severity)
   const remediation = asText(finding.remediation)
   const nistControls = asText(finding.nist_controls)
   // Affected hosts (Hardenize). domain is required; detail is optional.
@@ -618,22 +653,34 @@ function FindingRow({
         </Box>
       )}
       {severity && (
-        <Box
-          component="span"
-          sx={{
-            ml: 0.75,
-            px: 0.75,
-            py: 0.125,
-            borderRadius: '3px',
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            bgcolor: sevStyle.bg,
-            color: sevStyle.fg,
-          }}
+        <Tooltip
+          title={sevTooltip ?? ''}
+          placement="top"
+          arrow
+          disableHoverListener={!sevTooltip}
+          disableFocusListener={!sevTooltip}
+          disableTouchListener={!sevTooltip}
         >
-          {severity}
-        </Box>
+          <Box
+            component="span"
+            aria-label={sevTooltip ? `${severity}: ${sevTooltip}` : undefined}
+            sx={{
+              ml: 0.75,
+              px: 0.75,
+              py: 0.125,
+              borderRadius: '3px',
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              bgcolor: sevStyle.bg,
+              color: sevStyle.fg,
+              cursor: sevTooltip ? 'help' : undefined,
+              borderBottom: sevTooltip ? '1px dotted currentColor' : undefined,
+            }}
+          >
+            {severity}
+          </Box>
+        </Tooltip>
       )}
       {nistControls && (
         <Box
@@ -674,7 +721,11 @@ function FindingRow({
           </Box>
         </Tooltip>
       )}
-      {description && <Box sx={{ mt: 0.25, color: '#666' }}>{description}</Box>}
+      {/* Description lives in the severity badge hover. When a finding has no
+          severity badge to carry it, show it in the body so it isn't lost. */}
+      {!severity && description && (
+        <Box sx={{ mt: 0.25, color: '#666' }}>{description}</Box>
+      )}
       {remediation && (
         <Box sx={{ mt: 0.25, color: '#5a6a8a' }}>
           <Box component="span" sx={{ fontWeight: 600 }}>
