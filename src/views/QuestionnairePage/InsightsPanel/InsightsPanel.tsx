@@ -4,12 +4,7 @@ import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
 import Collapse from '@mui/material/Collapse'
 import Link from '@mui/material/Link'
-import type {
-  InsightPayload,
-  InsightKionFinding,
-  InsightSecHubFinding,
-  InsightHardenizeFinding,
-} from '@/types'
+import type { InsightPayload, InsightFinding } from '@/types'
 
 type Props = {
   payload: InsightPayload
@@ -297,15 +292,11 @@ function InsightsPanelInner({ payload }: Props) {
   // during render (which the route errorElement would turn into a full-page
   // error for the whole questionnaire).
   const findings = payload.findings
-  const kionFindings = Array.isArray(findings?.kion)
-    ? (findings?.kion as InsightKionFinding[])
-    : []
-  const sechubFindings = Array.isArray(findings?.sechub)
-    ? (findings?.sechub as InsightSecHubFinding[])
-    : []
-  const hardenizeFindings = Array.isArray(findings?.hardenize)
-    ? (findings?.hardenize as InsightHardenizeFinding[])
-    : []
+  const asFindingArray = (v: unknown): InsightFinding[] =>
+    Array.isArray(v) ? (v as InsightFinding[]) : []
+  const kionFindings = asFindingArray(findings?.kion)
+  const sechubFindings = asFindingArray(findings?.sechub)
+  const hardenizeFindings = asFindingArray(findings?.hardenize)
   const hasFindings =
     kionFindings.length > 0 ||
     sechubFindings.length > 0 ||
@@ -451,32 +442,20 @@ function InsightsPanelInner({ payload }: Props) {
           )}
 
           {kionFindings.map((f, i) => (
-            <FindingRow
-              key={`kion-${f.id ?? i}`}
-              source="Kion"
-              title={f.id}
-              description={f.description}
-              remediation={f.remediation}
-              nistControls={f.nist_controls}
-            />
+            <FindingRow key={`kion-${f.id ?? i}`} source="Kion" finding={f} />
           ))}
           {sechubFindings.map((f, i) => (
             <FindingRow
               key={`sechub-${f.id ?? i}`}
               source="SecurityHub"
-              title={f.id}
-              severity={f.severity}
-              description={f.title ?? f.description}
-              remediation={f.remediation}
+              finding={f}
             />
           ))}
           {hardenizeFindings.map((f, i) => (
             <FindingRow
               key={`hardenize-${f.id ?? i}`}
               source="Hardenize"
-              title={f.id}
-              severity={f.severity}
-              description={f.title}
+              finding={f}
             />
           ))}
         </Box>
@@ -549,26 +528,78 @@ function asText(v: unknown): string | undefined {
   return typeof v === 'string' ? v : String(v)
 }
 
-function FindingRow(props: {
+// Hardenize instance `detail` is inconsistent — a stringified JSON object
+// ({"Error message":"..."}), plain text ("Dangling DNS record: ..."), or empty
+// ({}). Surface something readable: JSON objects → their values joined; plain
+// text as-is; empty → nothing.
+function formatHardenizeDetail(detail?: string): string | undefined {
+  const t = asText(detail)
+  if (!t || t === '{}') return undefined
+  try {
+    const parsed = JSON.parse(t)
+    if (parsed && typeof parsed === 'object' && !Array.isArray(parsed)) {
+      const vals = Object.values(parsed).map(String).filter(Boolean)
+      return vals.length ? vals.join('; ') : undefined
+    }
+  } catch {
+    /* not JSON — fall through to raw text */
+  }
+  return t
+}
+
+// Severity → chip color. error/high/critical = red, warning/medium = amber,
+// everything else (low, powerup, unknown) = neutral.
+function severityStyle(sev?: string): { bg: string; fg: string } {
+  const s = (sev ?? '').toLowerCase()
+  if (s === 'error' || s === 'high' || s === 'critical')
+    return { bg: '#fdecec', fg: '#b02a37' }
+  if (s === 'warning' || s === 'warn' || s === 'medium')
+    return { bg: '#fff4e5', fg: '#b26a00' }
+  return { bg: '#f0f0f0', fg: '#666' }
+}
+
+// One structured finding, uniform across sources. Card = id (code) + title +
+// severity + description; "How to fix" when remediation is present; a hover
+// "N domains" affordance for Hardenize instances. Every field is optional and
+// coerced to text, so a null/malformed field degrades instead of throwing.
+function FindingRow({
+  source,
+  finding,
+}: {
   source: string
-  title?: unknown
-  severity?: unknown
-  description?: unknown
-  remediation?: unknown
-  nistControls?: unknown
+  finding: InsightFinding
 }) {
-  const source = props.source
-  const title = asText(props.title)
-  const severity = asText(props.severity)
-  const description = asText(props.description)
-  const remediation = asText(props.remediation)
-  const nistControls = asText(props.nistControls)
+  const code = asText(finding.id)
+  const heading = asText(finding.title)
+  const severity = asText(finding.severity)
+  const sevStyle = severityStyle(severity)
+  const description = asText(finding.description)
+  const remediation = asText(finding.remediation)
+  const nistControls = asText(finding.nist_controls)
+  // Affected hosts (Hardenize). domain is required; detail is optional.
+  const domains = (Array.isArray(finding.instances) ? finding.instances : [])
+    .map((inst) => ({
+      domain: asText(inst?.domain),
+      detail: formatHardenizeDetail(inst?.detail),
+    }))
+    .filter((d) => d.domain)
+  const domainsTooltip =
+    domains.length > 0 ? (
+      <Box sx={{ py: 0.25 }}>
+        {domains.map((d, i) => (
+          <Box key={`${d.domain}-${i}`} sx={{ fontSize: 11, lineHeight: 1.5 }}>
+            {d.domain}
+            {d.detail ? ` — ${d.detail}` : ''}
+          </Box>
+        ))}
+      </Box>
+    ) : null
   return (
     <Box sx={{ fontSize: 12, color: '#555', mb: 0.75, lineHeight: 1.6 }}>
       <Box component="span" sx={{ fontWeight: 700, color: '#333' }}>
         {source}
       </Box>
-      {title && (
+      {code && (
         <Box
           component="span"
           sx={{
@@ -578,7 +609,12 @@ function FindingRow(props: {
             color: '#9a6700',
           }}
         >
-          {title}
+          {code}
+        </Box>
+      )}
+      {heading && (
+        <Box component="span" sx={{ ml: 0.75, color: '#333' }}>
+          {heading}
         </Box>
       )}
       {severity && (
@@ -592,8 +628,8 @@ function FindingRow(props: {
             fontSize: 10,
             fontWeight: 700,
             textTransform: 'uppercase',
-            bgcolor: '#f0f0f0',
-            color: '#666',
+            bgcolor: sevStyle.bg,
+            color: sevStyle.fg,
           }}
         >
           {severity}
@@ -616,11 +652,33 @@ function FindingRow(props: {
           {nistControls}
         </Box>
       )}
+      {domainsTooltip && (
+        <Tooltip title={domainsTooltip} placement="top" arrow>
+          <Box
+            component="span"
+            aria-label={domains.map((d) => d.domain).join(', ')}
+            sx={{
+              ml: 0.75,
+              px: 0.75,
+              py: 0.125,
+              borderRadius: '3px',
+              fontSize: 10,
+              fontWeight: 600,
+              bgcolor: '#eef2f8',
+              color: '#3a5a80',
+              cursor: 'default',
+              borderBottom: '1px dotted #7a94b8',
+            }}
+          >
+            {domains.length} domain{domains.length === 1 ? '' : 's'}
+          </Box>
+        </Tooltip>
+      )}
       {description && <Box sx={{ mt: 0.25, color: '#666' }}>{description}</Box>}
       {remediation && (
         <Box sx={{ mt: 0.25, color: '#5a6a8a' }}>
           <Box component="span" sx={{ fontWeight: 600 }}>
-            Fix:
+            How to fix:
           </Box>{' '}
           {remediation}
         </Box>

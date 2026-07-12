@@ -71,6 +71,94 @@ describe('InsightsPanel', () => {
     expect(screen.getByText('No suggestion')).toBeInTheDocument()
   })
 
+  it('shows a hardenize finding heading + affected domains', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            hardenize: [
+              {
+                id: 'WWW_TLS_CONN_FAILED',
+                title: 'TLS connection failed',
+                description: 'Hardenize could not connect to the domain.',
+                severity: 'error',
+                instances: [
+                  {
+                    domain: 'portaldev.cms.gov',
+                    detail: '{"Error":"timeout"}',
+                  },
+                  { domain: 'api.cms.gov', detail: '' },
+                ],
+              },
+            ],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('TLS connection failed')).toBeInTheDocument()
+    expect(
+      screen.getByText('Hardenize could not connect to the domain.')
+    ).toBeInTheDocument()
+    // Domains affordance + reachable via aria-label (hover reveals the list).
+    expect(screen.getByText('2 domains')).toBeInTheDocument()
+    expect(
+      screen.getByLabelText('portaldev.cms.gov, api.cms.gov')
+    ).toBeInTheDocument()
+  })
+
+  it('renders a hardenize finding with no domains and no crash', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            hardenize: [
+              {
+                id: 'WWW_HSTS_POWERUP',
+                title: 'Deploy HSTS',
+                severity: 'warn',
+              },
+            ],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('Deploy HSTS')).toBeInTheDocument()
+    expect(screen.queryByText(/domain/)).not.toBeInTheDocument()
+  })
+
+  it('renders a finding uniformly: code, title, description, severity, How to fix', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            sechub: [
+              {
+                id: 'IAM.10',
+                title: 'MFA should be enabled',
+                description: 'Enable MFA for all IAM users.',
+                remediation: 'Turn on MFA in the IAM console.',
+                severity: 'MEDIUM',
+              },
+            ],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('IAM.10')).toBeInTheDocument()
+    expect(screen.getByText('MFA should be enabled')).toBeInTheDocument()
+    expect(
+      screen.getByText('Enable MFA for all IAM users.')
+    ).toBeInTheDocument()
+    expect(screen.getByText('MEDIUM')).toBeInTheDocument()
+    expect(screen.getByText(/How to fix/)).toBeInTheDocument()
+  })
+
   it('hides findings until details is toggled, then reveals them', () => {
     render(<InsightsPanel payload={fullPayload} />)
     expect(
