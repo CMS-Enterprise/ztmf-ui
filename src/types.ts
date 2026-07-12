@@ -378,31 +378,31 @@ export type ScoreDiffEntry = {
 // every key as optional and render defensively; the string index signature
 // keeps forward-added keys type-safe without an API change here.
 
-export type InsightKionFinding = {
+// One affected host for a Hardenize finding. `domain` is always present;
+// `detail` (specific error text) is present ~half the time and may be plain
+// text or a stringified JSON object.
+export type InsightHardenizeInstance = {
+  domain?: string
+  detail?: string
+}
+
+// One structured finding, shared across all sources (Kion / SecurityHub /
+// Hardenize). title/description/remediation are seeded from the findings
+// dictionary and may be null; instances is Hardenize-only (affected domains).
+export type InsightFinding = {
   id?: string
+  title?: string
+  description?: string
+  remediation?: string
+  severity?: string
   nist_controls?: string
-  description?: string
-  remediation?: string
-}
-
-export type InsightSecHubFinding = {
-  id?: string
-  title?: string
-  severity?: string
-  description?: string
-  remediation?: string
-}
-
-export type InsightHardenizeFinding = {
-  id?: string
-  title?: string
-  severity?: string
+  instances?: InsightHardenizeInstance[]
 }
 
 export type InsightFindings = {
-  kion?: InsightKionFinding[]
-  sechub?: InsightSecHubFinding[]
-  hardenize?: InsightHardenizeFinding[]
+  kion?: InsightFinding[]
+  sechub?: InsightFinding[]
+  hardenize?: InsightFinding[]
 }
 
 export type InsightPayload = {

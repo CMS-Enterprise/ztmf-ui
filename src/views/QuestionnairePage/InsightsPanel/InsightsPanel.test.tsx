@@ -1,5 +1,8 @@
 import { render, screen, fireEvent } from '@testing-library/react'
-import InsightsPanel, { OptionInsightBadges } from './InsightsPanel'
+import InsightsPanel, {
+  OptionInsightBadges,
+  severityStyle,
+} from './InsightsPanel'
 import type { InsightPayload } from '@/types'
 
 const fullPayload: InsightPayload = {
@@ -69,6 +72,98 @@ describe('InsightsPanel', () => {
   it('shows "No suggestion" when suggested_score is null', () => {
     render(<InsightsPanel payload={{ suggested_score: null }} />)
     expect(screen.getByText('No suggestion')).toBeInTheDocument()
+  })
+
+  it('shows a hardenize finding heading + affected domains', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            hardenize: [
+              {
+                id: 'WWW_TLS_CONN_FAILED',
+                title: 'TLS connection failed',
+                description: 'Hardenize could not connect to the domain.',
+                severity: 'error',
+                instances: [
+                  {
+                    domain: 'portaldev.cms.gov',
+                    detail: '{"Error":"timeout"}',
+                  },
+                  { domain: 'api.cms.gov', detail: '' },
+                ],
+              },
+            ],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('TLS connection failed')).toBeInTheDocument()
+    // Description lives in the severity badge hover, not the card body.
+    expect(
+      screen.getByLabelText(
+        /error: Hardenize could not connect to the domain\./
+      )
+    ).toBeInTheDocument()
+    // Domains affordance + reachable via aria-label (hover reveals the list).
+    expect(screen.getByText('2 domains')).toBeInTheDocument()
+    expect(
+      screen.getByLabelText('portaldev.cms.gov, api.cms.gov')
+    ).toBeInTheDocument()
+  })
+
+  it('renders a hardenize finding with no domains and no crash', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            hardenize: [
+              {
+                id: 'WWW_HSTS_POWERUP',
+                title: 'Deploy HSTS',
+                severity: 'warn',
+              },
+            ],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('Deploy HSTS')).toBeInTheDocument()
+    expect(screen.queryByText(/domain/)).not.toBeInTheDocument()
+  })
+
+  it('renders a finding uniformly: code, title, description, severity, How to fix', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            sechub: [
+              {
+                id: 'IAM.10',
+                title: 'MFA should be enabled',
+                description: 'Enable MFA for all IAM users.',
+                remediation: 'Turn on MFA in the IAM console.',
+                severity: 'MEDIUM',
+              },
+            ],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('IAM.10')).toBeInTheDocument()
+    expect(screen.getByText('MFA should be enabled')).toBeInTheDocument()
+    // Description surfaces in the severity badge hover, not the card body.
+    expect(
+      screen.getByLabelText(/MEDIUM: Enable MFA for all IAM users\./)
+    ).toBeInTheDocument()
+    expect(screen.getByText('MEDIUM')).toBeInTheDocument()
+    expect(screen.getByText(/How to fix/)).toBeInTheDocument()
   })
 
   it('hides findings until details is toggled, then reveals them', () => {
@@ -275,6 +370,64 @@ describe('InsightsPanel resilience (opaque payload)', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
     expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+  })
+})
+
+describe('severityStyle', () => {
+  it('maps severities to red / amber / neutral', () => {
+    for (const s of ['error', 'ERROR', 'high', 'critical']) {
+      expect(severityStyle(s).fg).toBe('#b02a37') // red
+    }
+    for (const s of ['warning', 'medium', 'WARN']) {
+      expect(severityStyle(s).fg).toBe('#b26a00') // amber
+    }
+    for (const s of ['low', 'powerup', 'anything', undefined]) {
+      expect(severityStyle(s).fg).toBe('#666') // neutral
+    }
+  })
+})
+
+describe('severity help (findings)', () => {
+  const withSeverity = (severity: string) => ({
+    suggested_score: 1,
+    findings: {
+      hardenize: [{ id: 'X', title: 'A finding', severity }],
+    },
+  })
+
+  it('adds an explanation tooltip on the powerup severity badge', () => {
+    render(<InsightsPanel payload={withSeverity('powerup')} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(
+      screen.getByLabelText(/powerup:.*recommended enhancement/i)
+    ).toBeInTheDocument()
+  })
+
+  it('adds an explanation tooltip on the error severity badge', () => {
+    render(<InsightsPanel payload={withSeverity('error')} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByLabelText(/error:.*failing check/i)).toBeInTheDocument()
+  })
+})
+
+describe('FindingRow resilience', () => {
+  it('drops a null finding element instead of blanking the panel', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            sechub: [
+              null as unknown as { id: string },
+              { id: 'IAM.10', title: 'MFA should be enabled' },
+            ],
+          },
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('IAM.10')).toBeInTheDocument()
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
   })
 })
