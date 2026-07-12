@@ -404,7 +404,7 @@ function InsightsPanelInner({ payload }: Props) {
               <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                 Based on:
               </Box>{' '}
-              {payload.evidence_sources}
+              {asText(payload.evidence_sources)}
             </Typography>
           )}
 
@@ -413,7 +413,7 @@ function InsightsPanelInner({ payload }: Props) {
               <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                 CFACTS:
               </Box>{' '}
-              {payload.cfacts_reasoning}
+              {asText(payload.cfacts_reasoning)}
             </Typography>
           )}
 
@@ -423,8 +423,8 @@ function InsightsPanelInner({ payload }: Props) {
                 <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                   ARS Controls:
                 </Box>{' '}
-                {payload.ars_controls_satisfied ?? 0} of{' '}
-                {payload.ars_controls_total} satisfied
+                {asText(payload.ars_controls_satisfied) ?? 0} of{' '}
+                {asText(payload.ars_controls_total)} satisfied
               </Typography>
               {(arsSatisfied.length > 0 || arsFailing.length > 0) && (
                 <Box
@@ -538,21 +538,31 @@ function ControlChip({ id, passed }: { id: string; passed: boolean }) {
   )
 }
 
-function FindingRow({
-  source,
-  title,
-  severity,
-  description,
-  remediation,
-  nistControls,
-}: {
+// Coerce an opaque payload value to renderable text. The payload is untrusted
+// JSON, so a field the type declares as a string could arrive as an object or
+// array; rendering that directly throws "Objects are not valid as a React
+// child" and (via the error boundary) blanks the whole panel. Coercing to a
+// string degrades gracefully instead. Returns undefined for nullish/empty so
+// existing truthiness guards still hide the element.
+function asText(v: unknown): string | undefined {
+  if (v == null || v === '') return undefined
+  return typeof v === 'string' ? v : String(v)
+}
+
+function FindingRow(props: {
   source: string
-  title?: string
-  severity?: string
-  description?: string
-  remediation?: string
-  nistControls?: string
+  title?: unknown
+  severity?: unknown
+  description?: unknown
+  remediation?: unknown
+  nistControls?: unknown
 }) {
+  const source = props.source
+  const title = asText(props.title)
+  const severity = asText(props.severity)
+  const description = asText(props.description)
+  const remediation = asText(props.remediation)
+  const nistControls = asText(props.nistControls)
   return (
     <Box sx={{ fontSize: 12, color: '#555', mb: 0.75, lineHeight: 1.6 }}>
       <Box component="span" sx={{ fontWeight: 700, color: '#333' }}>
