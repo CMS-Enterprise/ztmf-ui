@@ -10,7 +10,6 @@ import { Button as CmsButton, ChoiceList, Spinner } from '@cmsgov/design-system'
 import Grid from '@mui/material/Grid'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
-import TextField from '@mui/material/TextField'
 import {
   FismaQuestion,
   QuestionOption,
@@ -21,7 +20,6 @@ import {
   InsightPayload,
 } from '@/types'
 import { Container } from '@mui/system'
-import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { useNavigate, useLocation } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
@@ -48,6 +46,10 @@ import LastEditedFooter from './LastEditedFooter'
 import InsightsPanel, {
   OptionInsightBadges,
 } from './InsightsPanel/InsightsPanel'
+import JustificationField, {
+  type PriorReviewState,
+} from './JustificationField/JustificationField'
+import { priorResponseFor } from './JustificationField/justificationContext'
 import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
@@ -61,32 +63,6 @@ type Category = {
 type questionScoreMap = {
   [key: number]: QuestionScores
 }
-const CssTextField = styled(TextField)({
-  '& .MuiOutlinedInput-root': {
-    '& fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-    },
-    '&.Mui-focused fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-      boxShadow: '0px 0px 0px 3px #FFFFFF, 0px 0px 3px 6px #bd13b8',
-    },
-    '@supports (-moz-appearance:none)': {
-      paddingTop: '30px',
-      '& .MuiInputBase-inputMultiline': {
-        // paddingTop: '-15px',
-        height: '100%',
-        width: '100%',
-        scrollbarWidth: 'none',
-      },
-    },
-    '& .MuiInputBase-inputMultiline': {
-      msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
-      '&::-webkit-scrollbar': { display: 'none' },
-    },
-  },
-})
 const toSlug = (str: string) =>
   str
     .replace(/([a-z])([A-Z])/g, '$1-$2')
@@ -149,6 +125,9 @@ export default function QuestionnarePage() {
   const [initNotes, setInitNotes] = React.useState<string>('')
   const [notes, setNotes] = React.useState<string>('')
   const [notePrompt, setNotePrompt] = React.useState<string>('')
+  const [priorReviewState, setPriorReviewState] =
+    React.useState<PriorReviewState>('not-required')
+  const priorReviewKeyRef = React.useRef('')
   const [description, setDescription] = React.useState<string>('')
   const [stepId, setStepId] = React.useState<number>(0)
   const [selectQuestionOption, setSelectQuestionOption] =
@@ -173,12 +152,14 @@ export default function QuestionnarePage() {
     initQuestionChoice,
     notes,
     initNotes,
+    priorReviewState,
   })
   unsavedRef.current = {
     selectQuestionOption,
     initQuestionChoice,
     notes,
     initNotes,
+    priorReviewState,
   }
   // Refs so the out-of-band re-seed effect can read current options and loading
   // state without enrolling them as effect dependencies.
@@ -356,7 +337,13 @@ export default function QuestionnarePage() {
   }
 
   const saveResponse = async () => {
+    // Explicitly accepting carried-forward text is itself a current-call edit,
+    // even when the accepted text is byte-for-byte identical to the seeded
+    // notes. Persist it so the audit trail records that affirmative review.
+    const acceptedPriorResponse =
+      priorReviewState === 'accepted' && selectQuestionOption >= 0
     if (
+      !acceptedPriorResponse &&
       !shouldPersistResponse({
         selectQuestionOption,
         initQuestionChoice,
@@ -799,7 +786,8 @@ export default function QuestionnarePage() {
       const s = unsavedRef.current
       const hasPendingEdits =
         shouldPersistResponse(s) ||
-        (s.selectQuestionOption === -1 && s.notes !== s.initNotes)
+        (s.selectQuestionOption === -1 && s.notes !== s.initNotes) ||
+        s.priorReviewState === 'accepted'
       if (hasPendingEdits) {
         e.preventDefault()
         e.returnValue = ''
@@ -824,7 +812,8 @@ export default function QuestionnarePage() {
         loadingQuestion: loadingQuestionRef.current,
         hasUnsavedEdits:
           u.selectQuestionOption !== u.initQuestionChoice ||
-          u.notes !== u.initNotes,
+          u.notes !== u.initNotes ||
+          u.priorReviewState === 'accepted',
         draftRestored: draftStatusRef.current === 'restored',
       })
     ) {
@@ -849,6 +838,49 @@ export default function QuestionnarePage() {
     setScoreId(sel.scoreid)
     setRadioKey((k) => k + 1)
   }, [questionScores, questionId])
+
+  // Insight for the question currently on screen. questionId holds the current
+  // functionid; the Question record carries the DB questionid used by Insights.
+  const currentInsight =
+    questionId != null
+      ? insightsByQuestion.get(questions[questionId]?.questionid ?? -1)
+      : undefined
+
+  // A score copied from the prior data call has no edit event for the current
+  // call. When its notes exactly match last_score_notes, keep that text as
+  // context rather than silently treating it as the current submitted answer.
+  // The key makes this an initializer: accepting/dismissing cannot be reset by
+  // the resulting notes state change, but navigating to a new question can.
+  React.useEffect(() => {
+    if (loadingQuestion) return
+    const prior = priorResponseFor(currentInsight, datacall)
+    const currentScore =
+      selectQuestionOption >= 0
+        ? questionScores[selectQuestionOption]
+        : undefined
+    const reviewKey = `${questionId ?? ''}:${datacall}:${prior?.text ?? ''}`
+    if (priorReviewKeyRef.current === reviewKey) return
+    priorReviewKeyRef.current = reviewKey
+
+    const isUnreviewedCarryForward =
+      !isReadOnly &&
+      !!prior &&
+      !!currentScore &&
+      !currentScore.last_edited_at &&
+      draftStatus !== 'restored' &&
+      notes.trim() === prior.text.trim()
+    setPriorReviewState(isUnreviewedCarryForward ? 'pending' : 'not-required')
+  }, [
+    currentInsight,
+    datacall,
+    draftStatus,
+    isReadOnly,
+    loadingQuestion,
+    notes,
+    questionId,
+    questionScores,
+    selectQuestionOption,
+  ])
 
   const breadcrumbSegmentLabels = fismaacronym
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
@@ -889,14 +921,6 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
-  // Insight for the question currently on screen. questionId holds the current
-  // functionid; the Question record carries the DB questionid the insight rows
-  // are keyed by. Undefined for any question without a synced insight row, in
-  // which case the panel is not rendered and the page is unchanged.
-  const currentInsight =
-    questionId != null
-      ? insightsByQuestion.get(questions[questionId]?.questionid ?? -1)
-      : undefined
   return (
     <>
       <Box
@@ -975,7 +999,8 @@ export default function QuestionnarePage() {
                                 ((selectQuestionOption !== -1 &&
                                   initQuestionChoice !==
                                     selectQuestionOption) ||
-                                  initNotes !== notes)
+                                  initNotes !== notes ||
+                                  priorReviewState === 'accepted')
                               ) {
                                 setOpenAlert(true)
                               } else {
@@ -1037,32 +1062,25 @@ export default function QuestionnarePage() {
                   <Box key={radioKey} sx={{ mb: 2 }}>
                     {renderRadioGroup(options)}
                   </Box>
-                  <Typography variant="h6" sx={{ mb: 1 }}>
-                    {notePrompt || ''}
-                  </Typography>
-                  <CssTextField
-                    multiline
-                    rows={4}
-                    fullWidth
+                  <JustificationField
+                    label={notePrompt || 'Justification'}
                     value={notes}
+                    onChange={(value) => {
+                      setNotes(value)
+                      if (draftStatus === 'restored') setDraftStatus('idle')
+                    }}
+                    insight={currentInsight}
+                    viewedDatacall={datacall}
+                    priorReviewState={priorReviewState}
+                    onPriorReview={setPriorReviewState}
                     disabled={isReadOnly}
                     error={needsNotesUpdate}
                     helperText={
                       needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
                     }
-                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
-                    onChange={(e) => {
-                      setNotes(e.target.value)
-                      if (draftStatus === 'restored') setDraftStatus('idle')
-                    }}
+                    maxLength={MAX_QUESTIONNAIRE_NOTES_LENGTH}
                   />
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      mt: 0.5,
-                    }}
-                  >
+                  <Box sx={{ mt: 0.5 }}>
                     <AISummaryBadge
                       show={
                         selectQuestionOption >= 0 &&
@@ -1070,23 +1088,6 @@ export default function QuestionnarePage() {
                           ?.notes_is_ai_summary === true
                       }
                     />
-                    {!isReadOnly && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          ml: 'auto',
-                          color:
-                            notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                              ? 'error.main'
-                              : notes.length >=
-                                  MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                                ? 'warning.main'
-                                : 'text.secondary',
-                        }}
-                      >
-                        {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                      </Typography>
-                    )}
                   </Box>
                   <Box
                     position="relative"
@@ -1101,7 +1102,8 @@ export default function QuestionnarePage() {
                           !isReadOnly &&
                           ((selectQuestionOption !== -1 &&
                             initQuestionChoice !== selectQuestionOption) ||
-                            initNotes !== notes)
+                            initNotes !== notes ||
+                            priorReviewState === 'accepted')
                         ) {
                           setStepId(
                             stepFunctionId[functionIdIdx[selectedIndex] - 1]
@@ -1165,7 +1167,9 @@ export default function QuestionnarePage() {
                           saveResponse()
                         }
                       }}
-                      disabled={needsNotesUpdate}
+                      disabled={
+                        needsNotesUpdate || priorReviewState === 'pending'
+                      }
                       style={{ marginBottom: '8px', marginTop: '8px' }}
                     >
                       {selectedIndex ===
