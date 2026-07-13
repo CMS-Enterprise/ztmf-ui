@@ -7,6 +7,7 @@ interface ImportMetaEnv {
   readonly VITE_USER_POOL_CLIENT_ID: string
   readonly VITE_AWS_REGION: string
   readonly VITE_IDP_ENABLED: string
+  readonly VITE_INSIGHTS_SUGGEST_FIX_ENABLED: string
   readonly VITE_COGNITO_DOMAIN: string
   readonly VITE_COGNITO_REDIRECT_SIGN_IN: string
   // more env variables...
