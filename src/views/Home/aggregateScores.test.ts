@@ -39,17 +39,19 @@ describe('buildDashboardMaps', () => {
   it('shows the call a multi-call system most recently updated, not the newest', () => {
     // System 1 is in both calls; it completed the OLDER call (3) recently and
     // never touched the newer call (38). Expect the older call's score/progress.
-    const { scoreMap, progressMap, systemCallMap } = buildDashboardMaps(
-      CALL_IDS,
-      [[agg(1, 0)], [agg(1, 89)]], // newer call score 0, older call score 89
-      [
-        [prog(1, 0, null)], // newer call: never updated
-        [prog(1, 40, '2025-05-07')], // older call: completed
-      ]
-    )
+    const { scoreMap, progressMap, systemCallMap, chosenCallMap } =
+      buildDashboardMaps(
+        CALL_IDS,
+        [[agg(1, 0)], [agg(1, 89)]], // newer call score 0, older call score 89
+        [
+          [prog(1, 0, null)], // newer call: never updated
+          [prog(1, 40, '2025-05-07')], // older call: completed
+        ]
+      )
     expect(scoreMap[1].score).toBe(89) // older call wins
     expect(progressMap[1].questionsupdated).toBe(40)
     expect(systemCallMap[1]).toEqual([38, 3]) // both calls recorded
+    expect(chosenCallMap[1]).toBe(3) // chosen = the call most recently updated
   })
 
   it('falls back to the newest call when a system never updated any call', () => {
