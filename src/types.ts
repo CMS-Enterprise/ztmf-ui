@@ -7,6 +7,9 @@ export type AppConfig = AppFeatureFlags & AppEnvironment
 
 export type AppFeatureFlags = {
   IDP_ENABLED: boolean
+  // Gates the ZTMF Insights "How to fix" remediation text on the questionnaire.
+  // On in impl only (we're trialing whether to offer fixes); off in dev/prod.
+  INSIGHTS_SUGGEST_FIX_ENABLED: boolean
 }
 
 // Environment-derived settings. IS_NONPROD gates the development banner; the
@@ -173,6 +176,7 @@ export type QuestionScores = {
 }
 
 export type Question = {
+  questionid: number
   question: string
   notesprompt: string
   description: string
@@ -269,6 +273,9 @@ export type ScoreProgress = {
 export type QuestionChoice = {
   label: string
   value: number
+  // Maturity score (1-4) of this answer option. Carried so the radio group can
+  // match an option against a ZTMF Insight's suggested/prior score for badging.
+  score?: number
   defaultChecked?: boolean
 }
 export type users = {
@@ -362,4 +369,100 @@ export type ScoreDiffEntry = {
     email: string
     role: string
   }
+}
+
+// ── ZTMF Insights (GET /api/v1/insights) ───────────────────────────────
+// Evidence-backed maturity suggestion per system x question, synced daily
+// from Snowflake. The endpoint returns [] for every "should not show" case
+// (OpDiv not enabled, caller not entitled, not yet synced), so the UI is
+// driven purely off row presence — see InsightsPanel.
+//
+// `payload` is an opaque, additive document owned by the pipeline. Treat
+// every key as optional and render defensively; the string index signature
+// keeps forward-added keys type-safe without an API change here.
+
+// One affected host for a Hardenize finding. `domain` is always present;
+// `detail` (specific error text) is present ~half the time and may be plain
+// text or a stringified JSON object.
+export type InsightHardenizeInstance = {
+  domain?: string
+  detail?: string
+}
+
+// One structured finding, shared across all sources (Kion / SecurityHub /
+// Hardenize). title/description/remediation are seeded from the findings
+// dictionary and may be null; instances is Hardenize-only (affected domains).
+export type InsightFinding = {
+  id?: string
+  title?: string
+  description?: string
+  remediation?: string
+  severity?: string
+  nist_controls?: string
+  instances?: InsightHardenizeInstance[]
+}
+
+export type InsightFindings = {
+  kion?: InsightFinding[]
+  sechub?: InsightFinding[]
+  hardenize?: InsightFinding[]
+}
+
+export type InsightPayload = {
+  // The suggestion
+  suggested_score?: number | null
+  suggested_label?: string | null
+  evidence_sources?: string | null
+  score_floor_source?: string | null
+  score_direction?: string | null
+
+  // Prior self-reported score (for comparison)
+  last_score?: number | null
+  last_score_label?: string | null
+  last_score_date?: string | null
+  last_score_notes?: string | null
+  last_datacall?: string | null
+
+  // Per-source suggested scores + availability flags
+  has_kion_data?: boolean
+  kion_suggested_score?: number | null
+  kion_suggested_label?: string | null
+  kion_remediation?: string | null
+
+  has_sechub_data?: boolean
+  sechub_suggested_score?: number | null
+  sechub_suggested_label?: string | null
+  sechub_remediation?: string | null
+
+  has_hardenize_data?: boolean
+  hardenize_suggested_score?: number | null
+  hardenize_suggested_label?: string | null
+  hardenize_remediation?: string | null
+
+  cfacts_suggested_score?: number | null
+  cfacts_suggested_label?: string | null
+  cfacts_auth_methods?: string | null
+  cfacts_reasoning?: string | null
+
+  ars_maturity?: number | string | null
+  ars_control_score?: number | null
+  ars_controls_total?: number | null
+  ars_controls_satisfied?: number | null
+  // The actual ARS control IDs behind the counts. Additive passthrough from the
+  // pipeline; may be undefined (before it ships / on non-ARS questions), null,
+  // or []. `ars_satisfied_controls` length == `ars_controls_satisfied`.
+  ars_satisfied_controls?: string[] | null
+  ars_failing_controls?: string[] | null
+
+  findings?: InsightFindings
+
+  // Additive: the pipeline may add keys at any time.
+  [key: string]: unknown
+}
+
+export type Insight = {
+  fismasystemid: number
+  questionid: number
+  payload: InsightPayload
+  synced_at: string
 }
