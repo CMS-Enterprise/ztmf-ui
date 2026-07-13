@@ -125,8 +125,8 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 
   // True whenever a comparison is active (default or user-chosen call),
   // false when the user explicitly picked "None" or there is no predecessor
-  // at all. Distinguishes "selected a call with no score → show No previous
-  // data" from "None / no comparison possible → hide entirely".
+  // at all. Distinguishes "selected a call with no score → show 'No data for <name>'"
+  // from "None / no comparison possible → hide entirely".
   const comparisonActive =
     selectedComparisonId !== null &&
     (selectedComparisonId !== undefined || previousDatacall !== null)
@@ -475,7 +475,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             mb: 0.3,
                           }}
                         >
-                          {`${comparisonDatacallName}: ${previousSystemScore.toFixed(2)}`}
+                          {`Compared with ${comparisonDatacallName}: ${previousSystemScore.toFixed(2)}`}
                         </Typography>
                         <Typography
                           variant="caption"
@@ -504,7 +504,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                           fontSize: '0.85rem',
                         }}
                       >
-                        No previous data
+                        No data for {comparisonDatacallName}
                       </Typography>
                     )
                   }
@@ -627,7 +627,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             fontSize: '0.75rem',
                           }}
                         >
-                          {`${comparisonDatacallName}: ${previousPillarScore.toFixed(2)}`}
+                          {`Compared with ${comparisonDatacallName}: ${previousPillarScore.toFixed(2)}`}
                         </Typography>
                       )}
 
@@ -641,7 +641,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                               fontSize: '0.75rem',
                             }}
                           >
-                            No previous data
+                            No data for {comparisonDatacallName}
                           </Typography>
                         )}
 
