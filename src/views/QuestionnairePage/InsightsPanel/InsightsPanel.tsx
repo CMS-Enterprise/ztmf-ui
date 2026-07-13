@@ -309,6 +309,7 @@ function InsightsPanelInner({ payload }: Props) {
   const toStringArray = (v: unknown): string[] =>
     Array.isArray(v) ? v.filter((c): c is string => typeof c === 'string') : []
   const arsSatisfied = toStringArray(payload.ars_satisfied_controls)
+  const arsNotSatisfied = toStringArray(payload.ars_not_satisfied_controls)
   const arsFailing = toStringArray(payload.ars_failing_controls)
   const hasDetail =
     hasFindings ||
@@ -418,7 +419,9 @@ function InsightsPanelInner({ payload }: Props) {
                 {asText(payload.ars_controls_satisfied) ?? 0} of{' '}
                 {asText(payload.ars_controls_total)} satisfied
               </Typography>
-              {(arsSatisfied.length > 0 || arsFailing.length > 0) && (
+              {(arsSatisfied.length > 0 ||
+                arsNotSatisfied.length > 0 ||
+                arsFailing.length > 0) && (
                 <Box
                   sx={{
                     display: 'flex',
@@ -428,13 +431,24 @@ function InsightsPanelInner({ payload }: Props) {
                   }}
                 >
                   {arsSatisfied.map((id, i) => (
-                    <ControlChip key={`sat-${id}-${i}`} id={id} passed />
+                    <ControlChip
+                      key={`sat-${id}-${i}`}
+                      id={id}
+                      variant="satisfied"
+                    />
+                  ))}
+                  {arsNotSatisfied.map((id, i) => (
+                    <ControlChip
+                      key={`unsat-${id}-${i}`}
+                      id={id}
+                      variant="unsatisfied"
+                    />
                   ))}
                   {arsFailing.map((id, i) => (
                     <ControlChip
                       key={`fail-${id}-${i}`}
                       id={id}
-                      passed={false}
+                      variant="failing"
                     />
                   ))}
                 </Box>
@@ -491,8 +505,42 @@ export default function InsightsPanel(props: Props) {
   )
 }
 
-// A single ARS control ID pill — green when satisfied, red when failing.
-function ControlChip({ id, passed }: { id: string; passed: boolean }) {
+// A single ARS control ID pill. Three states: satisfied (green ✓), unsatisfied
+// (grey ○ — informational, applicable-but-not-satisfied, no alarm), failing
+// (red ✗ — Archer-explicit fails).
+type ControlChipVariant = 'satisfied' | 'unsatisfied' | 'failing'
+const CONTROL_CHIP_STYLE: Record<
+  ControlChipVariant,
+  { marker: string; bgcolor: string; color: string; border: string }
+> = {
+  satisfied: {
+    marker: '✓',
+    bgcolor: '#e6f4ea',
+    color: '#1e7e34',
+    border: '1px solid #b7dfc2',
+  },
+  unsatisfied: {
+    marker: '○',
+    bgcolor: '#eceef2',
+    color: '#5c636a',
+    border: '1px solid #d8dce8',
+  },
+  failing: {
+    marker: '✗',
+    bgcolor: '#fdecec',
+    color: '#b02a37',
+    border: '1px solid #f1b0b0',
+  },
+}
+
+function ControlChip({
+  id,
+  variant,
+}: {
+  id: string
+  variant: ControlChipVariant
+}) {
+  const style = CONTROL_CHIP_STYLE[variant]
   return (
     <Box
       component="span"
@@ -507,12 +555,12 @@ function ControlChip({ id, passed }: { id: string; passed: boolean }) {
         fontWeight: 600,
         fontFamily: 'monospace',
         whiteSpace: 'nowrap',
-        bgcolor: passed ? '#e6f4ea' : '#fdecec',
-        color: passed ? '#1e7e34' : '#b02a37',
-        border: passed ? '1px solid #b7dfc2' : '1px solid #f1b0b0',
+        bgcolor: style.bgcolor,
+        color: style.color,
+        border: style.border,
       }}
     >
-      <Box component="span">{passed ? '✓' : '✗'}</Box>
+      <Box component="span">{style.marker}</Box>
       {id}
     </Box>
   )

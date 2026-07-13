@@ -452,6 +452,10 @@ export type InsightPayload = {
   // pipeline; may be undefined (before it ships / on non-ARS questions), null,
   // or []. `ars_satisfied_controls` length == `ars_controls_satisfied`.
   ars_satisfied_controls?: string[] | null
+  // Applicable-but-not-satisfied controls (applicable − satisfied). Informational,
+  // rendered greyed — distinct from `ars_failing_controls` (Archer-explicit fails).
+  // satisfied + not_satisfied == ars_controls_total when the pipeline emits them.
+  ars_not_satisfied_controls?: string[] | null
   ars_failing_controls?: string[] | null
 
   findings?: InsightFindings
