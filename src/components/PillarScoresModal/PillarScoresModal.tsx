@@ -327,16 +327,18 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   <FormControl size="small">
                     <Select
                       value={
-                        selectedComparisonId === undefined
-                          ? previousScoreEntry?.datacallid ?? ''
-                          : selectedComparisonId ?? ''
+                        sortedDatacalls.length === 0
+                          ? ''
+                          : selectedComparisonId === undefined
+                            ? previousScoreEntry?.datacallid ?? ''
+                            : selectedComparisonId ?? ''
                       }
                       onChange={(e) => {
                         const val = e.target.value
                         setSelectedComparisonId(val === '' ? null : Number(val))
                       }}
                       displayEmpty
-                      sx={{ minWidth: 160 }}
+                      sx={{ minWidth: 160, maxWidth: 260 }}
                     >
                       <MenuItem value="">None</MenuItem>
                       {sortedDatacalls
@@ -479,7 +481,11 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         </Typography>
                       </>
                     )
-                  } else if (latestScore.systemscore && !previousSystemScore) {
+                  } else if (
+                    latestScore.systemscore &&
+                    comparisonScoreEntry !== null &&
+                    !previousSystemScore
+                  ) {
                     return (
                       <Typography
                         variant="body2"
@@ -503,7 +509,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               gutterBottom
               sx={{ mt: 3, mb: 1.5, textAlign: 'center', fontSize: '1.25rem' }}
             >
-              Pillar Scores - {getQuarterName(latestScore.datacallid)}
+              Pillar Scores - {currentDatacallName}
             </Typography>
             <Grid container spacing={2}>
               {(latestScore.pillarscores ?? []).map((pillar) => {
@@ -615,17 +621,19 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         </Typography>
                       )}
 
-                      {!previousPillarScore && currentScore > 0 && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: 'text.secondary',
-                            fontSize: '0.75rem',
-                          }}
-                        >
-                          No previous data
-                        </Typography>
-                      )}
+                      {comparisonScoreEntry !== null &&
+                        !previousPillarScore &&
+                        currentScore > 0 && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: 'text.secondary',
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            No previous data
+                          </Typography>
+                        )}
 
                       {trendInfo.text && currentScore > 0 && (
                         <Typography
@@ -730,7 +738,14 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                                 />
                                 <Typography
                                   variant="caption"
-                                  sx={{ fontSize: '0.875rem' }}
+                                  sx={{
+                                    fontSize: '0.875rem',
+                                    maxWidth: 200,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title={entry.value}
                                 >
                                   {entry.value}
                                 </Typography>
@@ -741,10 +756,46 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       }}
                     />
                     <Tooltip
-                      formatter={(value: number, name: string) => [
-                        value.toFixed(2),
-                        name,
-                      ]}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        return (
+                          <Box
+                            sx={{
+                              backgroundColor: 'background.paper',
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: 1,
+                              p: 1,
+                              maxWidth: 280,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              fontWeight="bold"
+                              sx={{
+                                mb: 0.5,
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {label}
+                            </Typography>
+                            {payload.map((entry, i) => (
+                              <Typography
+                                key={i}
+                                variant="caption"
+                                display="block"
+                                sx={{
+                                  color: entry.color,
+                                  overflowWrap: 'anywhere',
+                                }}
+                              >
+                                {entry.name}: {Number(entry.value).toFixed(2)}
+                              </Typography>
+                            ))}
+                          </Box>
+                        )
+                      }}
                     />
                   </RadarChart>
                 </ResponsiveContainer>

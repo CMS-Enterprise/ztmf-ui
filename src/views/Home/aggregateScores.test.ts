@@ -75,6 +75,7 @@ describe('buildDashboardMaps', () => {
       scoreMap: {},
       progressMap: {},
       systemCallMap: {},
+      chosenCallMap: {},
     })
   })
 

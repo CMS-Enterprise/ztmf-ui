@@ -5,6 +5,8 @@ export type DashboardMaps = {
   progressMap: Record<number, ScoreProgress>
   /** Which active data call(s) each system has scores in, for per-row actions. */
   systemCallMap: Record<number, number[]>
+  /** The single call chosen for each system's dashboard row (most-recently-updated). */
+  chosenCallMap: Record<number, number>
 }
 
 const lastUpdatedMs = (entry: ScoreProgress | undefined): number => {
@@ -62,6 +64,7 @@ export function buildDashboardMaps(
   const scoreMap: Record<number, SystemScoreEntry> = {}
   const progressMap: Record<number, ScoreProgress> = {}
   const systemCallMap: Record<number, number[]> = {}
+  const chosenCallMap: Record<number, number> = {}
 
   for (const [sys, idxs] of systemIdxs) {
     // Choose the call this system most recently updated; ties and
@@ -83,7 +86,8 @@ export function buildDashboardMaps(
     const progress = progressByCall[chosen]?.get(sys)
     if (progress) progressMap[sys] = progress
     systemCallMap[sys] = idxs.map((idx) => callIds[idx])
+    chosenCallMap[sys] = callIds[chosen]
   }
 
-  return { scoreMap, progressMap, systemCallMap }
+  return { scoreMap, progressMap, systemCallMap, chosenCallMap }
 }

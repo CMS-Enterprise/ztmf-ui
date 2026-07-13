@@ -403,6 +403,7 @@ export default function FismaTable({
   scores,
   progress,
   systemCallMap = {},
+  chosenCallMap = {},
 }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const {
@@ -555,15 +556,19 @@ export default function FismaTable({
   }
 
   const handleOpenPillarScores = async (row: FismaSystemType) => {
-    // Use the row's own call among the active ones (newest by deadline) so
-    // the modal shows the right "current" call when a full year is selected
-    // and activeDataCallId is just a global fallback.
-    const rowCallObjs = sortDatacallsByDeadline(
-      (systemCallMap[row.fismasystemid] ?? [])
-        .map((id) => datacalls.find((d) => d.datacallid === id))
-        .filter((d): d is datacall => Boolean(d))
-    )
-    const rowDataCallId = rowCallObjs[0]?.datacallid ?? activeDataCallId
+    // Use the same call the dashboard row is displaying (chosen by most-recently-updated
+    // in buildDashboardMaps) so the modal's "current" always matches the table cell.
+    // Falls back to newest-by-deadline if chosenCallMap has no entry (e.g. single-call
+    // system or map not yet populated), then to activeDataCallId as a last resort.
+    const chosenId = chosenCallMap[row.fismasystemid]
+    const rowDataCallId =
+      chosenId ??
+      sortDatacallsByDeadline(
+        (systemCallMap[row.fismasystemid] ?? [])
+          .map((id) => datacalls.find((d) => d.datacallid === id))
+          .filter((d): d is datacall => Boolean(d))
+      )[0]?.datacallid ??
+      activeDataCallId
 
     try {
       // Check cache first
