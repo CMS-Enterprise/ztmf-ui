@@ -8,6 +8,10 @@ import type { AppConfig } from '@/types'
 const CONFIG = {
   //* Feature flags
   IDP_ENABLED: String(import.meta.env.VITE_IDP_ENABLED) === 'true',
+  // ZTMF Insights "How to fix" remediation. Set true only on the impl build
+  // (VITE_INSIGHTS_SUGGEST_FIX_ENABLED in ui.yml); unset elsewhere → false.
+  INSIGHTS_SUGGEST_FIX_ENABLED:
+    String(import.meta.env.VITE_INSIGHTS_SUGGEST_FIX_ENABLED) === 'true',
 
   //* Environment
   // Vite's build mode is 'production' only for `yarn build:prod`; local dev,
