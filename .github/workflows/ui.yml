@@ -58,6 +58,8 @@ jobs:
         # Default off; flip per environment as IdP rollout progresses.
         env:
           VITE_IDP_ENABLED: ${{ inputs.environment == 'dev' && 'true' || 'false' }}
+          # Insights "How to fix" remediation — trialed in impl only; off in dev/prod.
+          VITE_INSIGHTS_SUGGEST_FIX_ENABLED: ${{ inputs.environment == 'impl' && 'true' || 'false' }}
           # Dev-only banner overrides. Sourced from secrets so the feedback form
           # URL and contact address stay out of the repo. Clear these secrets
           # when the testing window ends and the banner reverts to default copy.

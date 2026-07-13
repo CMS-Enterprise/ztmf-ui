@@ -5,6 +5,7 @@ import Tooltip from '@mui/material/Tooltip'
 import Collapse from '@mui/material/Collapse'
 import Link from '@mui/material/Link'
 import type { InsightPayload, InsightFinding } from '@/types'
+import CONFIG from '@/utils/config'
 
 type Props = {
   payload: InsightPayload
@@ -726,7 +727,7 @@ function FindingRow({
       {!severity && description && (
         <Box sx={{ mt: 0.25, color: '#666' }}>{description}</Box>
       )}
-      {remediation && (
+      {CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED && remediation && (
         <Box sx={{ mt: 0.25, color: '#5a6a8a' }}>
           <Box component="span" sx={{ fontWeight: 600 }}>
             How to fix:

@@ -4,6 +4,19 @@ import InsightsPanel, {
   severityStyle,
 } from './InsightsPanel'
 import type { InsightPayload } from '@/types'
+import CONFIG from '@/utils/config'
+
+// The "How to fix" remediation is gated by CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED,
+// which is false in the test env (no VITE_INSIGHTS_SUGGEST_FIX_ENABLED). Mock the
+// config so the default is ON here (matching impl); tests flip the flag on the
+// imported (mocked) CONFIG object, which the component reads by the same
+// reference. Only the flag field is used by this subtree, so a partial mock is
+// safe. jest.mock is hoisted above imports, so the flag object is created inside
+// the factory (referencing an outer const would hit the TDZ).
+jest.mock('@/utils/config', () => ({
+  __esModule: true,
+  default: { INSIGHTS_SUGGEST_FIX_ENABLED: true },
+}))
 
 const fullPayload: InsightPayload = {
   suggested_score: 1,
@@ -164,6 +177,42 @@ describe('InsightsPanel', () => {
     ).toBeInTheDocument()
     expect(screen.getByText('MEDIUM')).toBeInTheDocument()
     expect(screen.getByText(/How to fix/)).toBeInTheDocument()
+  })
+
+  it('hides "How to fix" when INSIGHTS_SUGGEST_FIX_ENABLED is off, keeping the finding and CFACTS reasoning', () => {
+    CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED = false
+    try {
+      render(
+        <InsightsPanel
+          payload={{
+            suggested_score: 1,
+            cfacts_reasoning: 'IDM-Okta detected. MFA required.',
+            findings: {
+              sechub: [
+                {
+                  id: 'IAM.10',
+                  title: 'MFA should be enabled',
+                  remediation: 'Turn on MFA in the IAM console.',
+                  severity: 'MEDIUM',
+                },
+              ],
+            },
+          }}
+        />
+      )
+      fireEvent.click(screen.getByRole('button', { name: /details/i }))
+      // Remediation gated off...
+      expect(screen.queryByText(/How to fix/)).not.toBeInTheDocument()
+      expect(
+        screen.queryByText(/Turn on MFA in the IAM console/)
+      ).not.toBeInTheDocument()
+      // ...but the finding itself and the CFACTS reasoning still render.
+      expect(screen.getByText('IAM.10')).toBeInTheDocument()
+      expect(screen.getByText('MFA should be enabled')).toBeInTheDocument()
+      expect(screen.getByText(/IDM-Okta detected/)).toBeInTheDocument()
+    } finally {
+      CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED = true
+    }
   })
 
   it('hides findings until details is toggled, then reveals them', () => {

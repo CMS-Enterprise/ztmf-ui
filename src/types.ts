@@ -7,6 +7,9 @@ export type AppConfig = AppFeatureFlags & AppEnvironment
 
 export type AppFeatureFlags = {
   IDP_ENABLED: boolean
+  // Gates the ZTMF Insights "How to fix" remediation text on the questionnaire.
+  // On in impl only (we're trialing whether to offer fixes); off in dev/prod.
+  INSIGHTS_SUGGEST_FIX_ENABLED: boolean
 }
 
 // Environment-derived settings. IS_NONPROD gates the development banner; the
