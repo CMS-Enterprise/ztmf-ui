@@ -112,15 +112,22 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     [datacalls, scores]
   )
 
-  // The scored datacall immediately preceding the current one by deadline order.
-  // Tracked separately from its score so we can still label the comparison.
-  const previousDatacall = (() => {
-    if (!latestScore || scoredDatacalls.length === 0) return null
+  // Scored calls strictly older than the anchor by deadline — the valid
+  // "previous" candidates. Excludes the anchor itself and anything newer, so a
+  // comparison always means an earlier submission and the trend wording
+  // (improved/declined) points the right way even when the anchor (the row's
+  // most-recently-updated call) is not the system's latest call by deadline.
+  const olderScoredDatacalls = (() => {
+    if (!latestScore) return []
     const idx = scoredDatacalls.findIndex(
       (dc) => dc.datacallid === latestScore.datacallid
     )
-    return idx >= 0 ? scoredDatacalls[idx + 1] ?? null : null
+    return idx >= 0 ? scoredDatacalls.slice(idx + 1) : []
   })()
+
+  // The scored datacall immediately preceding the current one by deadline order.
+  // Tracked separately from its score so we can still label the comparison.
+  const previousDatacall = olderScoredDatacalls[0] ?? null
 
   // Score entry for the previous datacall; null if no submission for that call.
   const previousScoreEntry = previousDatacall
@@ -330,8 +337,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
           <Box>
             {/* Comparison selector — shown whenever other scores exist (synchronous
                 check so the picker appears on the first render, not after the
-                async datacalls fetch resolves). Dropdown options use scoredDatacalls
-                which may briefly be empty while the fetch is in flight. */}
+                async datacalls fetch resolves). Dropdown options use
+                olderScoredDatacalls (the system's scored calls before the
+                anchor) which may briefly be empty while the fetch is in flight. */}
             {scores.length > 1 && (
               <Box
                 display="flex"
@@ -363,15 +371,11 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       sx={{ minWidth: 160, maxWidth: 260 }}
                     >
                       <MenuItem value="">None</MenuItem>
-                      {scoredDatacalls
-                        .filter(
-                          (dc) => dc.datacallid !== latestScore?.datacallid
-                        )
-                        .map((dc) => (
-                          <MenuItem key={dc.datacallid} value={dc.datacallid}>
-                            {getQuarterName(dc.datacallid)}
-                          </MenuItem>
-                        ))}
+                      {olderScoredDatacalls.map((dc) => (
+                        <MenuItem key={dc.datacallid} value={dc.datacallid}>
+                          {getQuarterName(dc.datacallid)}
+                        </MenuItem>
+                      ))}
                     </Select>
                   </FormControl>
                 </Box>
