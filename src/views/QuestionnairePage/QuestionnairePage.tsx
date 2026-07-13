@@ -186,17 +186,6 @@ export default function QuestionnarePage() {
   optionsRef.current = options
   const loadingQuestionRef = React.useRef(loadingQuestion)
   loadingQuestionRef.current = loadingQuestion
-  // Persisted data-call context so in-questionnaire navigation (Next/Back/
-  // sidebar) can re-supply it via router state. Without this, the first
-  // click-through drops location.state.datacall* and the load effect reverts to
-  // the global data-call selector — opening a system for a specific picked call
-  // (e.g. FY2025 Q3) would silently fall back to the latest call (FY25) on the
-  // next click.
-  const datacallStateRef = React.useRef<{
-    datacallid: number
-    datacall: string
-    deadline?: string
-  }>({ datacallid: 0, datacall: '' })
   // Bumped when a re-seed changes the answer so the uncontrolled radio ChoiceList
   // (which only reflects defaultChecked on mount) remounts and shows the
   // corrected selection.
@@ -288,6 +277,15 @@ export default function QuestionnarePage() {
   const routeDeadline = location.state?.deadline as string | undefined
   const systemRef = React.useRef(system)
   systemRef.current = system
+  // The in-survey navigate() calls (Next, Back, sidebar, canonical redirect)
+  // reset router state and would drop the chosen data call, reverting the
+  // survey to the latest call (#501). Persist the resolved call here and
+  // re-supply it in every internal navigation so the choice survives.
+  const datacallStateRef = React.useRef<{
+    datacallid?: number
+    datacall?: string
+    deadline?: string
+  }>({})
   const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
 
@@ -324,7 +322,6 @@ export default function QuestionnarePage() {
     void load()
     return () => controller.abort()
   }, [system])
-
   // Resolve the system's raw datacenter environment to its scoring category
   // for pillar filtering. Falls back to the raw value until the vocabulary
   // loads or for any value not in the map.
@@ -439,7 +436,7 @@ export default function QuestionnarePage() {
             )
             datacallStateRef.current = {
               datacallid: routeDatacallId,
-              datacall,
+              datacall: routeDatacall,
               deadline: routeDeadline,
             }
           } else {
@@ -453,7 +450,7 @@ export default function QuestionnarePage() {
               activeDataCallId = selectedDatacall.datacallid
               datacallStateRef.current = {
                 datacallid: selectedDatacall.datacallid,
-                datacall,
+                datacall: selectedDatacall.datacall,
                 deadline: selectedDatacall.deadline,
               }
             } else {
@@ -465,8 +462,8 @@ export default function QuestionnarePage() {
               activeDataCallId = latestDataCallId
               datacallStateRef.current = {
                 datacallid: latestDataCallId,
-                datacall,
-                deadline: latestDeadline ?? undefined,
+                datacall: latestDatacall,
+                deadline: latestDeadline,
               }
             }
           }
@@ -542,12 +539,7 @@ export default function QuestionnarePage() {
               navigate(
                 `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
                 {
-                  state: {
-                    fismasystemid: system,
-                    datacallid: datacallStateRef.current.datacallid,
-                    datacall: datacallStateRef.current.datacall,
-                    deadline: datacallStateRef.current.deadline,
-                  },
+                  state: { fismasystemid: system, ...datacallStateRef.current },
                   replace: true,
                 }
               )
@@ -992,12 +984,7 @@ export default function QuestionnarePage() {
                                   {
                                     state: {
                                       fismasystemid: system,
-                                      datacallid:
-                                        datacallStateRef.current.datacallid,
-                                      datacall:
-                                        datacallStateRef.current.datacall,
-                                      deadline:
-                                        datacallStateRef.current.deadline,
+                                      ...datacallStateRef.current,
                                     },
                                     replace: true,
                                   }
@@ -1131,10 +1118,7 @@ export default function QuestionnarePage() {
                               {
                                 state: {
                                   fismasystemid: system,
-                                  datacallid:
-                                    datacallStateRef.current.datacallid,
-                                  datacall: datacallStateRef.current.datacall,
-                                  deadline: datacallStateRef.current.deadline,
+                                  ...datacallStateRef.current,
                                 },
                                 replace: true,
                               }
@@ -1168,9 +1152,7 @@ export default function QuestionnarePage() {
                             {
                               state: {
                                 fismasystemid: system,
-                                datacallid: datacallStateRef.current.datacallid,
-                                datacall: datacallStateRef.current.datacall,
-                                deadline: datacallStateRef.current.deadline,
+                                ...datacallStateRef.current,
                               },
                               replace: true,
                             }
