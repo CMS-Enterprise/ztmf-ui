@@ -229,12 +229,13 @@ describe('InsightsPanel', () => {
     expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
   })
 
-  it('lists satisfied and failing ARS control IDs when the pipeline provides them', () => {
+  it('lists satisfied, non-satisfied, and failing ARS control IDs when the pipeline provides them', () => {
     render(
       <InsightsPanel
         payload={{
           ...fullPayload,
           ars_satisfied_controls: ['IA-01', 'IA-02(01)'],
+          ars_not_satisfied_controls: ['IA-02(02)', 'IA-02(08)'],
           ars_failing_controls: ['AC-17'],
         }}
       />
@@ -244,6 +245,23 @@ describe('InsightsPanel', () => {
     expect(screen.getByText('IA-01').textContent).toContain('✓')
     expect(screen.getByText('IA-02(01)').textContent).toContain('✓')
     expect(screen.getByText('AC-17').textContent).toContain('✗')
+    // Non-satisfied controls render greyed with a neutral marker — NOT the red ✗.
+    expect(screen.getByText('IA-02(02)').textContent).toContain('○')
+    expect(screen.getByText('IA-02(02)').textContent).not.toContain('✗')
+    expect(screen.getByText('IA-02(08)').textContent).toContain('○')
+  })
+
+  it('renders non-satisfied ARS controls even when the satisfied array is absent', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          ...fullPayload,
+          ars_not_satisfied_controls: ['IA-02(02)'],
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('IA-02(02)').textContent).toContain('○')
   })
 
   it('drops non-string control IDs instead of throwing', () => {
