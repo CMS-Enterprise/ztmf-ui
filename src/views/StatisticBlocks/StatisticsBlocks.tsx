@@ -4,7 +4,8 @@ import Paper from '@mui/material/Paper'
 import { Typography } from '@mui/material'
 import { styled } from '@mui/material/styles'
 import { useContextProp } from '../Title/Context'
-import type { SystemScoreEntry } from '@/types'
+import type { ScoreTier, SystemScoreEntry } from '@/types'
+import { TIERS } from '@/utils/tierStyles'
 const StatisticsPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(2),
   ...theme.typography.body2,
@@ -28,7 +29,13 @@ export default function StatisticsBlocks({
   const [avgSystemScore, setAvgSystemScore] = useState<number>(0)
   const [maxSystemAcronym, setMaxSystemAcronym] = useState<string>('')
   const [maxSystemScore, setMaxSystemScore] = useState<number>(0)
+  const [maxSystemTier, setMaxSystemTier] = useState<ScoreTier | undefined>(
+    undefined
+  )
   const [minSystemScore, setMinSystemScore] = useState<number>(0)
+  const [minSystemTier, setMinSystemTier] = useState<ScoreTier | undefined>(
+    undefined
+  )
   const [minSystemAcronym, setMinSystemAcronym] = useState<string>('')
   const [loading, setLoading] = useState<boolean>(false)
 
@@ -36,8 +43,10 @@ export default function StatisticsBlocks({
     const totalCount = fismaSystems.length
     let maxScore: number = 0
     let maxScoreSystem: string = ''
+    let maxScoreTier: ScoreTier | undefined
     let minScore: number = Number.POSITIVE_INFINITY
     let minScoreSystem: string = ''
+    let minScoreTier: ScoreTier | undefined
     let totalScores: number = 0
     for (const system of fismaSystems) {
       const entry = scores[system.fismasystemid]
@@ -45,10 +54,12 @@ export default function StatisticsBlocks({
         if (entry.score > maxScore) {
           maxScore = entry.score
           maxScoreSystem = system.fismaacronym
+          maxScoreTier = entry.tier
         }
         if (entry.score < minScore) {
           minScore = entry.score
           minScoreSystem = system.fismaacronym
+          minScoreTier = entry.tier
         }
         totalScores += entry.score
       }
@@ -62,8 +73,10 @@ export default function StatisticsBlocks({
     }
     setTotalSystems(totalCount)
     setMaxSystemScore(maxScore)
+    setMaxSystemTier(maxScoreTier)
     setMaxSystemAcronym(maxScoreSystem || '')
 
+    setMinSystemTier(minScoreTier)
     setMinSystemAcronym(minScoreSystem || '')
     setLoading(false)
   }, [fismaSystems, scores])
@@ -111,7 +124,7 @@ export default function StatisticsBlocks({
         <Typography
           variant="h2"
           sx={{
-            color: '#128172',
+            color: maxSystemTier ? TIERS[maxSystemTier].chip.color : 'inherit',
             fontSize: '50px',
           }}
         >
@@ -131,7 +144,7 @@ export default function StatisticsBlocks({
         <Typography
           variant="h2"
           sx={{
-            color: '#960B91',
+            color: minSystemTier ? TIERS[minSystemTier].chip.color : 'inherit',
             fontSize: '50px',
           }}
         >

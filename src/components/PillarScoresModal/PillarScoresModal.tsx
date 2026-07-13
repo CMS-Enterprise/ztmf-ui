@@ -32,7 +32,7 @@ import {
 } from 'recharts'
 import axiosInstance from '@/axiosConfig'
 import type { ScoreAggregate } from '@/types'
-import { styleForTier, TIER_STYLES } from '@/utils/tierStyles'
+import { tierStyle, TIERS } from '@/utils/tierStyles'
 
 // Static cache for datacalls that persists across component instances
 const datacallsCache: { data: DataCall[] | null; timestamp: number | null } = {
@@ -57,9 +57,9 @@ interface PillarScoresModalProps {
 }
 
 // Background color used when the API has not (yet) returned a tier
-// string for this score. Matches TIER_STYLES['Not Assessed'] so a
+// string for this score. Matches TIERS['Not Assessed'] so a
 // missing-tier cell visually reads as "no data" rather than a blank.
-const FALLBACK_BACKGROUND = TIER_STYLES['Not Assessed'].backgroundColor
+const FALLBACK_BACKGROUND = TIERS['Not Assessed'].chip.backgroundColor
 
 const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   open,
@@ -263,7 +263,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   borderColor: 'darkgray',
                   borderRadius: 2,
                   backgroundColor: latestScore.systemscore
-                    ? styleForTier(latestScore.systemtier)?.backgroundColor ??
+                    ? tierStyle(latestScore.systemtier)?.chip.backgroundColor ??
                       FALLBACK_BACKGROUND
                     : FALLBACK_BACKGROUND,
                   maxWidth: '320px',
@@ -299,7 +299,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                     <Typography
                       variant="body1"
                       sx={{
-                        color: TIER_STYLES[latestScore.systemtier].color,
+                        color: TIERS[latestScore.systemtier]?.chip.color,
                         fontWeight: 'bold',
                         fontSize: '1rem',
                         mb: 1,
@@ -440,7 +440,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         height: '100%',
                         backgroundColor:
                           currentScore > 0
-                            ? styleForTier(pillar.tier)?.backgroundColor ??
+                            ? tierStyle(pillar.tier)?.chip.backgroundColor ??
                               FALLBACK_BACKGROUND
                             : FALLBACK_BACKGROUND,
                       }}
@@ -502,7 +502,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         <Typography
                           variant="caption"
                           sx={{
-                            color: TIER_STYLES[pillar.tier].color,
+                            color: TIERS[pillar.tier]?.chip.color,
                             fontWeight: 'bold',
                             fontSize: '0.8rem',
                             display: 'block',
