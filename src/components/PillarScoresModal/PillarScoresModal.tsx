@@ -94,20 +94,32 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     latestScore.pillarscores &&
     latestScore.pillarscores.length > 0
 
-  const sortedDatacalls = useMemo(
-    () => sortDatacallsByDeadline(datacalls),
-    [datacalls]
+  // Data calls this system actually has a score for, deadline-sorted. The
+  // comparison must be self-scoped: `datacalls` is the full cross-tenant list
+  // (CMS quarterly `FY## Q#` and HHS annual `FY## ZTM` interleaved by deadline),
+  // so a raw deadline-neighbor is frequently a call this system can never have
+  // scored — e.g. an HHS system's chronological predecessor is a CMS quarterly,
+  // which would show "No data" by default. Scoping to scored calls keeps the
+  // #393 deadline ordering while restoring the "nearest call this system has
+  // data for" comparison semantics.
+  const scoredDatacalls = useMemo(
+    () =>
+      sortDatacallsByDeadline(
+        datacalls.filter((dc) =>
+          scores.some((s) => s.datacallid === dc.datacallid)
+        )
+      ),
+    [datacalls, scores]
   )
 
-  // The datacall immediately preceding the current one by deadline order.
-  // Tracked separately from its score so we can still label the comparison
-  // when this system has no submission for that call.
+  // The scored datacall immediately preceding the current one by deadline order.
+  // Tracked separately from its score so we can still label the comparison.
   const previousDatacall = (() => {
-    if (!latestScore || sortedDatacalls.length === 0) return null
-    const idx = sortedDatacalls.findIndex(
+    if (!latestScore || scoredDatacalls.length === 0) return null
+    const idx = scoredDatacalls.findIndex(
       (dc) => dc.datacallid === latestScore.datacallid
     )
-    return idx >= 0 ? sortedDatacalls[idx + 1] ?? null : null
+    return idx >= 0 ? scoredDatacalls[idx + 1] ?? null : null
   })()
 
   // Score entry for the previous datacall; null if no submission for that call.
@@ -318,7 +330,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
           <Box>
             {/* Comparison selector — shown whenever other scores exist (synchronous
                 check so the picker appears on the first render, not after the
-                async datacalls fetch resolves). Dropdown options use sortedDatacalls
+                async datacalls fetch resolves). Dropdown options use scoredDatacalls
                 which may briefly be empty while the fetch is in flight. */}
             {scores.length > 1 && (
               <Box
@@ -337,7 +349,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   <FormControl size="small">
                     <Select
                       value={
-                        sortedDatacalls.length === 0
+                        scoredDatacalls.length === 0
                           ? ''
                           : selectedComparisonId === undefined
                             ? previousDatacall?.datacallid ?? ''
@@ -351,7 +363,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       sx={{ minWidth: 160, maxWidth: 260 }}
                     >
                       <MenuItem value="">None</MenuItem>
-                      {sortedDatacalls
+                      {scoredDatacalls
                         .filter(
                           (dc) => dc.datacallid !== latestScore?.datacallid
                         )
