@@ -27,9 +27,12 @@ import { isAuthHandled, notify } from '@/utils/notify'
 // introduced FY23/FY24/FY25 ZTM datacall names.
 const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q[1-4]|ZTM)$/
 const DATACALL_MAX_LENGTH = 10 // "FY2025 ZTM" = 10 chars; longest valid form
-const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
 
-export default function DataCallModal({ open, onClose }: datacallModalProps) {
+export default function DataCallModal({
+  open,
+  onClose,
+  onCreated,
+}: datacallModalProps) {
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
@@ -61,8 +64,11 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       </Typography>
     )
   }
+  // Validates on every change so the user is never left with a disabled
+  // Create button and no explanation. Empty input still resets the error
+  // (an untouched field should not scream at the user).
   function isValidFormat(input: string) {
-    if (input.length < DATACALL_MIN_LENGTH) {
+    if (input.length === 0) {
       setDatacallError('')
       return
     }
@@ -77,11 +83,29 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
     setDatacall(value)
     isValidFormat(value.toUpperCase())
   }
+  // Deadline validation mirrors the blur logic but only fires once the
+  // input has reached the 10-char MM/DD/YYYY shape - partial input stays
+  // quiet so the field does not flash red on every keystroke.
+  const validateDeadlineValue = (value: string) => {
+    if (value.length === 0) {
+      setDeadlineError('')
+      return
+    }
+    if (value.length < 10) {
+      setDeadlineError('')
+      return
+    }
+    if (isNaN(Date.parse(value))) {
+      setDeadlineError('Invalid Deadline')
+      return
+    }
+    setDeadlineError('')
+  }
   const validateDeadline = (e: React.FocusEvent<HTMLInputElement>) => {
     if (e.target.value.length === 10 && !isNaN(Date.parse(e.target.value))) {
       setDeadline(e.target.value)
       setDeadlineError('')
-    } else {
+    } else if (e.target.value.length > 0) {
       setDeadlineError('Invalid Deadline')
     }
   }
@@ -95,6 +119,10 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       notify('Datacall has successfully been created', 'success', {
         autoHideDuration: 2500,
       })
+      // Refresh the caller's data-call list so the newly created call
+      // appears in the picker without a manual page reload, then close.
+      onCreated?.()
+      onClose()
     } catch (error) {
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
@@ -173,8 +201,9 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
             onBlur={validateDeadline}
             onChange={(e) => {
               setDeadline(e)
+              validateDeadlineValue(e)
             }}
-            value=""
+            value={deadline}
           />
         </DialogContent>
         <DialogActions
