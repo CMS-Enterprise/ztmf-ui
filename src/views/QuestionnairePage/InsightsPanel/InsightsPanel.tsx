@@ -598,6 +598,12 @@ function ControlChip({
   const chip = (
     <Box
       component="span"
+      // role="img" only when we supply an accessible name: aria-label on a
+      // role-less generic span is not reliably exposed by AT (NVDA/VoiceOver
+      // often ignore it), so a role is required for the pass/fail context to
+      // actually reach screen-reader users. ARS chips pass no ariaLabel and
+      // stay role-less — they're announced via their visible control-ID text.
+      role={ariaLabel ? 'img' : undefined}
       aria-label={ariaLabel || undefined}
       sx={{
         display: 'inline-flex',

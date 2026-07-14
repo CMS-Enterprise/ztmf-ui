@@ -579,16 +579,21 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     ac2.forEach((chip) => expect(chip.textContent).toContain('✓'))
   })
 
-  it('folds pass/fail status into each chip accessible name', () => {
+  it('folds pass/fail status into each chip accessible name (role=img so AT exposes it)', () => {
     render(<InsightsPanel payload={kionPassFail} />)
     expand()
+    // Assert via getByRole+name (resolves the real accessible name) rather than
+    // getByLabelText (reads the attribute directly) — the chip carries role=img
+    // so the aria-label is actually announced, not silently dropped by AT.
     expect(
-      screen.getByLabelText(
-        /account-without-compliant-password-policy.*Password Policy.*Passed/
-      )
+      screen.getByRole('img', {
+        name: /account-without-compliant-password-policy.*Password Policy.*Passed/,
+      })
     ).toBeInTheDocument()
     expect(
-      screen.getByLabelText(/iam-user-without-mfa-device-enabled.*Failed/)
+      screen.getByRole('img', {
+        name: /iam-user-without-mfa-device-enabled.*Failed/,
+      })
     ).toBeInTheDocument()
   })
 
