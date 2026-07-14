@@ -49,6 +49,16 @@ type SourceConfig = {
 function buildSources(p: InsightPayload): SourceConfig[] {
   return [
     {
+      // ARS leads — its control-coverage signal (satisfied + not-satisfied) is
+      // the richest, and the drawer renders the ARS Controls block first, so the
+      // chip order matches.
+      key: 'ars',
+      label: 'ARS',
+      color: '#7c5cbf',
+      score: p.ars_control_score,
+      active: p.ars_control_score != null || p.ars_controls_total != null,
+    },
+    {
       key: 'kion',
       label: 'Kion',
       color: '#e86c25',
@@ -77,18 +87,6 @@ function buildSources(p: InsightPayload): SourceConfig[] {
       score: p.cfacts_suggested_score,
       active: p.cfacts_suggested_score != null || p.cfacts_auth_methods != null,
     },
-    {
-      // ARS dot shows the numeric maturity score (ars_control_score, 1-4) —
-      // NOT ars_maturity (the string label like "Initial", which won't fit the
-      // dot) and NOT the controls-satisfied count (which is coverage, not
-      // maturity: 4/4 controls can still be Initial=2). The label is surfaced in
-      // the chip tooltip via maturityLabel(score).
-      key: 'ars',
-      label: 'ARS',
-      color: '#7c5cbf',
-      score: p.ars_control_score,
-      active: p.ars_control_score != null || p.ars_controls_total != null,
-    },
   ]
 }
 
@@ -100,7 +98,11 @@ function isFloor(floorSource: string | null | undefined, label: string) {
   return floorSource.toLowerCase().includes(label.toLowerCase())
 }
 
-function ScoreDot({
+// Score badge inside a source chip. Shows the maturity WORD ("Initial"), not the
+// bare number — a numeric badge next to a source name reads as a finding count
+// ("2 findings") rather than the maturity tier it is. Fixed width so every badge
+// is the same size, wide enough for the longest label ("Traditional").
+function ScoreBadge({
   score,
   color,
   active,
@@ -109,25 +111,29 @@ function ScoreDot({
   color: string
   active: boolean
 }) {
+  const label = active
+    ? maturityLabel(score) ?? (score != null ? `Score ${score}` : '—')
+    : '—'
   return (
     <Box
       component="span"
       sx={{
-        width: 16,
+        width: 74,
         height: 16,
-        borderRadius: '50%',
+        borderRadius: '8px',
         display: 'inline-flex',
         alignItems: 'center',
         justifyContent: 'center',
-        fontSize: 9,
+        fontSize: 9.5,
         fontWeight: 700,
+        letterSpacing: '0.2px',
         color: '#fff',
         lineHeight: 1,
         flexShrink: 0,
         bgcolor: active ? color : '#ccc',
       }}
     >
-      {score != null ? score : '–'}
+      {label}
     </Box>
   )
 }
@@ -148,8 +154,8 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
           display: 'inline-flex',
           alignItems: 'center',
           gap: 0.5,
-          pl: 0.5,
-          pr: 1,
+          pl: 1,
+          pr: 0.5,
           py: 0.25,
           borderRadius: '12px',
           fontSize: 11,
@@ -160,8 +166,8 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
           opacity: src.active ? 1 : 0.4,
         }}
       >
-        <ScoreDot score={src.score} color={src.color} active={src.active} />
-        <Box component="span">{src.label}</Box>
+        <Box component="span">{src.label}:</Box>
+        <ScoreBadge score={src.score} color={src.color} active={src.active} />
       </Box>
     </Tooltip>
   )
@@ -311,8 +317,34 @@ function InsightsPanelInner({ payload }: Props) {
   const arsSatisfied = toStringArray(payload.ars_satisfied_controls)
   const arsNotSatisfied = toStringArray(payload.ars_not_satisfied_controls)
   const arsFailing = toStringArray(payload.ars_failing_controls)
+
+  // Per-source pass/fail. A finding = a FAILED check (failing side, `findings`);
+  // the PASSING side ships separately as `{source}_passing` (same InsightFinding
+  // shape + level). When a source ships its passing array we render an ARS-style
+  // pass/fail block ("N of M checks passed" + ✓/✗ chips); until then it falls
+  // back to the plain failing FindingRows. Generic over all three finding-sources
+  // — Kion is live, sechub/hardenize light up when their arrays land, no code
+  // change. `hasPassing` keys on the array being PRESENT (even empty) so an
+  // all-failing source with a shipped passing array still reads "0 of M".
+  const feedSources = (
+    [
+      { key: 'kion', label: 'Kion', failing: kionFindings },
+      { key: 'sechub', label: 'SecurityHub', failing: sechubFindings },
+      { key: 'hardenize', label: 'Hardenize', failing: hardenizeFindings },
+    ] as const
+  ).map((s) => {
+    const raw = payload[`${s.key}_passing`]
+    return {
+      ...s,
+      passing: asFindingArray(raw),
+      hasPassing: Array.isArray(raw),
+    }
+  })
+  const anyFeedBlock = feedSources.some((s) => s.hasPassing)
+
   const hasDetail =
     hasFindings ||
+    anyFeedBlock ||
     !!payload.cfacts_reasoning ||
     !!payload.ars_controls_total ||
     !!payload.evidence_sources
@@ -392,24 +424,9 @@ function InsightsPanelInner({ payload }: Props) {
 
       <Collapse in={open} unmountOnExit>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #e0e4f0' }}>
-          {payload.evidence_sources && (
-            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                Based on:
-              </Box>{' '}
-              {asText(payload.evidence_sources)}
-            </Typography>
-          )}
-
-          {payload.cfacts_reasoning && (
-            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                CFACTS:
-              </Box>{' '}
-              {asText(payload.cfacts_reasoning)}
-            </Typography>
-          )}
-
+          {/* ARS Controls first — richest signal (satisfied + not-satisfied
+              control coverage), so it leads the drawer ahead of the other
+              enrichment sources. */}
           {payload.ars_controls_total != null && (
             <Box sx={{ mb: 0.75 }}>
               <Typography sx={{ fontSize: 12, color: '#555' }}>
@@ -456,23 +473,52 @@ function InsightsPanelInner({ payload }: Props) {
             </Box>
           )}
 
-          {kionFindings.map((f, i) => (
-            <FindingRow key={`kion-${f?.id ?? i}`} source="Kion" finding={f} />
-          ))}
-          {sechubFindings.map((f, i) => (
-            <FindingRow
-              key={`sechub-${f?.id ?? i}`}
-              source="SecurityHub"
-              finding={f}
-            />
-          ))}
-          {hardenizeFindings.map((f, i) => (
-            <FindingRow
-              key={`hardenize-${f?.id ?? i}`}
-              source="Hardenize"
-              finding={f}
-            />
-          ))}
+          {payload.evidence_sources && (
+            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
+              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                Based on:
+              </Box>{' '}
+              {asText(payload.evidence_sources)}
+            </Typography>
+          )}
+
+          {payload.cfacts_reasoning && (
+            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
+              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                CFACTS:
+              </Box>{' '}
+              {asText(payload.cfacts_reasoning)}
+            </Typography>
+          )}
+
+          {feedSources.map((s) => {
+            // Kion renders as the chip block on EVERY question (its passing array
+            // is rolling out and its FindingRow detail is low-value — no
+            // instances, unreliable remediation), so all Kion sections look
+            // uniform even before the passing array ships for a given question.
+            // SecHub/Hardenize keep the richer FindingRow (affected domains,
+            // severity) until their own passing arrays land, at which point
+            // `hasPassing` flips them to the same block automatically.
+            const asBlock = s.hasPassing || s.key === 'kion'
+            if (asBlock) {
+              return s.hasPassing || s.failing.length > 0 ? (
+                <FeedCheckBlock
+                  key={`feed-${s.key}`}
+                  label={s.label}
+                  passing={s.passing}
+                  failing={s.failing}
+                  hasPassing={s.hasPassing}
+                />
+              ) : null
+            }
+            return s.failing.map((f, i) => (
+              <FindingRow
+                key={`${s.key}-${f?.id ?? i}`}
+                source={s.label}
+                finding={f}
+              />
+            ))
+          })}
         </Box>
       </Collapse>
     </Box>
@@ -536,14 +582,29 @@ const CONTROL_CHIP_STYLE: Record<
 function ControlChip({
   id,
   variant,
+  tooltip,
+  ariaLabel,
 }: {
   id: string
   variant: ControlChipVariant
+  // When set, the chip label (a short NIST tag) carries a hover with the fuller
+  // context — used by the feed pass/fail chips whose underlying check slug is
+  // too long to be the label itself. May be rich (multi-line) node.
+  tooltip?: React.ReactNode
+  // Plain-text equivalent of a rich tooltip, for the accessible name.
+  ariaLabel?: string
 }) {
   const style = CONTROL_CHIP_STYLE[variant]
-  return (
+  const chip = (
     <Box
       component="span"
+      // role="img" only when we supply an accessible name: aria-label on a
+      // role-less generic span is not reliably exposed by AT (NVDA/VoiceOver
+      // often ignore it), so a role is required for the pass/fail context to
+      // actually reach screen-reader users. ARS chips pass no ariaLabel and
+      // stay role-less — they're announced via their visible control-ID text.
+      role={ariaLabel ? 'img' : undefined}
+      aria-label={ariaLabel || undefined}
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -558,10 +619,129 @@ function ControlChip({
         bgcolor: style.bgcolor,
         color: style.color,
         border: style.border,
+        cursor: tooltip ? 'help' : undefined,
       }}
     >
       <Box component="span">{style.marker}</Box>
       {id}
+    </Box>
+  )
+  return tooltip ? (
+    <Tooltip
+      title={tooltip}
+      placement="top"
+      arrow
+      slotProps={{ tooltip: { sx: { maxWidth: 340 } } }}
+    >
+      {chip}
+    </Tooltip>
+  ) : (
+    chip
+  )
+}
+
+// Rich hover for a feed pass/fail chip: the check slug (mono), its dictionary
+// description, and a footer line with the NIST control, maturity level, and
+// pass/fail status. Wider/multi-line so the description is readable rather than
+// crammed onto the chip's single-line label.
+function CheckTooltip({
+  finding,
+  pass,
+}: {
+  finding: InsightFinding
+  pass: boolean
+}) {
+  const slug = asText(finding?.id) ?? asText(finding?.title)
+  const desc = asText(finding?.description)
+  const nist = asText(finding?.nist_controls)
+  const level = typeof finding?.level === 'number' ? finding.level : null
+  const meta = [
+    nist,
+    level != null ? `Level ${level}` : undefined,
+    pass ? 'Passed' : 'Failed',
+  ]
+    .filter(Boolean)
+    .join(' · ')
+  return (
+    <Box sx={{ py: 0.25 }}>
+      {slug && (
+        <Box sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>
+          {slug}
+        </Box>
+      )}
+      {desc && (
+        <Box sx={{ fontSize: 11, mt: 0.5, lineHeight: 1.5 }}>{desc}</Box>
+      )}
+      {meta && <Box sx={{ fontSize: 10, mt: 0.5, opacity: 0.8 }}>{meta}</Box>}
+    </Box>
+  )
+}
+
+// ARS-style pass/fail block for one finding-source — the SINGLE rendering path
+// for every finding-source, so all questions look uniform (no fallback to the
+// old verbose FindingRow list). One ✓/✗ chip per check: passing from
+// `{source}_passing` (green), failing from `findings.{source}` (red), labeled by
+// the short NIST tag with the slug + description in the hover. Rollup is
+// per-check — a control tag can repeat because each check is distinct.
+//
+// Header adapts to what shipped: when the passing array is present we can state
+// the full "N of M checks passed"; when it's absent (source has only failing
+// findings, passing not yet emitted) we DON'T fabricate a pass count — we label
+// the failing checks honestly instead. Both render the same chip row, so the
+// look is uniform regardless. Normalizes to the full count everywhere once the
+// backend emits `{source}_passing` on every question.
+function FeedCheckBlock({
+  label,
+  passing,
+  failing,
+  hasPassing,
+}: {
+  label: string
+  passing: InsightFinding[]
+  failing: InsightFinding[]
+  hasPassing: boolean
+}) {
+  const chips = [
+    ...passing.map((f) => ({ pass: true, f })),
+    ...failing.map((f) => ({ pass: false, f })),
+  ]
+  const passed = passing.length
+  const total = chips.length
+  const summary = hasPassing
+    ? `${passed} of ${total} check${total === 1 ? '' : 's'} passed`
+    : `${failing.length} finding${failing.length === 1 ? '' : 's'}`
+  return (
+    <Box sx={{ mb: 0.75 }}>
+      <Typography sx={{ fontSize: 12, color: '#555' }}>
+        <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+          {label}:
+        </Box>{' '}
+        {summary}
+      </Typography>
+      {total > 0 && (
+        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
+          {chips.map(({ pass, f }, i) => {
+            const nist = asText(f?.nist_controls)
+            const slug = asText(f?.id) ?? asText(f?.title)
+            const desc = asText(f?.description)
+            // Fold pass/fail into the accessible name — the ✓/✗ + color is the
+            // only other place that distinction lives, and neither is exposed to
+            // a screen reader (508).
+            const ariaLabel = [slug, desc, pass ? 'Passed' : 'Failed']
+              .filter(Boolean)
+              .join(' — ')
+            return (
+              <ControlChip
+                key={`${pass ? 'p' : 'f'}-${slug ?? ''}-${i}`}
+                id={nist ?? slug ?? '—'}
+                variant={pass ? 'satisfied' : 'failing'}
+                tooltip={<CheckTooltip finding={f} pass={pass} />}
+                ariaLabel={ariaLabel || undefined}
+              />
+            )
+          })}
+        </Box>
+      )}
     </Box>
   )
 }
@@ -679,9 +859,12 @@ function FindingRow({
       </Box>
     ) : null
   return (
-    <Box sx={{ fontSize: 12, color: '#555', mb: 0.75, lineHeight: 1.6 }}>
-      <Box component="span" sx={{ fontWeight: 700, color: '#333' }}>
-        {source}
+    <Typography
+      component="div"
+      sx={{ fontSize: 12, color: '#555', mb: 0.75, lineHeight: 1.6 }}
+    >
+      <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+        {source}:
       </Box>
       {code && (
         <Box
@@ -783,6 +966,6 @@ function FindingRow({
           {remediation}
         </Box>
       )}
-    </Box>
+    </Typography>
   )
 }

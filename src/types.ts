@@ -405,6 +405,9 @@ export type InsightFinding = {
   remediation?: string
   severity?: string
   nist_controls?: string
+  // Maturity tier (1-4) of the check. Present on passing-check entries
+  // (`{source}_passing`); the tier that failed/passed is what drives the score.
+  level?: number | null
   instances?: InsightHardenizeInstance[]
 }
 
@@ -465,6 +468,13 @@ export type InsightPayload = {
   ars_failing_controls?: string[] | null
 
   findings?: InsightFindings
+  // Passing checks per source (counterpart to the failing-only `findings`).
+  // Same InsightFinding shape (id, nist_controls, description, level); severity
+  // omitted (a pass isn't a severity event). Kion is live; sechub/hardenize land
+  // later in the identical shape.
+  kion_passing?: InsightFinding[]
+  sechub_passing?: InsightFinding[]
+  hardenize_passing?: InsightFinding[]
 
   // Additive: the pipeline may add keys at any time.
   [key: string]: unknown
