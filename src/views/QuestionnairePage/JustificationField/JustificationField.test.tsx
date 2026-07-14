@@ -25,12 +25,17 @@ const insight: InsightPayload = {
   },
 }
 
-function Harness() {
+function Harness({
+  contextId = 'system-1003:question-1',
+}: {
+  contextId?: string
+}) {
   const initial = insight.last_score_notes ?? ''
   const [value, setValue] = React.useState(initial)
   const [review, setReview] = React.useState<PriorReviewState>('pending')
   return (
     <JustificationField
+      contextId={contextId}
       label="Explain the available authentication options"
       value={value}
       onChange={setValue}
@@ -61,6 +66,19 @@ describe('justification context helpers', () => {
 
   it('does not label the viewed data call as a previous response', () => {
     expect(priorResponseFor(insight, 'FY2025_Q1')).toBeUndefined()
+  })
+
+  it("labels prior content as last year's response", () => {
+    expect(priorResponseFor(insight, 'FY2025 Q2')).toEqual({
+      label: "Last year's response — FY2025 Q1",
+      text: insight.last_score_notes,
+    })
+    expect(
+      priorResponseFor({ last_score_notes: insight.last_score_notes })
+    ).toEqual({
+      label: "Last year's ISSO response",
+      text: insight.last_score_notes,
+    })
   })
 })
 
@@ -154,7 +172,11 @@ describe('JustificationField', () => {
       screen.getByRole('button', { name: 'Dismiss suggested justification' })
     )
     expect(screen.getByText('Not used')).toBeInTheDocument()
-    fireEvent.click(screen.getByRole('button', { name: 'Review again' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Review again: Suggested justification',
+      })
+    )
     expect(screen.getByText(/CFACTS \(2\): IDM-Okta\./)).toBeInTheDocument()
     expect(
       screen.getByRole('button', {
@@ -172,8 +194,13 @@ describe('JustificationField', () => {
       })
     )
     fireEvent.change(textbox, { target: { value: '' } })
+    expect(screen.getByText('Not used')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review again' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Review again: Suggested justification',
+      })
+    )
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Insert suggested justification into current response',
@@ -185,6 +212,72 @@ describe('JustificationField', () => {
     )
   })
 
+  it('disables reinserting an Insights suggestion that is still present', () => {
+    render(<Harness />)
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert suggested justification into current response',
+      })
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Review again: Suggested justification',
+      })
+    )
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Insert suggested justification into current response',
+      })
+    ).toBeDisabled()
+    expect(
+      screen.getByText('Already included in the current response.')
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Close suggested justification review',
+      })
+    )
+    expect(screen.getByText('Added to response')).toBeInTheDocument()
+    expect(
+      (
+        screen.getByRole('textbox', {
+          name: 'Current response',
+        }) as HTMLTextAreaElement
+      ).value
+    ).toContain('CFACTS (2): IDM-Okta.')
+  })
+
+  it('keeps an edited Insights suggestion marked as added', () => {
+    render(<Harness />)
+    const textbox = screen.getByRole('textbox', { name: 'Current response' })
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert suggested justification into current response',
+      })
+    )
+    fireEvent.change(textbox, {
+      target: {
+        value: (textbox as HTMLTextAreaElement).value.replace(
+          'IDM-Okta.',
+          'IDM-Okta with phishing-resistant MFA.'
+        ),
+      },
+    })
+
+    expect(screen.getByText('Added to response')).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Review again: Suggested justification',
+      })
+    )
+    expect(
+      screen.getByRole('button', {
+        name: 'Close suggested justification review',
+      })
+    ).toBeInTheDocument()
+  })
+
   it('lets the ISSO reopen an accepted previous response', () => {
     render(<Harness />)
     const textbox = screen.getByRole('textbox', { name: 'Current response' })
@@ -194,16 +287,148 @@ describe('JustificationField', () => {
       })
     )
     fireEvent.change(textbox, { target: { value: '' } })
+    expect(screen.getByText('Not used')).toBeInTheDocument()
 
-    fireEvent.click(screen.getByRole('button', { name: 'Review again' }))
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: "Review again: Last year's response — FY2025 Q1",
+      })
+    )
 
     expect(screen.getByText(insight.last_score_notes ?? '')).toBeInTheDocument()
+  })
+
+  it('disables reinserting a reviewed previous response that is still present', () => {
+    render(<Harness />)
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: "Review again: Last year's response — FY2025 Q1",
+      })
+    )
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).toBeDisabled()
+    expect(
+      screen.getByText('Already included in the current response.')
+    ).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Close previous ISSO response review',
+      })
+    )
+    expect(screen.getByText('Added to response')).toBeInTheDocument()
+    expect(
+      screen.getByRole('textbox', { name: 'Current response' })
+    ).toHaveValue(insight.last_score_notes)
+  })
+
+  it('keeps an edited previous response marked as added', () => {
+    render(<Harness />)
+    const textbox = screen.getByRole('textbox', { name: 'Current response' })
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+    fireEvent.change(textbox, {
+      target: {
+        value: (insight.last_score_notes ?? '').replace(
+          'Okta policies.',
+          'phishing-resistant Okta policies.'
+        ),
+      },
+    })
+
+    expect(screen.getByText('Added to response')).toBeInTheDocument()
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: "Review again: Last year's response — FY2025 Q1",
+      })
+    )
+    expect(
+      screen.getByRole('button', {
+        name: 'Close previous ISSO response review',
+      })
+    ).toBeInTheDocument()
+  })
+
+  it('marks only the removed source as not used when other text remains', () => {
+    render(<Harness />)
+    const textbox = screen.getByRole('textbox', { name: 'Current response' })
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert suggested justification into current response',
+      })
+    )
+
+    fireEvent.change(textbox, { target: { value: insight.last_score_notes } })
+
+    expect(screen.getByText('Not used')).toBeInTheDocument()
+    expect(screen.getByText('Added to response')).toBeInTheDocument()
+  })
+
+  it('resets card state when the question context changes', () => {
+    const { rerender } = render(<Harness contextId="question-1" />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Dismiss suggested justification' })
+    )
+    expect(screen.getByText('Not used')).toBeInTheDocument()
+
+    rerender(<Harness contextId="question-2" />)
+
+    expect(
+      screen.getByRole('button', { name: 'Dismiss suggested justification' })
+    ).toBeInTheDocument()
+    expect(screen.getByText(/CFACTS \(2\): IDM-Okta\./)).toBeInTheDocument()
+  })
+
+  it('blocks editing while previous-response review is initializing', () => {
+    render(
+      <JustificationField
+        contextId="question-1"
+        label="Justification"
+        value={insight.last_score_notes ?? ''}
+        onChange={jest.fn()}
+        insight={insight}
+        viewedDatacall="FY2025 Q2"
+        priorReviewState="initializing"
+        onPriorReview={jest.fn()}
+        maxLength={2000}
+      />
+    )
+
+    expect(
+      screen.getByRole('textbox', { name: 'Current response' })
+    ).toBeDisabled()
+    expect(
+      screen.getByText('Checking the previous response…')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).not.toBeInTheDocument()
   })
 
   it('only shows the expansion control when context text is clipped', () => {
     render(<Harness />)
     expect(
-      screen.queryByRole('button', { name: 'Show all' })
+      screen.queryByRole('button', {
+        name: 'Show all: Suggested justification',
+      })
     ).not.toBeInTheDocument()
 
     const suggestion = screen.getByText(/CFACTS \(2\): IDM-Okta\./)
@@ -217,7 +442,63 @@ describe('JustificationField', () => {
     })
     fireEvent(window, new Event('resize'))
 
-    expect(screen.getByRole('button', { name: 'Show all' })).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: 'Show all: Suggested justification',
+      })
+    ).toBeInTheDocument()
+  })
+
+  it('keeps repeated compact actions source-specific for assistive technology', () => {
+    render(<Harness />)
+    fireEvent.click(
+      screen.getByRole('button', { name: 'Dismiss suggested justification' })
+    )
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Dismiss previous ISSO response',
+      })
+    )
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Review again: Suggested justification',
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('button', {
+        name: "Review again: Last year's response — FY2025 Q1",
+      })
+    ).toBeInTheDocument()
+  })
+
+  it('explains when contextual text cannot fit in the current response', () => {
+    render(
+      <JustificationField
+        label="Justification"
+        value={'x'.repeat(1990)}
+        onChange={jest.fn()}
+        insight={insight}
+        viewedDatacall="FY2025 Q2"
+        priorReviewState="not-required"
+        onPriorReview={jest.fn()}
+        maxLength={2000}
+      />
+    )
+
+    expect(
+      screen.getByRole('button', {
+        name: 'Insert suggested justification into current response',
+      })
+    ).toBeDisabled()
+    expect(
+      screen.getByText('Not enough space remaining to insert this suggestion.')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText(
+        'Not enough space remaining to insert the previous response.'
+      )
+    ).toBeInTheDocument()
   })
 
   it('shows context without action buttons in read-only mode', () => {
