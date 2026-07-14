@@ -1,0 +1,115 @@
+name: Nightly sync main -> impl
+
+# Opens a PR merging `main` into `impl` each night so a human can review the
+# diff, resolve any conflicts on the sync branch, and merge it (merging pushes
+# to `impl`, which triggers the impl deploy via orchestration-impl).
+#
+# To smoke-test the candidate in the impl environment BEFORE merging, run the
+# "Manual Deploy to IMPL" workflow with --ref automation/sync-main-to-impl.
+#
+# GitHub's cron is UTC and does NOT adjust for DST. Midnight America/Los_Angeles
+# (== 3am America/New_York) is 08:00 UTC under PST and 07:00 UTC under PDT, so
+# both times are registered and the guard job runs the sync only at true local
+# midnight -- the off-season cron proceeds no further.
+
+on:
+  schedule:
+    - cron: '0 8 * * *' # 00:00 PST / 01:00 PDT
+    - cron: '0 7 * * *' # 00:00 PDT / 23:00 PST
+  workflow_dispatch: {} # allow an on-demand sync
+
+permissions:
+  contents: write # reset + push the sync branch
+  pull-requests: write # open the sync PR
+
+concurrency:
+  group: nightly-impl-sync
+  cancel-in-progress: false
+
+env:
+  SYNC_BRANCH: automation/sync-main-to-impl
+
+jobs:
+  guard:
+    name: Guard (true midnight Pacific)
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run -- proceeding."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          hour="$(TZ='America/Los_Angeles' date +%H)"
+          if [ "$hour" = "00" ]; then
+            echo "Pacific local hour is 00 -- proceeding."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pacific local hour is $hour, not midnight -- the paired DST cron handles this. Skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  open-sync-pr:
+    name: Open main -> impl sync PR
+    needs: guard
+    if: needs.guard.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if a sync PR is already open
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          num="$(gh pr list --base impl --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // ""')"
+          if [ -n "$num" ]; then
+            echo "Sync PR #$num is still open -- leaving it for review, not clobbering in-progress conflict resolution."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Skip if impl already matches main
+        id: uptodate
+        if: steps.existing.outputs.skip != 'true'
+        run: |
+          if git diff --quiet origin/impl origin/main; then
+            echo "impl already matches main -- nothing to sync."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Reset the sync branch to main and push
+        if: steps.existing.outputs.skip != 'true' && steps.uptodate.outputs.skip != 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git branch -f "$SYNC_BRANCH" origin/main
+          git push --force origin "$SYNC_BRANCH"
+
+      - name: Open the PR into impl
+        if: steps.existing.outputs.skip != 'true' && steps.uptodate.outputs.skip != 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: |
+            Automated nightly sync of `main` into `impl`.
+
+            - Review the diff and **resolve any conflicts on this branch** (`automation/sync-main-to-impl`).
+            - To smoke-test the merged result in the impl environment *before* merging, run the **Manual Deploy to IMPL** workflow with `--ref automation/sync-main-to-impl`.
+            - **Merging this PR** pushes to `impl` and triggers the impl deploy (orchestration-impl).
+
+            _Opened by the nightly-impl-sync workflow. It uses the built-in token, so PR-level analysis does not auto-run here; analysis + deploy run on merge (push to impl)._
+        run: |
+          date_pt="$(TZ='America/Los_Angeles' date +%Y-%m-%d)"
+          gh pr create \
+            --base impl \
+            --head "$SYNC_BRANCH" \
+            --title "Nightly sync: main -> impl ($date_pt)" \
+            --body "$PR_BODY"
