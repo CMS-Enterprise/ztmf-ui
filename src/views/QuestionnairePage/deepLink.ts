@@ -22,16 +22,30 @@ export function resolveSystemIdByAcronym(
     ?.fismasystemid
 }
 
-// Resolve the URL's data-call segment back to its datacall. The segment is the
-// call's name with spaces encoded as underscores (see how the page builds the
-// URL), so undo that before matching. undefined when absent or unrecognized —
-// callers fall back to the selected/latest call.
+// Encode a datacall name for its URL segment. Spaces become underscores (the
+// long-standing URL convention), and a literal underscore is doubled first so
+// names like "FY_2025 Q4" and "FY 2025_Q4" encode distinctly instead of
+// colliding on FY_2025_Q4. Current names contain no underscores, so existing
+// URLs are unchanged. Matching re-encodes each candidate name rather than
+// decoding the slug, so the scheme only needs to be collision-free, not
+// reversible.
+export const encodeDatacallSlug = (name: string) =>
+  name.replaceAll('_', '__').replaceAll(' ', '_')
+
+// Resolve the URL's data-call segment back to its datacall by re-encoding each
+// candidate name and comparing case-insensitively (consistent with the other
+// resolvers — a case-mangled shared URL should still land on the right cycle,
+// not silently fall back to the latest one). undefined when absent or
+// unrecognized — callers fall back to the selected/latest call.
 export function resolveDatacallBySlug(
   datacalls: datacall[],
   slug: string | undefined
 ): datacall | undefined {
   if (!slug) return undefined
-  return datacalls.find((dc) => dc.datacall.replaceAll(' ', '_') === slug)
+  const target = slug.toLowerCase()
+  return datacalls.find(
+    (dc) => encodeDatacallSlug(dc.datacall).toLowerCase() === target
+  )
 }
 
 export type FunctionTarget = {

@@ -1,5 +1,6 @@
 import {
   toSlug,
+  encodeDatacallSlug,
   resolveSystemIdByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
@@ -52,12 +53,37 @@ describe('resolveSystemIdByAcronym', () => {
   })
 })
 
+describe('encodeDatacallSlug', () => {
+  it('encodes spaces as underscores (existing URL convention)', () => {
+    expect(encodeDatacallSlug('FY2026 Q1')).toBe('FY2026_Q1')
+  })
+
+  it('doubles literal underscores so space/underscore mixes stay distinct', () => {
+    expect(encodeDatacallSlug('FY_2025 Q4')).toBe('FY__2025_Q4')
+    expect(encodeDatacallSlug('FY 2025_Q4')).toBe('FY_2025__Q4')
+    expect(encodeDatacallSlug('FY_2025 Q4')).not.toBe(
+      encodeDatacallSlug('FY 2025_Q4')
+    )
+  })
+})
+
 describe('resolveDatacallBySlug', () => {
   const datacalls = [dc(10, 'FY2026 Q1'), dc(11, 'FY2025 Q4')]
 
   it('matches the URL segment (spaces as underscores) to the datacall', () => {
     expect(resolveDatacallBySlug(datacalls, 'FY2026_Q1')?.datacallid).toBe(10)
     expect(resolveDatacallBySlug(datacalls, 'FY2025_Q4')?.datacallid).toBe(11)
+  })
+
+  it('matches case-insensitively, like the other resolvers', () => {
+    expect(resolveDatacallBySlug(datacalls, 'fy2026_q1')?.datacallid).toBe(10)
+    expect(resolveDatacallBySlug(datacalls, 'Fy2025_q4')?.datacallid).toBe(11)
+  })
+
+  it('distinguishes names that differ only by space vs literal underscore', () => {
+    const tricky = [dc(20, 'FY_2025 Q4'), dc(21, 'FY 2025_Q4')]
+    expect(resolveDatacallBySlug(tricky, 'FY__2025_Q4')?.datacallid).toBe(20)
+    expect(resolveDatacallBySlug(tricky, 'FY_2025__Q4')?.datacallid).toBe(21)
   })
 
   it('returns undefined for an unrecognized or missing segment', () => {

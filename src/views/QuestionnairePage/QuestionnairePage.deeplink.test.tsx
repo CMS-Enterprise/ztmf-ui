@@ -1,5 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
-import { MemoryRouter, Routes, Route } from 'react-router-dom'
+import { render, screen, waitFor, act } from '@testing-library/react'
+import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import QuestionnairePage from './QuestionnairePage'
 import type { userData } from '@/types'
@@ -118,20 +118,28 @@ beforeEach(() => {
   })
 })
 
-function renderAt(path: string) {
-  return render(
-    <MemoryRouter initialEntries={[path]}>
-      <Routes>
-        <Route path={AppRoutes.QUESTIONNAIRE} element={<QuestionnairePage />} />
-      </Routes>
-    </MemoryRouter>
+// Data-router harness (createMemoryRouter + RouterProvider) to match the real
+// app (createHashRouter): data routers hand components the stable useNavigate,
+// while plain <MemoryRouter> gets the pathname-keyed unstable one, whose
+// identity change on the canonical redirect re-runs the fetch effect and makes
+// exact-count assertions lie about production behavior.
+function renderAt(entry: string | { pathname: string; state: unknown }) {
+  const router = createMemoryRouter(
+    [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
+    { initialEntries: [entry] }
   )
+  return render(<RouterProvider router={router} />)
 }
 
 const optionsCalls = () =>
   mockGet.mock.calls
     .map((c) => c[0] as string)
     .filter((u) => u.includes('/options'))
+
+const callsTo = (fragment: string) =>
+  mockGet.mock.calls
+    .map((c) => c[0] as string)
+    .filter((u) => u.includes(fragment))
 
 it('resolves the system from :fismaacronym on a cold load (no location.state)', async () => {
   renderAt(
@@ -219,4 +227,91 @@ it('shows a spinner (not the not-found warning) while the systems list is still 
   )
 
   expect(screen.queryByText(/Could not find a system/i)).not.toBeInTheDocument()
+})
+
+it('runs the fetch exactly once per cold deep-link mount (no self-triggered rerun)', async () => {
+  renderAt(
+    '/questionnaire/ssd-ex/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+  )
+
+  // Settle: the deep-linked question's options request marks the end of the
+  // load chain; give any (buggy) second effect pass time to fire after it.
+  await waitFor(() =>
+    expect(
+      optionsCalls().some((u) => u.includes('functions/7003/options'))
+    ).toBe(true)
+  )
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 50))
+  })
+
+  expect(callsTo('/fismasystems/1002/questions')).toHaveLength(1)
+  expect(callsTo('scores?')).toHaveLength(1)
+  expect(optionsCalls()).toHaveLength(1)
+})
+
+it('runs the fetch exactly once for the dashboard flow too (route state present)', async () => {
+  renderAt({
+    pathname: '/questionnaire/ssd-ex',
+    state: {
+      fismasystemid: 1002,
+      datacallid: 5,
+      datacall: 'Audit Fields Smoke Cycle',
+      deadline: '2099-12-31T23:59:59Z',
+    },
+  })
+
+  await waitFor(() => expect(optionsCalls().length).toBeGreaterThan(0))
+  await act(async () => {
+    await new Promise((r) => setTimeout(r, 50))
+  })
+
+  // Route state wins (#467/#501): scores queried for the opened call, once.
+  expect(callsTo('scores?')).toHaveLength(1)
+  expect(callsTo('scores?')[0]).toContain('datacallid=5')
+  expect(callsTo('/fismasystems/1002/questions')).toHaveLength(1)
+})
+
+it('resolves a decommissioned system and shows its no-questionnaire state, not the not-found warning', async () => {
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('fismasystems?decommissioned=true'))
+      return Promise.resolve({
+        data: {
+          data: [
+            {
+              fismasystemid: 1099,
+              fismaacronym: 'OLD-SYS',
+              fismaname: 'Retired Imperial System',
+              datacenterenvironment: 'Imperial-Fleet',
+              decommissioned: true,
+            },
+          ],
+        },
+      })
+    // Decommissioned systems join to zero functions; backend serializes null.
+    if (url.includes('/fismasystems/1099/questions'))
+      return Promise.resolve({ data: { data: null } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('insights')) return Promise.resolve({ data: { data: [] } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt('/questionnaire/old-sys/FY2025_Death_Star_Assessment')
+
+  await waitFor(() =>
+    expect(
+      screen.getByText(/No questionnaire is available for this system/i)
+    ).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/Could not find a system/i)).not.toBeInTheDocument()
+})
+
+it('still warns not-found when the acronym is in neither the active nor the decommissioned list', async () => {
+  renderAt('/questionnaire/nope/FY2025_Death_Star_Assessment')
+
+  await waitFor(() =>
+    expect(screen.getByText(/Could not find a system/i)).toBeInTheDocument()
+  )
+  // The decommissioned list was actually consulted before concluding.
+  expect(callsTo('fismasystems?decommissioned=true')).toHaveLength(1)
 })

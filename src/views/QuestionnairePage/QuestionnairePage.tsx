@@ -13,6 +13,7 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import TextField from '@mui/material/TextField'
 import {
   FismaQuestion,
+  FismaSystemType,
   QuestionOption,
   Question,
   QuestionChoice,
@@ -56,6 +57,7 @@ import { saveDraft, loadDraft, clearDraft } from './draftStore'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
   toSlug,
+  encodeDatacallSlug,
   resolveSystemIdByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
@@ -282,7 +284,48 @@ export default function QuestionnarePage() {
     () => resolveSystemIdByAcronym(fismaSystems, fismaacronym),
     [fismaSystems, fismaacronym]
   )
-  const system = stateSystem ?? resolvedSystem
+  // The context list holds active systems only, so a deep link to a
+  // decommissioned system would read as "not found" and mislead (its real
+  // state is "no questionnaire available"). When the acronym misses the active
+  // list, lazily fetch the decommissioned list once and retry against it.
+  // null = not fetched; [] = fetched (empty or failed).
+  const [decommissionedSystems, setDecommissionedSystems] = React.useState<
+    FismaSystemType[] | null
+  >(null)
+  const resolvedDecommissioned = React.useMemo(
+    () => resolveSystemIdByAcronym(decommissionedSystems ?? [], fismaacronym),
+    [decommissionedSystems, fismaacronym]
+  )
+  const system = stateSystem ?? resolvedSystem ?? resolvedDecommissioned
+  React.useEffect(() => {
+    if (
+      system !== undefined ||
+      fismaSystems.length === 0 ||
+      !fismaacronym ||
+      decommissionedSystems !== null
+    )
+      return
+    const controller = new AbortController()
+    const load = async () => {
+      try {
+        const res = await axiosInstance.get(
+          'fismasystems?decommissioned=true',
+          {
+            signal: controller.signal,
+          }
+        )
+        setDecommissionedSystems(res.data?.data ?? [])
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        // Resolution proceeds without the list; the not-found warning is the
+        // fallback rather than an indefinite spinner.
+        setDecommissionedSystems([])
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [system, fismaSystems.length, fismaacronym, decommissionedSystems])
   // Deep-link URL params, read via refs inside the data-fetch effect so honoring
   // them doesn't enroll them as effect deps (which would refetch on every
   // in-survey question change, since those rewrite :pillar/:function).
@@ -301,15 +344,25 @@ export default function QuestionnarePage() {
   const systemRef = React.useRef(system)
   systemRef.current = system
   // The in-survey navigate() calls (Next, Back, sidebar, canonical redirect)
-  // reset router state and would drop the chosen data call, reverting the
-  // survey to the latest call (#501). Persist the resolved call here and
-  // re-supply it in every internal navigation so the choice survives.
+  // reset router state and would drop a picker-chosen data call, reverting the
+  // survey to the latest call (#501). Persist the dashboard-opened call here
+  // and re-supply it in every internal navigation so the choice survives.
+  //
+  // Populated ONLY on the dashboard path (route state present). For URL-driven
+  // flows (deep link / selected / latest) it stays empty on purpose: the URL's
+  // datacall segment already carries the cycle across navigations, and writing
+  // these values into location.state from the fetch effect's own navigate()
+  // would flip the routeDatacall* deps from undefined to defined and re-run
+  // the whole fetch — every cold deep-link used to hit /questions and /scores
+  // twice (#524 review).
   const datacallStateRef = React.useRef<{
     datacallid?: number
     datacall?: string
     deadline?: string
   }>({})
-  const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
+  const systemInfo =
+    fismaSystems.find((s) => s.fismasystemid === system) ??
+    decommissionedSystems?.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
 
   // Fetch ZTMF Insights for this system once (not per question — one call
@@ -454,7 +507,7 @@ export default function QuestionnarePage() {
             // Opened for a specific system's own call from the dashboard. Read
             // only when that call's own deadline has passed - not by comparing
             // to the global latest, since two calls can be open at once.
-            datacall = routeDatacall.replaceAll(' ', '_')
+            datacall = encodeDatacallSlug(routeDatacall)
             setDatacall(datacall)
             activeDataCallId = routeDatacallId
             setIsPastDeadline(
@@ -469,6 +522,14 @@ export default function QuestionnarePage() {
             // Cold deep link (no route state): resolve the cycle from the URL's
             // data-call segment. Falls through to the selected/latest call when
             // the segment is absent or unrecognized. (#500)
+            //
+            // These branches leave datacallStateRef empty — see its declaration.
+            // The cycle rides in the URL segment written by the canonical
+            // navigate below, so it survives re-runs and in-survey navigation
+            // without route state; a stale ref from a previous dashboard-opened
+            // call is also cleared here so it can't hijack a later system
+            // switch.
+            datacallStateRef.current = {}
             const deepLinkDatacall = resolveDatacallBySlug(
               datacalls,
               datacallSlugRef.current
@@ -477,7 +538,7 @@ export default function QuestionnarePage() {
               selectedDatacall !== null &&
               selectedDatacall.datacallid !== latestDataCallId
             if (deepLinkDatacall) {
-              datacall = deepLinkDatacall.datacall.replaceAll(' ', '_')
+              datacall = encodeDatacallSlug(deepLinkDatacall.datacall)
               setDatacall(datacall)
               setIsPastDeadline(
                 deepLinkDatacall.deadline
@@ -485,33 +546,18 @@ export default function QuestionnarePage() {
                   : true
               )
               activeDataCallId = deepLinkDatacall.datacallid
-              datacallStateRef.current = {
-                datacallid: deepLinkDatacall.datacallid,
-                datacall: deepLinkDatacall.datacall,
-                deadline: deepLinkDatacall.deadline,
-              }
             } else if (isHistorical && selectedDatacall) {
-              datacall = selectedDatacall.datacall.replaceAll(' ', '_')
+              datacall = encodeDatacallSlug(selectedDatacall.datacall)
               setDatacall(datacall)
               setIsPastDeadline(true)
               activeDataCallId = selectedDatacall.datacallid
-              datacallStateRef.current = {
-                datacallid: selectedDatacall.datacallid,
-                datacall: selectedDatacall.datacall,
-                deadline: selectedDatacall.deadline,
-              }
             } else {
-              datacall = latestDatacall.replaceAll(' ', '_')
+              datacall = encodeDatacallSlug(latestDatacall)
               setDatacall(datacall)
               setIsPastDeadline(
                 latestDeadline ? new Date() > new Date(latestDeadline) : true
               )
               activeDataCallId = latestDataCallId
-              datacallStateRef.current = {
-                datacallid: latestDataCallId,
-                datacall: latestDatacall,
-                deadline: latestDeadline,
-              }
             }
           }
           // Hoisted so both the questions block and the final batch can access them.
@@ -919,10 +965,11 @@ export default function QuestionnarePage() {
     : undefined
   if (!system) {
     // Cold load (paste / refresh / bookmark): the systems list may still be in
-    // flight, so :fismaacronym can't be resolved yet. Show a spinner until it
-    // arrives; only once systems are loaded and the acronym still isn't among
-    // them is the link genuinely unresolvable. (#500)
-    if (fismaSystems.length === 0) {
+    // flight, so :fismaacronym can't be resolved yet — and if it missed the
+    // active list, the decommissioned list is being checked before concluding
+    // not-found. Show a spinner until both have answered; only then is the
+    // link genuinely unresolvable. (#500 / #524 review)
+    if (fismaSystems.length === 0 || decommissionedSystems === null) {
       return (
         <>
           <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
@@ -1305,8 +1352,9 @@ export default function QuestionnarePage() {
         </Grid>
       </Container>
       {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
-          questionnaire was opened for (the row's own call), since the dashboard
-          may be aggregating a whole year and selectedDatacall is then null. */}
+          questionnaire actually resolved (datacallID covers every entry path,
+          including URL deep links where no route state exists); fall back to
+          the route/selected/latest chain during the pre-fetch window. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
@@ -1314,7 +1362,11 @@ export default function QuestionnarePage() {
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
         selectedDataCallId={
-          routeDatacallId ?? selectedDatacall?.datacallid ?? latestDataCallId
+          datacallID > 0
+            ? datacallID
+            : routeDatacallId ??
+              selectedDatacall?.datacallid ??
+              latestDataCallId
         }
       />
     </>
