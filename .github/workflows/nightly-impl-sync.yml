@@ -1,0 +1,163 @@
+name: Nightly sync main -> impl
+
+# Opens a PR that brings `main` into `impl` each night for a human to review and
+# merge. Merging pushes to `impl`, which triggers the impl deploy via
+# orchestration-impl.
+#
+# WHY -X theirs (not a plain merge): main and impl are both squash-merged, so
+# they share no real ancestry -- their merge-base is stale (back at #363). A
+# plain 3-way merge across that base surfaces dozens of phantom add/add
+# conflicts for changes already on both sides. We merge `main` into an
+# impl-based branch with `-X theirs`, so main deterministically wins every
+# overlap, impl-only files that don't conflict are preserved, and there is
+# nothing to hand-resolve. The resulting merge commit also re-establishes
+# shared ancestry, so the divergence closes instead of recurring -- which only
+# holds if the PR is merged as a MERGE COMMIT, not squashed.
+#
+# Scheduling: GitHub cron is UTC and does NOT adjust for DST. Midnight
+# America/Los_Angeles (== 3am America/New_York) is 08:20 UTC under PST and
+# 07:20 UTC under PDT, so both are registered and the guard runs the sync only
+# at true local midnight. We fire at :20 rather than :00 to avoid the most
+# contended top-of-hour scheduler slot (trade-off: a scheduler delay beyond
+# ~39 min would push past local midnight and skip a night -- manual dispatch
+# covers that).
+
+on:
+  schedule:
+    - cron: '20 8 * * *' # 00:20 PST / 01:20 PDT
+    - cron: '20 7 * * *' # 00:20 PDT / 23:20 PST
+  workflow_dispatch: {} # allow an on-demand sync
+
+permissions:
+  contents: write # reset + push the sync branch
+  pull-requests: write # open the sync PR
+
+concurrency:
+  group: nightly-impl-sync
+  cancel-in-progress: false
+
+env:
+  SYNC_BRANCH: automation/sync-main-to-impl
+
+jobs:
+  guard:
+    name: Guard (true midnight Pacific)
+    runs-on: ubuntu-latest
+    outputs:
+      proceed: ${{ steps.check.outputs.proceed }}
+    steps:
+      - id: check
+        run: |
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual run -- proceeding."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+          hour="$(TZ='America/Los_Angeles' date +%H)"
+          if [ "$hour" = "00" ]; then
+            echo "Pacific local hour is 00 -- proceeding."
+            echo "proceed=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "Pacific local hour is $hour, not midnight -- the paired DST cron handles this. Skipping."
+            echo "proceed=false" >> "$GITHUB_OUTPUT"
+          fi
+
+  open-sync-pr:
+    name: Open main -> impl sync PR
+    needs: guard
+    if: needs.guard.outputs.proceed == 'true'
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - name: Skip if a sync PR is already open
+        id: existing
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          num="$(gh pr list --base impl --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // ""')"
+          if [ -n "$num" ]; then
+            echo "Sync PR #$num is still open -- leaving it for review, not clobbering in-progress work."
+            echo "skip=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Don't clobber a hand-edited sync branch
+        id: handedited
+        if: steps.existing.outputs.skip != 'true'
+        run: |
+          # Safety: if the remote sync branch exists and its tip was NOT pushed
+          # by the automation (e.g. someone added a cherry-pick or manual fix),
+          # leave it alone rather than force-resetting it to main.
+          if git ls-remote --exit-code --heads origin "$SYNC_BRANCH" >/dev/null 2>&1; then
+            git fetch --quiet origin "$SYNC_BRANCH"
+            author="$(git log -1 --format='%an' FETCH_HEAD)"
+            if [ "$author" != "github-actions[bot]" ]; then
+              echo "::warning::$SYNC_BRANCH tip is authored by '$author', not the automation -- skipping to avoid clobbering manual work."
+              echo "skip=true" >> "$GITHUB_OUTPUT"
+            else
+              echo "skip=false" >> "$GITHUB_OUTPUT"
+            fi
+          else
+            echo "skip=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Build the sync branch (main wins overlaps)
+        id: build
+        if: steps.existing.outputs.skip != 'true' && steps.handedited.outputs.skip != 'true'
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          # Base on impl so the merge commit shares impl's ancestry (closes the
+          # divergence on merge); merge main with -X theirs so main wins overlaps.
+          git checkout -B "$SYNC_BRANCH" origin/impl
+          if ! git merge -X theirs --no-edit origin/main; then
+            echo "::error::merge -X theirs hit a conflict it could not auto-resolve (e.g. modify/delete). Manual intervention needed."
+            git merge --abort || true
+            exit 1
+          fi
+          # If merging main brought nothing new, the result equals impl -- skip.
+          if git diff --quiet origin/impl HEAD; then
+            echo "Merging main into impl produced no change; nothing to sync."
+            echo "changed=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "changed=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Push the sync branch
+        if: steps.build.outputs.changed == 'true'
+        run: |
+          # --force-with-lease: only overwrite the remote branch if it still
+          # points where we expect (fails safe if it moved under us).
+          lease="$(git ls-remote origin "refs/heads/$SYNC_BRANCH" | cut -f1)"
+          if [ -n "$lease" ]; then
+            git push --force-with-lease="$SYNC_BRANCH:$lease" origin "$SYNC_BRANCH"
+          else
+            git push origin "$SYNC_BRANCH"
+          fi
+
+      - name: Open the PR into impl
+        if: steps.build.outputs.changed == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          PR_BODY: |
+            Automated nightly sync of `main` into `impl` — **main wins every overlap**.
+
+            This branch is `impl` with `main` merged in using `-X theirs`, so the result is deterministic: main's version wins any conflict, and impl-only files that don't conflict are preserved. There should be nothing to hand-resolve.
+
+            ⚠️ **Merge this with a MERGE COMMIT, not squash.** `main` and `impl` share no squash ancestry; squashing here would leave them diverged and every future nightly sync would re-conflict. A merge commit re-establishes shared ancestry and closes the gap.
+
+            - Review the net change, then merge (merge commit). Merging pushes to `impl` and triggers the impl deploy (orchestration-impl).
+            - To smoke-test the merged result in the impl environment first, run **Manual Deploy to IMPL** with `--ref automation/sync-main-to-impl`.
+
+            _Opened by the nightly-impl-sync workflow. It uses the built-in token, so PR-level analysis does not auto-run here; analysis + deploy run on merge (push to impl)._
+        run: |
+          date_pt="$(TZ='America/Los_Angeles' date +%Y-%m-%d)"
+          gh pr create \
+            --base impl \
+            --head "$SYNC_BRANCH" \
+            --title "Nightly sync: main -> impl ($date_pt)" \
+            --body "$PR_BODY"
