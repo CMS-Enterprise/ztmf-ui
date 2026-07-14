@@ -54,6 +54,12 @@ import {
 } from './saveGuard'
 import { saveDraft, loadDraft, clearDraft } from './draftStore'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
+import {
+  toSlug,
+  resolveSystemIdByAcronym,
+  resolveDatacallBySlug,
+  resolveFunctionTarget,
+} from './deepLink'
 type Category = {
   name: string
   steps: FismaQuestion[]
@@ -87,12 +93,6 @@ const CssTextField = styled(TextField)({
     },
   },
 })
-const toSlug = (str: string) =>
-  str
-    .replace(/([a-z])([A-Z])/g, '$1-$2')
-    .toLowerCase()
-    .replaceAll(' ', '-')
-
 const addSpace = (str: string) => {
   for (let i = 0; i < str.length; i++) {
     if (
@@ -115,6 +115,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     fismaSystems,
+    datacalls,
     datacenterEnvironments,
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
@@ -263,12 +264,34 @@ export default function QuestionnarePage() {
 
   const navigate = useNavigate()
   const location = useLocation()
-  const { fismaacronym } = useParams()
+  // `function` is a reserved word, so the :function route param is aliased.
+  const {
+    fismaacronym,
+    datacallid: datacallSlug,
+    pillar: pillarSlug,
+    function: functionSlug,
+  } = useParams()
 
   // Direct/bookmarked navigation to /questionnaire/<acronym> has a null
-  // location.state. Optional-chain instead of crashing on first render; the
-  // missing-system path is handled by an early render guard below.
-  const system = location.state?.fismasystemid as number | undefined
+  // location.state. On such a cold load (paste / refresh / bookmark) fall back
+  // to resolving :fismaacronym against the systems list the app already loads,
+  // so the questionnaire is self-addressable (#500). In-app navigation keeps
+  // carrying the id in location.state, which takes precedence.
+  const stateSystem = location.state?.fismasystemid as number | undefined
+  const resolvedSystem = React.useMemo(
+    () => resolveSystemIdByAcronym(fismaSystems, fismaacronym),
+    [fismaSystems, fismaacronym]
+  )
+  const system = stateSystem ?? resolvedSystem
+  // Deep-link URL params, read via refs inside the data-fetch effect so honoring
+  // them doesn't enroll them as effect deps (which would refetch on every
+  // in-survey question change, since those rewrite :pillar/:function).
+  const pillarSlugRef = React.useRef(pillarSlug)
+  pillarSlugRef.current = pillarSlug
+  const functionSlugRef = React.useRef(functionSlug)
+  functionSlugRef.current = functionSlug
+  const datacallSlugRef = React.useRef(datacallSlug)
+  datacallSlugRef.current = datacallSlug
   // The dashboard opens the questionnaire for the system's own data call
   // (year-aggregated view, #467): the specific call id and name ride along in
   // the route state. Absent (deep link), fall back to the selected/latest call.
@@ -411,7 +434,10 @@ export default function QuestionnarePage() {
   }
 
   React.useEffect(() => {
-    if (system) {
+    // Wait for the data calls to load before fetching: a cold deep link can
+    // resolve `system` (from the systems list) before the datacall context is
+    // ready, and firing early would query scores with datacallid=0. (#500)
+    if (system && latestDataCallId > 0) {
       const controller = new AbortController()
       // Reset the empty-questionnaire flag so a previous decommissioned-system
       // view does not bleed into the next render when system changes.
@@ -440,10 +466,31 @@ export default function QuestionnarePage() {
               deadline: routeDeadline,
             }
           } else {
+            // Cold deep link (no route state): resolve the cycle from the URL's
+            // data-call segment. Falls through to the selected/latest call when
+            // the segment is absent or unrecognized. (#500)
+            const deepLinkDatacall = resolveDatacallBySlug(
+              datacalls,
+              datacallSlugRef.current
+            )
             const isHistorical =
               selectedDatacall !== null &&
               selectedDatacall.datacallid !== latestDataCallId
-            if (isHistorical && selectedDatacall) {
+            if (deepLinkDatacall) {
+              datacall = deepLinkDatacall.datacall.replaceAll(' ', '_')
+              setDatacall(datacall)
+              setIsPastDeadline(
+                deepLinkDatacall.deadline
+                  ? new Date() > new Date(deepLinkDatacall.deadline)
+                  : true
+              )
+              activeDataCallId = deepLinkDatacall.datacallid
+              datacallStateRef.current = {
+                datacallid: deepLinkDatacall.datacallid,
+                datacall: deepLinkDatacall.datacall,
+                deadline: deepLinkDatacall.deadline,
+              }
+            } else if (isHistorical && selectedDatacall) {
               datacall = selectedDatacall.datacall.replaceAll(' ', '_')
               setDatacall(datacall)
               setIsPastDeadline(true)
@@ -470,6 +517,9 @@ export default function QuestionnarePage() {
           // Hoisted so both the questions block and the final batch can access them.
           const questionData: Record<number, Question> = {}
           let sortedFuncId: number[] = []
+          // The function to open. Defaults to the first; overridden below when the
+          // URL's :pillar/:function names a valid function (deep link, #500).
+          let targetFuncId: number | undefined
           try {
             const response = await axiosInstance.get(
               `/fismasystems/${system}/questions`,
@@ -528,6 +578,19 @@ export default function QuestionnarePage() {
                 },
                 {}
               )
+              // Honor the URL's :pillar/:function when they name a valid
+              // function; otherwise open the first (#500).
+              const target = resolveFunctionTarget(
+                categoriesData,
+                pillarSlugRef.current,
+                functionSlugRef.current
+              )
+              targetFuncId = target?.functionid ?? sortedFuncId[0]
+              const targetPillarName =
+                target?.pillarName ?? categoriesData[0].name
+              const targetFunctionName =
+                target?.functionName ??
+                categoriesData[0].steps[0].function.function
               // Update sidebar/nav state immediately so the question list
               // renders while scores are still loading. setQuestions,
               // setDatacallID, and setQuestionId are deferred to the batch
@@ -537,13 +600,13 @@ export default function QuestionnarePage() {
               setStepFunctionId(sortedFuncId)
               setCategories(categoriesData)
               navigate(
-                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
+                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(targetPillarName)}/${toSlug(targetFunctionName)}`,
                 {
                   state: { fismasystemid: system, ...datacallStateRef.current },
                   replace: true,
                 }
               )
-              setSelectedIndex(sortedFuncId[0])
+              setSelectedIndex(targetFuncId)
             }
           } catch (error) {
             if (controller.signal.aborted) return
@@ -591,7 +654,7 @@ export default function QuestionnarePage() {
           setQuestions(questionData)
           setQuestionScores(hashTable)
           setDatacallID(activeDataCallId)
-          setQuestionId(sortedFuncId[0])
+          setQuestionId(targetFuncId ?? sortedFuncId[0])
         } catch (error) {
           if (controller.signal.aborted) return
           if (isAuthHandled(error)) {
@@ -617,6 +680,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     systemCategory,
+    datacalls,
   ])
   React.useEffect(() => {
     if (questionId) {
@@ -854,13 +918,29 @@ export default function QuestionnarePage() {
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
     : undefined
   if (!system) {
+    // Cold load (paste / refresh / bookmark): the systems list may still be in
+    // flight, so :fismaacronym can't be resolved yet. Show a spinner until it
+    // arrives; only once systems are loaded and the acronym still isn't among
+    // them is the link genuinely unresolvable. (#500)
+    if (fismaSystems.length === 0) {
+      return (
+        <>
+          <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+          <Container maxWidth={false} disableGutters>
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+              <Spinner size="big" />
+            </Box>
+          </Container>
+        </>
+      )
+    }
     return (
       <>
         <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
         <Container maxWidth={false} disableGutters>
           <Alert severity="warning" sx={{ mt: 2 }}>
-            Cannot load questionnaire from a direct link. Please open it from
-            the system list.
+            Could not find a system matching “{fismaacronym}”. It may not exist,
+            or you may not have access to it.
           </Alert>
         </Container>
       </>
