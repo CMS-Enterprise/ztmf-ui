@@ -4,7 +4,7 @@
 // the per-view redirect/permission ladders that the centralization
 // replaced. This is a long-lived consistency check, not a behavioral
 // test. Behavioral coverage lives next to each view (e.g.
-// EmailModal.test.tsx, CfactsRecordCard.test.tsx).
+// EmailModal.test.tsx, SystemEnrichmentCard.test.tsx).
 import fs from 'node:fs'
 import path from 'node:path'
 
@@ -60,7 +60,7 @@ const expectations: FileExpectation[] = [
     excludes: ['Routes.SIGNIN'],
   },
   {
-    filePath: 'src/views/SystemDetailPage/CfactsRecordCard.tsx',
+    filePath: 'src/views/SystemDetailPage/SystemEnrichmentCard.tsx',
     includes: ['skipAuthHandling: true'],
   },
   {
