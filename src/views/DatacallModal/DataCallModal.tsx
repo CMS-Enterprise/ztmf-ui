@@ -178,10 +178,6 @@ export default function DataCallModal({
     }
   }
 
-  // Both fields carry a Required indicator (see the requirementLabel
-  // props on each below), so the disabled Create button is
-  // self-explaining for the empty-field case. Invalid input is reported
-  // per-field via the error message.
   const nameValid = DATACALL_NAME_PATTERN.test(datacall.toUpperCase())
   const deadlineComplete = deadline.length === 10 && !deadlineError
   const isCreateDisabled =
