@@ -23,6 +23,8 @@ export default function HomePageContainer() {
   const [systemCallMap, setSystemCallMap] = useState<Record<number, number[]>>(
     {}
   )
+  const [chosenCallMap, setChosenCallMap] = useState<Record<number, number>>({})
+
   const { activeDatacallIds } = useContextProp()
   useEffect(() => {
     const controller = new AbortController()
@@ -69,6 +71,7 @@ export default function HomePageContainer() {
       setScoreMap(maps.scoreMap)
       setProgressMap(maps.progressMap)
       setSystemCallMap(maps.systemCallMap)
+      setChosenCallMap(maps.chosenCallMap)
       setLoading(false)
     }
 
@@ -106,6 +109,7 @@ export default function HomePageContainer() {
         scores={scoreMap}
         progress={progressMap}
         systemCallMap={systemCallMap}
+        chosenCallMap={chosenCallMap}
       />
     </Box>
   )

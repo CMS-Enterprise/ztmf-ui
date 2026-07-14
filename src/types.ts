@@ -314,6 +314,9 @@ export type FismaTableProps = {
   // Which active data call(s) each system has scores in, keyed by
   // fismasystemid, so per-row actions target the system's own call.
   systemCallMap?: Record<number, number[]>
+  // The single call chosen for each system's dashboard row (most-recently-updated),
+  // used so Pillar Scores opens on the same call the table is displaying.
+  chosenCallMap?: Record<number, number>
 }
 
 export type ThemeColor =
