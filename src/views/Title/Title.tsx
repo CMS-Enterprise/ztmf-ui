@@ -124,17 +124,28 @@ export default function Title() {
     if (loaderData.status === 200) void clearOtherUserDrafts(userInfo.userid)
   }, [loaderData.status, userInfo.userid])
 
-  useEffect(() => {
-    if (loaderData.status !== 200) return
-    const controller = new AbortController()
-    async function fetchDatacalls() {
+  // Hoisted out of the mount effect so it can be re-invoked on demand -
+  // specifically, right after DataCallModal creates a new datacall so the
+  // picker updates without a manual page reload. Accepts an optional
+  // signal for the mount-effect's abort cleanup; user-triggered refetches
+  // (e.g. post-create) invoke it without a signal.
+  //
+  // `resetSelection` defaults to true for the initial mount load, which snaps
+  // the active year/toggles to the latest year with data. A post-create
+  // refetch passes false so refreshing the list does not clobber whatever
+  // year/selection the user is currently viewing - that selection flows through
+  // the Outlet context to the dashboard and questionnaire.
+  const fetchDatacalls = useCallback(
+    async (signal?: AbortSignal, resetSelection: boolean = true) => {
       try {
-        const res = await axiosInstance.get('/datacalls', {
-          signal: controller.signal,
-        })
+        const res = await axiosInstance.get(
+          '/datacalls',
+          signal ? { signal } : {}
+        )
+        if (signal?.aborted) return
         // "Latest"/"current" is the call with the furthest-out deadline, not
         // the highest datacallid: historical loads can carry a higher id than
-        // the real current call (#393). datacallid is only a tiebreak.
+        // the real current call. datacallid is only a tiebreak.
         const sorted: datacall[] = sortDatacallsByDeadline(
           res.data.data as datacall[]
         )
@@ -143,23 +154,32 @@ export default function Title() {
           setLatestDataCallId(sorted[0].datacallid)
           setLatestDatacall(sorted[0].datacall)
           setLatestDeadline(sorted[0].deadline)
-          // Default to the latest year with data, all of its calls toggled on.
-          const [firstGroup] = groupDatacallsByYear(sorted)
-          if (firstGroup) {
-            setActiveYear(firstGroup.year)
-            setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+          // Default to the latest year with data, all of its calls toggled on -
+          // initial load only; a post-create refetch keeps the user's selection.
+          if (resetSelection) {
+            const [firstGroup] = groupDatacallsByYear(sorted)
+            if (firstGroup) {
+              setActiveYear(firstGroup.year)
+              setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+            }
           }
         }
       } catch (error) {
-        if (controller.signal.aborted) return
+        if (signal?.aborted) return
         console.error('Fetch latest datacall error:', error)
       }
-    }
-    fetchDatacalls()
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    fetchDatacalls(controller.signal)
     return () => {
       controller.abort()
     }
-  }, [loaderData.status])
+  }, [loaderData.status, fetchDatacalls])
 
   // Datacenter-environment vocabulary is reference data shared by the system
   // form (dropdown) and the questionnaire pillar filter, so it is fetched
@@ -640,7 +660,11 @@ export default function Title() {
           openModal={openEmailModal}
           closeModal={handleCloseEmailModal}
         />
-        <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
+        <DataCallModal
+          open={openDataCallModal}
+          onClose={handleDataCallClose}
+          onCreated={() => fetchDatacalls(undefined, false)}
+        />
       </Container>
       <Footer />
     </>
