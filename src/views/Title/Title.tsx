@@ -129,36 +129,48 @@ export default function Title() {
   // picker updates without a manual page reload. Accepts an optional
   // signal for the mount-effect's abort cleanup; user-triggered refetches
   // (e.g. post-create) invoke it without a signal.
-  const fetchDatacalls = useCallback(async (signal?: AbortSignal) => {
-    try {
-      const res = await axiosInstance.get(
-        '/datacalls',
-        signal ? { signal } : {}
-      )
-      if (signal?.aborted) return
-      // "Latest"/"current" is the call with the furthest-out deadline, not
-      // the highest datacallid: historical loads can carry a higher id than
-      // the real current call. datacallid is only a tiebreak.
-      const sorted: datacall[] = sortDatacallsByDeadline(
-        res.data.data as datacall[]
-      )
-      setDatacalls(sorted)
-      if (sorted.length > 0) {
-        setLatestDataCallId(sorted[0].datacallid)
-        setLatestDatacall(sorted[0].datacall)
-        setLatestDeadline(sorted[0].deadline)
-        // Default to the latest year with data, all of its calls toggled on.
-        const [firstGroup] = groupDatacallsByYear(sorted)
-        if (firstGroup) {
-          setActiveYear(firstGroup.year)
-          setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+  //
+  // `resetSelection` defaults to true for the initial mount load, which snaps
+  // the active year/toggles to the latest year with data. A post-create
+  // refetch passes false so refreshing the list does not clobber whatever
+  // year/selection the user is currently viewing - that selection flows through
+  // the Outlet context to the dashboard and questionnaire.
+  const fetchDatacalls = useCallback(
+    async (signal?: AbortSignal, resetSelection: boolean = true) => {
+      try {
+        const res = await axiosInstance.get(
+          '/datacalls',
+          signal ? { signal } : {}
+        )
+        if (signal?.aborted) return
+        // "Latest"/"current" is the call with the furthest-out deadline, not
+        // the highest datacallid: historical loads can carry a higher id than
+        // the real current call. datacallid is only a tiebreak.
+        const sorted: datacall[] = sortDatacallsByDeadline(
+          res.data.data as datacall[]
+        )
+        setDatacalls(sorted)
+        if (sorted.length > 0) {
+          setLatestDataCallId(sorted[0].datacallid)
+          setLatestDatacall(sorted[0].datacall)
+          setLatestDeadline(sorted[0].deadline)
+          // Default to the latest year with data, all of its calls toggled on -
+          // initial load only; a post-create refetch keeps the user's selection.
+          if (resetSelection) {
+            const [firstGroup] = groupDatacallsByYear(sorted)
+            if (firstGroup) {
+              setActiveYear(firstGroup.year)
+              setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+            }
+          }
         }
+      } catch (error) {
+        if (signal?.aborted) return
+        console.error('Fetch latest datacall error:', error)
       }
-    } catch (error) {
-      if (signal?.aborted) return
-      console.error('Fetch latest datacall error:', error)
-    }
-  }, [])
+    },
+    []
+  )
 
   useEffect(() => {
     if (loaderData.status !== 200) return
@@ -651,7 +663,7 @@ export default function Title() {
         <DataCallModal
           open={openDataCallModal}
           onClose={handleDataCallClose}
-          onCreated={fetchDatacalls}
+          onCreated={() => fetchDatacalls(undefined, false)}
         />
       </Container>
       <Footer />
