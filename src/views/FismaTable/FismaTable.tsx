@@ -26,7 +26,7 @@ import {
   Button,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
@@ -415,6 +415,21 @@ export default function FismaTable({
     datacenterEnvironments,
   } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
+  // Whether the call a given row is displaying (chosen by most-recently-updated
+  // in buildDashboardMaps) is the current/active one — the call with the
+  // furthest-out deadline (latestDataCallId). The Data Call Progress column's
+  // current-cycle framing (the "0/40 Not updated" laggard chip and the
+  // not-updated filter) only makes sense for that call; a past call shows a
+  // neutral Complete chip instead (ztmf#537). Rows without a chosen call, or
+  // before latestDataCallId has loaded, keep the current-cycle rendering.
+  const isRowCurrentCall = useCallback(
+    (fismasystemid: number): boolean => {
+      const chosen = chosenCallMap[fismasystemid]
+      if (!latestDataCallId || chosen == null) return true
+      return chosen === latestDataCallId
+    },
+    [chosenCallMap, latestDataCallId]
+  )
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
@@ -532,8 +547,14 @@ export default function FismaTable({
 
   const filteredRows = useMemo(
     () =>
-      applyDashboardFilters(fismaSystems, progress ?? {}, categoryMap, filters),
-    [fismaSystems, progress, categoryMap, filters]
+      applyDashboardFilters(
+        fismaSystems,
+        progress ?? {},
+        categoryMap,
+        filters,
+        isRowCurrentCall
+      ),
+    [fismaSystems, progress, categoryMap, filters, isRowCurrentCall]
   )
   const [pillarScoresModal, setPillarScoresModal] = useState<{
     open: boolean
@@ -715,7 +736,11 @@ export default function FismaTable({
       valueGetter: (value) =>
         progressSortValue(progress?.[value.row.fismasystemid]),
       renderCell: (params) => (
-        <ProgressCell entry={progress?.[params.row.fismasystemid]} />
+        <ProgressCell
+          entry={progress?.[params.row.fismasystemid]}
+          isCurrentCall={isRowCurrentCall(params.row.fismasystemid)}
+          hasScore={Boolean(scores[params.row.fismasystemid])}
+        />
       ),
     },
     {

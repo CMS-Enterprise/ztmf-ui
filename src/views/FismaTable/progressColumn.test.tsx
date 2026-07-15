@@ -112,6 +112,20 @@ describe('progressTooltip', () => {
       'No questionnaire applies to this system'
     )
   })
+
+  it('reads "complete" for a past-call cell without a usable timestamp', () => {
+    // A completed past call has 0 updates this cycle, so the current-cycle
+    // fallback would wrongly say "No updates" - the completed flag must win.
+    expect(progressTooltip(untouchedEntry, { completed: true })).toBe(
+      'Data call complete'
+    )
+  })
+
+  it('still prefers a real last-update time over the completed fallback', () => {
+    expect(progressTooltip(updatedEntry, { completed: true })).toMatch(
+      /^Last updated /
+    )
+  })
 })
 
 describe('ProgressCell', () => {
@@ -147,5 +161,50 @@ describe('ProgressCell', () => {
     expect(screen.getByText('N/A')).toBeInTheDocument()
     expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
     expect(screen.queryByText('0/0')).not.toBeInTheDocument()
+  })
+
+  it('renders a neutral Complete chip for a scored past-call system', () => {
+    // ztmf#537: a past call reads 0 updates this cycle for everyone. A system
+    // with a score for that call was completed - show a neutral Complete chip,
+    // never the orange "0/40 Not updated" laggard chip.
+    render(
+      <ProgressCell
+        entry={untouchedEntry}
+        isCurrentCall={false}
+        hasScore={true}
+      />
+    )
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+    expect(screen.queryByText('0/41')).not.toBeInTheDocument()
+  })
+
+  it('keeps the current-cycle chip for the same entry on the active call', () => {
+    // Same untouched entry, but on the current call it is a genuine laggard.
+    render(
+      <ProgressCell
+        entry={untouchedEntry}
+        isCurrentCall={true}
+        hasScore={true}
+      />
+    )
+    expect(screen.getByText('0/41')).toBeInTheDocument()
+    expect(screen.getByText('Not updated')).toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('renders an em-dash for a past-call system with no score', () => {
+    // Defensive: a past-call row must never show the orange laggard chip even
+    // without a score to prove completion.
+    render(
+      <ProgressCell
+        entry={untouchedEntry}
+        isCurrentCall={false}
+        hasScore={false}
+      />
+    )
+    expect(screen.getByLabelText('No progress data')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
   })
 })

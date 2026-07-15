@@ -93,6 +93,37 @@ test('isNotUpdated classifies each progress bucket correctly', () => {
   expect(isNotUpdated(undefined)).toBe(false) // no data
 })
 
+test('isNotUpdated is current-call-only: a past-call laggard is not a laggard', () => {
+  // ztmf#537: "Not updated" is a current-cycle signal. On a past call the same
+  // 0-updates row is not a laggard - it read 0 because the call is closed.
+  expect(isNotUpdated(prog(1, 40, 0), true)).toBe(true)
+  expect(isNotUpdated(prog(1, 40, 0), false)).toBe(false)
+})
+
+test('not-updated filter excludes rows on a past call', () => {
+  // sys1 is the only 0-updates laggard, but here it is displaying a past call,
+  // so the not-updated facet must not surface it.
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ notUpdatedOnly: true }),
+    (id) => id !== 1 // sys1 on a past call, everyone else current
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([])
+})
+
+test('not-updated filter still surfaces current-call laggards when a predicate is passed', () => {
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ notUpdatedOnly: true }),
+    () => true // every row on the current call
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([1])
+})
+
 test('facets combine with AND', () => {
   const out = applyDashboardFilters(
     ROWS,

@@ -40,15 +40,24 @@ export function progressSortValue(entry: ScoreProgress | undefined): number {
  * otherwise a state description that never contradicts the chip (an "Updated"
  * system with an unusable timestamp reads "time unavailable," not "no updates").
  * @param {ScoreProgress | undefined} entry - The system's progress row.
+ * @param {object} [opts] - Display context.
+ * @param {boolean} [opts.completed] - True when the cell shows a past-call
+ *   "Complete" chip (ztmf#537). The current-cycle fallbacks below describe
+ *   this-cycle activity, which is meaningless for a closed call, so a completed
+ *   cell without a usable timestamp reads "Data call complete" instead.
  * @returns {string} Human-readable description of the cell's state.
  */
-export function progressTooltip(entry: ScoreProgress | undefined): string {
+export function progressTooltip(
+  entry: ScoreProgress | undefined,
+  opts: { completed?: boolean } = {}
+): string {
   if (!entry) return 'No progress data for this data call'
   if (entry.lastupdatedat) {
     const at = new Date(entry.lastupdatedat)
     if (!isNaN(at.getTime())) return `Last updated ${at.toLocaleString()}`
   }
   // No usable timestamp: describe the state without contradicting the chip.
+  if (opts.completed) return 'Data call complete'
   if (hasNoQuestionnaire(entry))
     return 'No questionnaire applies to this system'
   if (entry.questionsupdated > 0) return 'Updated (time unavailable)'
