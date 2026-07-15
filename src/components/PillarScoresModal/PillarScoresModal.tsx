@@ -33,17 +33,11 @@ import {
   Legend,
   Tooltip,
 } from 'recharts'
-import axiosInstance from '@/axiosConfig'
-import type { ScoreAggregate, datacall as DataCall } from '@/types'
+import type { ScoreAggregate } from '@/types'
 import { tierStyle, TIERS } from '@/utils/tierStyles'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { parseDatacallName } from '@/utils/datacallGrouping'
-
-// Static cache for datacalls that persists across component instances
-const datacallsCache: { data: DataCall[] | null; timestamp: number | null } = {
-  data: null,
-  timestamp: null,
-}
+import { useContextProp } from '@/views/Title/Context'
 
 interface PillarScoresModalProps {
   open: boolean
@@ -67,7 +61,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   scores,
   selectedDataCallId,
 }) => {
-  const [datacalls, setDatacalls] = useState<DataCall[]>([])
+  const { datacalls } = useContextProp()
   const [showDataTable, setShowDataTable] = useState(false)
   // undefined = not set by user (use deadline-based default)
   // null      = user explicitly selected "None" (no comparison)
@@ -102,11 +96,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   // "highest datacallid wins" pitfall (#393). When datacalls hasn't loaded yet
   // scoredDatacalls is empty and the expression resolves to null, which is safe.
   const latestScore =
-    scores.length > 0
-      ? scores.find((s) => s.datacallid === selectedDataCallId) ??
-        scores.find((s) => s.datacallid === scoredDatacalls[0]?.datacallid) ??
-        null
-      : null
+    scores.find((s) => s.datacallid === selectedDataCallId) ??
+    scores.find((s) => s.datacallid === scoredDatacalls[0]?.datacallid) ??
+    null
 
   // Check if we have any valid score data
   const hasValidData =
@@ -169,45 +161,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
       }
     })
   }, [hasValidData, latestScore, comparisonScoreEntry])
-
-  // Fetch datacalls when modal opens (with caching)
-  useEffect(() => {
-    if (!open) return
-    const controller = new AbortController()
-    const fetchDatacalls = async () => {
-      try {
-        const now = Date.now()
-        const CACHE_DURATION = 10 * 60 * 1000 // 10 minutes for datacalls
-
-        // Check if cache is still valid
-        if (
-          datacallsCache.data &&
-          datacallsCache.timestamp &&
-          now - datacallsCache.timestamp < CACHE_DURATION
-        ) {
-          setDatacalls(datacallsCache.data)
-        } else {
-          // Fetch fresh data
-          const response = await axiosInstance.get('/datacalls', {
-            signal: controller.signal,
-          })
-          const datacallsData = response.data.data
-          setDatacalls(datacallsData)
-
-          // Update cache
-          datacallsCache.data = datacallsData
-          datacallsCache.timestamp = now
-        }
-      } catch (error) {
-        if (controller.signal.aborted) return
-        console.error('Error fetching datacalls:', error)
-      }
-    }
-    fetchDatacalls()
-    return () => {
-      controller.abort()
-    }
-  }, [open])
 
   // Focus management for accessibility
   useEffect(() => {
