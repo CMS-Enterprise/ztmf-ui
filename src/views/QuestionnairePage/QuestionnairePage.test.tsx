@@ -379,10 +379,14 @@ describe('QuestionnairePage justification integration', () => {
     render(<QuestionnarePage />)
 
     expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
-    expect(screen.getByText('ZTMF Insights option badge')).toBeInTheDocument()
-    expect(screen.getByText('Suggested justification')).toBeInTheDocument()
     expect(
-      screen.getByText("Last year's response — FY24 ZTM")
+      await screen.findByText('ZTMF Insights option badge')
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText('Suggested justification')
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText("Last year's response — FY24 ZTM")
     ).toBeInTheDocument()
   })
 
