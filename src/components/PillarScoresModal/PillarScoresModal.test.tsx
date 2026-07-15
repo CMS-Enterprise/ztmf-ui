@@ -146,7 +146,19 @@ describe('PillarScoresModal', () => {
     expect(
       screen.queryByText('No Score Data Available')
     ).not.toBeInTheDocument()
-    // 4.50 appears in the overall score box, pillar score, and data table — all correct
-    expect(screen.getAllByText('4.50').length).toBeGreaterThan(0)
+    // queryAllByText returns [] on no match (unlike getAllByText which throws),
+    // so this gives a legible failure if the wrong score or no score is shown.
+    expect(screen.queryAllByText('4.50')).not.toHaveLength(0)
+  })
+
+  // Load-order: primary path (selectedDataCallId in scores) must resolve
+  // immediately even when datacalls context is still empty.
+  it('shows score data via primary path when datacalls context is empty', () => {
+    mockUseContextProp.mockReturnValue({ datacalls: [] })
+    renderModal({ selectedDataCallId: 5 })
+    expect(
+      screen.queryByText('No Score Data Available')
+    ).not.toBeInTheDocument()
+    expect(screen.getByText('3.75')).toBeInTheDocument()
   })
 })
