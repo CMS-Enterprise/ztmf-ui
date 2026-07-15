@@ -188,7 +188,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     return `${datacall.datacall} · ${tenant}`
   }
 
-  // Show 'Current'/'Previous' until the datacalls fetch resolves so labels
+  // Show 'Current'/'Previous' until the context datacalls populate so labels
   // don't flash 'Datacall {id}' during the initial load.
   const currentDatacallName =
     latestScore && datacalls.length > 0
@@ -292,9 +292,9 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
           <Box>
             {/* Comparison selector — shown whenever other scores exist (synchronous
                 check so the picker appears on the first render, not after the
-                async datacalls fetch resolves). Dropdown options use
+                context datacalls populate). Dropdown options use
                 olderScoredDatacalls (the system's scored calls before the
-                anchor) which may briefly be empty while the fetch is in flight. */}
+                anchor) which may briefly be empty while datacalls is still []. */}
             {scores.length > 1 && (
               <Box
                 display="flex"
