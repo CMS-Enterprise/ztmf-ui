@@ -16,6 +16,9 @@ import {
   Paper,
   Collapse,
   Button,
+  FormControl,
+  Select,
+  MenuItem,
 } from '@mui/material'
 import Grid from '@mui/material/Grid'
 import CloseIcon from '@mui/icons-material/Close'
@@ -31,20 +34,15 @@ import {
   Tooltip,
 } from 'recharts'
 import axiosInstance from '@/axiosConfig'
-import type { ScoreAggregate } from '@/types'
+import type { ScoreAggregate, datacall as DataCall } from '@/types'
 import { tierStyle, TIERS } from '@/utils/tierStyles'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
+import { parseDatacallName } from '@/utils/datacallGrouping'
 
 // Static cache for datacalls that persists across component instances
 const datacallsCache: { data: DataCall[] | null; timestamp: number | null } = {
   data: null,
   timestamp: null,
-}
-
-interface DataCall {
-  datacallid: number
-  datacall: string
-  datecreated: string
-  deadline: string
 }
 
 interface PillarScoresModalProps {
@@ -71,6 +69,12 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
 }) => {
   const [datacalls, setDatacalls] = useState<DataCall[]>([])
   const [showDataTable, setShowDataTable] = useState(false)
+  // undefined = not set by user (use deadline-based default)
+  // null      = user explicitly selected "None" (no comparison)
+  // number    = user selected a specific datacall
+  const [selectedComparisonId, setSelectedComparisonId] = useState<
+    number | null | undefined
+  >(undefined)
   const dialogRef = useRef<HTMLDivElement>(null)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
 
@@ -90,26 +94,79 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     latestScore.pillarscores &&
     latestScore.pillarscores.length > 0
 
+  // Data calls this system actually has a score for, deadline-sorted. The
+  // comparison must be self-scoped: `datacalls` is the full cross-tenant list
+  // (CMS quarterly `FY## Q#` and HHS annual `FY## ZTM` interleaved by deadline),
+  // so a raw deadline-neighbor is frequently a call this system can never have
+  // scored — e.g. an HHS system's chronological predecessor is a CMS quarterly,
+  // which would show "No data" by default. Scoping to scored calls keeps the
+  // #393 deadline ordering while restoring the "nearest call this system has
+  // data for" comparison semantics.
+  const scoredDatacalls = useMemo(
+    () =>
+      sortDatacallsByDeadline(
+        datacalls.filter((dc) =>
+          scores.some((s) => s.datacallid === dc.datacallid)
+        )
+      ),
+    [datacalls, scores]
+  )
+
+  // Scored calls strictly older than the anchor by deadline — the valid
+  // "previous" candidates. Excludes the anchor itself and anything newer, so a
+  // comparison always means an earlier submission and the trend wording
+  // (improved/declined) points the right way even when the anchor (the row's
+  // most-recently-updated call) is not the system's latest call by deadline.
+  const olderScoredDatacalls = (() => {
+    if (!latestScore) return []
+    const idx = scoredDatacalls.findIndex(
+      (dc) => dc.datacallid === latestScore.datacallid
+    )
+    return idx >= 0 ? scoredDatacalls.slice(idx + 1) : []
+  })()
+
+  // The scored datacall immediately preceding the current one by deadline order.
+  // Tracked separately from its score so we can still label the comparison.
+  const previousDatacall = olderScoredDatacalls[0] ?? null
+
+  // Score entry for the previous datacall; null if no submission for that call.
+  const previousScoreEntry = previousDatacall
+    ? scores.find((s) => s.datacallid === previousDatacall.datacallid) ?? null
+    : null
+
+  // Effective comparison entry based on selection state.
+  const comparisonScoreEntry =
+    selectedComparisonId === undefined
+      ? previousScoreEntry
+      : selectedComparisonId === null
+        ? null
+        : scores.find((s) => s.datacallid === selectedComparisonId) ?? null
+
+  // True whenever a comparison is active (default or user-chosen call),
+  // false when the user explicitly picked "None" or there is no predecessor
+  // at all. Distinguishes "selected a call with no score → show 'No data for <name>'"
+  // from "None / no comparison possible → hide entirely".
+  const comparisonActive =
+    selectedComparisonId !== null &&
+    (selectedComparisonId !== undefined || previousDatacall !== null)
+
+  const hasComparisonPillarData =
+    (comparisonScoreEntry?.pillarscores?.length ?? 0) > 0
+
   // Prepare radar chart data
   const radarData = useMemo(() => {
     if (!hasValidData || !latestScore?.pillarscores) return []
-
-    const previousDatacall = scores
-      .filter((s) => s.datacallid < latestScore.datacallid)
-      .sort((a, b) => b.datacallid - a.datacallid)[0]
-
     return latestScore.pillarscores.map((pillar) => {
-      const previousPillarScore = previousDatacall?.pillarscores?.find(
+      const comparisonPillarScore = comparisonScoreEntry?.pillarscores?.find(
         (p) => p.pillarid === pillar.pillarid
       )?.score
-
       return {
         pillar: pillar.pillar,
         current: pillar.score ?? 0,
-        previous: previousPillarScore ?? 0,
+        previous: comparisonPillarScore ?? 0,
       }
     })
-  }, [scores, latestScore, hasValidData])
+  }, [hasValidData, latestScore, comparisonScoreEntry])
 
   // Fetch datacalls when modal opens (with caching)
   useEffect(() => {
@@ -161,11 +218,38 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     }
   }, [open])
 
-  // Helper function to get quarter name by datacallid
+  // Reset to default whenever the modal opens or the target system/call changes.
+  // Depending on latestScore.datacallid alone misses the case where two different
+  // systems share the same active datacall — the stale comparison would persist.
+  useEffect(() => {
+    if (open) setSelectedComparisonId(undefined)
+  }, [open, selectedDataCallId])
+
+  // Returns "{name} · {tenant}" to match the year-grouped selector styling.
   const getQuarterName = (datacallid: number) => {
     const datacall = datacalls.find((dc) => dc.datacallid === datacallid)
-    return datacall ? datacall.datacall : `Datacall ${datacallid}`
+    if (!datacall) return `Datacall ${datacallid}`
+    const { tenant } = parseDatacallName(datacall.datacall)
+    return `${datacall.datacall} · ${tenant}`
   }
+
+  // Show 'Current'/'Previous' until the datacalls fetch resolves so labels
+  // don't flash 'Datacall {id}' during the initial load.
+  const currentDatacallName =
+    latestScore && datacalls.length > 0
+      ? getQuarterName(latestScore.datacallid)
+      : 'Current'
+  // Resolve which datacall id is being compared against — from explicit selection,
+  // the default predecessor call, or nothing (None selected).
+  const comparisonDatacallId =
+    selectedComparisonId === undefined
+      ? previousDatacall?.datacallid
+      : selectedComparisonId ?? undefined
+
+  const comparisonDatacallName =
+    comparisonDatacallId != null && datacalls.length > 0
+      ? getQuarterName(comparisonDatacallId)
+      : 'Previous'
 
   // Helper function to get trend information
   const getTrendInfo = (currentScore: number, previousScore: number | null) => {
@@ -251,6 +335,52 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
         </Box>
         {hasValidData ? (
           <Box>
+            {/* Comparison selector — shown whenever other scores exist (synchronous
+                check so the picker appears on the first render, not after the
+                async datacalls fetch resolves). Dropdown options use
+                olderScoredDatacalls (the system's scored calls before the
+                anchor) which may briefly be empty while the fetch is in flight. */}
+            {scores.length > 1 && (
+              <Box
+                display="flex"
+                alignItems="center"
+                justifyContent="space-between"
+                mb={2}
+              >
+                <Typography variant="body2" color="text.secondary">
+                  Viewing: <strong>{currentDatacallName}</strong>
+                </Typography>
+                <Box display="flex" alignItems="center" gap={1}>
+                  <Typography variant="body2" color="text.secondary">
+                    Compare with:
+                  </Typography>
+                  <FormControl size="small">
+                    <Select
+                      value={
+                        scoredDatacalls.length === 0
+                          ? ''
+                          : selectedComparisonId === undefined
+                            ? previousDatacall?.datacallid ?? ''
+                            : selectedComparisonId ?? ''
+                      }
+                      onChange={(e) => {
+                        const val = e.target.value
+                        setSelectedComparisonId(val === '' ? null : Number(val))
+                      }}
+                      displayEmpty
+                      sx={{ minWidth: 160, maxWidth: 260 }}
+                    >
+                      <MenuItem value="">None</MenuItem>
+                      {olderScoredDatacalls.map((dc) => (
+                        <MenuItem key={dc.datacallid} value={dc.datacallid}>
+                          {getQuarterName(dc.datacallid)}
+                        </MenuItem>
+                      ))}
+                    </Select>
+                  </FormControl>
+                </Box>
+              </Box>
+            )}
             {/* Overall System Score */}
             <Box mb={2} textAlign="center">
               <Typography variant="h3" sx={{ fontSize: '1.5rem' }} gutterBottom>
@@ -317,12 +447,8 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   gap={1.5}
                 >
                   {(() => {
-                    // Find previous system score for trend calculation
-                    const previousSystemScore = scores
-                      .filter((s) => s.datacallid < latestScore.datacallid)
-                      .sort(
-                        (a, b) => b.datacallid - a.datacallid
-                      )[0]?.systemscore
+                    const previousSystemScore =
+                      comparisonScoreEntry?.systemscore
 
                     if (latestScore.systemscore && previousSystemScore) {
                       const trendInfo = getTrendInfo(
@@ -348,10 +474,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                 </Box>
 
                 {(() => {
-                  // Show previous score and change information
-                  const previousSystemScore = scores
-                    .filter((s) => s.datacallid < latestScore.datacallid)
-                    .sort((a, b) => b.datacallid - a.datacallid)[0]?.systemscore
+                  const previousSystemScore = comparisonScoreEntry?.systemscore
 
                   if (latestScore.systemscore && previousSystemScore) {
                     const trendInfo = getTrendInfo(
@@ -368,7 +491,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             mb: 0.3,
                           }}
                         >
-                          Previous: {previousSystemScore.toFixed(2)}
+                          {`Compared with ${comparisonDatacallName}: ${previousSystemScore.toFixed(2)}`}
                         </Typography>
                         <Typography
                           variant="caption"
@@ -384,7 +507,11 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                         </Typography>
                       </>
                     )
-                  } else if (latestScore.systemscore && !previousSystemScore) {
+                  } else if (
+                    latestScore.systemscore &&
+                    comparisonActive &&
+                    !previousSystemScore
+                  ) {
                     return (
                       <Typography
                         variant="body2"
@@ -393,7 +520,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                           fontSize: '0.85rem',
                         }}
                       >
-                        No previous data
+                        No data for {comparisonDatacallName}
                       </Typography>
                     )
                   }
@@ -408,17 +535,12 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               gutterBottom
               sx={{ mt: 3, mb: 1.5, textAlign: 'center', fontSize: '1.25rem' }}
             >
-              Pillar Scores - {getQuarterName(latestScore.datacallid)}
+              Pillar Scores - {currentDatacallName}
             </Typography>
             <Grid container spacing={2}>
               {(latestScore.pillarscores ?? []).map((pillar) => {
-                // Find previous score for this pillar
-                const previousDatacall = scores
-                  .filter((s) => s.datacallid < latestScore.datacallid)
-                  .sort((a, b) => b.datacallid - a.datacallid)[0]
-
                 const previousPillarScore =
-                  previousDatacall?.pillarscores?.find(
+                  comparisonScoreEntry?.pillarscores?.find(
                     (p) => p.pillarid === pillar.pillarid
                   )?.score
 
@@ -521,21 +643,23 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             fontSize: '0.75rem',
                           }}
                         >
-                          Previous: {previousPillarScore.toFixed(2)}
+                          {`Compared with ${comparisonDatacallName}: ${previousPillarScore.toFixed(2)}`}
                         </Typography>
                       )}
 
-                      {!previousPillarScore && currentScore > 0 && (
-                        <Typography
-                          variant="caption"
-                          sx={{
-                            color: 'text.secondary',
-                            fontSize: '0.75rem',
-                          }}
-                        >
-                          No previous data
-                        </Typography>
-                      )}
+                      {comparisonActive &&
+                        !previousPillarScore &&
+                        currentScore > 0 && (
+                          <Typography
+                            variant="caption"
+                            sx={{
+                              color: 'text.secondary',
+                              fontSize: '0.75rem',
+                            }}
+                          >
+                            No data for {comparisonDatacallName}
+                          </Typography>
+                        )}
 
                       {trendInfo.text && currentScore > 0 && (
                         <Typography
@@ -570,7 +694,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
               </Typography>
               <Box
                 role="img"
-                aria-label={`Radar chart showing pillar scores. Current scores: ${radarData.map((d) => `${d.pillar}: ${d.current.toFixed(2)}`).join(', ')}`}
+                aria-label={`Radar chart showing pillar scores. ${currentDatacallName} scores: ${radarData.map((d) => `${d.pillar}: ${d.current.toFixed(2)}`).join(', ')}`}
               >
                 <ResponsiveContainer width="100%" height={400}>
                   <RadarChart
@@ -588,16 +712,16 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       tickCount={6}
                     />
                     <Radar
-                      name="Current"
+                      name={currentDatacallName}
                       dataKey="current"
                       stroke="#8884d8"
                       fill="#8884d8"
                       fillOpacity={0.3}
                       strokeWidth={2}
                     />
-                    {scores.length > 1 && (
+                    {hasComparisonPillarData && (
                       <Radar
-                        name="Previous"
+                        name={comparisonDatacallName}
                         dataKey="previous"
                         stroke="#82ca9d"
                         fill="#82ca9d"
@@ -629,16 +753,25 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                                     height: 12,
                                     backgroundColor: entry.color,
                                     border:
-                                      entry.value === 'Previous'
+                                      entry.value === comparisonDatacallName
                                         ? '1px dashed'
                                         : 'none',
                                     opacity:
-                                      entry.value === 'Previous' ? 0.7 : 0.8,
+                                      entry.value === comparisonDatacallName
+                                        ? 0.7
+                                        : 0.8,
                                   }}
                                 />
                                 <Typography
                                   variant="caption"
-                                  sx={{ fontSize: '0.875rem' }}
+                                  sx={{
+                                    fontSize: '0.875rem',
+                                    maxWidth: 200,
+                                    overflow: 'hidden',
+                                    textOverflow: 'ellipsis',
+                                    whiteSpace: 'nowrap',
+                                  }}
+                                  title={entry.value}
                                 >
                                   {entry.value}
                                 </Typography>
@@ -649,10 +782,46 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       }}
                     />
                     <Tooltip
-                      formatter={(value: number, name: string) => [
-                        value.toFixed(2),
-                        name === 'current' ? 'Current Score' : 'Previous Score',
-                      ]}
+                      content={({ active, payload, label }) => {
+                        if (!active || !payload?.length) return null
+                        return (
+                          <Box
+                            sx={{
+                              backgroundColor: 'background.paper',
+                              border: '1px solid',
+                              borderColor: 'divider',
+                              borderRadius: 1,
+                              p: 1,
+                              maxWidth: 280,
+                            }}
+                          >
+                            <Typography
+                              variant="caption"
+                              display="block"
+                              fontWeight="bold"
+                              sx={{
+                                mb: 0.5,
+                                overflowWrap: 'anywhere',
+                              }}
+                            >
+                              {label}
+                            </Typography>
+                            {payload.map((entry, i) => (
+                              <Typography
+                                key={i}
+                                variant="caption"
+                                display="block"
+                                sx={{
+                                  color: entry.color,
+                                  overflowWrap: 'anywhere',
+                                }}
+                              >
+                                {entry.name}: {Number(entry.value).toFixed(2)}
+                              </Typography>
+                            ))}
+                          </Box>
+                        )
+                      }}
                     />
                   </RadarChart>
                 </ResponsiveContainer>
@@ -703,11 +872,11 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                             <strong>Pillar Name</strong>
                           </TableCell>
                           <TableCell align="right">
-                            <strong>Current Score</strong>
+                            <strong>{currentDatacallName}</strong>
                           </TableCell>
-                          {scores.length > 1 && (
+                          {hasComparisonPillarData && (
                             <TableCell align="right">
-                              <strong>Previous Score</strong>
+                              <strong>{comparisonDatacallName}</strong>
                             </TableCell>
                           )}
                           <TableCell align="right">
@@ -720,14 +889,8 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       </TableHead>
                       <TableBody>
                         {latestScore?.pillarscores?.map((pillar) => {
-                          const previousDatacall = scores
-                            .filter(
-                              (s) => s.datacallid < latestScore.datacallid
-                            )
-                            .sort((a, b) => b.datacallid - a.datacallid)[0]
-
                           const previousPillarScore =
-                            previousDatacall?.pillarscores?.find(
+                            comparisonScoreEntry?.pillarscores?.find(
                               (p) => p.pillarid === pillar.pillarid
                             )?.score
 
@@ -756,7 +919,7 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                                   ? currentScore.toFixed(2)
                                   : 'N/A'}
                               </TableCell>
-                              {scores.length > 1 && (
+                              {hasComparisonPillarData && (
                                 <TableCell align="right">
                                   {prevScore > 0 ? prevScore.toFixed(2) : 'N/A'}
                                 </TableCell>

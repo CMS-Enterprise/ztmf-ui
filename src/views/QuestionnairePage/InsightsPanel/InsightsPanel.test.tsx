@@ -55,6 +55,7 @@ describe('InsightsPanel', () => {
   it('renders the ZTMF Insights label and all five source chips', () => {
     render(<InsightsPanel payload={fullPayload} />)
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    // Chips render the source name with a trailing colon (e.g. "Kion:").
     for (const source of [
       'Kion',
       'SecurityHub',
@@ -62,7 +63,7 @@ describe('InsightsPanel', () => {
       'CFACTS',
       'ARS',
     ]) {
-      expect(screen.getByText(source)).toBeInTheDocument()
+      expect(screen.getByText(`${source}:`)).toBeInTheDocument()
     }
   })
 
@@ -78,8 +79,9 @@ describe('InsightsPanel', () => {
 
   it('marks a source with no data using a dash instead of a score', () => {
     render(<InsightsPanel payload={fullPayload} />)
-    // Hardenize has has_hardenize_data:false, so its dot renders an en-dash.
-    expect(screen.getByText('–')).toBeInTheDocument()
+    // Hardenize has has_hardenize_data:false, so its badge renders an em-dash
+    // instead of a maturity word.
+    expect(screen.getByText('—')).toBeInTheDocument()
   })
 
   it('shows "No suggestion" when suggested_score is null', () => {
@@ -217,24 +219,25 @@ describe('InsightsPanel', () => {
 
   it('hides findings until details is toggled, then reveals them', () => {
     render(<InsightsPanel payload={fullPayload} />)
-    expect(
-      screen.queryByText(/iam-user-without-mfa-device-enabled/)
-    ).not.toBeInTheDocument()
+    // Nothing in the drawer shows until expanded.
+    expect(screen.queryByText(/IAM\.10/)).not.toBeInTheDocument()
+    expect(screen.queryByText('IA-02')).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
 
-    expect(
-      screen.getByText(/iam-user-without-mfa-device-enabled/)
-    ).toBeInTheDocument()
+    // Kion renders as its pass/fail chip block (failing chip labeled by the
+    // NIST tag, ✗); the sechub finding renders as a FindingRow (slug visible).
+    expect(screen.getByText('IA-02').textContent).toContain('✗')
     expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
   })
 
-  it('lists satisfied and failing ARS control IDs when the pipeline provides them', () => {
+  it('lists satisfied, non-satisfied, and failing ARS control IDs when the pipeline provides them', () => {
     render(
       <InsightsPanel
         payload={{
           ...fullPayload,
           ars_satisfied_controls: ['IA-01', 'IA-02(01)'],
+          ars_not_satisfied_controls: ['IA-02(02)', 'IA-02(08)'],
           ars_failing_controls: ['AC-17'],
         }}
       />
@@ -244,6 +247,23 @@ describe('InsightsPanel', () => {
     expect(screen.getByText('IA-01').textContent).toContain('✓')
     expect(screen.getByText('IA-02(01)').textContent).toContain('✓')
     expect(screen.getByText('AC-17').textContent).toContain('✗')
+    // Non-satisfied controls render greyed with a neutral marker — NOT the red ✗.
+    expect(screen.getByText('IA-02(02)').textContent).toContain('○')
+    expect(screen.getByText('IA-02(02)').textContent).not.toContain('✗')
+    expect(screen.getByText('IA-02(08)').textContent).toContain('○')
+  })
+
+  it('renders non-satisfied ARS controls even when the satisfied array is absent', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          ...fullPayload,
+          ars_not_satisfied_controls: ['IA-02(02)'],
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('IA-02(02)').textContent).toContain('○')
   })
 
   it('drops non-string control IDs instead of throwing', () => {
@@ -477,6 +497,223 @@ describe('FindingRow resilience', () => {
     )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
     expect(screen.getByText('IAM.10')).toBeInTheDocument()
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+  })
+})
+
+// The maturity score badge inside a source chip shows the tier WORD, not the
+// bare number (a number next to a source name read as a finding count).
+describe('ScoreBadge', () => {
+  it('shows the maturity word in the source chip, not the numeric score', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 2,
+          has_kion_data: true,
+          kion_suggested_score: 2,
+        }}
+      />
+    )
+    // Kion (score 2) renders "Initial", not "2".
+    expect(screen.getByText('Initial')).toBeInTheDocument()
+    expect(screen.queryByText('2')).not.toBeInTheDocument()
+  })
+})
+
+// The ARS-style pass/fail block: passing checks from `{source}_passing` (green
+// ✓), failing from `findings.{source}` (red ✗), labeled by NIST tag with the
+// slug + description in the hover.
+describe('FeedCheckBlock (feed pass/fail checks)', () => {
+  const kionPassFail: InsightPayload = {
+    suggested_score: 1,
+    has_kion_data: true,
+    kion_suggested_score: 1,
+    kion_passing: [
+      {
+        id: 'account-without-compliant-password-policy',
+        nist_controls: 'IA-5',
+        description: 'Password Policy',
+        level: 1,
+      },
+      {
+        id: 'root-account-without-mfa-enabled',
+        nist_controls: 'AC-2',
+        description: 'Root MFA',
+        level: 1,
+      },
+      {
+        id: 'iam-user-with-password-and-no-mfa',
+        nist_controls: 'AC-2',
+        description: 'User MFA',
+        level: 1,
+      },
+    ],
+    findings: {
+      kion: [
+        {
+          id: 'iam-user-without-mfa-device-enabled',
+          nist_controls: 'IA-2',
+          description: 'MFA device',
+        },
+      ],
+    },
+  }
+
+  const expand = () =>
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+
+  it('renders "N of M checks passed" with one chip per check', () => {
+    render(<InsightsPanel payload={kionPassFail} />)
+    expand()
+    expect(screen.getByText(/3 of 4 checks passed/)).toBeInTheDocument()
+    // 3 passing (green ✓) + 1 failing (red ✗), labeled by NIST tag.
+    expect(screen.getByText('IA-5').textContent).toContain('✓')
+    expect(screen.getByText('IA-2').textContent).toContain('✗')
+  })
+
+  it('renders a chip per check even when a NIST tag repeats (distinct checks)', () => {
+    render(<InsightsPanel payload={kionPassFail} />)
+    expand()
+    const ac2 = screen.getAllByText('AC-2')
+    expect(ac2).toHaveLength(2)
+    ac2.forEach((chip) => expect(chip.textContent).toContain('✓'))
+  })
+
+  it('folds pass/fail status into each chip accessible name (role=img so AT exposes it)', () => {
+    render(<InsightsPanel payload={kionPassFail} />)
+    expand()
+    // Assert via getByRole+name (resolves the real accessible name) rather than
+    // getByLabelText (reads the attribute directly) — the chip carries role=img
+    // so the aria-label is actually announced, not silently dropped by AT.
+    expect(
+      screen.getByRole('img', {
+        name: /account-without-compliant-password-policy.*Password Policy.*Passed/,
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', {
+        name: /iam-user-without-mfa-device-enabled.*Failed/,
+      })
+    ).toBeInTheDocument()
+  })
+
+  it('pluralizes the header for a single check', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          kion_passing: [],
+          findings: { kion: [{ id: 'x', nist_controls: 'AC-1' }] },
+        }}
+      />
+    )
+    expand()
+    expect(screen.getByText(/0 of 1 check passed/)).toBeInTheDocument()
+  })
+
+  it('renders a header-only "0 of 0" for an empty passing array with no failures', () => {
+    render(<InsightsPanel payload={{ suggested_score: 2, kion_passing: [] }} />)
+    expand()
+    expect(screen.getByText(/0 of 0 checks passed/)).toBeInTheDocument()
+  })
+
+  it('shows Kion as a chip block (uniform) even with no passing array, labeling failures as findings', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          has_kion_data: true,
+          kion_suggested_score: 1,
+          findings: {
+            kion: [
+              {
+                id: 'iam-role-missing-permissions-boundary',
+                nist_controls: 'AC-6-10',
+                description: 'Permissions boundary',
+              },
+            ],
+          },
+        }}
+      />
+    )
+    expand()
+    // No fabricated pass count — labeled "N finding(s)" — but still the chip
+    // block (NIST tag + ✗), NOT the old verbose FindingRow (slug is not body
+    // text, only reachable via the chip's accessible name).
+    expect(screen.getByText(/1 finding/)).toBeInTheDocument()
+    expect(screen.queryByText(/checks? passed/)).not.toBeInTheDocument()
+    expect(screen.getByText('AC-6-10').textContent).toContain('✗')
+    expect(
+      screen.queryByText('iam-role-missing-permissions-boundary')
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders SecurityHub as the block when its passing array ships', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 2,
+          has_sechub_data: true,
+          sechub_suggested_score: 2,
+          sechub_passing: [
+            { id: 'IAM.1', nist_controls: 'AC-3', description: 'x', level: 1 },
+          ],
+          findings: {
+            sechub: [{ id: 'IAM.10', nist_controls: 'IA-2', description: 'y' }],
+          },
+        }}
+      />
+    )
+    expand()
+    expect(screen.getByText(/1 of 2 checks passed/)).toBeInTheDocument()
+    expect(screen.getByText('AC-3').textContent).toContain('✓')
+    expect(screen.getByText('IA-2').textContent).toContain('✗')
+    // As a block the finding slug is not rendered as body text.
+    expect(screen.queryByText('IAM.10')).not.toBeInTheDocument()
+  })
+
+  it('keeps SecurityHub on the FindingRow list until its passing array ships', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          findings: {
+            sechub: [
+              {
+                id: 'IAM.10',
+                title: 'MFA should be enabled',
+                description: 'Enable MFA',
+                severity: 'MEDIUM',
+              },
+            ],
+          },
+        }}
+      />
+    )
+    expand()
+    // No passing array → old FindingRow: slug + title visible as body text.
+    expect(screen.getByText('IAM.10')).toBeInTheDocument()
+    expect(screen.getByText('MFA should be enabled')).toBeInTheDocument()
+    // Not the block — no "N of M checks passed" header for SecurityHub.
+    expect(screen.queryByText(/checks? passed/)).not.toBeInTheDocument()
+  })
+
+  it('degrades when a passing array arrives as a non-array', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          has_kion_data: true,
+          kion_suggested_score: 1,
+          kion_passing: 'nope' as unknown as [],
+          findings: { kion: [{ id: 'x', nist_controls: 'AC-1' }] },
+        }}
+      />
+    )
+    expand()
+    // asFindingArray drops the bad value → treated as no passing checks; the
+    // failing check still renders and the panel is not blanked.
+    expect(screen.getByText('AC-1').textContent).toContain('✗')
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
   })
 })

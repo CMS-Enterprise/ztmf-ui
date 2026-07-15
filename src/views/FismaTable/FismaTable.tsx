@@ -52,6 +52,7 @@ import { progressSortValue } from './progressHelpers'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { parseDatacallName } from '@/utils/datacallGrouping'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import type { OpDiv } from '@/types'
 import {
   applyDashboardFilters,
@@ -402,6 +403,7 @@ export default function FismaTable({
   scores,
   progress,
   systemCallMap = {},
+  chosenCallMap = {},
 }: FismaTableProps) {
   const apiRef = useGridApiRef()
   const {
@@ -539,12 +541,14 @@ export default function FismaTable({
     systemAcronym: string
     fismasystemid: number
     scores: ScoreAggregate[]
+    selectedDataCallId: number
   }>({
     open: false,
     systemName: '',
     systemAcronym: '',
     fismasystemid: 0,
     scores: [],
+    selectedDataCallId: 0,
   })
   const handleCloseModal = () => {
     setOpen(false)
@@ -552,6 +556,20 @@ export default function FismaTable({
   }
 
   const handleOpenPillarScores = async (row: FismaSystemType) => {
+    // Use the same call the dashboard row is displaying (chosen by most-recently-updated
+    // in buildDashboardMaps) so the modal's "current" always matches the table cell.
+    // Falls back to newest-by-deadline if chosenCallMap has no entry (e.g. single-call
+    // system or map not yet populated), then to activeDataCallId as a last resort.
+    const chosenId = chosenCallMap[row.fismasystemid]
+    const rowDataCallId =
+      chosenId ??
+      sortDatacallsByDeadline(
+        (systemCallMap[row.fismasystemid] ?? [])
+          .map((id) => datacalls.find((d) => d.datacallid === id))
+          .filter((d): d is datacall => Boolean(d))
+      )[0]?.datacallid ??
+      activeDataCallId
+
     try {
       // Check cache first
       const cached = pillarScoresCache.get(row.fismasystemid)
@@ -582,6 +600,7 @@ export default function FismaTable({
         systemAcronym: row.fismaacronym,
         fismasystemid: row.fismasystemid,
         scores: scoresData,
+        selectedDataCallId: rowDataCallId,
       })
     } catch (error) {
       console.error('Error fetching pillar scores:', error)
@@ -720,13 +739,11 @@ export default function FismaTable({
         // The system's own call(s) among the active ones, newest first. One
         // call opens directly; more than one opens a picker so the user
         // chooses which to open (#467).
-        const rowCallObjs = (systemCallMap[params.row.fismasystemid] ?? [])
-          .map((id) => datacalls.find((d) => d.datacallid === id))
-          .filter((d): d is datacall => Boolean(d))
-          .sort(
-            (a, b) =>
-              new Date(b.deadline).getTime() - new Date(a.deadline).getTime()
-          )
+        const rowCallObjs = sortDatacallsByDeadline(
+          (systemCallMap[params.row.fismasystemid] ?? [])
+            .map((id) => datacalls.find((d) => d.datacallid === id))
+            .filter((d): d is datacall => Boolean(d))
+        )
         return (
           <>
             <Tooltip title="Questionnaire">
@@ -884,7 +901,7 @@ export default function FismaTable({
         systemName={pillarScoresModal.systemName}
         systemAcronym={pillarScoresModal.systemAcronym}
         scores={pillarScoresModal.scores}
-        selectedDataCallId={activeDataCallId}
+        selectedDataCallId={pillarScoresModal.selectedDataCallId}
       />
       <Menu
         anchorEl={callPicker?.anchor ?? null}
