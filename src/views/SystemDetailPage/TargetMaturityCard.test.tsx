@@ -288,6 +288,25 @@ test('Cancel with dirty draft opens the ConfirmDialog; confirming discards', asy
 // Error handling
 // ---------------------------------------------------------------------------
 
+test('200 with no body surfaces an error and keeps the user in edit mode', async () => {
+  const user = userEvent.setup()
+  mock
+    .onPut(`/fismasystems/${BASE_SYSTEM.fismasystemid}/target-maturity`)
+    .reply(200, {})
+
+  const { onSaved } = renderCard()
+  await user.click(screen.getByRole('button', { name: /^edit$/i }))
+  await user.click(screen.getByLabelText('Target level'))
+  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.type(screen.getByLabelText('Justification'), 'reason')
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  expect(onSaved).not.toHaveBeenCalled()
+  // Still in edit mode - the missing body was flagged, not swallowed
+  expect(screen.getByLabelText('Justification')).toBeInTheDocument()
+})
+
 test('server error keeps the user in edit mode and does not call onSaved', async () => {
   const user = userEvent.setup()
   mock

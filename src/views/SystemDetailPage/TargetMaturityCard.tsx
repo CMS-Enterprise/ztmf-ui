@@ -132,8 +132,15 @@ export default function TargetMaturityCard({
           target_maturity_justification: trimmedJustification,
         }
       )
-      const saved = (res.data?.data ?? null) as FismaSystemType | null
-      if (saved) onSaved(saved)
+      // The endpoint contract is to echo the updated record. If a 200 ever
+      // comes back without one, the view would silently diverge from the
+      // server, so surface it as an error rather than a success toast.
+      const saved = res.data?.data as FismaSystemType | undefined
+      if (!saved) {
+        notify(ERROR_MESSAGES.error, 'error', { autoHideDuration: 2000 })
+        return
+      }
+      onSaved(saved)
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setIsEditing(false)
     } catch (error) {

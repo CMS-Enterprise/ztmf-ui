@@ -21,8 +21,7 @@ interface SystemDetailReadViewProps {
   system: FismaSystemType
   decommissionedByName: string
   // Rendered in the right column between Data Lake Export and Organization.
-  // The page owns it (its edit state is independent of this view) and slots it
-  // here so it sits with the other system cards (ztmf#398).
+  // The page owns the card so its edit state is independent of this view.
   targetMaturitySlot?: ReactNode
 }
 
