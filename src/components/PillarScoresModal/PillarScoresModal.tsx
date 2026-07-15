@@ -78,22 +78,6 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
   const dialogRef = useRef<HTMLDivElement>(null)
   const initialFocusRef = useRef<HTMLButtonElement>(null)
 
-  // Use the selected datacall if it exists in the scores, otherwise fall back
-  // to the highest datacallid (e.g. when modal is opened before context loads).
-  const latestScore =
-    scores.length > 0
-      ? scores.find((s) => s.datacallid === selectedDataCallId) ??
-        scores.reduce((latest, current) =>
-          current.datacallid > latest.datacallid ? current : latest
-        )
-      : null
-
-  // Check if we have any valid score data
-  const hasValidData =
-    latestScore &&
-    latestScore.pillarscores &&
-    latestScore.pillarscores.length > 0
-
   // Data calls this system actually has a score for, deadline-sorted. The
   // comparison must be self-scoped: `datacalls` is the full cross-tenant list
   // (CMS quarterly `FY## Q#` and HHS annual `FY## ZTM` interleaved by deadline),
@@ -111,6 +95,24 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
       ),
     [datacalls, scores]
   )
+
+  // Use the selected datacall if it exists in the scores, otherwise fall back
+  // to the deadline-latest scored call. scoredDatacalls[0] is furthest-out by
+  // deadline (same ordering used everywhere else in this modal), avoiding the
+  // "highest datacallid wins" pitfall (#393). When datacalls hasn't loaded yet
+  // scoredDatacalls is empty and the expression resolves to null, which is safe.
+  const latestScore =
+    scores.length > 0
+      ? scores.find((s) => s.datacallid === selectedDataCallId) ??
+        scores.find((s) => s.datacallid === scoredDatacalls[0]?.datacallid) ??
+        null
+      : null
+
+  // Check if we have any valid score data
+  const hasValidData =
+    latestScore &&
+    latestScore.pillarscores &&
+    latestScore.pillarscores.length > 0
 
   // Scored calls strictly older than the anchor by deadline — the valid
   // "previous" candidates. Excludes the anchor itself and anything newer, so a
