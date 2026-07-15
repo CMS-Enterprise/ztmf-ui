@@ -7,30 +7,37 @@ name: Nightly sync main -> impl
 # WHY -X theirs (not a plain merge): main and impl are both squash-merged, so
 # they share no real ancestry -- their merge-base is stale (back at #363). A
 # plain 3-way merge across that base surfaces dozens of phantom add/add
-# conflicts for changes already on both sides. We merge `main` into an
-# impl-based branch with `-X theirs`, so main deterministically wins every
-# overlap, impl-only files that don't conflict are preserved, and there is
-# nothing to hand-resolve. The resulting merge commit also re-establishes
-# shared ancestry, so the divergence closes instead of recurring -- which only
-# holds if the PR is merged as a MERGE COMMIT, not squashed.
+# conflicts for changes already on both sides. Merging `main` into an impl-based
+# branch with `-X theirs` makes main deterministically win every overlap, keeps
+# impl-only non-conflicting files, and leaves nothing to hand-resolve. Merging
+# the PR as a MERGE COMMIT re-establishes shared ancestry so the gap closes.
 #
-# Scheduling: GitHub cron is UTC and does NOT adjust for DST. Midnight
-# America/Los_Angeles (== 3am America/New_York) is 08:20 UTC under PST and
-# 07:20 UTC under PDT, so both are registered and the guard runs the sync only
-# at true local midnight. We fire at :20 rather than :00 to avoid the most
-# contended top-of-hour scheduler slot (trade-off: a scheduler delay beyond
-# ~39 min would push past local midnight and skip a night -- manual dispatch
-# covers that).
+# WHY a PAT (not GITHUB_TOKEN): the CMS-Enterprise org prohibits GitHub Actions
+# from creating pull requests, so `gh pr create` with the built-in GITHUB_TOKEN
+# returns 409. A GitHub App would also work but installing one on the org repos
+# needs org-owner approval, which was declined -- the org admins recommend a
+# PAT. PROVISION ONCE: add a repo secret SYNC_PAT holding a FINE-GRAINED PAT
+# scoped to this repo, permissions Contents: read/write + Pull requests:
+# read/write. BRITTLENESS: a fine-grained PAT expires (max ~1 year) and is tied
+# to its creator -- prefer a shared machine/service account and set a rotation
+# reminder; when it lapses the "Open PR" step 401s and no PR is opened.
+#
+# WHY no exact-midnight guard: GitHub cron is UTC and does not adjust for DST,
+# so both 07:20 (PDT midnight) and 08:20 (PST midnight) UTC are registered.
+# There is deliberately NO "is it exactly midnight?" guard -- the scheduler
+# routinely delays runs ~40 min, which tipped a strict hour==00 check past
+# midnight and skipped whole nights. Instead both crons simply run; the
+# "skip if a sync PR is already open" step dedupes them to one PR/night (the
+# near-midnight run opens it, the ~1h-later run finds it open and skips).
 
 on:
   schedule:
-    - cron: '20 8 * * *' # 00:20 PST / 01:20 PDT
-    - cron: '20 7 * * *' # 00:20 PDT / 23:20 PST
+    - cron: '20 8 * * *' # ~midnight PST / ~01:20 PDT
+    - cron: '20 7 * * *' # ~midnight PDT / ~23:20 PST
   workflow_dispatch: {} # allow an on-demand sync
 
 permissions:
-  contents: write # reset + push the sync branch
-  pull-requests: write # open the sync PR
+  contents: read # writes are done with the PAT, not GITHUB_TOKEN
 
 concurrency:
   group: nightly-impl-sync
@@ -40,42 +47,19 @@ env:
   SYNC_BRANCH: automation/sync-main-to-impl
 
 jobs:
-  guard:
-    name: Guard (true midnight Pacific)
-    runs-on: ubuntu-latest
-    outputs:
-      proceed: ${{ steps.check.outputs.proceed }}
-    steps:
-      - id: check
-        run: |
-          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
-            echo "Manual run -- proceeding."
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
-            exit 0
-          fi
-          hour="$(TZ='America/Los_Angeles' date +%H)"
-          if [ "$hour" = "00" ]; then
-            echo "Pacific local hour is 00 -- proceeding."
-            echo "proceed=true" >> "$GITHUB_OUTPUT"
-          else
-            echo "Pacific local hour is $hour, not midnight -- the paired DST cron handles this. Skipping."
-            echo "proceed=false" >> "$GITHUB_OUTPUT"
-          fi
-
   open-sync-pr:
     name: Open main -> impl sync PR
-    needs: guard
-    if: needs.guard.outputs.proceed == 'true'
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
         with:
           fetch-depth: 0
+          token: ${{ secrets.SYNC_PAT }}
 
       - name: Skip if a sync PR is already open
         id: existing
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
         run: |
           num="$(gh pr list --base impl --head "$SYNC_BRANCH" --state open --json number --jq '.[0].number // ""')"
           if [ -n "$num" ]; then
@@ -142,7 +126,7 @@ jobs:
       - name: Open the PR into impl
         if: steps.build.outputs.changed == 'true'
         env:
-          GH_TOKEN: ${{ github.token }}
+          GH_TOKEN: ${{ secrets.SYNC_PAT }}
           PR_BODY: |
             Automated nightly sync of `main` into `impl` — **main wins every overlap**.
 
@@ -153,7 +137,7 @@ jobs:
             - Review the net change, then merge (merge commit). Merging pushes to `impl` and triggers the impl deploy (orchestration-impl).
             - To smoke-test the merged result in the impl environment first, run **Manual Deploy to IMPL** with `--ref automation/sync-main-to-impl`.
 
-            _Opened by the nightly-impl-sync workflow. It uses the built-in token, so PR-level analysis does not auto-run here; analysis + deploy run on merge (push to impl)._
+            _Opened by the nightly-impl-sync workflow._
         run: |
           date_pt="$(TZ='America/Los_Angeles' date +%Y-%m-%d)"
           gh pr create \
