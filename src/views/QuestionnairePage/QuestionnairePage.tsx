@@ -252,12 +252,11 @@ export default function QuestionnarePage() {
     // ChoiceList can't express.
     //
     // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights layer.
-    // Passing no insight for those calls hides the option-level insight badges
-    // AND the insight-derived FIPS per-option markers together with the
-    // (already-hidden) Insights panel/FIPS strip — matching QuestionRadioGroup's
-    // own "strip and per-option markers appear/vanish together" invariant. For
-    // every CMS (non-HHS) call the insight passes through unchanged, so the FIPS
-    // treatment is identical to before.
+    // Always pass insight so the FIPS baseline markers (a federal-wide concept)
+    // render for all systems including HHS. showInsightBadges suppresses the
+    // CMS-specific option chips (suggested + prior-answer) for HHS calls while
+    // leaving the baseline treatment intact. The Insights panel and suggestion
+    // are separately gated by showInsights / showInsightSuggestion.
     return (
       <QuestionRadioGroup
         options={options}
@@ -265,7 +264,8 @@ export default function QuestionnarePage() {
         selectedValue={selectQuestionOption}
         onChange={handleChoiceChange}
         disabled={isReadOnly}
-        insight={isHhsDatacall ? undefined : currentInsight}
+        insight={currentInsight}
+        showInsightBadges={!isHhsDatacall}
         viewedDatacall={datacall}
       />
     )

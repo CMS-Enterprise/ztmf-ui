@@ -737,6 +737,9 @@ const INSIGHT_ROW = {
     // A prior cycle, distinct from the FY2026 Q1 / FY25 ZTM calls under test, so
     // the carried-forward response is offered as last year's context.
     last_datacall: 'FY2025 Q1',
+    // FIPS data is a federal-wide concept; must render for both CMS and HHS.
+    fips_impact_level: 'Low',
+    fips_ceiling: 2,
   },
 }
 
@@ -798,6 +801,9 @@ describe('QuestionnairePage justification integration', () => {
     expect(await screen.findByText('Review required')).toBeInTheDocument()
     // ...but the pending review empties the on-screen value and blocks submit.
     expect(response).toHaveValue('')
+
+    // The FIPS baseline is a federal-wide concept and must appear for HHS too.
+    expect(await screen.findByText('Low baseline')).toBeInTheDocument()
 
     // The CMS-internal insights layer is suppressed for HHS calls.
     expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
