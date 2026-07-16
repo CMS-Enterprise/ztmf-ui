@@ -10,8 +10,8 @@ import {
   fipsBadgeText,
   showFipsStrip,
   baselineCeiling,
+  asImpactLevel,
   FIPS_GOLD,
-  type FipsImpactLevel,
 } from '../fipsBaseline'
 
 type Props = {
@@ -392,7 +392,7 @@ function InsightsPanelInner({ payload }: Props) {
           panel → no strip). Only shown when there's headroom above the
           baseline (ceiling < 4). */}
       {showFipsStrip(
-        (payload.fips_impact_level ?? null) as FipsImpactLevel | null,
+        asImpactLevel(payload.fips_impact_level),
         payload.fips_ceiling
       ) && (
         <Box
@@ -415,6 +415,7 @@ function InsightsPanelInner({ payload }: Props) {
           >
             <Box
               component="span"
+              tabIndex={0}
               aria-label={`FIPS impact level: ${payload.fips_impact_level}`}
               sx={{
                 fontSize: 11,
@@ -429,9 +430,7 @@ function InsightsPanelInner({ payload }: Props) {
                 cursor: 'help',
               }}
             >
-              {fipsBadgeText(
-                (payload.fips_impact_level ?? null) as FipsImpactLevel | null
-              )}
+              {fipsBadgeText(asImpactLevel(payload.fips_impact_level))}
             </Box>
           </Tooltip>
           <Box

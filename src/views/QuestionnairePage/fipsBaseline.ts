@@ -7,6 +7,20 @@
 
 export type FipsImpactLevel = 'Low' | 'Moderate' | 'High'
 
+const IMPACT_LEVELS: readonly FipsImpactLevel[] = ['Low', 'Moderate', 'High']
+
+// `fips_impact_level` rides on the opaque payload, so a TS `as` cast buys
+// nothing at runtime. Narrow it to one of the three literals (or null) here so
+// every surface — the strip and the per-option markers — reads it the same way
+// and suppresses together on a malformed value, rather than interpolating a
+// number into "▲ above 3 baseline".
+export function asImpactLevel(x: unknown): FipsImpactLevel | null {
+  return typeof x === 'string' &&
+    (IMPACT_LEVELS as readonly string[]).includes(x)
+    ? (x as FipsImpactLevel)
+    : null
+}
+
 // Shared palette for the FIPS baseline treatment, used by both the strip (in the
 // insights panel) and the per-option markers (in the radio group). Gold =
 // "above your baseline" (attention, optional); the dotted blue baseline box =
@@ -43,10 +57,15 @@ export function showFipsStrip(
 
 // A system with no FIPS on file arrives with ceiling null/undefined; treat it as
 // 4 so nothing scores above it and the UI warns on nothing (never breaks).
+// Clamp to the valid 1–4 maturity range too: a stray 0 (a zero serialized in
+// place of null) would make `score > ceiling` true for every option — the exact
+// inverse of the fail-safe — so any out-of-range number also falls back to 4.
 export function baselineCeiling(
   fipsCeiling: number | null | undefined
 ): number {
-  return typeof fipsCeiling === 'number' ? fipsCeiling : 4
+  return typeof fipsCeiling === 'number' && fipsCeiling >= 1 && fipsCeiling <= 4
+    ? fipsCeiling
+    : 4
 }
 
 // The core rule: an option is above baseline when its maturity score exceeds the

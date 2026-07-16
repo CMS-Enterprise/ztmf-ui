@@ -6,9 +6,9 @@ import { OptionInsightBadges } from './InsightsPanel/InsightsPanel'
 import {
   baselineCeiling,
   isAboveBaseline,
+  asImpactLevel,
   FIPS_GOLD as GOLD,
   FIPS_BASELINE as BASELINE,
-  type FipsImpactLevel,
 } from './fipsBaseline'
 
 // Maturity answer options as a native-radio fieldset (not CMSDS ChoiceList) so
@@ -55,13 +55,11 @@ export default function QuestionRadioGroup({
   viewedDatacall,
 }: Props) {
   const ceiling = baselineCeiling(insight?.fips_ceiling)
-  const level = (insight?.fips_impact_level ?? null) as FipsImpactLevel | null
-  const anyAbove = options.some(
-    (o) => o.score != null && isAboveBaseline(o.score, ceiling)
-  )
-  // Per-option markers only when there's a real impact level AND some option
-  // sits above the ceiling (a High/ceiling-4 or null-FIPS system shows nothing).
-  const hasBaseline = level != null && anyAbove
+  const level = asImpactLevel(insight?.fips_impact_level)
+  // Same gate as the panel strip (showFipsStrip): a real impact level plus
+  // headroom above the baseline. A High/ceiling-4 or null-FIPS system has no
+  // baseline treatment, so strip and per-option markers appear/vanish together.
+  const hasBaseline = level != null && ceiling < 4
 
   // Effective selection: the page state once the user has chosen, otherwise the
   // option flagged defaultChecked (the saved answer) so a pre-loaded above-
@@ -192,9 +190,12 @@ export default function QuestionRadioGroup({
                   sx={{ fontSize: 14, lineHeight: 1.5, flex: 1 }}
                 >
                   {o.label}
-                  {/* Non-color cues for AT: expose the baseline relationship to
-                      assistive tech regardless of the visible (color) treatment. */}
-                  {above && (
+                  {/* Non-color cue for AT: expose the baseline relationship to
+                      assistive tech regardless of the visible (color) treatment.
+                      Suppressed when the option is selected — the visible chip
+                      below is focusable and carries the same aria-label, so this
+                      would double-announce on the selected above-baseline row. */}
+                  {above && !selectedAbove && (
                     <Box component="span" sx={SR_ONLY}>
                       {` (above the ${level} baseline)`}
                     </Box>
@@ -207,6 +208,7 @@ export default function QuestionRadioGroup({
                     >
                       <Box
                         component="span"
+                        tabIndex={0}
                         aria-label={`${level} baseline — your system's expected maturity level`}
                         sx={{
                           display: 'inline-block',
@@ -237,6 +239,7 @@ export default function QuestionRadioGroup({
                     >
                       <Box
                         component="span"
+                        tabIndex={0}
                         aria-label={`above the ${level} baseline — optional`}
                         sx={{
                           display: 'inline-block',

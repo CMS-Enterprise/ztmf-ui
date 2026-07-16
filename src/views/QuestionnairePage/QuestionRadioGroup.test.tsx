@@ -124,5 +124,15 @@ describe('QuestionRadioGroup', () => {
       })
       expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
     })
+
+    it('malformed level (a number on the opaque payload) is ignored — no throw, no treatment', () => {
+      renderGroup({
+        insight: {
+          fips_impact_level: 3 as unknown as null,
+          fips_ceiling: 2,
+        },
+      })
+      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
+    })
   })
 })

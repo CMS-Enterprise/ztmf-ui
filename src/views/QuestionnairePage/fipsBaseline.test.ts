@@ -3,6 +3,7 @@ import {
   baselineCeiling,
   fipsBadgeText,
   showFipsStrip,
+  asImpactLevel,
 } from './fipsBaseline'
 
 describe('fipsBaseline', () => {
@@ -27,6 +28,33 @@ describe('fipsBaseline', () => {
       expect(isAboveBaseline(4, null)).toBe(false)
       expect(isAboveBaseline(4, undefined)).toBe(false)
       expect(baselineCeiling(null)).toBe(4)
+    })
+
+    it('out-of-range ceiling falls back to 4 (a stray 0 must not invert the fail-safe)', () => {
+      // 0 serialized in place of null would make score > ceiling true for every
+      // option; clamp it — and anything outside 1–4 — back to the safe ceiling.
+      expect(baselineCeiling(0)).toBe(4)
+      expect(baselineCeiling(-1)).toBe(4)
+      expect(baselineCeiling(5)).toBe(4)
+      expect(baselineCeiling(NaN)).toBe(4)
+      expect(isAboveBaseline(1, 0)).toBe(false) // floor stays the floor
+      // valid range still passes through untouched
+      expect(baselineCeiling(1)).toBe(1)
+      expect(baselineCeiling(4)).toBe(4)
+    })
+  })
+
+  describe('asImpactLevel', () => {
+    it('narrows the three valid literals, nulls everything else', () => {
+      expect(asImpactLevel('Low')).toBe('Low')
+      expect(asImpactLevel('Moderate')).toBe('Moderate')
+      expect(asImpactLevel('High')).toBe('High')
+      // malformed values from the opaque payload → null (feature stays invisible)
+      expect(asImpactLevel(null)).toBeNull()
+      expect(asImpactLevel(undefined)).toBeNull()
+      expect(asImpactLevel(3)).toBeNull()
+      expect(asImpactLevel('low')).toBeNull() // case-sensitive
+      expect(asImpactLevel({})).toBeNull()
     })
   })
 
