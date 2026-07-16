@@ -19,6 +19,15 @@ const OPTIONS: QuestionChoice[] = [
 // Low FIPS → ceiling 2 (Initial): options scoring 3 and 4 are above baseline.
 const LOW_FIPS: InsightPayload = { fips_impact_level: 'Low', fips_ceiling: 2 }
 
+// Low FIPS with CMS-specific badge data (suggested + prior answer).
+const LOW_FIPS_WITH_BADGES: InsightPayload = {
+  fips_impact_level: 'Low',
+  fips_ceiling: 2,
+  suggested_score: 2, // points to Initial answer (the ceiling/baseline option)
+  last_score: 1,
+  last_datacall: 'FY2025 Q1',
+}
+
 const noop = () => {}
 
 function renderGroup(
@@ -107,6 +116,22 @@ describe('QuestionRadioGroup', () => {
         />
       )
       expect(screen.getByText('Above-baseline selection')).toBeInTheDocument()
+    })
+  })
+
+  describe('showInsightBadges=false (HHS-like rendering)', () => {
+    it('shows FIPS baseline but suppresses CMS insight chips', () => {
+      renderGroup({ insight: LOW_FIPS_WITH_BADGES, showInsightBadges: false })
+      // FIPS baseline marker still renders — it is a federal-wide concept.
+      expect(screen.getByText('Low baseline')).toBeInTheDocument()
+      // CMS-internal insight chips are absent.
+      expect(screen.queryByText('ZTMF Insights')).not.toBeInTheDocument()
+    })
+
+    it('shows both baseline and insight chips when showInsightBadges is true', () => {
+      renderGroup({ insight: LOW_FIPS_WITH_BADGES, showInsightBadges: true })
+      expect(screen.getByText('Low baseline')).toBeInTheDocument()
+      expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
     })
   })
 

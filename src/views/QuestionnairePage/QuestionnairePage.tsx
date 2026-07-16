@@ -265,7 +265,7 @@ export default function QuestionnarePage() {
         onChange={handleChoiceChange}
         disabled={isReadOnly}
         insight={currentInsight}
-        showInsightBadges={!isHhsDatacall}
+        showInsightBadges={showCmsInsights}
         viewedDatacall={datacall}
       />
     )
@@ -466,8 +466,10 @@ export default function QuestionnarePage() {
   // applies so a copied answer is affirmatively reviewed.
   const isHhsDatacall =
     parseDatacallName(datacall.replaceAll('_', ' ')).tenant === 'HHS'
-  const showInsights = Boolean(currentInsight) && !isHhsDatacall
-  const currentSuggestion = !isHhsDatacall
+  // Single source of truth for all CMS-internal insight UI gates.
+  const showCmsInsights = !isHhsDatacall
+  const showInsights = Boolean(currentInsight) && showCmsInsights
+  const currentSuggestion = showCmsInsights
     ? buildInsightJustification(currentInsight)
     : undefined
   const currentPriorResponse = priorResponseFor(currentInsight, datacall)
@@ -1341,7 +1343,7 @@ export default function QuestionnarePage() {
                       }}
                       insight={currentInsight}
                       priorResponse={currentPriorResponse}
-                      showInsightSuggestion={!isHhsDatacall}
+                      showInsightSuggestion={showCmsInsights}
                       viewedDatacall={datacall}
                       priorReviewState={priorReviewState}
                       onPriorReview={updatePriorReviewState}
