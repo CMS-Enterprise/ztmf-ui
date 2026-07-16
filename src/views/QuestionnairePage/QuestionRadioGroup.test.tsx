@@ -20,10 +20,14 @@ const OPTIONS: QuestionChoice[] = [
 const LOW_FIPS: InsightPayload = { fips_impact_level: 'Low', fips_ceiling: 2 }
 
 // Low FIPS with CMS-specific badge data (suggested + prior answer).
+// suggested_score: 3 (Advanced) is intentionally distinct from fips_ceiling: 2
+// (Initial) so the "ZTMF Insights" badge and "Low baseline" chip land on
+// separate option rows — a bug that suppressed badges only on the baseline
+// option would be visible.
 const LOW_FIPS_WITH_BADGES: InsightPayload = {
   fips_impact_level: 'Low',
   fips_ceiling: 2,
-  suggested_score: 2, // points to Initial answer (the ceiling/baseline option)
+  suggested_score: 3, // Advanced (score 3) — above the ceiling, not at it
   last_score: 1,
   last_datacall: 'FY2025 Q1',
 }

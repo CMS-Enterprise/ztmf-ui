@@ -255,8 +255,9 @@ export default function QuestionnarePage() {
     // Always pass insight so the FIPS baseline markers (a federal-wide concept)
     // render for all systems including HHS. showInsightBadges suppresses the
     // CMS-specific option chips (suggested + prior-answer) for HHS calls while
-    // leaving the baseline treatment intact. The Insights panel and suggestion
-    // are separately gated by showInsights / showInsightSuggestion.
+    // leaving the baseline treatment intact. The Insights panel, suggestion,
+    // and per-option insight badges are each separately gated (showInsights /
+    // showInsightSuggestion / showInsightBadges) — all derive from showCmsInsights.
     return (
       <QuestionRadioGroup
         options={options}
