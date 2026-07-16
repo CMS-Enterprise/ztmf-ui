@@ -66,6 +66,7 @@ interface SystemDetailEditViewProps {
   // Rendered in the right column between Data Lake Export and Organization,
   // matching the read view's placement.
   targetMaturitySlot?: React.ReactNode
+  opdivName: string | null
 }
 
 function renderEditField(
@@ -517,6 +518,16 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             sx={{ pb: 0 }}
           />
           <CardContent>
+            <TextField
+              id="edit-opdiv_id"
+              label="OpDiv"
+              variant="standard"
+              fullWidth
+              disabled
+              margin="normal"
+              InputLabelProps={{ shrink: true, sx: { marginTop: 0 } }}
+              value={props.opdivName ?? ''}
+            />
             {orgFields.map((field) => renderEditField(field, props))}
           </CardContent>
         </Card>
