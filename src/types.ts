@@ -476,6 +476,15 @@ export type InsightPayload = {
   sechub_passing?: InsightFinding[]
   hardenize_passing?: InsightFinding[]
 
+  // FIPS maturity baseline (ztmf-ui#547). `fips_ceiling` is the highest maturity
+  // tier this system's FIPS impact level needs (Low→2, Moderate→3, High/HVA→4);
+  // an answer option scoring above it is "above baseline" — warned but still
+  // selectable. `fips_impact_level` drives the "FIPS LOW" badge / divider text.
+  // Fallback for a system with no FIPS on file: level null + ceiling 4, so the
+  // rule (score > ceiling) warns on nothing and the UI never breaks.
+  fips_impact_level?: 'Low' | 'Moderate' | 'High' | null
+  fips_ceiling?: number | null
+
   // Additive: the pipeline may add keys at any time.
   [key: string]: unknown
 }
