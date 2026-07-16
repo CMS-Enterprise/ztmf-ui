@@ -1,4 +1,4 @@
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { fireEvent, render, screen, waitFor, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
@@ -53,6 +53,23 @@ jest.mock('@/utils/notify', () => {
   return {
     ...actual,
     notify: (...args: unknown[]) => notifyMock(...args),
+  }
+})
+
+// Stub the insights panel and option badges with recognizable text so the
+// justification-integration tests can assert their presence/absence without
+// depending on the real panel's internals. OptionInsightBadges renders nothing
+// when no insight is passed, matching the real component — so the existing
+// effect-path tests (which run with insights disabled) are unaffected.
+jest.mock('./InsightsPanel/InsightsPanel', () => {
+  const react = require('react')
+  return {
+    __esModule: true,
+    default: () => react.createElement('div', null, 'ZTMF Insights panel'),
+    OptionInsightBadges: ({ insight }: { insight?: unknown }) =>
+      insight
+        ? react.createElement('span', null, 'ZTMF Insights option badge')
+        : null,
   }
 })
 
@@ -662,4 +679,222 @@ test('the questionId effect reads live scores via ref and seeds the answer at mo
   // No POST fired - the saved answer was seeded from GET, not written
   // back as a fresh score.
   expect(axios.post).not.toHaveBeenCalled()
+})
+
+// ---------------------------------------------------------------------------
+// 4. ZTMF Insights justification-field wiring (#527/#529).
+//    - HHS data calls render the review-aware JustificationField but hide the
+//      CMS-internal insights layer (panel, option badges, suggestion).
+//    - CMS data calls render both the JustificationField and the insights layer.
+//    - A carried-forward prior response blocks submission until reviewed, and
+//      the initial insights lookup blocks submission until it settles.
+//    - A question with no justification context keeps the plain notes field.
+// ---------------------------------------------------------------------------
+
+const PRIOR_RESPONSE = 'MFA is enforced through Okta policies.'
+
+const JUSTIFICATION_QUESTION = {
+  questionid: 900,
+  question: 'How does the system authenticate users?',
+  notesprompt: 'Explain the authentication mechanisms.',
+  pillar: { pillar: 'Identity' },
+  function: {
+    functionid: 7006,
+    function: 'Imperial Identity Verification',
+    description: 'Authenticate users.',
+    datacenterenvironment: 'Imperial-Fleet',
+  },
+}
+
+const JUSTIFICATION_OPTIONS = [
+  { functionoptionid: 100, description: 'Baseline', score: 1 },
+  { functionoptionid: 101, description: 'Advanced', score: 2 },
+]
+
+// Carried forward from the prior data call: no edit event for the current call
+// (last_edited_at null) and its notes match the insight's last_score_notes, so
+// it is treated as context requiring an explicit review, not a submitted answer.
+const CARRY_FORWARD_SCORE = {
+  scoreid: 5001,
+  fismasystemid: 1002,
+  notes: PRIOR_RESPONSE,
+  functionoptionid: 100,
+  datacallid: 5,
+  last_edited_at: null,
+  last_edited_by: null,
+}
+
+const INSIGHT_ROW = {
+  fismasystemid: 1002,
+  questionid: 900,
+  synced_at: '2026-07-14T00:00:00Z',
+  payload: {
+    suggested_score: 1,
+    suggested_label: 'Baseline',
+    cfacts_auth_methods: 'IDM-Okta',
+    last_score: 1,
+    last_score_notes: PRIOR_RESPONSE,
+    // A prior cycle, distinct from the FY2026 Q1 / FY25 ZTM calls under test, so
+    // the carried-forward response is offered as last year's context.
+    last_datacall: 'FY2025 Q1',
+  },
+}
+
+const HHS_ZTM = {
+  datacallid: 6,
+  datacall: 'FY25 ZTM',
+  datecreated: '',
+  deadline: '2099-12-31T23:59:59Z',
+}
+
+const HHS_DEEP_LINK =
+  '/questionnaire/ssd-ex/FY25_ZTM/identity/imperial-identity-verification'
+
+describe('QuestionnairePage justification integration', () => {
+  type InsightsResponse = { data: { data: unknown[] } }
+
+  function installMocks({
+    insightRows = [INSIGHT_ROW] as unknown[],
+    insightsResponse,
+  }: {
+    insightRows?: unknown[]
+    insightsResponse?: Promise<InsightsResponse>
+  } = {}) {
+    axios.get.mockImplementation((url: string) => {
+      if (url === 'insights') {
+        return (
+          insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
+        )
+      }
+      if (url.includes('/questions'))
+        return Promise.resolve({ data: { data: [JUSTIFICATION_QUESTION] } })
+      if (url.startsWith('scores'))
+        return Promise.resolve({ data: { data: [CARRY_FORWARD_SCORE] } })
+      if (url.includes('/options'))
+        return Promise.resolve({ data: { data: JUSTIFICATION_OPTIONS } })
+      return Promise.resolve({ data: { data: [] } })
+    })
+    axios.post.mockResolvedValue({ data: {} })
+    axios.put.mockResolvedValue({ data: {} })
+  }
+
+  it('renders the justification field but hides the insights layer for an HHS data call, and persists an accepted prior response', async () => {
+    installMocks()
+    setMockCtx(
+      makeCtx({
+        latestDataCallId: 6,
+        latestDatacall: 'FY25 ZTM',
+        selectedDatacall: HHS_ZTM,
+        datacalls: [HHS_ZTM],
+      })
+    )
+
+    renderAt(HHS_DEEP_LINK)
+
+    // The JustificationField appears (there is a prior response to review)...
+    const response = await screen.findByRole('textbox', {
+      name: 'Current response',
+    })
+    expect(await screen.findByText('Review required')).toBeInTheDocument()
+    // ...but the pending review empties the on-screen value and blocks submit.
+    expect(response).toHaveValue('')
+
+    // The CMS-internal insights layer is suppressed for HHS calls.
+    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('ZTMF Insights option badge')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Suggested justification')
+    ).not.toBeInTheDocument()
+
+    const complete = screen.getByRole('button', { name: 'Complete' })
+    expect(complete).toBeDisabled()
+
+    // Accepting the required review is a current-call action, so the answer
+    // persists even though the text equals the seeded prior response.
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+    expect(response).toHaveValue(PRIOR_RESPONSE)
+    expect(complete).toBeEnabled()
+
+    fireEvent.click(complete)
+
+    await waitFor(() =>
+      expect(axios.put).toHaveBeenCalledWith('scores/5001', {
+        fismasystemid: 1002,
+        notes: PRIOR_RESPONSE,
+        functionoptionid: 100,
+        datacallid: 6,
+        notes_is_ai_summary: false,
+      })
+    )
+  })
+
+  it('shows the insights panel, option badges, and suggestion for a CMS data call', async () => {
+    installMocks()
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
+    expect(
+      (await screen.findAllByText('ZTMF Insights option badge')).length
+    ).toBeGreaterThan(0)
+    expect(
+      await screen.findByText('Suggested justification')
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText("Last year's response — FY2025 Q1")
+    ).toBeInTheDocument()
+  })
+
+  it('blocks submission until the initial insights lookup settles', async () => {
+    let resolveInsights: ((value: InsightsResponse) => void) | null = null
+    const insightsResponse = new Promise<InsightsResponse>((resolve) => {
+      resolveInsights = resolve
+    })
+    installMocks({ insightsResponse })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    expect(
+      await screen.findByText('Checking for prior responses…')
+    ).toBeInTheDocument()
+    expect(complete).toBeDisabled()
+
+    await act(async () => {
+      resolveInsights?.({ data: { data: [INSIGHT_ROW] } })
+    })
+
+    expect(await screen.findByText('Review required')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Checking for prior responses…')
+    ).not.toBeInTheDocument()
+    // Still blocked: the carried-forward response now requires review.
+    expect(complete).toBeDisabled()
+  })
+
+  it('keeps the plain four-row notes field when the question has no justification context', async () => {
+    installMocks({ insightRows: [] })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    expect(
+      await screen.findByText('Explain the authentication mechanisms.')
+    ).toBeInTheDocument()
+    const response = screen.getByRole('textbox', {
+      name: 'Justification notes',
+    })
+    expect(response).toHaveAttribute('rows', '4')
+    expect(
+      screen.queryByRole('textbox', { name: 'Current response' })
+    ).not.toBeInTheDocument()
+  })
 })
