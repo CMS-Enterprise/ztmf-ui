@@ -1,10 +1,23 @@
 # ZTMF UI Development Makefile
 
-.PHONY: help install lint lint-fix format format-check build build-dev test dev clean
+# Auto-detect env from current git branch.
+# impl / feature/impl-* -> impl; everything else -> main.
+# Override on command line: make dev ZTMF_ENV=impl
+ZTMF_ENV ?= $(shell git branch --show-current 2>/dev/null | grep -qE '^(impl|feature/impl-)' && echo impl || echo main)
+-include Makefile.$(ZTMF_ENV)
+
+# Defaults (overridden by Makefile.impl when ZTMF_ENV=impl)
+FRONTEND_PORT ?= 5174
+export VITE_DEV_PORT = $(FRONTEND_PORT)
+
+.PHONY: help install lint lint-fix format format-check build build-dev test dev clean env
 
 # Default target
 help:
+	@echo "Active env: $(ZTMF_ENV) (frontend port $(FRONTEND_PORT))"
+	@echo ""
 	@echo "Available commands:"
+	@echo "  env          - Show resolved env variables"
 	@echo "  install      - Install dependencies"
 	@echo "  lint         - Run linting checks"
 	@echo "  lint-fix     - Run linting with auto-fix"
@@ -57,8 +70,14 @@ test:
 
 # Development server
 dev:
-	@echo "Starting development server..."
-	yarn dev
+	@echo "Starting development server ($(ZTMF_ENV)) on port $(FRONTEND_PORT)..."
+	VITE_DEV_PORT=$(FRONTEND_PORT) yarn dev
+
+# Show resolved env
+env:
+	@echo "ZTMF_ENV       = $(ZTMF_ENV)"
+	@echo "FRONTEND_PORT  = $(FRONTEND_PORT)"
+	@echo "VITE_DEV_PORT  = $(VITE_DEV_PORT)"
 
 # Clean up
 clean:

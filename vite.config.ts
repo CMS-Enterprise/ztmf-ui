@@ -54,7 +54,7 @@ export default defineConfig(({ mode }) => {
 
     server: {
       host: true,
-      port: 5174,
+      port: Number(process.env.VITE_DEV_PORT) || 5174,
       proxy: {
         '/api/v1': {
           target: process.env.VITE_CF_DOMAIN,
