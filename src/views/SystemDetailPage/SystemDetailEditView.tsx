@@ -518,6 +518,8 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             sx={{ pb: 0 }}
           />
           <CardContent>
+            {/* id must not match renderEditField's `edit-${key}` pattern — if opdiv_id
+                is ever added to fieldConfig it would produce a duplicate DOM id. */}
             <TextField
               id="edit-opdiv_id"
               label="OpDiv"
