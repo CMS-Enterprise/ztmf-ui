@@ -2,11 +2,12 @@ import * as React from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import List from '@mui/material/List'
+import ListItem from '@mui/material/ListItem'
 import ListItemButton from '@mui/material/ListItemButton'
 import ListItemText from '@mui/material/ListItemText'
 import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
-import { Button as CmsButton, ChoiceList, Spinner } from '@cmsgov/design-system'
+import { Button as CmsButton, Spinner } from '@cmsgov/design-system'
 import Grid from '@mui/material/Grid'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -46,9 +47,8 @@ import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
-import InsightsPanel, {
-  OptionInsightBadges,
-} from './InsightsPanel/InsightsPanel'
+import InsightsPanel from './InsightsPanel/InsightsPanel'
+import QuestionRadioGroup from './QuestionRadioGroup'
 import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
@@ -189,9 +189,10 @@ export default function QuestionnarePage() {
   optionsRef.current = options
   const loadingQuestionRef = React.useRef(loadingQuestion)
   loadingQuestionRef.current = loadingQuestion
-  // Bumped when a re-seed changes the answer so the uncontrolled radio ChoiceList
-  // (which only reflects defaultChecked on mount) remounts and shows the
-  // corrected selection.
+  // Bumped on a re-seed to remount the radio group. QuestionRadioGroup is now
+  // controlled (reflects selectQuestionOption directly), so this is no longer
+  // strictly required for the selection to update, but it is retained as a clean
+  // reset of the subtree when a re-seed changes the answer out of band.
   const [radioKey, setRadioKey] = React.useState(0)
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
@@ -218,49 +219,20 @@ export default function QuestionnarePage() {
     if (draftStatus === 'restored') setDraftStatus('idle')
   }
   const renderRadioGroup = (options: QuestionChoice[]) => {
-    // Enrich each option label with insight badges (recommended answer / last
-    // year's answer). When there is no insight for this question, the badge
-    // component renders nothing and labels are just the option text.
-    const choices = options.map((o) => ({
-      label: (
-        <Box
-          component="span"
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
-          }}
-        >
-          <Box component="span">{o.label}</Box>
-          <OptionInsightBadges
-            score={o.score}
-            insight={currentInsight}
-            viewedDatacall={datacall}
-          />
-        </Box>
-      ),
-      value: o.value,
-      defaultChecked: o.defaultChecked,
-    }))
+    // Native-radio group (see QuestionRadioGroup) rather than CMSDS ChoiceList:
+    // it carries the same option insight badges plus the FIPS baseline treatment
+    // (per-option warn styling, divider, above-baseline badge/notice) that a flat
+    // ChoiceList can't express.
     return (
-      <Box
-        sx={{
-          '& .ds-c-choice-wrapper': {
-            maxWidth: 'none',
-          },
-        }}
-      >
-        <ChoiceList
-          choices={choices}
-          name={'radio-choices'}
-          type={'radio'}
-          label={undefined}
-          className="ds-u-margin-top--05"
-          size="small"
-          onChange={handleChoiceChange}
-          disabled={isReadOnly}
-        />
-      </Box>
+      <QuestionRadioGroup
+        options={options}
+        name="radio-choices"
+        selectedValue={selectQuestionOption}
+        onChange={handleChoiceChange}
+        disabled={isReadOnly}
+        insight={currentInsight}
+        viewedDatacall={datacall}
+      />
     )
   }
 
@@ -1090,42 +1062,48 @@ export default function QuestionnarePage() {
                         text.length > 33 ? '0.9rem' : '1rem'
                       // TODO: refactor this code such that it's going to be a single component instead of being rerendered everytime
                       return (
-                        <ListItemButton
+                        <ListItem
                           key={`item-${pillar.name}-${func.function.functionid}`}
-                          selected={selectedIndex === func.function.functionid}
-                          onClick={() => {
-                            // prevent clicking on the same question to break list
-                            if (selectedIndex !== func.function.functionid) {
-                              setStepId(func.function.functionid)
-                              if (
-                                !isReadOnly &&
-                                ((selectQuestionOption !== -1 &&
-                                  initQuestionChoice !==
-                                    selectQuestionOption) ||
-                                  initNotes !== notes)
-                              ) {
-                                setOpenAlert(true)
-                              } else {
-                                navigate(
-                                  `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
-                                  {
-                                    state: {
-                                      fismasystemid: system,
-                                      ...datacallStateRef.current,
-                                    },
-                                    replace: true,
-                                  }
-                                )
-                                handleListItemClick(func.function.functionid)
-                              }
-                            }
-                          }}
+                          disablePadding
                         >
-                          <ListItemText
-                            primary={`${text}`}
-                            sx={{ fontSize: customFontSize }}
-                          />
-                        </ListItemButton>
+                          <ListItemButton
+                            selected={
+                              selectedIndex === func.function.functionid
+                            }
+                            onClick={() => {
+                              // prevent clicking on the same question to break list
+                              if (selectedIndex !== func.function.functionid) {
+                                setStepId(func.function.functionid)
+                                if (
+                                  !isReadOnly &&
+                                  ((selectQuestionOption !== -1 &&
+                                    initQuestionChoice !==
+                                      selectQuestionOption) ||
+                                    initNotes !== notes)
+                                ) {
+                                  setOpenAlert(true)
+                                } else {
+                                  navigate(
+                                    `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
+                                    {
+                                      state: {
+                                        fismasystemid: system,
+                                        ...datacallStateRef.current,
+                                      },
+                                      replace: true,
+                                    }
+                                  )
+                                  handleListItemClick(func.function.functionid)
+                                }
+                              }
+                            }}
+                          >
+                            <ListItemText
+                              primary={`${text}`}
+                              sx={{ fontSize: customFontSize }}
+                            />
+                          </ListItemButton>
+                        </ListItem>
                       )
                     })}
                   </ul>
@@ -1144,7 +1122,9 @@ export default function QuestionnarePage() {
               >
                 {description}
               </Box>
-              <Typography variant="h6" sx={{ mt: 1, mb: 0 }}>
+              {/* The question is the page's main heading — render as <h1>
+                  (keeping the h6 styling) so the page has a level-one heading. */}
+              <Typography variant="h6" component="h1" sx={{ mt: 1, mb: 0 }}>
                 {question}
               </Typography>
               {currentInsight && <InsightsPanel payload={currentInsight} />}
@@ -1164,7 +1144,8 @@ export default function QuestionnarePage() {
                   <Box key={radioKey} sx={{ mb: 2 }}>
                     {renderRadioGroup(options)}
                   </Box>
-                  <Typography variant="h6" sx={{ mb: 1 }}>
+                  {/* h2 under the question's h1 so the heading order is valid. */}
+                  <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
                     {notePrompt || ''}
                   </Typography>
                   <CssTextField
@@ -1177,7 +1158,12 @@ export default function QuestionnarePage() {
                     helperText={
                       needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
                     }
-                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
+                    inputProps={{
+                      maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH,
+                      // The multiline field has no visible <label>; the prompt
+                      // above is styling-only. Give it an accessible name (508).
+                      'aria-label': 'Justification notes',
+                    }}
                     onChange={(e) => {
                       setNotes(e.target.value)
                       if (draftStatus === 'restored') setDraftStatus('idle')
