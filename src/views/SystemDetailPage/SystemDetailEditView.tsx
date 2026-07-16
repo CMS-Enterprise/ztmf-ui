@@ -64,7 +64,7 @@ interface SystemDetailEditViewProps {
   // SystemDetailPage (which reads it from the outlet context).
   datacenterEnvironments: DataCenterEnvironment[]
   // Rendered in the right column between Data Lake Export and Organization,
-  // matching the read view's placement (ztmf#398).
+  // matching the read view's placement.
   targetMaturitySlot?: React.ReactNode
 }
 
