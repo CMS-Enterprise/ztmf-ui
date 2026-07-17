@@ -208,7 +208,7 @@ export function CustomFooterSaveComponent(
   )
 }
 
-function QuickSearchToolbar(props: {
+export function QuickSearchToolbar(props: {
   filters?: DashboardFilterState
   onFiltersChange?: (next: DashboardFilterState) => void
   envOptions?: string[]
@@ -382,8 +382,17 @@ function QuickSearchToolbar(props: {
         <Button
           size="small"
           startIcon={<CloseIcon />}
-          onClick={() => onFiltersChange(EMPTY_DASHBOARD_FILTERS)}
-          disabled={hasNoActiveFilters(filters)}
+          onClick={() => {
+            onFiltersChange(EMPTY_DASHBOARD_FILTERS)
+            // Show Decommissioned lives in Title context (it gates a refetch),
+            // not in the client-side filter model — so clear it separately or it
+            // would survive "Clear filters".
+            setShowDecommissioned(false)
+          }}
+          // ...and it's an active filter for the button's own enabled state:
+          // without this, toggling only Show Decommissioned left Clear filters
+          // greyed out (#566).
+          disabled={hasNoActiveFilters(filters) && !showDecommissioned}
           sx={{ color: '#004297', textTransform: 'none', mr: 2, flexShrink: 0 }}
         >
           Clear filters
