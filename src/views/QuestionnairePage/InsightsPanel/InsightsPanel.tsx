@@ -6,6 +6,13 @@ import Collapse from '@mui/material/Collapse'
 import Link from '@mui/material/Link'
 import type { InsightPayload, InsightFinding } from '@/types'
 import CONFIG from '@/utils/config'
+import {
+  fipsBadgeText,
+  showFipsStrip,
+  baselineCeiling,
+  asImpactLevel,
+  FIPS_GOLD,
+} from '../fipsBaseline'
 
 type Props = {
   payload: InsightPayload
@@ -130,7 +137,9 @@ function ScoreBadge({
         color: '#fff',
         lineHeight: 1,
         flexShrink: 0,
-        bgcolor: active ? color : '#ccc',
+        // Inactive badge uses a mid grey (not #ccc) so the white "—" clears
+        // WCAG AA (4.5:1) — #ccc failed at ~1.6:1.
+        bgcolor: active ? color : '#6c757d',
       }}
     >
       {label}
@@ -162,8 +171,9 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
           fontWeight: 600,
           bgcolor: floor ? '#fffdf5' : '#fff',
           border: floor ? '1.5px solid #b08d00' : '1px solid #ddd',
-          color: floor ? '#7d6608' : src.active ? '#333' : '#888',
-          opacity: src.active ? 1 : 0.4,
+          // Inactive label a compliant mid grey at full opacity — the old
+          // #888 @ 0.4 opacity blended to ~3:1 on white and failed AA.
+          color: floor ? '#7d6608' : src.active ? '#333' : '#595959',
         }}
       >
         <Box component="span">{src.label}:</Box>
@@ -227,42 +237,58 @@ export function OptionInsightBadges({
       }}
     >
       {isSuggested && (
-        <Box
-          component="span"
-          sx={{
-            px: 0.75,
-            py: 0.125,
-            borderRadius: '4px',
-            fontSize: 10,
-            fontWeight: 700,
-            textTransform: 'uppercase',
-            letterSpacing: '0.3px',
-            color: '#2c5282',
-            bgcolor: '#eaf1fb',
-            border: '1px dashed #5666b8',
-            whiteSpace: 'nowrap',
-          }}
+        <Tooltip
+          title="The answer the automated evidence points to"
+          placement="top"
+          arrow
         >
-          ZTMF Insights
-        </Box>
+          <Box
+            component="span"
+            aria-label="ZTMF Insights — the answer the automated evidence points to"
+            sx={{
+              px: 0.75,
+              py: 0.125,
+              borderRadius: '4px',
+              fontSize: 10,
+              fontWeight: 700,
+              textTransform: 'uppercase',
+              letterSpacing: '0.3px',
+              color: '#2c5282',
+              bgcolor: '#eaf1fb',
+              border: '1px dashed #5666b8',
+              whiteSpace: 'nowrap',
+              cursor: 'help',
+            }}
+          >
+            ZTMF Insights
+          </Box>
+        </Tooltip>
       )}
       {isPrior && (
-        <Box
-          component="span"
-          sx={{
-            px: 0.75,
-            py: 0.125,
-            borderRadius: '4px',
-            fontSize: 10,
-            fontWeight: 600,
-            color: '#555',
-            bgcolor: '#f0f0f0',
-            border: '1px solid #ddd',
-            whiteSpace: 'nowrap',
-          }}
+        <Tooltip
+          title="The answer you gave in a prior data call"
+          placement="top"
+          arrow
         >
-          {priorLabel}
-        </Box>
+          <Box
+            component="span"
+            aria-label={`${priorLabel} — the answer you gave in a prior data call`}
+            sx={{
+              px: 0.75,
+              py: 0.125,
+              borderRadius: '4px',
+              fontSize: 10,
+              fontWeight: 600,
+              color: '#555',
+              bgcolor: '#f0f0f0',
+              border: '1px solid #ddd',
+              whiteSpace: 'nowrap',
+              cursor: 'help',
+            }}
+          >
+            {priorLabel}
+          </Box>
+        </Tooltip>
       )}
     </Box>
   )
@@ -361,6 +387,70 @@ function InsightsPanelInner({ payload }: Props) {
         my: 2,
       }}
     >
+      {/* FIPS baseline strip — lives at the top of the insights panel so it's
+          gated on insight data like everything else here (no insight → no
+          panel → no strip). Only shown when there's headroom above the
+          baseline (ceiling < 4). */}
+      {showFipsStrip(
+        asImpactLevel(payload.fips_impact_level),
+        payload.fips_ceiling
+      ) && (
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 1.25,
+            bgcolor: FIPS_GOLD.box,
+            border: `1px solid ${FIPS_GOLD.border}`,
+            borderRadius: '6px',
+            p: '8px 14px',
+            mb: 1.5,
+            fontSize: 12,
+          }}
+        >
+          <Tooltip
+            title={`FIPS impact level for this system: ${payload.fips_impact_level}`}
+            placement="top"
+            arrow
+          >
+            <Box
+              component="span"
+              tabIndex={0}
+              aria-label={`FIPS impact level: ${payload.fips_impact_level}`}
+              sx={{
+                fontSize: 11,
+                fontWeight: 700,
+                bgcolor: FIPS_GOLD.badgeBg,
+                color: FIPS_GOLD.badgeText,
+                px: 1,
+                py: 0.25,
+                borderRadius: '3px',
+                letterSpacing: '0.3px',
+                flexShrink: 0,
+                cursor: 'help',
+              }}
+            >
+              {fipsBadgeText(asImpactLevel(payload.fips_impact_level))}
+            </Box>
+          </Tooltip>
+          <Box
+            component="span"
+            sx={{ color: FIPS_GOLD.text, flex: 1, lineHeight: 1.5 }}
+          >
+            Baseline for this system is{' '}
+            <Box
+              component="span"
+              sx={{ fontWeight: 700, color: FIPS_GOLD.strong }}
+            >
+              {maturityLabel(baselineCeiling(payload.fips_ceiling))}
+            </Box>
+            . Higher maturity levels are available — teams that go above
+            baseline are encouraged to document what&rsquo;s driving that
+            maturity.
+          </Box>
+        </Box>
+      )}
+
       <Box
         sx={{
           display: 'flex',

@@ -1,7 +1,7 @@
-// Target-maturity vocabulary shared by the card and the page save flow
-// (ztmf#398). Mirrors the backend's validTargetMaturityTiers: the tier NAME is
-// the stored value; the CISA stage number is display-only. Traditional (1) is
-// deliberately not offered.
+// Target-maturity vocabulary used by TargetMaturityCard. Mirrors the
+// backend's validTargetMaturityTiers: the tier NAME is the stored value;
+// the CISA stage number is display-only. Traditional (1) is deliberately
+// not offered.
 export const TIER_OPTIONS = [
   { value: 'Initial', label: '2 — Initial' },
   { value: 'Advanced', label: '3 — Advanced (default)' },

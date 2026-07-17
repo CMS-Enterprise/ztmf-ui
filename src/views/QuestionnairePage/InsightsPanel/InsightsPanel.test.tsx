@@ -717,3 +717,53 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
   })
 })
+
+describe('FIPS baseline strip', () => {
+  it('shows the FIPS badge + baseline sentence for a system with headroom (Low → Initial)', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 2,
+          fips_impact_level: 'Low',
+          fips_ceiling: 2,
+        }}
+      />
+    )
+    expect(screen.getByText('FIPS LOW')).toBeInTheDocument()
+    expect(screen.getByText(/Baseline for this system is/)).toBeInTheDocument()
+    expect(screen.getByText('Initial')).toBeInTheDocument()
+  })
+
+  it('hides the strip when there is no headroom (High / ceiling 4)', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 4,
+          fips_impact_level: 'High',
+          fips_ceiling: 4,
+        }}
+      />
+    )
+    expect(screen.queryByText(/FIPS/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/Baseline for this system is/)
+    ).not.toBeInTheDocument()
+  })
+
+  it('does not throw or render the strip for a malformed (non-string) impact level', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 2,
+          fips_impact_level: 3 as unknown as 'Low',
+          fips_ceiling: 2,
+        }}
+      />
+    )
+    // Panel still renders; strip is suppressed rather than crashing.
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+    expect(
+      screen.queryByText(/Baseline for this system is/)
+    ).not.toBeInTheDocument()
+  })
+})
