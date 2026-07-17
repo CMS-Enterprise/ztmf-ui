@@ -76,6 +76,28 @@ describe('progressSortValue', () => {
       progressSortValue(untouchedEntry)
     )
   })
+
+  it('does not sort a past-call row to the laggard top', () => {
+    // ztmf-ui#542: on a past call, questionsupdated is 0 for everyone, so the
+    // current-call -1 "needs a nudge" rank would wrongly sort every historical
+    // row above real current-call laggards. Past calls rank by completion.
+    const pastComplete: ScoreProgress = {
+      ...untouchedEntry,
+      questionsanswered: 41,
+    }
+    const pastPartial: ScoreProgress = {
+      ...untouchedEntry,
+      questionsanswered: 10,
+    }
+    // Not at the -1 laggard rank...
+    expect(progressSortValue(pastComplete, false)).toBeGreaterThan(
+      progressSortValue(untouchedEntry, true)
+    )
+    // ...and a less-complete past call sorts ahead of a more-complete one.
+    expect(progressSortValue(pastPartial, false)).toBeLessThan(
+      progressSortValue(pastComplete, false)
+    )
+  })
 })
 
 describe('progressTooltip', () => {
@@ -110,6 +132,20 @@ describe('progressTooltip', () => {
     }
     expect(progressTooltip(empty)).toBe(
       'No questionnaire applies to this system'
+    )
+  })
+
+  it('reads "complete" for a past-call cell without a usable timestamp', () => {
+    // A completed past call has 0 updates this cycle, so the current-cycle
+    // fallback would wrongly say "No updates" - the completed flag must win.
+    expect(progressTooltip(untouchedEntry, { completed: true })).toBe(
+      'Data call complete'
+    )
+  })
+
+  it('still prefers a real last-update time over the completed fallback', () => {
+    expect(progressTooltip(updatedEntry, { completed: true })).toMatch(
+      /^Last updated /
     )
   })
 })
@@ -147,5 +183,82 @@ describe('ProgressCell', () => {
     expect(screen.getByText('N/A')).toBeInTheDocument()
     expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
     expect(screen.queryByText('0/0')).not.toBeInTheDocument()
+  })
+
+  it('renders a neutral Complete chip for a scored past-call system', () => {
+    // ztmf#537: a past call reads 0 updates this cycle for everyone. A system
+    // with a score for that call was completed - show a neutral Complete chip,
+    // never the orange "0/40 Not updated" laggard chip.
+    render(
+      <ProgressCell
+        entry={untouchedEntry}
+        isCurrentCall={false}
+        hasScore={true}
+      />
+    )
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+    expect(screen.queryByText('0/41')).not.toBeInTheDocument()
+  })
+
+  it('keeps the current-cycle chip for the same entry on the active call', () => {
+    // Same untouched entry, but on the current call it is a genuine laggard.
+    render(
+      <ProgressCell
+        entry={untouchedEntry}
+        isCurrentCall={true}
+        hasScore={true}
+      />
+    )
+    expect(screen.getByText('0/41')).toBeInTheDocument()
+    expect(screen.getByText('Not updated')).toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('renders an em-dash for a past-call system with no score', () => {
+    // Defensive: a past-call row must never show the orange laggard chip even
+    // without a score to prove completion.
+    render(
+      <ProgressCell
+        entry={untouchedEntry}
+        isCurrentCall={false}
+        hasScore={false}
+      />
+    )
+    expect(screen.getByLabelText('No progress data')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('renders Complete for a fully-answered past call even with zero updates', () => {
+    // ztmf#437: completion is answered/total, not updated/total. An imported or
+    // carried-over call is fully answered (answered == expected) but never
+    // "updated this cycle" - it must read Complete, not Incomplete.
+    render(
+      <ProgressCell
+        entry={{ ...untouchedEntry, questionsanswered: 41 }}
+        isCurrentCall={false}
+        hasScore={true}
+      />
+    )
+    expect(screen.getByText('Complete')).toBeInTheDocument()
+    expect(screen.queryByText('Incomplete')).not.toBeInTheDocument()
+  })
+
+  it('renders answered/total + Incomplete for a partially-answered past call', () => {
+    // Jono's blocker (ztmf-ui#542): a past call that was only 10/41 answered
+    // must NOT read Complete just because it has a score. QuestionsAnswered
+    // exposes the truth - show the honest fraction and an Incomplete chip.
+    render(
+      <ProgressCell
+        entry={{ ...untouchedEntry, questionsanswered: 10 }}
+        isCurrentCall={false}
+        hasScore={true}
+      />
+    )
+    expect(screen.getByText('10/41')).toBeInTheDocument()
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
   })
 })

@@ -268,6 +268,11 @@ export type SystemScoreEntry = {
 export type ScoreProgress = {
   fismasystemid: number
   questionsexpected: number
+  // Distinct applicable questions with an answer at all, any status (ztmf#437).
+  // The completion signal a closed call needs: imported/carried answers are
+  // answered but never "updated this cycle". Optional so the UI degrades to the
+  // prior score-presence proxy until the backend field is deployed.
+  questionsanswered?: number
   questionsupdated: number
   lastupdatedat?: string | null
   updatedsincestart: boolean
