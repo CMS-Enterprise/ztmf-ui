@@ -10,6 +10,9 @@ import {
   GridFooter,
   GridRowId,
   useGridApiRef,
+  useGridApiContext,
+  useGridSelector,
+  gridQuickFilterValuesSelector,
   GridRowParams,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
@@ -217,6 +220,15 @@ export function QuickSearchToolbar(props: {
   showOpDivFilter?: boolean
 }) {
   const { showDecommissioned, setShowDecommissioned } = useContextProp()
+  // The free-text quick-filter lives in the grid's own filter model, not in
+  // DashboardFilterState — read it reactively so it counts toward the Clear
+  // button's enabled state, and clear it alongside the other facets (#573).
+  const apiRef = useGridApiContext()
+  const quickFilterValues = useGridSelector(
+    apiRef,
+    gridQuickFilterValuesSelector
+  )
+  const hasQuickFilter = (quickFilterValues ?? []).length > 0
   const filters = props.filters ?? EMPTY_DASHBOARD_FILTERS
   const onFiltersChange = props.onFiltersChange ?? (() => {})
   const envOptions = props.envOptions ?? []
@@ -388,11 +400,19 @@ export function QuickSearchToolbar(props: {
             // not in the client-side filter model — so clear it separately or it
             // would survive "Clear filters".
             setShowDecommissioned(false)
+            // The DataGrid quick-filter is grid state, not DashboardFilterState,
+            // so reset it via the grid API or the typed term survives (#573).
+            apiRef.current.setQuickFilterValues([])
           }}
-          // ...and it's an active filter for the button's own enabled state:
-          // without this, toggling only Show Decommissioned left Clear filters
-          // greyed out (#566).
-          disabled={hasNoActiveFilters(filters) && !showDecommissioned}
+          // ...and both Show Decommissioned and the quick-filter are active
+          // filters for the button's own enabled state: without this, toggling
+          // only Show Decommissioned left Clear filters greyed out (#566), and
+          // typing only a search term would leave it greyed out too (#573).
+          disabled={
+            hasNoActiveFilters(filters) &&
+            !showDecommissioned &&
+            !hasQuickFilter
+          }
           sx={{ color: '#004297', textTransform: 'none', mr: 2, flexShrink: 0 }}
         >
           Clear filters
