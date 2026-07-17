@@ -23,6 +23,7 @@ interface SystemDetailReadViewProps {
   // Rendered in the right column between Data Lake Export and Organization.
   // The page owns the card so its edit state is independent of this view.
   targetMaturitySlot?: ReactNode
+  opdivName: string | null
 }
 
 function FieldDisplay({
@@ -56,6 +57,7 @@ export default function SystemDetailReadView({
   system,
   decommissionedByName,
   targetMaturitySlot,
+  opdivName,
 }: SystemDetailReadViewProps) {
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
@@ -193,7 +195,10 @@ export default function SystemDetailReadView({
             titleTypographyProps={{ variant: 'h6' }}
             sx={{ pb: 0 }}
           />
-          <CardContent>{renderFields(orgFields, system)}</CardContent>
+          <CardContent>
+            <FieldDisplay label="OpDiv" value={opdivName} />
+            {renderFields(orgFields, system)}
+          </CardContent>
         </Card>
       </Grid>
 

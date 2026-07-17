@@ -3,7 +3,13 @@ import { useParams } from 'react-router-dom'
 import { Box, CircularProgress, Divider, Typography } from '@mui/material'
 import _ from 'lodash'
 
-import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
+import {
+  FismaSystemType,
+  FormValidType,
+  FormValidHelperText,
+  OpDiv,
+} from '@/types'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
@@ -77,6 +83,21 @@ export default function SystemDetailPage() {
       controller.abort()
     }
   }, [fismaSystems, system, systemId, setFismaSystems])
+
+  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchOpDivs(true, controller.signal)
+      .then(setOpdivs)
+      .catch((error) => {
+        if (controller.signal.aborted || isAuthHandled(error)) return
+        notify('Failed to load OpDiv list.', 'error')
+      })
+    return () => {
+      controller.abort()
+    }
+  }, [])
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
@@ -311,7 +332,6 @@ export default function SystemDetailPage() {
         datacallcontact: editedSystem.datacallcontact,
         issoemail: editedSystem.issoemail,
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
-        opdiv_id: editedSystem.opdiv_id,
       }
       // Extended metadata fields are editable across all OpDivs; send each,
       // using null to leave a value unchanged (the backend writes only
@@ -540,6 +560,9 @@ export default function SystemDetailPage() {
     )
   }
 
+  const opdivName =
+    opdivs.find((o) => o.opdiv_id === system.opdiv_id)?.name ?? null
+
   // Target maturity owns its own edit/save lifecycle (see TargetMaturityCard).
   // The card is slotted into the right column of whichever view renders
   // (between Data Lake Export and Organization). The card's Edit button is
@@ -602,12 +625,14 @@ export default function SystemDetailPage() {
             )
           }
           targetMaturitySlot={targetMaturityCard}
+          opdivName={opdivName}
         />
       ) : (
         <SystemDetailReadView
           system={system}
           decommissionedByName={decommissionedByName}
           targetMaturitySlot={targetMaturityCard}
+          opdivName={opdivName}
         />
       )}
 

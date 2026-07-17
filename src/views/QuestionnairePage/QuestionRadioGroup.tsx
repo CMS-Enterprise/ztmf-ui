@@ -19,7 +19,8 @@ import {
 //
 // The FIPS *strip* lives in the insights panel (above the chips); this component
 // owns only the per-option markers: a dotted box on the baseline-level option
-// ("where you should be") and solid gold boxes on the above-baseline options.
+// ("where you should be"), a gold divider + badge when an above-baseline option
+// is selected, and a notice box below the list.
 
 const SR_ONLY = {
   position: 'absolute',
@@ -103,9 +104,9 @@ export default function QuestionRadioGroup({
           const above =
             hasBaseline && o.score != null && isAboveBaseline(o.score, ceiling)
           // The option at the ceiling is the baseline level — "where you should
-          // be" — a dotted box, distinct from the solid gold above-baseline ones.
+          // be" — marked with a dotted box. Above-baseline options have no box.
           const atBaseline = hasBaseline && o.score === ceiling
-          const boxed = above || atBaseline
+          const boxed = atBaseline
           const id = `${name}-${o.value}`
           return (
             <React.Fragment key={o.value}>
@@ -153,16 +154,10 @@ export default function QuestionRadioGroup({
                   mx: boxed ? '-10px' : 0,
                   my: boxed ? '2px' : 0,
                   borderRadius: boxed ? '6px' : 0,
-                  border: above
-                    ? `1.5px solid ${GOLD.border}`
-                    : atBaseline
-                      ? `1.5px dashed ${BASELINE.border}`
-                      : '1.5px solid transparent',
-                  bgcolor: above
-                    ? GOLD.box
-                    : atBaseline
-                      ? BASELINE.box
-                      : 'transparent',
+                  border: atBaseline
+                    ? `1.5px dashed ${BASELINE.border}`
+                    : '1.5px solid transparent',
+                  bgcolor: atBaseline ? BASELINE.box : 'transparent',
                 }}
               >
                 <Box
