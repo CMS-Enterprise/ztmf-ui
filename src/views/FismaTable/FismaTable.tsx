@@ -415,20 +415,32 @@ export default function FismaTable({
     datacenterEnvironments,
   } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
+  // "Latest by deadline" is not the same as "still open". Once the newest
+  // call's deadline has passed there is no active cycle at all, so nothing is
+  // "current" - every row must render past-call (Complete/Incomplete) rather
+  // than the "0/40 Not updated" laggard framing. This mirrors the
+  // Current-while-open / Latest-once-closed distinction the call picker already
+  // makes (ztmf#393). Without this gate the newest *closed* call stays labeled
+  // current and shows 0/40 forever (ztmf-ui#542).
+  const latestDeadlinePassed = useMemo(() => {
+    if (!latestDataCallId) return false
+    const latest = datacalls.find((d) => d.datacallid === latestDataCallId)
+    return latest ? new Date() > new Date(latest.deadline) : false
+  }, [datacalls, latestDataCallId])
   // Whether the call a given row is displaying (chosen by most-recently-updated
-  // in buildDashboardMaps) is the current/active one — the call with the
-  // furthest-out deadline (latestDataCallId). The Data Call Progress column's
+  // in buildDashboardMaps) is the current/active one: the latest-by-deadline
+  // call AND that call is still open. The Data Call Progress column's
   // current-cycle framing (the "0/40 Not updated" laggard chip and the
-  // not-updated filter) only makes sense for that call; a past call shows a
-  // neutral Complete chip instead (ztmf#537). Rows without a chosen call, or
-  // before latestDataCallId has loaded, keep the current-cycle rendering.
+  // not-updated filter) only makes sense then; a past/closed call shows a
+  // neutral Complete/Incomplete chip instead (ztmf#537). Rows without a chosen
+  // call, or before latestDataCallId has loaded, keep the current rendering.
   const isRowCurrentCall = useCallback(
     (fismasystemid: number): boolean => {
       const chosen = chosenCallMap[fismasystemid]
       if (!latestDataCallId || chosen == null) return true
-      return chosen === latestDataCallId
+      return chosen === latestDataCallId && !latestDeadlinePassed
     },
-    [chosenCallMap, latestDataCallId]
+    [chosenCallMap, latestDataCallId, latestDeadlinePassed]
   )
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
@@ -734,7 +746,10 @@ export default function FismaTable({
       align: 'center',
       headerAlign: 'center',
       valueGetter: (value) =>
-        progressSortValue(progress?.[value.row.fismasystemid]),
+        progressSortValue(
+          progress?.[value.row.fismasystemid],
+          isRowCurrentCall(value.row.fismasystemid)
+        ),
       renderCell: (params) => (
         <ProgressCell
           entry={progress?.[params.row.fismasystemid]}

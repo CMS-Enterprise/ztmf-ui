@@ -59,17 +59,46 @@ export function ProgressCell({
     )
   }
   // A past data call is closed: "updated this cycle" is meaningless, so never
-  // show the orange laggard chip here. A score for the call means it was
-  // completed - show a neutral "Complete" chip. Without a score (should not
-  // happen for a row the table drew from score data) fall back to the em-dash
-  // rather than a misleading fraction.
+  // show the orange laggard chip here. But completion is answered/total, NOT
+  // updated/total - imported and carried-over answers are answered yet never
+  // "updated this cycle", so gating on updates (or on mere score presence)
+  // would either drop them or, worse, mask a partially-answered historical
+  // call as done. Prefer QuestionsAnswered (ztmf#437): a fully-answered past
+  // call is a neutral "Complete"; a partially-answered one shows an honest
+  // answered/total with an "Incomplete" chip. Until the backend field ships,
+  // fall back to the prior score-presence proxy.
   if (!isCurrentCall) {
-    if (!hasScore) {
-      return <span aria-label="No progress data">—</span>
+    const answered = entry.questionsanswered
+    if (answered == null) {
+      if (!hasScore) {
+        return <span aria-label="No progress data">—</span>
+      }
+      return (
+        <Tooltip title={progressTooltip(entry, { completed: true })}>
+          <Chip size="small" label="Complete" variant="outlined" />
+        </Tooltip>
+      )
+    }
+    if (answered >= entry.questionsexpected) {
+      return (
+        <Tooltip title={progressTooltip(entry, { completed: true })}>
+          <Chip size="small" label="Complete" variant="outlined" />
+        </Tooltip>
+      )
     }
     return (
-      <Tooltip title={progressTooltip(entry, { completed: true })}>
-        <Chip size="small" label="Complete" variant="outlined" />
+      <Tooltip title={progressTooltip(entry)}>
+        <Box sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}>
+          <span>
+            {answered}/{entry.questionsexpected}
+          </span>
+          <Chip
+            size="small"
+            label="Incomplete"
+            color="warning"
+            variant="outlined"
+          />
+        </Box>
       </Tooltip>
     )
   }
