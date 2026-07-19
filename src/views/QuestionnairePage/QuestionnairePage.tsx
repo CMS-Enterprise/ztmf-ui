@@ -11,10 +11,13 @@ import DatacallContextCard from '@/components/DatacallContextCard/DatacallContex
 import TextField from '@mui/material/TextField'
 import {
   FismaQuestion,
+  FismaSystemType,
   QuestionOption,
   Question,
   QuestionChoice,
   QuestionScores,
+  Insight,
+  InsightPayload,
 } from '@/types'
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
@@ -29,8 +32,10 @@ import {
   NOTES_UPDATE_REQUIRED_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { parseDatacallName } from '@/utils/datacallGrouping'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
+import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -38,20 +43,36 @@ import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import InsightsPanel from './InsightsPanel/InsightsPanel'
+import QuestionRadioGroup from './QuestionRadioGroup'
+import JustificationField, {
+  type PriorReviewState,
+} from './JustificationField/JustificationField'
+import {
+  buildInsightJustification,
+  priorResponseFor,
+} from './JustificationField/justificationContext'
 import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
-import { addSpace, toSlug, type Category } from './helpers'
+import { addSpace, type Category } from './helpers'
 import ClosedDatacallBanner from './components/ClosedDatacallBanner'
 import PillarRail from './components/PillarRail'
 import EyebrowLine from './components/EyebrowLine'
-import OptionCardList from './components/OptionCardList'
 import SectionRail from './components/SectionRail'
 import SubtitleLine from './components/SubtitleLine'
 import SaveIndicator from './components/SaveIndicator'
 import Card from './components/Card'
-
+import { saveDraft, loadDraft, clearDraft } from './draftStore'
+import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
+import {
+  toSlug,
+  encodeDatacallSlug,
+  resolveSystemIdByAcronym,
+  resolveDatacallBySlug,
+  resolveFunctionTarget,
+} from './deepLink'
 type questionScoreMap = {
   [key: number]: QuestionScores
 }
@@ -89,6 +110,8 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     fismaSystems,
+    datacalls,
+    datacenterEnvironments,
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
@@ -101,10 +124,29 @@ export default function QuestionnarePage() {
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
   const [questions, setQuestions] = React.useState<Record<number, Question>>([])
+  // ZTMF Insights keyed by DB questionid. Empty for every "off" case (OpDiv not
+  // enabled, not entitled, not yet synced) — the endpoint returns [] and the
+  // panel simply never renders, leaving the page unchanged.
+  const [insightsByQuestion, setInsightsByQuestion] = React.useState<
+    Map<number, InsightPayload>
+  >(new Map())
+  // Tracks which system the insights map belongs to and whether that system's
+  // one-shot lookup has settled. The initial lookup briefly blocks submission so
+  // a carried-forward response cannot be submitted before its required-review
+  // UI is known.
+  const [insightsLoadState, setInsightsLoadState] = React.useState<{
+    system?: number
+    settled: boolean
+  }>({ settled: false })
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
   const [loadingQuestion, setLoadingQuestion] = React.useState<boolean>(true)
+  // The context (system x data call x question) the current answer/notes were
+  // last seeded for. The prior-review initializer only runs once fetchOptions
+  // has settled this to the on-screen context.
+  const [loadedResponseContextId, setLoadedResponseContextId] =
+    React.useState('')
   const [noQuestions, setNoQuestions] = React.useState<boolean>(false)
   const [categories, setCategories] = React.useState<Category[]>([])
   const [stepFunctionId, setStepFunctionId] = React.useState<number[]>([])
@@ -125,6 +167,50 @@ export default function QuestionnarePage() {
   // indicator reads "Saved just now / 2 min ago" without depending on the
   // questionScores re-fetch round trip.
   const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
+  const [draftStatus, setDraftStatus] = React.useState<
+    'idle' | 'restored' | 'saved' | 'error'
+  >('idle')
+  // Review state for a carried-forward prior response, scoped to one
+  // system x data call x question x prior-text context. needsSave marks a
+  // resolved required review as an unsaved current-call action even when the
+  // resulting text is byte-for-byte identical to the seeded response.
+  const [priorReview, setPriorReview] = React.useState<{
+    contextId: string
+    state: PriorReviewState
+    needsSave: boolean
+  }>({ contextId: '', state: 'not-required', needsSave: false })
+  // Refs read inside setTimeout/event callbacks to get the current value
+  // without enrolling the effects in those deps (prevents extra re-runs).
+  const draftStatusRef = React.useRef(draftStatus)
+  draftStatusRef.current = draftStatus
+  // Stable ref so fetchOptions always reads the latest scores without enrolling
+  // questionScores as a dep of the questionId effect. Stale-closure-safe because
+  // the ref updates synchronously on every render before any effect runs.
+  const questionScoresRef = React.useRef(questionScores)
+  questionScoresRef.current = questionScores
+  // Incremented on every explicit draft clear so in-flight debounced saves
+  // that fire after a clear don't resurrect the just-removed draft.
+  const saveGenRef = React.useRef(0)
+  const unsavedRef = React.useRef({
+    selectQuestionOption,
+    initQuestionChoice,
+    notes,
+    initNotes,
+    priorReviewNeedsSave: false,
+  })
+  // unsavedRef.current is assigned below, once priorReviewNeedsSave has been
+  // derived, so the beforeunload and re-seed effects read it too.
+  // Refs so the out-of-band re-seed effect can read current options and loading
+  // state without enrolling them as effect dependencies.
+  const optionsRef = React.useRef(options)
+  optionsRef.current = options
+  const loadingQuestionRef = React.useRef(loadingQuestion)
+  loadingQuestionRef.current = loadingQuestion
+  // Bumped on a re-seed to remount the radio group. QuestionRadioGroup is now
+  // controlled (reflects selectQuestionOption directly), so this is no longer
+  // strictly required for the selection to update, but it is retained as a clean
+  // reset of the subtree when a re-seed changes the answer out of band.
+  const [radioKey, setRadioKey] = React.useState(0)
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
@@ -156,32 +242,292 @@ export default function QuestionnarePage() {
       console.error('Error fetching question scores:', error)
     }
   }
+  const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
+    setSelectQuestionOption(Number(event.target.value))
+    if (draftStatus === 'restored') setDraftStatus('idle')
+  }
+  const renderRadioGroup = (options: QuestionChoice[]) => {
+    // Native-radio group (see QuestionRadioGroup) rather than CMSDS ChoiceList:
+    // it carries the same option insight badges plus the FIPS baseline treatment
+    // (per-option warn styling, divider, above-baseline badge/notice) that a flat
+    // ChoiceList can't express.
+    //
+    // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights layer.
+    // Always pass insight so the FIPS baseline markers (a federal-wide concept)
+    // render for all systems including HHS. showInsightBadges suppresses the
+    // CMS-specific option chips (suggested + prior-answer) for HHS calls while
+    // leaving the baseline treatment intact. The Insights panel, suggestion,
+    // and per-option insight badges are each separately gated (showInsights /
+    // showInsightSuggestion / showInsightBadges) — all derive from showCmsInsights.
+    return (
+      <QuestionRadioGroup
+        options={options}
+        name="radio-choices"
+        selectedValue={selectQuestionOption}
+        onChange={handleChoiceChange}
+        disabled={isReadOnly}
+        insight={currentInsight}
+        showInsightBadges={showCmsInsights}
+        viewedDatacall={datacall}
+      />
+    )
+  }
+
   const navigate = useNavigate()
   const location = useLocation()
-  const { fismaacronym } = useParams()
+  // `function` is a reserved word, so the :function route param is aliased.
+  const {
+    fismaacronym,
+    datacallid: datacallSlug,
+    pillar: pillarSlug,
+    function: functionSlug,
+  } = useParams()
 
   // Direct/bookmarked navigation to /questionnaire/<acronym> has a null
-  // location.state. Optional-chain instead of crashing on first render; the
-  // missing-system path is handled by an early render guard below.
-  const system = location.state?.fismasystemid as number | undefined
-  const systemInfo = fismaSystems.find((s) => s.fismasystemid === system)
+  // location.state. On such a cold load (paste / refresh / bookmark) fall back
+  // to resolving :fismaacronym against the systems list the app already loads,
+  // so the questionnaire is self-addressable (#500). In-app navigation keeps
+  // carrying the id in location.state, which takes precedence.
+  const stateSystem = location.state?.fismasystemid as number | undefined
+  const resolvedSystem = React.useMemo(
+    () => resolveSystemIdByAcronym(fismaSystems, fismaacronym),
+    [fismaSystems, fismaacronym]
+  )
+  // The context list holds active systems only, so a deep link to a
+  // decommissioned system would read as "not found" and mislead (its real
+  // state is "no questionnaire available"). When the acronym misses the active
+  // list, lazily fetch the decommissioned list once and retry against it.
+  // null = not fetched; [] = fetched (empty or failed).
+  const [decommissionedSystems, setDecommissionedSystems] = React.useState<
+    FismaSystemType[] | null
+  >(null)
+  const resolvedDecommissioned = React.useMemo(
+    () => resolveSystemIdByAcronym(decommissionedSystems ?? [], fismaacronym),
+    [decommissionedSystems, fismaacronym]
+  )
+  const system = stateSystem ?? resolvedSystem ?? resolvedDecommissioned
+  React.useEffect(() => {
+    if (
+      system !== undefined ||
+      fismaSystems.length === 0 ||
+      !fismaacronym ||
+      decommissionedSystems !== null
+    )
+      return
+    const controller = new AbortController()
+    const load = async () => {
+      try {
+        const res = await axiosInstance.get(
+          'fismasystems?decommissioned=true',
+          {
+            signal: controller.signal,
+          }
+        )
+        setDecommissionedSystems(res.data?.data ?? [])
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        // Resolution proceeds without the list; the not-found warning is the
+        // fallback rather than an indefinite spinner.
+        setDecommissionedSystems([])
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [system, fismaSystems.length, fismaacronym, decommissionedSystems])
+  // Deep-link URL params, read via refs inside the data-fetch effect so honoring
+  // them doesn't enroll them as effect deps (which would refetch on every
+  // in-survey question change, since those rewrite :pillar/:function).
+  const pillarSlugRef = React.useRef(pillarSlug)
+  pillarSlugRef.current = pillarSlug
+  const functionSlugRef = React.useRef(functionSlug)
+  functionSlugRef.current = functionSlug
+  const datacallSlugRef = React.useRef(datacallSlug)
+  datacallSlugRef.current = datacallSlug
+  // The dashboard opens the questionnaire for the system's own data call
+  // (year-aggregated view, #467): the specific call id and name ride along in
+  // the route state. Absent (deep link), fall back to the selected/latest call.
+  const routeDatacallId = location.state?.datacallid as number | undefined
+  const routeDatacall = location.state?.datacall as string | undefined
+  const routeDeadline = location.state?.deadline as string | undefined
+  const systemRef = React.useRef(system)
+  systemRef.current = system
+  // The in-survey navigate() calls (Next, Back, sidebar, canonical redirect)
+  // reset router state and would drop a picker-chosen data call, reverting the
+  // survey to the latest call (#501). Persist the dashboard-opened call here
+  // and re-supply it in every internal navigation so the choice survives.
+  //
+  // Populated ONLY on the dashboard path (route state present). For URL-driven
+  // flows (deep link / selected / latest) it stays empty on purpose: the URL's
+  // datacall segment already carries the cycle across navigations, and writing
+  // these values into location.state from the fetch effect's own navigate()
+  // would flip the routeDatacall* deps from undefined to defined and re-run
+  // the whole fetch — every cold deep-link used to hit /questions and /scores
+  // twice (#524 review).
+  const datacallStateRef = React.useRef<{
+    datacallid?: number
+    datacall?: string
+    deadline?: string
+  }>({})
+  const systemInfo =
+    fismaSystems.find((s) => s.fismasystemid === system) ??
+    decommissionedSystems?.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
+
+  // Fetch ZTMF Insights for this system once (not per question — one call
+  // returns every question's row). The initial lookup briefly blocks submission
+  // so a carried-forward response cannot be submitted before its required
+  // review UI is known. Failures and empty responses then leave the map empty.
+  React.useEffect(() => {
+    if (!system) return
+    const controller = new AbortController()
+    // Clear the previous system's insights up front so a system change can't
+    // briefly render stale badges/panel while the new fetch is in flight.
+    setInsightsByQuestion(new Map())
+    setInsightsLoadState({ system, settled: false })
+    const load = async () => {
+      try {
+        const res = await axiosInstance.get<{ data: Insight[] }>('insights', {
+          params: { fismasystemid: system },
+          signal: controller.signal,
+        })
+        const map = new Map<number, InsightPayload>()
+        for (const row of res.data?.data ?? []) {
+          if (row?.questionid != null && row.payload) {
+            map.set(row.questionid, row.payload)
+          }
+        }
+        setInsightsByQuestion(map)
+      } catch {
+        if (!controller.signal.aborted) {
+          // Insights are additive and optional; swallow errors and render the
+          // page exactly as it is without them.
+          setInsightsByQuestion(new Map())
+        }
+      } finally {
+        if (!controller.signal.aborted) {
+          setInsightsLoadState({ system, settled: true })
+        }
+      }
+    }
+    void load()
+    return () => controller.abort()
+  }, [system])
+  // Resolve the system's raw datacenter environment to its scoring category
+  // for pillar filtering. Falls back to the raw value until the vocabulary
+  // loads or for any value not in the map.
+  const systemCategory =
+    toCategoryMap(datacenterEnvironments)[
+      systemInfo?.datacenterenvironment ?? ''
+    ] ?? systemInfo?.datacenterenvironment
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
+      // User explicitly chose to abandon unsaved edits — clear the draft so it
+      // doesn't reappear if they navigate back to this question.
+      clearCurrentDraft()
       setLoadingQuestion(true)
       setSelectedIndex(stepId)
       setQuestionId(stepId)
     }
   }
   const handleListItemClick = (index: number) => {
+    saveGenRef.current++
     setLoadingQuestion(true)
     setSelectedIndex(index)
     setQuestionId(index)
   }
 
+  const clearCurrentDraft = () => {
+    saveGenRef.current++
+    if (system && questionId && datacallID > 0) {
+      void clearDraft(userInfo.userid, system, questionId, datacallID)
+    }
+    setDraftStatus('idle')
+  }
+
+  // Keep insight, review, and card state scoped to one system x data call x
+  // database question. React reuses this route component as those route values
+  // change, so everything below is keyed on that context.
+  //
+  // questionId holds the current functionid; the Question record carries the DB
+  // questionid the insight rows are keyed by. currentInsight is undefined for
+  // any question without a synced insight row, in which case the panel is not
+  // rendered and the page is unchanged.
+  const currentDatabaseQuestionId =
+    questionId != null ? questions[questionId]?.questionid : undefined
+  const insightsPending =
+    !!system &&
+    (insightsLoadState.system !== system || !insightsLoadState.settled)
+  const currentInsight =
+    insightsLoadState.system === system && currentDatabaseQuestionId != null
+      ? insightsByQuestion.get(currentDatabaseQuestionId)
+      : undefined
+  // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights UI
+  // (panel, suggestion). The carried-forward prior-response review still
+  // applies so a copied answer is affirmatively reviewed.
+  const isHhsDatacall =
+    parseDatacallName(datacall.replaceAll('_', ' ')).tenant === 'HHS'
+  // Single source of truth for all CMS-internal insight UI gates.
+  const showCmsInsights = !isHhsDatacall
+  const showInsights = Boolean(currentInsight) && showCmsInsights
+  const currentSuggestion = showCmsInsights
+    ? buildInsightJustification(currentInsight)
+    : undefined
+  const currentPriorResponse = priorResponseFor(currentInsight, datacall)
+  const hasJustificationContext = Boolean(
+    currentPriorResponse || currentSuggestion
+  )
+  const justificationContextId = JSON.stringify([
+    system ?? null,
+    datacallID,
+    currentDatabaseQuestionId ?? null,
+  ])
+  const priorReviewContextId = JSON.stringify([
+    justificationContextId,
+    currentPriorResponse?.text ?? null,
+    isReadOnly,
+  ])
+  // A context that has not yet been evaluated is synchronously treated as
+  // initializing. This keeps the editor and Next button blocked during the
+  // render before the initializer effect runs.
+  const priorReviewState: PriorReviewState =
+    !currentPriorResponse || isReadOnly
+      ? 'not-required'
+      : loadedResponseContextId === justificationContextId &&
+          priorReview.contextId === priorReviewContextId
+        ? priorReview.state
+        : 'initializing'
+  const priorReviewNeedsSave =
+    priorReview.contextId === priorReviewContextId && priorReview.needsSave
+  const updatePriorReviewState = (state: PriorReviewState) => {
+    setPriorReview((current) => ({
+      contextId: priorReviewContextId,
+      state,
+      // Resolving a required review is an unsaved current-call action even if
+      // the resulting text is byte-for-byte identical to the seeded response.
+      needsSave:
+        (current.contextId === priorReviewContextId && current.needsSave) ||
+        priorReviewState === 'pending',
+    }))
+  }
+  unsavedRef.current = {
+    selectQuestionOption,
+    initQuestionChoice,
+    notes,
+    initNotes,
+    priorReviewNeedsSave,
+  }
+
   const saveResponse = async () => {
+    // Resolving a required carried-forward review is itself a current-call
+    // action, even when the final text is byte-for-byte identical to the
+    // seeded notes. Persist it so the audit trail records the affirmative
+    // review.
+    const resolvedPriorReview =
+      priorReviewNeedsSave && selectQuestionOption >= 0
     if (
+      !resolvedPriorReview &&
       !shouldPersistResponse({
         selectQuestionOption,
         initQuestionChoice,
@@ -189,6 +535,7 @@ export default function QuestionnarePage() {
         initNotes,
       })
     ) {
+      clearCurrentDraft()
       return
     }
     // Backstop: the Next button is disabled when this fires, but a future
@@ -226,6 +573,12 @@ export default function QuestionnarePage() {
       }
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setLastSavedAt(new Date())
+      clearCurrentDraft()
+      setPriorReview((current) =>
+        current.contextId === priorReviewContextId
+          ? { ...current, needsSave: false }
+          : current
+      )
       fetchQuestionScores(system, setQuestionScores)
     } catch (error) {
       if (isAuthHandled(error)) return
@@ -235,34 +588,85 @@ export default function QuestionnarePage() {
   }
 
   React.useEffect(() => {
-    if (system) {
+    // Wait for the data calls to load before fetching: a cold deep link can
+    // resolve `system` (from the systems list) before the datacall context is
+    // ready, and firing early would query scores with datacallid=0. (#500)
+    if (system && latestDataCallId > 0) {
       const controller = new AbortController()
       // Reset the empty-questionnaire flag so a previous decommissioned-system
       // view does not bleed into the next render when system changes.
       setNoQuestions(false)
       const fetchData = async () => {
+        // Gate the debounce effect during the entire system/datacall transition
+        // so stale pending saves don't fire while the question list reloads.
+        setLoadingQuestion(true)
         try {
           let questionsEmpty = false
           let datacall = ''
-          const isHistorical =
-            selectedDatacall !== null &&
-            selectedDatacall.datacallid !== latestDataCallId
           let activeDataCallId: number
-          if (isHistorical && selectedDatacall) {
-            setDatacallID(selectedDatacall.datacallid)
-            datacall = selectedDatacall.datacall.replaceAll(' ', '_')
+          if (routeDatacallId && routeDatacall) {
+            // Opened for a specific system's own call from the dashboard. Read
+            // only when that call's own deadline has passed - not by comparing
+            // to the global latest, since two calls can be open at once.
+            datacall = encodeDatacallSlug(routeDatacall)
             setDatacall(datacall)
-            setIsPastDeadline(true)
-            activeDataCallId = selectedDatacall.datacallid
-          } else {
-            setDatacallID(latestDataCallId)
-            datacall = latestDatacall.replaceAll(' ', '_')
-            setDatacall(datacall)
+            activeDataCallId = routeDatacallId
             setIsPastDeadline(
-              latestDeadline ? new Date() > new Date(latestDeadline) : true
+              routeDeadline ? new Date() > new Date(routeDeadline) : true
             )
-            activeDataCallId = latestDataCallId
+            datacallStateRef.current = {
+              datacallid: routeDatacallId,
+              datacall: routeDatacall,
+              deadline: routeDeadline,
+            }
+          } else {
+            // Cold deep link (no route state): resolve the cycle from the URL's
+            // data-call segment. Falls through to the selected/latest call when
+            // the segment is absent or unrecognized. (#500)
+            //
+            // These branches leave datacallStateRef empty — see its declaration.
+            // The cycle rides in the URL segment written by the canonical
+            // navigate below, so it survives re-runs and in-survey navigation
+            // without route state; a stale ref from a previous dashboard-opened
+            // call is also cleared here so it can't hijack a later system
+            // switch.
+            datacallStateRef.current = {}
+            const deepLinkDatacall = resolveDatacallBySlug(
+              datacalls,
+              datacallSlugRef.current
+            )
+            const isHistorical =
+              selectedDatacall !== null &&
+              selectedDatacall.datacallid !== latestDataCallId
+            if (deepLinkDatacall) {
+              datacall = encodeDatacallSlug(deepLinkDatacall.datacall)
+              setDatacall(datacall)
+              setIsPastDeadline(
+                deepLinkDatacall.deadline
+                  ? new Date() > new Date(deepLinkDatacall.deadline)
+                  : true
+              )
+              activeDataCallId = deepLinkDatacall.datacallid
+            } else if (isHistorical && selectedDatacall) {
+              datacall = encodeDatacallSlug(selectedDatacall.datacall)
+              setDatacall(datacall)
+              setIsPastDeadline(true)
+              activeDataCallId = selectedDatacall.datacallid
+            } else {
+              datacall = encodeDatacallSlug(latestDatacall)
+              setDatacall(datacall)
+              setIsPastDeadline(
+                latestDeadline ? new Date() > new Date(latestDeadline) : true
+              )
+              activeDataCallId = latestDataCallId
+            }
           }
+          // Hoisted so both the questions block and the final batch can access them.
+          const questionData: Record<number, Question> = {}
+          let sortedFuncId: number[] = []
+          // The function to open. Defaults to the first; overridden below when the
+          // URL's :pillar/:function names a valid function (deep link, #500).
+          let targetFuncId: number | undefined
           try {
             const response = await axiosInstance.get(
               `/fismasystems/${system}/questions`,
@@ -281,12 +685,12 @@ export default function QuestionnarePage() {
               setLoadingQuestion(false)
             } else {
               const organizedData: Record<string, FismaQuestion[]> = {}
-              const questionData: Record<number, Question> = {}
               data.forEach((question: FismaQuestion) => {
                 if (!organizedData[question.pillar.pillar]) {
                   organizedData[question.pillar.pillar] = []
                 }
                 questionData[question.function.functionid] = {
+                  questionid: question.questionid,
                   question: question.question,
                   notesprompt: question.notesprompt,
                   description: question.function.description,
@@ -295,12 +699,10 @@ export default function QuestionnarePage() {
                 }
                 organizedData[question.pillar.pillar].push(question)
               })
-              setQuestions(questionData)
               const sortedPillars = filterPillarsForSystem(
                 sortPillars(Object.keys(organizedData)),
-                systemInfo?.datacenterenvironment
+                systemCategory
               )
-              let sortedFuncId: number[] = []
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
                 const sortedSteps = sortFunctions(pillar, organizedData[pillar])
                 const sortedStepFuncId = sortedSteps.map(
@@ -323,44 +725,64 @@ export default function QuestionnarePage() {
                 },
                 {}
               )
-              setFunctionIdIdx(funcIdToIdx) // set a map of functionid -> index in sortedFunctId
-              setQuestionId(sortedFuncId[0]) // sets the questionid(functionid) to the first value in the array
-              setStepFunctionId(sortedFuncId) // contains an array of all functionid in order of render
+              // Honor the URL's :pillar/:function when they name a valid
+              // function; otherwise open the first (#500).
+              const target = resolveFunctionTarget(
+                categoriesData,
+                pillarSlugRef.current,
+                functionSlugRef.current
+              )
+              targetFuncId = target?.functionid ?? sortedFuncId[0]
+              const targetPillarName =
+                target?.pillarName ?? categoriesData[0].name
+              const targetFunctionName =
+                target?.functionName ??
+                categoriesData[0].steps[0].function.function
+              // Update sidebar/nav state immediately so the question list
+              // renders while scores are still loading. setQuestions,
+              // setDatacallID, and setQuestionId are deferred to the batch
+              // below — after scores arrive — so the questionId effect fires
+              // exactly once with the correct scores already in the ref.
+              setFunctionIdIdx(funcIdToIdx)
+              setStepFunctionId(sortedFuncId)
               setCategories(categoriesData)
               navigate(
-                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(categoriesData[0].name)}/${toSlug(categoriesData[0].steps[0].function.function)}`,
+                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(targetPillarName)}/${toSlug(targetFunctionName)}`,
                 {
-                  state: { fismasystemid: system },
+                  state: { fismasystemid: system, ...datacallStateRef.current },
                   replace: true,
                 }
               )
-              setSelectedIndex(sortedFuncId[0]) // set the first selected item in the list (rendered) to be selected(highlighted)
-              setQuestion(questionData[sortedFuncId[0]].question) // set the first question value to the page
-              setDescription(questionData[sortedFuncId[0]].description)
-              setNotePrompt(questionData[sortedFuncId[0]].notesprompt) // set the first note prompt to the page
+              setSelectedIndex(targetFuncId)
             }
           } catch (error) {
             if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
+            if (isAuthHandled(error)) {
+              setLoadingQuestion(false)
+              return
+            }
             notify(ERROR_MESSAGES.tryAgain, 'error')
+            setLoadingQuestion(false)
             return
           }
           if (questionsEmpty) {
             return
           }
+          let hashTable: questionScoreMap = {}
           try {
             const res = await axiosInstance.get(
               `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`,
               { signal: controller.signal }
             )
             const rows: QuestionScores[] = res.data.data ?? []
-            const hashTable: questionScoreMap = Object.assign(
+            // Assigned into the outer hashTable so the batch below commits
+            // questions + scores + datacallID + questionId together.
+            hashTable = Object.assign(
               {},
               ...rows.map((item: QuestionScores) => ({
                 [item.functionoptionid]: item,
               }))
             )
-            setQuestionScores(hashTable)
             // Same seed as fetchQuestionScores so a freshly-loaded page
             // shows "last saved <time>" without needing a save first.
             let maxAt = 0
@@ -372,14 +794,34 @@ export default function QuestionnarePage() {
             if (maxAt > 0) setLastSavedAt(new Date(maxAt))
           } catch (error) {
             if (controller.signal.aborted) return
-            if (isAuthHandled(error)) return
-            console.error('Error fetching question scores:', error)
-            notify(ERROR_MESSAGES.tryAgain, 'error')
+            if (!isAuthHandled(error)) {
+              console.error('Error fetching question scores:', error)
+              notify(ERROR_MESSAGES.tryAgain, 'error')
+            }
+            // Fall through to the batch below with an empty scores map so the
+            // sidebar/URL commit together with questions/datacallID/questionId,
+            // even when the scores call 403s without redirecting (auth-handled,
+            // component stays mounted). Returning here instead would leave the
+            // sidebar/URL on the new system while the content stayed on the old
+            // one. The [questionId] effect's finally clears the spinner.
           }
+          // Batch questions + scores + datacallID + questionId so the questionId
+          // effect fires exactly once with the correct scores already in
+          // questionScoresRef. This prevents a second effect run (and its
+          // accompanying draft-clearing race) that would occur if questionScores
+          // arrived as a separate update after questionId was already set.
+          setQuestions(questionData)
+          setQuestionScores(hashTable)
+          setDatacallID(activeDataCallId)
+          setQuestionId(targetFuncId ?? sortedFuncId[0])
         } catch (error) {
           if (controller.signal.aborted) return
-          if (isAuthHandled(error)) return
+          if (isAuthHandled(error)) {
+            setLoadingQuestion(false)
+            return
+          }
           console.error('Error fetching data:', error)
+          setLoadingQuestion(false)
         }
       }
       fetchData()
@@ -389,19 +831,25 @@ export default function QuestionnarePage() {
     system,
     navigate,
     fismaacronym,
+    routeDatacallId,
+    routeDatacall,
+    routeDeadline,
     selectedDatacall,
     latestDataCallId,
     latestDatacall,
     latestDeadline,
-    systemInfo?.datacenterenvironment,
+    systemCategory,
+    datacalls,
   ])
   React.useEffect(() => {
     if (questionId) {
       const controller = new AbortController()
       // Clear saved-state markers before async load so the last-edited
       // footer does not flash the previous question's editor during the
-      // refetch window.
+      // refetch window. Also resets draft indicators so stale status from
+      // a previous question or datacall doesn't bleed into the next render.
       setInitQuestionChoice(-1)
+      setDraftStatus('idle')
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
       async function fetchOptions() {
@@ -414,50 +862,298 @@ export default function QuestionnarePage() {
             const choiceOpt: QuestionChoice = {
               label: item.description,
               value: item.functionoptionid,
+              score: item.score,
             }
-            if (item.functionoptionid in questionScores) {
+            if (item.functionoptionid in questionScoresRef.current) {
               funcOptId = item.functionoptionid
               choiceOpt.defaultChecked = true
             }
             choices.push(choiceOpt)
           })
           // Foundation of question
-          setDescription(questionId ? questions[questionId].description : '')
-          setQuestion(questionId ? questions[questionId].question : '')
-          setNotePrompt(questionId ? questions[questionId].notesprompt : '')
+          setDescription(questions[questionId ?? 0]?.description ?? '')
+          setQuestion(questions[questionId ?? 0]?.question ?? '')
+          setNotePrompt(questions[questionId ?? 0]?.notesprompt ?? '')
 
           // Notes
-          setNotes(funcOptId ? questionScores[funcOptId].notes : '')
-          setInitNotes(funcOptId ? questionScores[funcOptId].notes : '')
+          setNotes(funcOptId ? questionScoresRef.current[funcOptId].notes : '')
+          setInitNotes(
+            funcOptId ? questionScoresRef.current[funcOptId].notes : ''
+          )
 
           // Question options
           setSelectQuestionOption(funcOptId ? funcOptId : -1)
           setInitQuestionChoice(funcOptId ? funcOptId : -1)
-          setScoreId(funcOptId ? questionScores[funcOptId].scoreid : 0)
-          setOptions(choices ? choices : [])
+          setScoreId(
+            funcOptId ? questionScoresRef.current[funcOptId].scoreid : 0
+          )
+
+          // Restore any in-progress draft from localStorage, overriding the
+          // server-side values set above. Skipped for read-only sessions.
+          const sys = systemRef.current
+          const uid = userInfo.userid
+          if (controller.signal.aborted) return
+          // Read-only sessions never load the draft again, so evict any lingering
+          // entry instead of letting it sit for the full TTL. Bump the save
+          // generation first: an autosave that fired just before isReadOnly
+          // flipped may still be mid-flight, and without the bump its isCurrent()
+          // checks would pass and rewrite the draft after this clear.
+          if (isReadOnly && sys && questionId && datacallID > 0) {
+            saveGenRef.current++
+            void clearDraft(uid, sys, questionId, datacallID)
+          }
+          const draft =
+            !isReadOnly && sys && questionId && datacallID > 0
+              ? await loadDraft(uid, sys, questionId, datacallID)
+              : null
+          // Guard: if the user navigated away while loadDraft was running
+          // (crypto.subtle.decrypt is genuinely async), discard its result
+          // rather than writing it into the now-active question's state.
+          if (controller.signal.aborted) return
+          if (draft) {
+            if (draft.selectQuestionOption === -1) {
+              // Notes-only draft — restore notes without pre-selecting an answer.
+              setNotes(draft.notes)
+              setDraftStatus('restored')
+            } else if (
+              choices.some((c) => c.value === draft.selectQuestionOption)
+            ) {
+              choices.forEach(
+                (c) =>
+                  (c.defaultChecked = c.value === draft.selectQuestionOption)
+              )
+              setSelectQuestionOption(draft.selectQuestionOption)
+              setNotes(draft.notes)
+              setDraftStatus('restored')
+            } else {
+              // Draft references an option that no longer exists — evict it.
+              if (sys && questionId && datacallID > 0)
+                await clearDraft(uid, sys, questionId, datacallID)
+              if (controller.signal.aborted) return
+              setDraftStatus('idle')
+            }
+          } else {
+            setDraftStatus('idle')
+          }
+          setOptions(choices)
+          // Mark this system x data call x question as the context the current
+          // answer/notes were seeded for, so the prior-review initializer runs
+          // only once the loaded state matches what is on screen.
+          setLoadedResponseContextId(
+            JSON.stringify([
+              sys ?? null,
+              datacallID,
+              questions[questionId ?? -1]?.questionid ?? null,
+            ])
+          )
         } catch (error) {
           if (controller.signal.aborted) return
           if (isAuthHandled(error)) return
           console.error('Error fetching data:', error)
         } finally {
-          setLoadingQuestion(false)
+          if (!controller.signal.aborted) setLoadingQuestion(false)
         }
       }
       fetchOptions()
       return () => controller.abort()
     }
-  }, [questionId, questionScores, questions])
+  }, [questionId, questions, isReadOnly, datacallID, userInfo.userid])
+
+  // Debounced draft save: 1 second after the user pauses editing, persist
+  // the current answer and notes to localStorage so a reload can recover them.
+  // Only fires when the user has actually changed something from the server-side
+  // initial values — prevents question-load state transitions from being
+  // mistakenly recorded as drafts on questions the user never touched.
+  React.useEffect(() => {
+    if (
+      isReadOnly ||
+      !system ||
+      !questionId ||
+      datacallID <= 0 ||
+      loadingQuestion
+    ) {
+      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
+      return
+    }
+    if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
+      saveGenRef.current++
+      // Skip clearDraft when a draft was just restored from storage — the draft
+      // values matching the server state does not mean the user reverted manually.
+      // Clearing it here would delete a valid in-progress draft on every page load
+      // when the server happens to be at the same state as the draft.
+      if (
+        system &&
+        questionId &&
+        datacallID > 0 &&
+        draftStatusRef.current !== 'restored'
+      )
+        void clearDraft(userInfo.userid, system, questionId, datacallID)
+      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
+      return
+    }
+    const currentGen = saveGenRef.current
+    const timer = setTimeout(() => {
+      if (saveGenRef.current !== currentGen) return
+      saveDraft(
+        userInfo.userid,
+        system,
+        questionId,
+        datacallID,
+        { selectQuestionOption, notes },
+        () => saveGenRef.current === currentGen
+      ).then((saved) => {
+        if (saveGenRef.current !== currentGen) return
+        if (saved) {
+          if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
+        } else {
+          setDraftStatus('error')
+        }
+      })
+    }, 1000)
+    return () => clearTimeout(timer)
+  }, [
+    selectQuestionOption,
+    notes,
+    isReadOnly,
+    system,
+    questionId,
+    datacallID,
+    initQuestionChoice,
+    initNotes,
+    loadingQuestion,
+    userInfo.userid,
+  ])
+
+  // Warn before tab close or hard refresh when the active question has edits
+  // that haven't been committed to the backend yet.
+  React.useEffect(() => {
+    if (isReadOnly) return
+    const handle = (e: BeforeUnloadEvent) => {
+      const s = unsavedRef.current
+      const hasPendingEdits =
+        shouldPersistResponse(s) ||
+        (s.selectQuestionOption === -1 && s.notes !== s.initNotes) ||
+        s.priorReviewNeedsSave
+      if (hasPendingEdits) {
+        e.preventDefault()
+        e.returnValue = ''
+      }
+    }
+    window.addEventListener('beforeunload', handle)
+    return () => window.removeEventListener('beforeunload', handle)
+  }, [isReadOnly])
+
+  // Re-seed the current question's answer when the scores map refreshes out of
+  // band — e.g. the user saves a question then navigates back before that save's
+  // scores GET resolves, so the questionId effect seeded from a stale snapshot.
+  // Only runs when idle (the questionId effect owns seeding while loading) with no
+  // unsaved edits and no restored draft, so an in-progress change is never
+  // overwritten. Without this the display can show a just-saved answer as
+  // unanswered, and re-answering it would POST a duplicate score.
+  React.useEffect(() => {
+    const u = unsavedRef.current
+    if (
+      !shouldReseedAnswer({
+        hasQuestion: !!questionId,
+        loadingQuestion: loadingQuestionRef.current,
+        hasUnsavedEdits:
+          u.selectQuestionOption !== u.initQuestionChoice ||
+          u.notes !== u.initNotes ||
+          u.priorReviewNeedsSave,
+        draftRestored: draftStatusRef.current === 'restored',
+      })
+    ) {
+      return
+    }
+    const sel = deriveScoreSelection(
+      optionsRef.current.map((o) => Number(o.value)),
+      questionScoresRef.current
+    )
+    // No change from the last-seeded state — nothing to correct.
+    if (sel.choice === u.initQuestionChoice && sel.notes === u.initNotes) return
+    setOptions((prev) =>
+      prev.map((o) => ({
+        ...o,
+        defaultChecked: Number(o.value) === sel.funcOptId,
+      }))
+    )
+    setSelectQuestionOption(sel.choice)
+    setInitQuestionChoice(sel.choice)
+    setNotes(sel.notes)
+    setInitNotes(sel.notes)
+    setScoreId(sel.scoreid)
+    setRadioKey((k) => k + 1)
+  }, [questionScores, questionId])
+
+  // A score copied from the prior data call has no edit event for the current
+  // call. When its notes exactly match last_score_notes, keep that text as
+  // context rather than silently treating it as the current submitted answer.
+  // The context id makes this an initializer: accepting/dismissing cannot be
+  // reset by the resulting notes state change, but navigating to a new question
+  // can.
+  React.useEffect(() => {
+    if (loadingQuestion || loadedResponseContextId !== justificationContextId)
+      return
+    const currentScore =
+      selectQuestionOption >= 0
+        ? questionScores[selectQuestionOption]
+        : undefined
+    if (priorReview.contextId === priorReviewContextId) return
+
+    const isUnreviewedCarryForward =
+      !isReadOnly &&
+      !!currentPriorResponse &&
+      !!currentScore &&
+      !currentScore.last_edited_at &&
+      draftStatus !== 'restored' &&
+      notes.trim() === currentPriorResponse.text.trim()
+    setPriorReview({
+      contextId: priorReviewContextId,
+      state: isUnreviewedCarryForward ? 'pending' : 'not-required',
+      needsSave: false,
+    })
+  }, [
+    currentPriorResponse,
+    draftStatus,
+    isReadOnly,
+    loadingQuestion,
+    loadedResponseContextId,
+    notes,
+    priorReview.contextId,
+    priorReviewContextId,
+    justificationContextId,
+    questionScores,
+    selectQuestionOption,
+  ])
+
   const breadcrumbSegmentLabels = fismaacronym
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
     : undefined
   if (!system) {
+    // Cold load (paste / refresh / bookmark): the systems list may still be in
+    // flight, so :fismaacronym can't be resolved yet — and if it missed the
+    // active list, the decommissioned list is being checked before concluding
+    // not-found. Show a spinner until both have answered; only then is the
+    // link genuinely unresolvable. (#500 / #524 review)
+    if (fismaSystems.length === 0 || decommissionedSystems === null) {
+      return (
+        <>
+          <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+          <Container maxWidth={false} disableGutters>
+            <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+              <Spinner size="big" />
+            </Box>
+          </Container>
+        </>
+      )
+    }
     return (
       <>
         <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
         <Container maxWidth={false} disableGutters>
           <Alert severity="warning" sx={{ mt: 2 }}>
-            Cannot load questionnaire from a direct link. Please open it from
-            the system list.
+            Could not find a system matching “{fismaacronym}”. It may not exist,
+            or you may not have access to it.
           </Alert>
         </Container>
       </>
@@ -523,7 +1219,8 @@ export default function QuestionnarePage() {
       !isReadOnly &&
       ((selectQuestionOption !== -1 &&
         initQuestionChoice !== selectQuestionOption) ||
-        initNotes !== notes)
+        initNotes !== notes ||
+        priorReviewNeedsSave)
     if (dirty) {
       setStepId(fn.function.functionid)
       setOpenAlert(true)
@@ -532,7 +1229,7 @@ export default function QuestionnarePage() {
     navigate(
       `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillarName)}/${toSlug(fn.function.function)}`,
       {
-        state: { fismasystemid: system },
+        state: { fismasystemid: system, ...datacallStateRef.current },
         replace: true,
       }
     )
@@ -662,6 +1359,18 @@ export default function QuestionnarePage() {
               {description}
             </Typography>
           )}
+          {insightsPending && (
+            <Typography
+              role="status"
+              variant="caption"
+              sx={{ color: 'text.secondary' }}
+            >
+              Checking for prior responses...
+            </Typography>
+          )}
+          {showInsights && currentInsight && (
+            <InsightsPanel payload={currentInsight} />
+          )}
           {loadingQuestion ? (
             <Box
               sx={{
@@ -675,53 +1384,87 @@ export default function QuestionnarePage() {
             </Box>
           ) : (
             <>
-              <OptionCardList
-                options={options}
-                selectedValue={selectQuestionOption}
-                onChange={(v) => setSelectQuestionOption(v)}
-                disabled={isReadOnly}
-              />
-              <Typography
-                component="label"
-                htmlFor="questionnaire-notes"
-                sx={{
-                  display: 'block',
-                  fontSize: 13,
-                  fontWeight: 600,
-                  color: colors.ink,
-                  mt: 3,
-                  mb: 0.5,
-                }}
-              >
-                Supporting evidence{' '}
-                <Box
-                  component="span"
-                  sx={{
-                    color: colors.neutral500,
-                    fontWeight: 500,
+              {/* QuestionRadioGroup (not OptionCardList) so each option keeps
+                  its insight badges and the FIPS baseline treatment; the box
+                  key remounts the subtree on an out-of-band re-seed. */}
+              <Box key={radioKey} sx={{ mb: 2 }}>
+                {renderRadioGroup(options)}
+              </Box>
+              {hasJustificationContext ? (
+                // Carried-forward prior response and/or an Insights
+                // suggestion exist: render the review-aware justification
+                // editor. It owns its own label, char counter, and (for
+                // CMS calls) the suggestion card.
+                <JustificationField
+                  key={justificationContextId}
+                  contextId={justificationContextId}
+                  label={notePrompt || 'Justification'}
+                  value={notes}
+                  onChange={(value) => {
+                    setNotes(value)
+                    if (draftStatus === 'restored') setDraftStatus('idle')
                   }}
-                >
-                  - optional
-                </Box>
-              </Typography>
-              <CssTextField
-                id="questionnaire-notes"
-                multiline
-                rows={4}
-                fullWidth
-                value={notes}
-                disabled={isReadOnly}
-                error={needsNotesUpdate}
-                helperText={
-                  needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
-                }
-                placeholder={
-                  notePrompt ||
-                  'Link policies or screenshots in your evidence repo.'
-                }
-                inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
-                onChange={(e) => setNotes(e.target.value)}
-              />
+                  insight={currentInsight}
+                  priorResponse={currentPriorResponse}
+                  showInsightSuggestion={showCmsInsights}
+                  viewedDatacall={datacall}
+                  priorReviewState={priorReviewState}
+                  onPriorReview={updatePriorReviewState}
+                  disabled={isReadOnly}
+                  error={needsNotesUpdate}
+                  helperText={
+                    needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                  }
+                  maxLength={MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                />
+              ) : (
+                <>
+                  <Typography
+                    component="label"
+                    htmlFor="questionnaire-notes"
+                    sx={{
+                      display: 'block',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.ink,
+                      mt: 3,
+                      mb: 0.5,
+                    }}
+                  >
+                    Supporting evidence{' '}
+                    <Box
+                      component="span"
+                      sx={{
+                        color: colors.neutral500,
+                        fontWeight: 500,
+                      }}
+                    >
+                      - optional
+                    </Box>
+                  </Typography>
+                  <CssTextField
+                    id="questionnaire-notes"
+                    multiline
+                    rows={4}
+                    fullWidth
+                    value={notes}
+                    disabled={isReadOnly}
+                    error={needsNotesUpdate}
+                    helperText={
+                      needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                    }
+                    placeholder={
+                      notePrompt ||
+                      'Link policies or screenshots in your evidence repo.'
+                    }
+                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
+                    onChange={(e) => {
+                      setNotes(e.target.value)
+                      if (draftStatus === 'restored') setDraftStatus('idle')
+                    }}
+                  />
+                </>
+              )}
               <Box
                 sx={{
                   display: 'flex',
@@ -739,13 +1482,16 @@ export default function QuestionnarePage() {
                         ?.notes_is_ai_summary === true
                     }
                   />
-                  <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                    {notePrompt
-                      ? notePrompt
-                      : 'Link policies or screenshots in your evidence repo.'}
-                  </Typography>
+                  {!hasJustificationContext && (
+                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                      {notePrompt
+                        ? notePrompt
+                        : 'Link policies or screenshots in your evidence repo.'}
+                    </Typography>
+                  )}
                 </Box>
-                {!isReadOnly && (
+                {/* JustificationField renders its own counter. */}
+                {!hasJustificationContext && !isReadOnly && (
                   <Typography
                     sx={{
                       fontSize: 12,
@@ -761,6 +1507,25 @@ export default function QuestionnarePage() {
                   </Typography>
                 )}
               </Box>
+              {draftStatus !== 'idle' && !isReadOnly && (
+                <Alert
+                  severity={
+                    draftStatus === 'saved'
+                      ? 'success'
+                      : draftStatus === 'error'
+                        ? 'error'
+                        : 'warning'
+                  }
+                  icon={false}
+                  sx={{ mt: 1, py: 0.5 }}
+                >
+                  {draftStatus === 'saved'
+                    ? 'Draft saved - click Next or Complete to save permanently.'
+                    : draftStatus === 'error'
+                      ? 'Draft could not be saved - click Next or Complete to save permanently.'
+                      : 'Draft restored - click Next or Complete to save permanently.'}
+                </Alert>
+              )}
               <Box
                 sx={{
                   display: 'flex',
@@ -781,18 +1546,23 @@ export default function QuestionnarePage() {
                       !isReadOnly &&
                       ((selectQuestionOption !== -1 &&
                         initQuestionChoice !== selectQuestionOption) ||
-                        initNotes !== notes)
+                        initNotes !== notes ||
+                        priorReviewNeedsSave)
                     ) {
                       setStepId(id)
                       setOpenAlert(true)
                       return
                     }
+                    saveGenRef.current++
                     if (questions[id]) {
                       const q = questions[id]
                       navigate(
                         `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                         {
-                          state: { fismasystemid: system },
+                          state: {
+                            fismasystemid: system,
+                            ...datacallStateRef.current,
+                          },
                           replace: true,
                         }
                       )
@@ -824,8 +1594,14 @@ export default function QuestionnarePage() {
                 <Button
                   variant="contained"
                   color="primary"
-                  disabled={needsNotesUpdate}
+                  disabled={
+                    needsNotesUpdate ||
+                    insightsPending ||
+                    priorReviewState === 'pending' ||
+                    priorReviewState === 'initializing'
+                  }
                   onClick={() => {
+                    saveGenRef.current++
                     const id =
                       selectedIndex ===
                       stepFunctionId[stepFunctionId.length - 1]
@@ -836,16 +1612,18 @@ export default function QuestionnarePage() {
                       navigate(
                         `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
                         {
-                          state: { fismasystemid: system },
+                          state: {
+                            fismasystemid: system,
+                            ...datacallStateRef.current,
+                          },
                           replace: true,
                         }
                       )
                     }
-                    setLoadingQuestion(true)
+                    if (id !== questionId) setLoadingQuestion(true)
                     setQuestionId(id)
                     setSelectedIndex(id)
                     if (!isReadOnly) saveResponse()
-                    setLoadingQuestion(false)
                   }}
                   sx={{ fontSize: 13 }}
                 >
@@ -872,13 +1650,23 @@ export default function QuestionnarePage() {
         onClose={() => setOpenAlert(false)}
         confirmClick={handleConfirmReturn}
       />
+      {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
+          questionnaire actually resolved (datacallID covers every entry path,
+          including URL deep links where no route state exists); fall back to
+          the route/selected/latest chain during the pre-fetch window. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
-        selectedDataCallId={selectedDatacall?.datacallid}
+        selectedDataCallId={
+          datacallID > 0
+            ? datacallID
+            : routeDatacallId ??
+              selectedDatacall?.datacallid ??
+              latestDataCallId
+        }
       />
     </Box>
   )

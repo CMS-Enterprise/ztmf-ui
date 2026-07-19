@@ -1,0 +1,25 @@
+name: Manual Deploy to IMPL
+
+# Deploy a chosen branch to the IMPL environment on demand.
+#   - Primary use: smoke-test the nightly main -> impl sync candidate BEFORE
+#     merging it. Run:
+#       gh workflow run "Manual Deploy to IMPL" --ref automation/sync-main-to-impl
+#   - The deploy AT merge is automatic (orchestration-impl, push to impl). This
+#     workflow is the optional pre-merge preview against the shared impl env.
+on:
+  workflow_dispatch:
+
+jobs:
+  analysis:
+    name: Analysis
+    uses: ./.github/workflows/analysis.yml
+    secrets: inherit
+
+  ui:
+    name: ui
+    needs:
+      - analysis
+    uses: ./.github/workflows/ui.yml
+    with:
+      environment: impl
+    secrets: inherit

@@ -86,6 +86,15 @@ export const hasAdminRead = (user: UserLike): boolean =>
 export const hasUnscopedRead = (user: UserLike): boolean =>
   !!user && UNSCOPED_READ_ROLES.has(user.role as UserRole)
 
+// System-scoped tiers (ISSO / ISSM) - the users whose write scope is their
+// per-system assignment rather than an OpDiv or admin tier. Like the other
+// gates here this is display-only: the backend narrows the fismaSystems list
+// to the user's assignments and re-checks IsAssignedFismaSystem on write, so
+// the frontend only needs the tier. Read-only admins are deliberately excluded
+// (they are neither admin-writers nor system-scoped).
+export const isSystemScoped = (user: UserLike): boolean =>
+  !!user && SYSTEM_SCOPED_ROLES.has(user.role as UserRole)
+
 // Row-level OpDiv scoping is server-enforced - the backend narrows the
 // fismaSystems list before it reaches the frontend, so this gate only needs
 // to decide whether the user belongs to a tier that gets system-detail UI at

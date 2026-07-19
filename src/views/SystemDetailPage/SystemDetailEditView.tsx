@@ -9,11 +9,16 @@ import {
   Tooltip,
   Typography,
 } from '@mui/material'
-import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
+import {
+  FismaSystemType,
+  FormValidType,
+  FormValidHelperText,
+  DataCenterEnvironment,
+} from '@/types'
 import Field, { fieldInputSx } from '@/components/ui/Field'
 import { StatusChip } from '@/components/ui/StatusChip'
-import { datacenterenvironment } from '@/views/EditSystemModal/dataEnvironment'
 import { optionalEmailValidator } from '@/views/EditSystemModal/validators'
+import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { colors, radius } from '@/theme/tokens'
@@ -73,6 +78,18 @@ interface SystemDetailEditViewProps {
    * tooltip explaining the gate.
    */
   extendedEditable: boolean
+  /**
+   * Datacenter-environment vocabulary for the select field, passed down from
+   * SystemDetailPage (which reads it from the outlet context).
+   */
+  datacenterEnvironments: DataCenterEnvironment[]
+  /**
+   * Target-maturity card, rendered between Data Lake Export and Organization,
+   * matching the read view's placement.
+   */
+  targetMaturitySlot?: React.ReactNode
+  /** Resolved OpDiv display name, shown read-only in the Organization card. */
+  opdivName: string | null
 }
 
 /** Visual wrapper used by every card in the edit layout. */
@@ -184,6 +201,9 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     onSdlSyncToggle,
     onValidatedFieldChange,
     extendedEditable,
+    datacenterEnvironments,
+    targetMaturitySlot,
+    opdivName,
   } = props
 
   const extendedFields = getFieldsBySection('extended')
@@ -468,10 +488,21 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           </Box>
         </Card>
 
+        {targetMaturitySlot}
+
         {/* Organization. Absorbs ISSO Email + Data Call Contact - the
             separate Contacts card from the mock was redundant. */}
         <Card title="Organization">
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+            <TextRow
+              id="edit-opdiv"
+              label="OpDiv"
+              value={opdivName ?? ''}
+              showError={false}
+              errorText=""
+              disabled
+              onChange={() => {}}
+            />
             <TextRow
               id="edit-datacallcontact"
               label="Data Call Contact"
@@ -536,12 +567,22 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                       </Box>
                     )
                   return (
-                    datacenterenvironment.find((o) => o.value === v)?.label ?? v
+                    toDropdownOptionsWithCurrent(
+                      datacenterEnvironments,
+                      editedSystem.datacenterenvironment
+                    ).find((o) => o.value === v)?.label ?? v
                   )
                 }}
               >
-                {datacenterenvironment.map((option) => (
-                  <MenuItem key={option.value} value={option.value}>
+                {toDropdownOptionsWithCurrent(
+                  datacenterEnvironments,
+                  editedSystem.datacenterenvironment
+                ).map((option) => (
+                  <MenuItem
+                    key={option.value}
+                    value={option.value}
+                    disabled={option.disabled}
+                  >
                     {option.label}
                   </MenuItem>
                 ))}
@@ -554,7 +595,8 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
       {/* Extended Metadata - full width below both columns. Inputs are
           disabled unless the caller is an organization-wide admin; scoped
           tiers see the values populated but locked, with a tooltip
-          explaining the gate. */}
+          explaining the gate. isso_name is display-only (backend-resolved),
+          so it renders disabled for everyone. */}
       <Box sx={{ gridColumn: '1 / -1' }}>
         <Card title="Extended Metadata">
           <Typography
@@ -577,12 +619,13 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           >
             {extendedFields.map((field) => {
               const value = String(editedSystem[field.key] ?? '')
+              const editable = extendedEditable && !field.readOnly
               // Optional email fields validate on content only: empty is
               // fine, a non-empty value must be a well-formed address. The
               // validity feeds the page's formValid map so a bad address
               // gates Save the same way the modal path does.
               const emailError =
-                field.type === 'email' && extendedEditable
+                field.type === 'email' && editable
                   ? optionalEmailValidator(value)
                   : false
               const row = (
@@ -592,7 +635,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                   value={value}
                   showError={Boolean(emailError)}
                   errorText={emailError || ''}
-                  disabled={!extendedEditable}
+                  disabled={!editable}
                   onChange={(e) => {
                     const next = e.target.value
                     if (field.type === 'email') {
@@ -607,7 +650,9 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                   }}
                 />
               )
-              return extendedEditable ? (
+              // readOnly fields are locked for everyone (backend-resolved),
+              // so the role-gate tooltip would be misleading on them.
+              return extendedEditable || field.readOnly ? (
                 <Box key={field.key}>{row}</Box>
               ) : (
                 <Tooltip

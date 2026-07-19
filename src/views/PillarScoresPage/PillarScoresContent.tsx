@@ -1,7 +1,8 @@
 import { useMemo } from 'react'
 import { Box, Typography } from '@mui/material'
-import type { ScoreAggregate } from '@/types'
+import type { ScoreAggregate, datacall } from '@/types'
 import { colors } from '@/theme/tokens'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import HeroRow from './components/HeroRow'
 import PillarGrid from './components/PillarGrid'
 import QuestionBreakdown from './QuestionBreakdown'
@@ -25,6 +26,13 @@ export interface PillarScoresContentProps {
    * modal. Falls back to the implicit lookup when undefined.
    */
   comparisonFromDatacallId?: number
+  /**
+   * Data-call reference list. When present, the latest/previous fallbacks
+   * order by deadline (the real "newest" - historical loads can carry a
+   * higher datacallid than the current call); id order is the fallback
+   * when the list is absent.
+   */
+  datacalls?: datacall[]
 }
 
 /**
@@ -51,30 +59,52 @@ export default function PillarScoresContent({
   currentDatacallName,
   previousDatacallName,
   comparisonFromDatacallId,
+  datacalls,
 }: PillarScoresContentProps) {
+  // Score datacallids ordered newest-first. Deadline order via the shared
+  // datacalls list when available (the real "newest" - historical loads can
+  // carry a higher datacallid than the current call); id order otherwise.
+  const orderedCallIds = useMemo(() => {
+    const present = new Set(scores.map((s) => s.datacallid))
+    if (datacalls && datacalls.length > 0) {
+      const ordered = sortDatacallsByDeadline(
+        datacalls.filter((d) => present.has(d.datacallid))
+      ).map((d) => d.datacallid)
+      // Score rows whose call is missing from the reference list still
+      // participate, after the known ones, in id order.
+      const known = new Set(ordered)
+      const unknown = [...present]
+        .filter((id) => !known.has(id))
+        .sort((a, b) => b - a)
+      return [...ordered, ...unknown]
+    }
+    return [...present].sort((a, b) => b - a)
+  }, [scores, datacalls])
+
   // Latest score = the selected datacall if it has data, otherwise the
-  // highest datacallid in the set. Lets the page still render the most
-  // recent measurement when no datacall is picked yet.
+  // newest call (by deadline) in the set. Lets the page still render the
+  // most recent measurement when no datacall is picked yet.
   const latestScore =
     scores.length > 0
       ? scores.find((s) => s.datacallid === selectedDataCallId) ??
-        scores.reduce((latest, current) =>
-          current.datacallid > latest.datacallid ? current : latest
-        )
+        scores.find((s) => s.datacallid === orderedCallIds[0]) ??
+        scores[0]
       : null
 
   // Previous-score lookup respects the parent's explicit comparison pick
-  // (driven by the Compare Datacalls modal) and falls back to the most
-  // recent prior datacall on this system when nothing's been picked yet.
+  // (driven by the Compare Datacalls modal) and falls back to the next
+  // older call (deadline order) on this system when nothing's been picked.
   const previousScore = useMemo(() => {
     if (!latestScore) return undefined
     if (typeof comparisonFromDatacallId === 'number') {
       return scores.find((s) => s.datacallid === comparisonFromDatacallId)
     }
-    return scores
-      .filter((s) => s.datacallid < latestScore.datacallid)
-      .sort((a, b) => b.datacallid - a.datacallid)[0]
-  }, [scores, latestScore, comparisonFromDatacallId])
+    const idx = orderedCallIds.indexOf(latestScore.datacallid)
+    const prevId = idx >= 0 ? orderedCallIds[idx + 1] : undefined
+    return prevId != null
+      ? scores.find((s) => s.datacallid === prevId)
+      : undefined
+  }, [scores, latestScore, comparisonFromDatacallId, orderedCallIds])
 
   const hasValidData = Boolean(
     latestScore &&

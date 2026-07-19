@@ -17,7 +17,13 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
 import { colors } from '@/theme/tokens'
 import _ from 'lodash'
-import type { ScoreAggregate, SystemScoreEntry, FismaSystemType } from '@/types'
+import type {
+  ScoreAggregate,
+  ScoreProgress,
+  SystemScoreEntry,
+  FismaSystemType,
+} from '@/types'
+import { buildDashboardMaps } from './aggregateScores'
 
 /** Short fiscal-year label, e.g. "FY2022 ..." -> "FY22". Falls back to the name. */
 function shortFy(name: string | undefined): string {
@@ -55,13 +61,24 @@ export default function HomePageContainer() {
   const [addOpen, setAddOpen] = useState<boolean>(false)
   const [priorAvg, setPriorAvg] = useState<number | undefined>(undefined)
   const [priorLabel, setPriorLabel] = useState<string>('')
+  const [progressMap, setProgressMap] = useState<Record<number, ScoreProgress>>(
+    {}
+  )
+  // Which active call(s) each system has scores in, so per-row actions open the
+  // system's own data call instead of a globally-selected one.
+  const [systemCallMap, setSystemCallMap] = useState<Record<number, number[]>>(
+    {}
+  )
+  const [chosenCallMap, setChosenCallMap] = useState<Record<number, number>>({})
   const {
     latestDataCallId,
     selectedDatacall,
     datacalls,
+    activeDatacallIds,
     fismaSystems,
     setFismaSystems,
     userInfo,
+    datacenterEnvironments,
   } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const datacallName = selectedDatacall?.datacall ?? ''
@@ -70,34 +87,64 @@ export default function HomePageContainer() {
 
   useEffect(() => {
     const controller = new AbortController()
-    async function fetchScores() {
-      if (activeDataCallId !== 0) {
-        try {
-          const res = await axiosInstance.get(
-            `/scores/aggregate?datacallid=${activeDataCallId}`,
-            { signal: controller.signal }
+    const ids = activeDatacallIds
+
+    // Aggregate every active call in the year. Each call is fetched
+    // independently (per-request .catch so one failure doesn't sink the batch
+    // or block the others), then buildDashboardMaps merges them per system,
+    // choosing the call each system most recently updated. Scores and progress
+    // are fetched together because the chosen call depends on both.
+    async function load() {
+      const [scoresPerCall, progressPerCall] = await Promise.all([
+        Promise.all(
+          ids.map((id) =>
+            axiosInstance
+              .get(`/scores/aggregate?datacallid=${id}`, {
+                signal: controller.signal,
+              })
+              .then((res) => res.data.data as ScoreAggregate[])
+              .catch((error) => {
+                if (!controller.signal.aborted)
+                  console.error(`scores/aggregate ${id} failed:`, error)
+                return [] as ScoreAggregate[]
+              })
           )
-          const scoresMap: Record<number, SystemScoreEntry> = {}
-          for (const obj of res.data.data as ScoreAggregate[]) {
-            scoresMap[obj.fismasystemid] = {
-              score: obj.systemscore ?? 0,
-              tier: obj.systemtier,
-            }
-          }
-          setScoreMap(scoresMap)
-        } catch (error) {
-          if (controller.signal.aborted) return
-          console.error('Error fetching scores:', error)
-        } finally {
-          if (!controller.signal.aborted) setLoading(false)
-        }
-      }
+        ),
+        Promise.all(
+          ids.map((id) =>
+            axiosInstance
+              .get(`/scores/progress?datacallid=${id}`, {
+                signal: controller.signal,
+              })
+              .then((res) => res.data.data as ScoreProgress[])
+              .catch((error) => {
+                if (!controller.signal.aborted)
+                  console.error(`scores/progress ${id} failed:`, error)
+                return [] as ScoreProgress[]
+              })
+          )
+        ),
+      ])
+      if (controller.signal.aborted) return
+      const maps = buildDashboardMaps(ids, scoresPerCall, progressPerCall)
+      setScoreMap(maps.scoreMap)
+      setProgressMap(maps.progressMap)
+      setSystemCallMap(maps.systemCallMap)
+      setChosenCallMap(maps.chosenCallMap)
+      setLoading(false)
     }
-    fetchScores()
+
+    // Keep the spinner until the active calls resolve - activeDatacallIds is
+    // empty on the first paint while Title is still fetching /datacalls, so
+    // don't clear loading (which would flash an empty dashboard) until there
+    // are calls to fetch.
+    if (ids.length > 0) {
+      load()
+    }
     return () => {
       controller.abort()
     }
-  }, [activeDataCallId])
+  }, [activeDatacallIds])
 
   // Average score for the immediately-prior datacall, for the Avg ZT trend.
   // datacalls arrives sorted by datacallid descending, so the prior one is the
@@ -244,6 +291,9 @@ export default function HomePageContainer() {
         scores={scoreMap}
         selectedRows={selectedRows}
         onSelectionChange={setSelectedRows}
+        progress={progressMap}
+        systemCallMap={systemCallMap}
+        chosenCallMap={chosenCallMap}
       />
 
       <EditSystemModal
@@ -252,6 +302,7 @@ export default function HomePageContainer() {
         onClose={handleCloseAdd}
         system={EMPTY_SYSTEM}
         mode="create"
+        datacenterEnvironments={datacenterEnvironments}
         extendedEditable={hasUnscopedRead(userInfo)}
       />
     </Box>

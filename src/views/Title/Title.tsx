@@ -3,7 +3,7 @@ import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import 'core-js/stable/atob'
-import { userData, UserRole, datacall } from '@/types'
+import { userData, UserRole, datacall, DataCenterEnvironment } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -14,12 +14,16 @@ import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
-import { useState, useEffect, useCallback } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
+import { groupDatacallsByYear } from '@/utils/datacallGrouping'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
+import { notify } from '@/utils/notify'
+import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
@@ -27,8 +31,10 @@ import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import _ from 'lodash'
 import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
+import DevEnvironmentBanner from '@/components/DevEnvironmentBanner/DevEnvironmentBanner'
 import ztmfLogo from '@/assets/ztmf-logo-color.png'
 import { colors, fonts } from '@/theme/tokens'
+import { clearOtherUserDrafts } from '../QuestionnairePage/draftStore'
 /**
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
@@ -55,15 +61,22 @@ export default function Title() {
   const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
-  const [selectedDatacall, setSelectedDatacall] = useState<datacall | null>(
-    null
-  )
+  // The dashboard aggregates the active year's data calls. activeYear is the
+  // selected fiscal year; activeDatacallIds are the toggled-on calls within it
+  // (all on by default). See groupDatacallsByYear / #467.
+  // Only the setter is needed now that the year is implied by the selected
+  // call; kept as state so fetchDatacalls' initial-load reset still works.
+  const [, setActiveYear] = useState<number | null>(null)
+  const [activeDatacallIds, setActiveDatacallIds] = useState<number[]>([])
   const [latestDeadline, setLatestDeadline] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
   const [dashboardSearch, setDashboardSearch] = useState<string>('')
+  const [datacenterEnvironments, setDatacenterEnvironments] = useState<
+    DataCenterEnvironment[]
+  >([])
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -98,38 +111,157 @@ export default function Title() {
   }, [showDecommissioned, fetchFismaSystems, loaderData.status])
 
   useEffect(() => {
-    if (loaderData.status !== 200) return
-    const controller = new AbortController()
-    async function fetchDatacalls() {
+    if (loaderData.status === 200) void clearOtherUserDrafts(userInfo.userid)
+  }, [loaderData.status, userInfo.userid])
+
+  // Hoisted out of the mount effect so it can be re-invoked on demand -
+  // specifically, right after DataCallModal creates a new datacall so the
+  // picker updates without a manual page reload. Accepts an optional
+  // signal for the mount-effect's abort cleanup; user-triggered refetches
+  // (e.g. post-create) invoke it without a signal.
+  //
+  // `resetSelection` defaults to true for the initial mount load, which snaps
+  // the active year/toggles to the latest year with data. A post-create
+  // refetch passes false so refreshing the list does not clobber whatever
+  // year/selection the user is currently viewing - that selection flows through
+  // the Outlet context to the dashboard and questionnaire.
+  const fetchDatacalls = useCallback(
+    async (signal?: AbortSignal, resetSelection: boolean = true) => {
       try {
-        const res = await axiosInstance.get('/datacalls', {
-          signal: controller.signal,
-        })
-        const sorted: datacall[] = [...res.data.data].sort(
-          (a: datacall, b: datacall) => b.datacallid - a.datacallid
+        const res = await axiosInstance.get(
+          '/datacalls',
+          signal ? { signal } : {}
+        )
+        if (signal?.aborted) return
+        // "Latest"/"current" is the call with the furthest-out deadline, not
+        // the highest datacallid: historical loads can carry a higher id than
+        // the real current call. datacallid is only a tiebreak.
+        const sorted: datacall[] = sortDatacallsByDeadline(
+          res.data.data as datacall[]
         )
         setDatacalls(sorted)
         if (sorted.length > 0) {
           setLatestDataCallId(sorted[0].datacallid)
           setLatestDatacall(sorted[0].datacall)
           setLatestDeadline(sorted[0].deadline)
-          setSelectedDatacall(sorted[0])
+          // Default to the latest year with data, all of its calls toggled on -
+          // initial load only; a post-create refetch keeps the user's selection.
+          if (resetSelection) {
+            const [firstGroup] = groupDatacallsByYear(sorted)
+            if (firstGroup) {
+              setActiveYear(firstGroup.year)
+              setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+            }
+          }
         }
       } catch (error) {
-        if (controller.signal.aborted) return
+        if (signal?.aborted) return
         console.error('Fetch latest datacall error:', error)
       }
+    },
+    []
+  )
+
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    fetchDatacalls(controller.signal)
+    return () => {
+      controller.abort()
     }
-    fetchDatacalls()
+  }, [loaderData.status, fetchDatacalls])
+
+  // Datacenter-environment vocabulary is reference data shared by the system
+  // form (dropdown) and the questionnaire pillar filter, so it is fetched
+  // once here and passed down via context. Failure is non-fatal: consumers
+  // fall back to raw values when the list is empty.
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    fetchDataCenterEnvironments(controller.signal)
+      .then(setDatacenterEnvironments)
+      .catch((error) => {
+        if (controller.signal.aborted) return
+        console.error('Fetch datacenter environments error:', error)
+      })
     return () => {
       controller.abort()
     }
   }, [loaderData.status])
+  const datacallsByYear = useMemo(
+    () => groupDatacallsByYear(datacalls),
+    [datacalls]
+  )
+  // Single active call when exactly one is toggled on, else null. Drives the
+  // single-id flows (questionnaire, export, diff); null signals aggregation.
+  const selectedDatacall = useMemo<datacall | null>(
+    () =>
+      activeDatacallIds.length === 1
+        ? datacalls.find((d) => d.datacallid === activeDatacallIds[0]) ?? null
+        : null,
+    [activeDatacallIds, datacalls]
+  )
+  // Single-select adapter for the redesign's DatacallContextCard picker over
+  // the year-grouped multi-call model: picking a call narrows the active set
+  // to just that call (and its year); clearing resets to the latest year with
+  // every call toggled on, which restores the aggregated dashboard view.
+  const setSelectedDatacall = useCallback(
+    (dc: datacall | null) => {
+      if (!dc) {
+        const [firstGroup] = datacallsByYear
+        if (firstGroup) {
+          setActiveYear(firstGroup.year)
+          setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+        } else {
+          setActiveYear(null)
+          setActiveDatacallIds([])
+        }
+        return
+      }
+      const group = datacallsByYear.find((g) =>
+        g.calls.some((c) => c.datacallid === dc.datacallid)
+      )
+      setActiveYear(group?.year ?? null)
+      setActiveDatacallIds([dc.datacallid])
+    },
+    [datacallsByYear]
+  )
+
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
   }
   const handleClose = () => {
     setAnchorEl(null)
+  }
+  // Ends the session: calls the backend logout endpoint that clears the
+  // ztmf_session and ALB OIDC cookies, then forces a full reload onto the
+  // sign-in route. The reload is deliberate - it re-runs the root authLoader
+  // against the now-cleared cookie so Title re-renders LoginPage. A client-
+  // side hash change alone would not re-run the loader, and a full reload
+  // also guarantees no in-memory session state lingers. Logout is best-
+  // effort: even if the request fails we still drop the user to sign-in.
+  //
+  // skipAuthHandling short-circuits the centralized 401 interceptor - if the
+  // session has already expired, the interceptor's own /signin redirect is
+  // redundant with the reload we do below and only causes a flash of the
+  // "Session expired" message before the reload lands.
+  //
+  // The timeout caps a hung logout so a dead or slow backend cannot leave
+  // the user stuck with no visible feedback. The notify toast covers the
+  // gap between click and reload on any connection speed.
+  const handleLogout = async () => {
+    setAnchorEl(null)
+    notify('Signing out...', 'info')
+    try {
+      await axiosInstance.post('/auth/logout', null, {
+        skipAuthHandling: true,
+        timeout: 5000,
+      })
+    } catch (error) {
+      console.error('Error logging out:', error)
+    }
+    window.location.hash = Routes.SIGNIN
+    window.location.reload()
   }
   // Display name for the IdP that minted the user's session. Surfaced
   // as a small badge next to the name so support can debug "I logged
@@ -182,12 +314,36 @@ export default function Title() {
       show: userInfo.role === 'OWNER',
     },
   ].filter((item) => item.show)
-  // The Admin dropdown only appears when the user actually has an action to
-  // take. Read-only admins have nav but no create/email actions.
-  const hasHeaderActions = isAdmin || isUnscopedWriteAdmin(userInfo)
+  // Every logged-in user gets the account menu (the logout affordance must
+  // always be reachable); the admin-only action items inside are gated
+  // individually, so a non-admin sees just Log out.
+  const hasHeaderActions = true
   return (
     <>
-      <UsaBanner />
+      {/* Left-align the USA banner's content with the ZTMF logo below it by
+          dropping the CMSDS max-width centering and matching the header's
+          responsive horizontal padding. */}
+      <Box
+        sx={{
+          '& .ds-c-usa-banner__header, & .ds-c-usa-banner__guidance': {
+            maxWidth: 'none',
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          },
+        }}
+      >
+        <UsaBanner />
+      </Box>
+      {/* Match the dev banner's text start to the logo/USA-banner content
+          while the coloured bar stays full-bleed. */}
+      <Box
+        sx={{
+          '& .MuiAlert-root': {
+            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
+          },
+        }}
+      >
+        <DevEnvironmentBanner authenticated={loaderData.status === 200} />
+      </Box>
       {/* Branded header bar. Hidden on the /signin route AND any time
           LoginPage is rendered as the body (loaderData.status !== 200),
           so the header never sits above a "please sign in" prompt at any
@@ -361,6 +517,10 @@ export default function Title() {
                       Create datacall
                     </MenuItem>
                   )}
+                  {/* Rendered for every logged-in user so the logout
+                      affordance is always available; the admin items above
+                      remain individually gated. */}
+                  <MenuItem onClick={handleLogout}>Log out</MenuItem>
                 </Menu>
               )}
             </Box>
@@ -417,6 +577,7 @@ export default function Title() {
               latestDatacall,
               latestDeadline,
               datacalls,
+              activeDatacallIds,
               selectedDatacall,
               setSelectedDatacall,
               showDecommissioned,
@@ -424,6 +585,7 @@ export default function Title() {
               fetchFismaSystems,
               dashboardSearch,
               setDashboardSearch,
+              datacenterEnvironments,
             }}
           />
         </Box>
@@ -435,13 +597,18 @@ export default function Title() {
         onClose={handleCloseModal}
         system={EMPTY_SYSTEM}
         mode={'create'}
+        datacenterEnvironments={datacenterEnvironments}
         extendedEditable={hasUnscopedRead(userInfo)}
       />
       <EmailModal
         openModal={openEmailModal}
         closeModal={handleCloseEmailModal}
       />
-      <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
+      <DataCallModal
+        open={openDataCallModal}
+        onClose={handleDataCallClose}
+        onCreated={() => fetchDatacalls(undefined, false)}
+      />
       <Footer />
     </>
   )

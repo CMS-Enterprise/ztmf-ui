@@ -1,5 +1,9 @@
 import { filterPillarsForSystem } from './filterPillarsForSystem'
 
+// The second argument is the system's resolved scoring *category*, not its
+// raw datacenterenvironment. Raw-to-category resolution is the caller's job
+// (see toCategoryMap); this pure function only compares the category.
+
 const FULL_PILLARS = [
   'Identity',
   'Devices',
@@ -9,19 +13,21 @@ const FULL_PILLARS = [
   'CrossCutting',
 ]
 
+const SAAS_FILTERED = ['Identity', 'Networks', 'Data', 'CrossCutting']
+
 describe('filterPillarsForSystem', () => {
-  it('passes through when datacenterenvironment is null', () => {
+  it('passes through when category is null', () => {
     expect(filterPillarsForSystem(FULL_PILLARS, null)).toEqual(FULL_PILLARS)
   })
 
-  it('passes through when datacenterenvironment is undefined', () => {
+  it('passes through when category is undefined', () => {
     expect(filterPillarsForSystem(FULL_PILLARS, undefined)).toEqual(
       FULL_PILLARS
     )
   })
 
-  it('passes through when datacenterenvironment is not SaaS', () => {
-    expect(filterPillarsForSystem(FULL_PILLARS, 'On-Prem')).toEqual(
+  it('passes through when category is not SaaS', () => {
+    expect(filterPillarsForSystem(FULL_PILLARS, 'data-center-gov')).toEqual(
       FULL_PILLARS
     )
     expect(filterPillarsForSystem(FULL_PILLARS, 'Imperial-Fleet')).toEqual(
@@ -30,13 +36,14 @@ describe('filterPillarsForSystem', () => {
     expect(filterPillarsForSystem(FULL_PILLARS, '')).toEqual(FULL_PILLARS)
   })
 
-  it('drops Devices and Applications when datacenterenvironment === SaaS', () => {
-    expect(filterPillarsForSystem(FULL_PILLARS, 'SaaS')).toEqual([
-      'Identity',
-      'Networks',
-      'Data',
-      'CrossCutting',
-    ])
+  it('drops Devices and Applications when category === SaaS', () => {
+    expect(filterPillarsForSystem(FULL_PILLARS, 'SaaS')).toEqual(SAAS_FILTERED)
+  })
+
+  it('filters on the resolved category even when it came from an alias raw value', () => {
+    // A raw value like "Some SaaS Alias" resolves (via toCategoryMap) to the
+    // 'SaaS' category before reaching here; passing that category filters.
+    expect(filterPillarsForSystem(FULL_PILLARS, 'SaaS')).toEqual(SAAS_FILTERED)
   })
 
   it('is case-sensitive on the SaaS check (matches BE convention exactly)', () => {

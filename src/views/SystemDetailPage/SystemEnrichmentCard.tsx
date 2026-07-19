@@ -9,11 +9,11 @@ import {
   Grid,
   Typography,
 } from '@mui/material'
-import { CfactsSystemType } from '@/types'
+import { SystemEnrichmentType } from '@/types'
 import axiosInstance from '@/axiosConfig'
 import InsightsEmptyState from './InsightsEmptyState'
 
-interface CfactsRecordCardProps {
+interface SystemEnrichmentCardProps {
   fismaUid: string
 }
 
@@ -85,8 +85,12 @@ function formatDate(dateStr: string | null): string | null {
   return date.toLocaleDateString()
 }
 
-export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
-  const [cfacts, setCfacts] = useState<CfactsSystemType | null>(null)
+export default function SystemEnrichmentCard({
+  fismaUid,
+}: SystemEnrichmentCardProps) {
+  const [enrichment, setEnrichment] = useState<SystemEnrichmentType | null>(
+    null
+  )
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [hasError, setHasError] = useState(false)
@@ -112,7 +116,7 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
         // top-level siblings. Flatten into the existing shape so the rendering
         // below is unchanged.
         const record = res.data?.data
-        setCfacts(
+        setEnrichment(
           record
             ? {
                 ...record.payload,
@@ -160,11 +164,11 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
     )
   }
 
-  if (notFound || !cfacts) {
+  if (notFound || !enrichment) {
     return <InsightsEmptyState />
   }
 
-  const atoColor = getAtoColor(cfacts.ato_expiration_date)
+  const atoColor = getAtoColor(enrichment.ato_expiration_date)
 
   return (
     <Grid container spacing={3}>
@@ -179,14 +183,17 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
           <CardContent>
             <FieldDisplay
               label="Package Name"
-              value={cfacts.authorization_package_name}
+              value={enrichment.authorization_package_name}
             />
-            <FieldDisplay label="Acronym" value={cfacts.fisma_acronym} />
-            <FieldDisplay label="FISMA UUID" value={cfacts.fisma_uuid} />
-            <FieldDisplay label="Component" value={cfacts.component_acronym} />
+            <FieldDisplay label="Acronym" value={enrichment.fisma_acronym} />
+            <FieldDisplay label="FISMA UUID" value={enrichment.fisma_uuid} />
+            <FieldDisplay
+              label="Component"
+              value={enrichment.component_acronym}
+            />
             <FieldDisplay
               label="Lifecycle Phase"
-              value={cfacts.lifecycle_phase}
+              value={enrichment.lifecycle_phase}
             />
           </CardContent>
         </Card>
@@ -201,11 +208,11 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
           />
           <CardContent>
             <Box sx={{ display: 'flex', gap: 1, flexWrap: 'wrap', mb: 2 }}>
-              <BooleanChip label="Active" value={cfacts.is_active} />
-              <BooleanChip label="Retired" value={cfacts.is_retired} />
+              <BooleanChip label="Active" value={enrichment.is_active} />
+              <BooleanChip label="Retired" value={enrichment.is_retired} />
               <BooleanChip
                 label="Decommissioned"
-                value={cfacts.is_decommissioned}
+                value={enrichment.is_decommissioned}
               />
             </Box>
             <Box sx={{ mb: 2 }}>
@@ -216,13 +223,13 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
                 variant="body1"
                 sx={atoColor ? { color: atoColor } : undefined}
               >
-                {formatDate(cfacts.ato_expiration_date) || '-'}
+                {formatDate(enrichment.ato_expiration_date) || '-'}
               </Typography>
             </Box>
-            {cfacts.decommission_date && (
+            {enrichment.decommission_date && (
               <FieldDisplay
                 label="Decommission Date"
-                value={formatDate(cfacts.decommission_date)}
+                value={formatDate(enrichment.decommission_date)}
               />
             )}
           </CardContent>
@@ -237,9 +244,15 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
             sx={{ pb: 0 }}
           />
           <CardContent>
-            <FieldDisplay label="Group Acronym" value={cfacts.group_acronym} />
-            <FieldDisplay label="Group Name" value={cfacts.group_name} />
-            <FieldDisplay label="Division Name" value={cfacts.division_name} />
+            <FieldDisplay
+              label="Group Acronym"
+              value={enrichment.group_acronym}
+            />
+            <FieldDisplay label="Group Name" value={enrichment.group_name} />
+            <FieldDisplay
+              label="Division Name"
+              value={enrichment.division_name}
+            />
           </CardContent>
         </Card>
       </Grid>
@@ -257,13 +270,13 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
               <Grid item xs={12} sm={6}>
                 <FieldDisplay
                   label="Primary ISSO Name"
-                  value={cfacts.primary_isso_name}
+                  value={enrichment.primary_isso_name}
                 />
               </Grid>
               <Grid item xs={12} sm={6}>
                 <FieldDisplay
                   label="Primary ISSO Email"
-                  value={cfacts.primary_isso_email}
+                  value={enrichment.primary_isso_email}
                 />
               </Grid>
             </Grid>
@@ -274,9 +287,9 @@ export default function CfactsRecordCard({ fismaUid }: CfactsRecordCardProps) {
       {/* Footer: sync info */}
       <Grid item xs={12}>
         <Typography variant="caption" color="text.secondary">
-          Data as of: {new Date(cfacts.synced_at).toLocaleString()}
-          {cfacts.last_modified_date &&
-            ` · Last modified in CFACTS: ${formatDate(cfacts.last_modified_date)}`}
+          Data as of: {new Date(enrichment.synced_at).toLocaleString()}
+          {enrichment.last_modified_date &&
+            ` · Last modified in CFACTS: ${formatDate(enrichment.last_modified_date)}`}
         </Typography>
       </Grid>
     </Grid>

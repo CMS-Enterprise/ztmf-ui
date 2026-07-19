@@ -14,7 +14,7 @@ import type {
   FormValidHelperText,
 } from '@/types'
 import { emailValidator } from '../validators'
-import { datacenterenvironment } from '../dataEnvironment'
+import type { DataCenterEnvironmentOption } from '@/utils/dataCenterEnvironments'
 import type { OpDiv } from '@/types'
 
 /** Props for {@link SystemFormFields}. */
@@ -45,6 +45,12 @@ export interface SystemFormFieldsProps {
    * top of the form. Loaded by the orchestrator when the modal opens.
    */
   opdivs: OpDiv[]
+  /**
+   * Datacenter-environment options from the server vocabulary, including
+   * the system's current value as a disabled entry when it is a legacy
+   * environment that is no longer selectable.
+   */
+  datacenterEnvironmentOptions: DataCenterEnvironmentOption[]
   /**
    * Content rendered at the bottom of the right column, below the SDL
    * sync toggle. Used by EditSystemModal to render the decommission /
@@ -79,6 +85,7 @@ export default function SystemFormFields({
   setFormValid,
   setFormValidErrorText,
   opdivs,
+  datacenterEnvironmentOptions,
   children,
 }: SystemFormFieldsProps) {
   return (
@@ -382,8 +389,12 @@ export default function SystemFormFields({
               '& fieldset': { borderColor: colors.border },
             }}
           >
-            {datacenterenvironment.map((option) => (
-              <MenuItem key={option.value} value={option.value}>
+            {datacenterEnvironmentOptions.map((option) => (
+              <MenuItem
+                key={option.value}
+                value={option.value}
+                disabled={option.disabled}
+              >
                 {option.label}
               </MenuItem>
             ))}

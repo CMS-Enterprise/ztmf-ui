@@ -17,6 +17,7 @@ import DecommissionForm from './components/DecommissionForm'
 import ReactivateForm from './components/ReactivateForm'
 import SystemFormFields from './components/SystemFormFields'
 import ExtendedMetadataFields from './components/ExtendedMetadataFields'
+import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
@@ -39,6 +40,7 @@ export default function EditSystemModal({
   onClose,
   system,
   mode,
+  datacenterEnvironments = [],
   extendedEditable = false,
 }: editSystemModalProps) {
   const {
@@ -54,6 +56,10 @@ export default function EditSystemModal({
     markTouched,
     markFieldError,
   } = useEditSystemForm(system, open)
+  const datacenterEnvironmentOptions = toDropdownOptionsWithCurrent(
+    datacenterEnvironments,
+    system?.datacenterenvironment
+  )
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const {
     decommissionDate,
@@ -152,7 +158,9 @@ export default function EditSystemModal({
         }
         // Extended metadata only sent when the caller is an
         // organization-wide admin. The backend also strips these on scoped
-        // users - defense-in-depth.
+        // users - defense-in-depth. Null leaves a value unchanged (the
+        // backend writes only non-null fields, so imported data isn't
+        // clobbered).
         if (extendedEditable) {
           for (const key of EXTENDED_METADATA_KEYS) {
             editBody[key] = editedFismaSystem[key] ?? null
@@ -279,6 +287,7 @@ export default function EditSystemModal({
               setFormValid={setFormValid}
               setFormValidErrorText={setFormValidErrorText}
               opdivs={opdivs}
+              datacenterEnvironmentOptions={datacenterEnvironmentOptions}
             >
               {mode === 'edit' && (
                 <Box

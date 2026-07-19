@@ -1,7 +1,7 @@
 import * as React from 'react'
 import { Table, TableBody, TableCell, TableRow, TableHead } from '@mui/material'
 import type { ScoreTier } from '@/types'
-import { TIER_CELL_STYLES, TIER_CHIP_STYLES } from '@/utils/tierStyles'
+import { TIERS } from '@/utils/tierStyles'
 
 // Static legend of the HHS scoring tiers. Order mirrors the maturity
 // progression so a reader scans left (lowest) to right (highest). Ranges
@@ -31,10 +31,10 @@ const ScoreTable: React.FC = (): JSX.Element => {
             // legend swatch on a white page looks like a missing cell, so
             // fall back to the soft chip gray for the Not Assessed legend
             // entry only.
-            const cellBg = TIER_CELL_STYLES[tier].backgroundColor
+            const cellBg = TIERS[tier]?.cell.backgroundColor
             const legendBg =
-              cellBg === 'transparent'
-                ? TIER_CHIP_STYLES[tier].backgroundColor
+              !cellBg || cellBg === 'transparent'
+                ? TIERS[tier]?.chip.backgroundColor
                 : cellBg
             return (
               <TableCell

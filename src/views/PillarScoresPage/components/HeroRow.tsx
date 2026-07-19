@@ -121,6 +121,8 @@ export default function HeroRow({
           latestScore={latestScore}
           previousScore={previousScore}
           hasPrevious={scores.length > 1}
+          currentLabel={currentDatacallName}
+          previousLabel={previousDatacallName}
         />
       </Card>
     </Box>
