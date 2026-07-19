@@ -167,7 +167,7 @@ describe('ProgressCell', () => {
 
   it('renders an em-dash when progress data is missing', () => {
     render(<ProgressCell entry={undefined} />)
-    expect(screen.getByLabelText('No progress data')).toBeInTheDocument()
+    expect(screen.getByText('No progress data')).toBeInTheDocument()
   })
 
   it('renders a neutral N/A chip when no questionnaire applies', () => {
@@ -225,7 +225,7 @@ describe('ProgressCell', () => {
         hasScore={false}
       />
     )
-    expect(screen.getByLabelText('No progress data')).toBeInTheDocument()
+    expect(screen.getByText('No progress data')).toBeInTheDocument()
     expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
     expect(screen.queryByText('Complete')).not.toBeInTheDocument()
   })

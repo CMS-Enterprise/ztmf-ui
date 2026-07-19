@@ -1345,7 +1345,10 @@ export default function QuestionnarePage() {
             current={currentFunctionIndex + 1}
             total={currentCategory?.steps.length ?? 0}
           />
+          {/* The question is the card's heading - h2 under the PageHeader's
+              h1 so screen-reader users can jump straight to it. */}
           <Typography
+            component="h2"
             sx={{
               fontSize: 18,
               fontWeight: 700,
