@@ -11,6 +11,7 @@ import {
   ScoreAggregate,
 } from '@/types'
 import { fetchOpDivs } from '@/utils/opdivs'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
@@ -602,19 +603,30 @@ export default function SystemDetailPage() {
   }
 
   // Pick the score aggregate matching the currently-selected datacall; fall
-  // back to the highest datacallid in the set so the page still shows the most
-  // recent measurement when no datacall is picked.
+  // back to the newest scored call so the page still shows the most recent
+  // measurement when no datacall is picked. "Newest" and "previous" are
+  // deadline order via the shared datacalls list, not raw datacallid -
+  // historical loads can out-id the real current call (#393).
+  const scoredCallsByDeadline = sortDatacallsByDeadline(
+    datacalls.filter((dc) => scores.some((s) => s.datacallid === dc.datacallid))
+  )
   const currentScore =
     scores.find((s) => s.datacallid === activeDataCallId) ??
-    scores.reduce<ScoreAggregate | undefined>(
-      (latest, s) => (!latest || s.datacallid > latest.datacallid ? s : latest),
-      undefined
-    )
-  const previousScore = currentScore
-    ? scores
-        .filter((s) => s.datacallid < currentScore.datacallid)
-        .sort((a, b) => b.datacallid - a.datacallid)[0]
-    : undefined
+    scores.find((s) => s.datacallid === scoredCallsByDeadline[0]?.datacallid) ??
+    scores[0]
+  const currentScoredIdx = currentScore
+    ? scoredCallsByDeadline.findIndex(
+        (dc) => dc.datacallid === currentScore.datacallid
+      )
+    : -1
+  const previousScore =
+    currentScoredIdx >= 0
+      ? scores.find(
+          (s) =>
+            s.datacallid ===
+            scoredCallsByDeadline[currentScoredIdx + 1]?.datacallid
+        )
+      : undefined
   const datacallNameById = (id?: number) =>
     id ? datacalls.find((dc) => dc.datacallid === id)?.datacall : undefined
   const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
