@@ -29,8 +29,13 @@ export type DatacallContextCardProps = {
 export default function DatacallContextCard({
   readOnly = false,
 }: DatacallContextCardProps = {}) {
-  const { datacalls, selectedDatacall, setSelectedDatacall, latestDataCallId } =
-    useContextProp()
+  const {
+    datacalls,
+    selectedDatacall,
+    setSelectedDatacall,
+    latestDataCallId,
+    activeDatacallIds,
+  } = useContextProp()
 
   return (
     <DatacallContextCardView
@@ -38,6 +43,7 @@ export default function DatacallContextCard({
       selectedDatacall={selectedDatacall}
       onSelect={setSelectedDatacall}
       latestDataCallId={latestDataCallId}
+      activeDatacallIds={activeDatacallIds}
       readOnly={readOnly}
     />
   )
