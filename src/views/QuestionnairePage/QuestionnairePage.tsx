@@ -635,7 +635,12 @@ export default function QuestionnarePage() {
               datacalls,
               datacallSlugRef.current
             )
-            const isHistorical =
+            // "Not the latest call" does not mean "closed": two calls can be
+            // open at once (e.g. a CMS quarterly and an HHS annual), and
+            // "latest" only ranks deadlines. A non-latest pick just means the
+            // user chose a specific call; whether it reads as closed is
+            // decided by that call's own deadline below.
+            const isExplicitPick =
               selectedDatacall !== null &&
               selectedDatacall.datacallid !== latestDataCallId
             if (deepLinkDatacall) {
@@ -647,10 +652,14 @@ export default function QuestionnarePage() {
                   : true
               )
               activeDataCallId = deepLinkDatacall.datacallid
-            } else if (isHistorical && selectedDatacall) {
+            } else if (isExplicitPick && selectedDatacall) {
               datacall = encodeDatacallSlug(selectedDatacall.datacall)
               setDatacall(datacall)
-              setIsPastDeadline(true)
+              setIsPastDeadline(
+                selectedDatacall.deadline
+                  ? new Date() > new Date(selectedDatacall.deadline)
+                  : true
+              )
               activeDataCallId = selectedDatacall.datacallid
             } else {
               datacall = encodeDatacallSlug(latestDatacall)
