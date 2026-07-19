@@ -320,6 +320,41 @@ export default function Title() {
   const hasHeaderActions = true
   return (
     <>
+      {/* Skip link: first tab stop, visually hidden until focused. A button
+          with programmatic focus (not an href="#..." anchor) because the app
+          uses hash routing - an in-page fragment would be swallowed by the
+          router as a navigation. */}
+      {!isSignInRoute && loaderData.status === 200 && (
+        <Box
+          component="button"
+          type="button"
+          onClick={() => {
+            const main = document.getElementById('main-content')
+            if (main) {
+              main.focus()
+              main.scrollIntoView()
+            }
+          }}
+          sx={{
+            position: 'absolute',
+            left: -9999,
+            top: 0,
+            zIndex: 2000,
+            px: 2,
+            py: 1,
+            fontSize: 14,
+            fontWeight: 600,
+            color: colors.white,
+            backgroundColor: colors.primary,
+            border: 'none',
+            borderRadius: `0 0 4px 0`,
+            cursor: 'pointer',
+            '&:focus-visible': { left: 0 },
+          }}
+        >
+          Skip to main content
+        </Box>
+      )}
       {/* Left-align the USA banner's content with the ZTMF logo below it by
           dropping the CMSDS max-width centering and matching the header's
           responsive horizontal padding. */}
@@ -433,10 +468,17 @@ export default function Title() {
                     : 'Account'
                 }
               >
+                {/* A real button element (not a role="button" Box) so the
+                    account menu - the only path to Log out - is reachable
+                    and operable by keyboard and announced correctly. */}
                 <Box
-                  role={hasHeaderActions ? 'button' : undefined}
+                  component="button"
+                  type="button"
                   aria-controls={hasHeaderActions ? 'actions-menu' : undefined}
                   aria-haspopup={hasHeaderActions ? 'true' : undefined}
+                  aria-expanded={
+                    hasHeaderActions ? Boolean(anchorEl) : undefined
+                  }
                   aria-label={`Account: ${userInfo.fullname || 'user'}`}
                   onClick={hasHeaderActions ? handleClick : undefined}
                   sx={{
@@ -447,10 +489,18 @@ export default function Title() {
                     pr: hasHeaderActions ? 1 : 0.5,
                     borderRadius: 999,
                     cursor: hasHeaderActions ? 'pointer' : 'default',
+                    backgroundColor: 'transparent',
+                    font: 'inherit',
+                    border: hasHeaderActions
+                      ? `1px solid ${colors.neutral200}`
+                      : 'none',
                     ...(hasHeaderActions && {
-                      border: `1px solid ${colors.neutral200}`,
                       '&:hover': { backgroundColor: colors.neutral50 },
                     }),
+                    '&:focus-visible': {
+                      outline: `2px solid ${colors.primary}`,
+                      outlineOffset: 2,
+                    },
                   }}
                 >
                   <Box
@@ -562,9 +612,14 @@ export default function Title() {
         // page content stays padded to the same gutters as the header.
         <Box
           component="main"
+          id="main-content"
+          // Focus target for the skip link; -1 keeps it out of the natural
+          // tab order while allowing programmatic focus.
+          tabIndex={-1}
           sx={{
             backgroundColor: colors.neutral50,
             minWidth: 800,
+            outline: 'none',
             px: { xs: 2, sm: 4 },
           }}
         >
