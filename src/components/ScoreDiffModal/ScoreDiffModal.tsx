@@ -21,6 +21,7 @@ import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import Modal from '@/components/ui/Modal'
 import axiosInstance from '@/axiosConfig'
 import { isAuthHandled } from '@/utils/notify'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { PILLAR_ORDER, PILLAR_FUNCTION_MAP } from '@/constants'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import type {
@@ -115,9 +116,9 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
           sorted = datacallsCache.data
         } else {
           const res = await axiosInstance.get('/datacalls')
-          sorted = [...res.data.data].sort(
-            (a: datacall, b: datacall) => b.datacallid - a.datacallid
-          )
+          // Order by deadline (furthest-out first), datacallid only as a
+          // tiebreak: historical loads can out-id the real current call (#393).
+          sorted = sortDatacallsByDeadline(res.data.data as datacall[])
           datacallsCache.data = sorted
           datacallsCache.timestamp = now
         }
@@ -125,9 +126,12 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
         const toId = selectedDataCallId
         const toDefault =
           sorted.find((dc) => dc.datacallid === toId) ?? sorted[0] ?? null
-        const fromDefault =
-          sorted.find((dc) => dc.datacallid < (toDefault?.datacallid ?? 0)) ??
-          null
+        // The default "from" is the call immediately older than "to" - i.e. the
+        // next entry in the deadline-sorted list, not the next-lower datacallid.
+        const toIndex = sorted.findIndex(
+          (dc) => dc.datacallid === toDefault?.datacallid
+        )
+        const fromDefault = toIndex >= 0 ? sorted[toIndex + 1] ?? null : null
         setToDatacall(toDefault)
         setFromDatacall(fromDefault)
         // Notify the parent of the initial defaults so its page-level trend
@@ -260,7 +264,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     option: datacall,
     latestId: number
   ) => {
-    const isCurrent = option.datacallid === latestId
+    const isLatest = option.datacallid === latestId
     const isClosed = new Date() > new Date(option.deadline)
     const { key, ...rest } = props
     const deadlineLabel = new Date(option.deadline).toLocaleDateString(
@@ -280,12 +284,14 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
             }}
           >
             <Typography variant="body2">{option.datacall}</Typography>
-            {isCurrent && (
+            {/* Latest-by-deadline call: "Current" while open, "Latest" once
+                its deadline has passed (#393). */}
+            {isLatest && (
               <Chip
-                label="Current"
+                label={isClosed ? 'Latest' : 'Current'}
                 size="small"
                 variant="outlined"
-                color="primary"
+                color={isClosed ? 'default' : 'primary'}
                 sx={{ height: 18, fontSize: '0.65rem' }}
               />
             )}

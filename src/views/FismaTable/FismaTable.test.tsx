@@ -1,5 +1,13 @@
 import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
+
+// axiosConfig reads import.meta, which Jest's CJS transform cannot parse -
+// same import-meta dance as the other view tests.
+jest.mock('@/axiosConfig', () => ({
+  __esModule: true,
+  default: { get: jest.fn(), post: jest.fn(), put: jest.fn() },
+}))
+
 import FismaTable from './FismaTable'
 
 // Provide just enough context for the table to render one system row.
@@ -17,6 +25,10 @@ jest.mock('../Title/Context', () => ({
       },
     ],
     userInfo: { role: 'OWNER' },
+    latestDataCallId: 5,
+    selectedDatacall: null,
+    datacalls: [],
+    datacenterEnvironments: [],
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
     dashboardSearch: '',

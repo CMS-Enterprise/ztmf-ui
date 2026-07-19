@@ -114,6 +114,7 @@ export default function PillarScoresPage() {
           currentDatacallName={currentDatacallName}
           previousDatacallName={previousDatacallName}
           comparisonFromDatacallId={previousDatacallId}
+          datacalls={datacalls}
         />
       )}
       <ScoreDiffModal

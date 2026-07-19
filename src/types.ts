@@ -3,11 +3,23 @@
  * @module types
  */
 
-// TODO: maybe provide environment and other things to log?
-export type AppConfig = AppFeatureFlags
+export type AppConfig = AppFeatureFlags & AppEnvironment
 
 export type AppFeatureFlags = {
   IDP_ENABLED: boolean
+  // Gates the ZTMF Insights "How to fix" remediation text on the questionnaire.
+  // On in impl only (we're trialing whether to offer fixes); off in dev/prod.
+  INSIGHTS_SUGGEST_FIX_ENABLED: boolean
+}
+
+// Environment-derived settings. IS_NONPROD gates the development banner; the
+// DEV_* overrides let the deployed dev environment inject testing-specific copy
+// and contact links at build time without committing them to the repo.
+export type AppEnvironment = {
+  IS_NONPROD: boolean
+  DEV_BANNER_MESSAGE: string
+  DEV_FEEDBACK_URL: string
+  DEV_CONTACT_EMAIL: string
 }
 
 export type FormField = {
@@ -37,6 +49,19 @@ export type OpDiv = {
   name: string
   is_parent: boolean
   active: boolean
+}
+
+// One known datacenter environment from GET /api/v1/datacenterenvironments.
+// `datacenterenvironment` is the raw value stored on a system; `category` is
+// the reporting bucket the raw value resolves to (and the dropdown label);
+// `selectable` marks values offered in the picker (legacy/alias values are
+// still returned so existing systems resolve). Rows arrive ordered by `ordr`.
+export type DataCenterEnvironment = {
+  datacenterenvironment: string
+  category: string
+  scoring_key: string | null
+  selectable: boolean
+  ordr: number
 }
 
 export type userData = {
@@ -90,6 +115,10 @@ export type FismaSystemType = {
   system_owner?: string | null
   system_owner_email?: string | null
   legacy?: string | null
+  // Risk-based target maturity (ztmf#398). null = no target asserted yet;
+  // the UI presents the Advanced default.
+  target_maturity_tier?: string | null
+  target_maturity_justification?: string | null
 }
 export type FismaSystems = {
   fismaSystems: FismaSystemType[]
@@ -147,6 +176,7 @@ export type QuestionScores = {
 }
 
 export type Question = {
+  questionid: number
   question: string
   notesprompt: string
   description: string
@@ -178,15 +208,22 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
-  // When true, render the Extended Metadata section. Only organization-wide
-  // admins (HasUnscopedRead) see it; scoped tiers get the modal without those
-  // fields. Undefined defaults to false — fail closed.
+  // Datacenter-environment vocabulary for the dropdown. Passed from Title
+  // (the modal renders outside the outlet, so it can't read context).
+  // Optional so tests can omit it; production callers always pass it or
+  // the environment dropdown renders empty.
+  datacenterEnvironments?: DataCenterEnvironment[]
+  // True for organization-wide admins: Extended Metadata fields render
+  // editable and are included in the save body. Scoped tiers see them locked.
   extendedEditable?: boolean
 }
 
 export type datacallModalProps = {
   open: boolean
   onClose: () => void
+  // Fired after a successful POST /datacalls so the parent can re-fetch
+  // its data-call list and the new call appears without a manual reload.
+  onCreated?: () => void
 }
 
 export type ScoreData = {
@@ -228,9 +265,30 @@ export type SystemScoreEntry = {
   tier?: ScoreTier
 }
 
+// One system's questionnaire progress within a data call, as returned by
+// GET /scores/progress. "Updated" counts answers genuinely touched this
+// cycle - answers pre-populated from the previous data call do not count
+// until a user saves them, so a carried-over untouched questionnaire reads
+// as not updated (ztmf#299).
+export type ScoreProgress = {
+  fismasystemid: number
+  questionsexpected: number
+  // Distinct applicable questions with an answer at all, any status (ztmf#437).
+  // The completion signal a closed call needs: imported/carried answers are
+  // answered but never "updated this cycle". Optional so the UI degrades to the
+  // prior score-presence proxy until the backend field is deployed.
+  questionsanswered?: number
+  questionsupdated: number
+  lastupdatedat?: string | null
+  updatedsincestart: boolean
+}
+
 export type QuestionChoice = {
   label: string
   value: number
+  // Maturity score (1-4) of this answer option. Carried so the radio group can
+  // match an option against a ZTMF Insight's suggested/prior score for badging.
+  score?: number
   defaultChecked?: boolean
 }
 export type users = {
@@ -270,6 +328,16 @@ export type FismaTableProps = {
   selectedRows?: number[]
   /** Called when the user toggles row selection. */
   onSelectionChange?: (ids: number[]) => void
+  // Per-system questionnaire progress for the active data call, keyed by
+  // fismasystemid. Optional so the table degrades to an em-dash column if
+  // the progress fetch fails - score display must not depend on it.
+  progress?: Record<number, ScoreProgress>
+  // Which active data call(s) each system has scores in, keyed by
+  // fismasystemid, so per-row actions target the system's own call.
+  systemCallMap?: Record<number, number[]>
+  // The single call chosen for each system's dashboard row (most-recently-updated),
+  // used so Pillar Scores opens on the same call the table is displaying.
+  chosenCallMap?: Record<number, number>
 }
 
 export type ThemeColor =
@@ -282,7 +350,7 @@ export type ThemeColor =
 
 export type ThemeSkin = 'filled' | 'light' | 'light-static'
 
-export type CfactsSystemType = {
+export type SystemEnrichmentType = {
   fisma_uuid: string
   fisma_acronym: string
   authorization_package_name: string | null
@@ -325,4 +393,123 @@ export type ScoreDiffEntry = {
     email: string
     role: string
   }
+}
+
+// ── ZTMF Insights (GET /api/v1/insights) ───────────────────────────────
+// Evidence-backed maturity suggestion per system x question, synced daily
+// from Snowflake. The endpoint returns [] for every "should not show" case
+// (OpDiv not enabled, caller not entitled, not yet synced), so the UI is
+// driven purely off row presence — see InsightsPanel.
+//
+// `payload` is an opaque, additive document owned by the pipeline. Treat
+// every key as optional and render defensively; the string index signature
+// keeps forward-added keys type-safe without an API change here.
+
+// One affected host for a Hardenize finding. `domain` is always present;
+// `detail` (specific error text) is present ~half the time and may be plain
+// text or a stringified JSON object.
+export type InsightHardenizeInstance = {
+  domain?: string
+  detail?: string
+}
+
+// One structured finding, shared across all sources (Kion / SecurityHub /
+// Hardenize). title/description/remediation are seeded from the findings
+// dictionary and may be null; instances is Hardenize-only (affected domains).
+export type InsightFinding = {
+  id?: string
+  title?: string
+  description?: string
+  remediation?: string
+  severity?: string
+  nist_controls?: string
+  // Maturity tier (1-4) of the check. Present on passing-check entries
+  // (`{source}_passing`); the tier that failed/passed is what drives the score.
+  level?: number | null
+  instances?: InsightHardenizeInstance[]
+}
+
+export type InsightFindings = {
+  kion?: InsightFinding[]
+  sechub?: InsightFinding[]
+  hardenize?: InsightFinding[]
+}
+
+export type InsightPayload = {
+  // The suggestion
+  suggested_score?: number | null
+  suggested_label?: string | null
+  evidence_sources?: string | null
+  score_floor_source?: string | null
+  score_direction?: string | null
+
+  // Prior self-reported score (for comparison)
+  last_score?: number | null
+  last_score_label?: string | null
+  last_score_date?: string | null
+  last_score_notes?: string | null
+  last_datacall?: string | null
+
+  // Per-source suggested scores + availability flags
+  has_kion_data?: boolean
+  kion_suggested_score?: number | null
+  kion_suggested_label?: string | null
+  kion_remediation?: string | null
+
+  has_sechub_data?: boolean
+  sechub_suggested_score?: number | null
+  sechub_suggested_label?: string | null
+  sechub_remediation?: string | null
+
+  has_hardenize_data?: boolean
+  hardenize_suggested_score?: number | null
+  hardenize_suggested_label?: string | null
+  hardenize_remediation?: string | null
+
+  cfacts_suggested_score?: number | null
+  cfacts_suggested_label?: string | null
+  cfacts_auth_methods?: string | null
+  cfacts_reasoning?: string | null
+
+  ars_maturity?: number | string | null
+  ars_control_score?: number | null
+  ars_controls_total?: number | null
+  ars_controls_satisfied?: number | null
+  // The actual ARS control IDs behind the counts. Additive passthrough from the
+  // pipeline; may be undefined (before it ships / on non-ARS questions), null,
+  // or []. `ars_satisfied_controls` length == `ars_controls_satisfied`.
+  ars_satisfied_controls?: string[] | null
+  // Applicable-but-not-satisfied controls (applicable − satisfied). Informational,
+  // rendered greyed — distinct from `ars_failing_controls` (Archer-explicit fails).
+  // satisfied + not_satisfied == ars_controls_total when the pipeline emits them.
+  ars_not_satisfied_controls?: string[] | null
+  ars_failing_controls?: string[] | null
+
+  findings?: InsightFindings
+  // Passing checks per source (counterpart to the failing-only `findings`).
+  // Same InsightFinding shape (id, nist_controls, description, level); severity
+  // omitted (a pass isn't a severity event). Kion is live; sechub/hardenize land
+  // later in the identical shape.
+  kion_passing?: InsightFinding[]
+  sechub_passing?: InsightFinding[]
+  hardenize_passing?: InsightFinding[]
+
+  // FIPS maturity baseline (ztmf-ui#547). `fips_ceiling` is the highest maturity
+  // tier this system's FIPS impact level needs (Low→2, Moderate→3, High/HVA→4);
+  // an answer option scoring above it is "above baseline" — warned but still
+  // selectable. `fips_impact_level` drives the "FIPS LOW" badge / divider text.
+  // Fallback for a system with no FIPS on file: level null + ceiling 4, so the
+  // rule (score > ceiling) warns on nothing and the UI never breaks.
+  fips_impact_level?: 'Low' | 'Moderate' | 'High' | null
+  fips_ceiling?: number | null
+
+  // Additive: the pipeline may add keys at any time.
+  [key: string]: unknown
+}
+
+export type Insight = {
+  fismasystemid: number
+  questionid: number
+  payload: InsightPayload
+  synced_at: string
 }

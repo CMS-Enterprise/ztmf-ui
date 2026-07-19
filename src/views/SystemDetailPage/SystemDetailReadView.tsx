@@ -11,7 +11,7 @@ import { colors, fonts, radius, tierDot } from '@/theme/tokens'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import { PILLAR_ORDER } from '@/constants'
 import { CodeBadge } from '@/components/ui/StatusChip'
-import CfactsRecordCard from './CfactsRecordCard'
+import SystemEnrichmentCard from './SystemEnrichmentCard'
 import InsightsEmptyState from './InsightsEmptyState'
 import { getFieldsBySection } from './fieldConfig'
 
@@ -30,29 +30,41 @@ interface SystemDetailReadViewProps {
   /** The system being displayed. */
   system: FismaSystemType
   /** OpDiv reference list, used to resolve the system's OpDiv code. */
-  opdivs: OpDiv[]
+  opdivs?: OpDiv[]
   /** Score aggregate for the current datacall, when available. */
   currentScore?: ScoreAggregate
   /** Score aggregate for the prior datacall on the same system, when available. */
   previousScore?: ScoreAggregate
   /** Human-readable name for the previous datacall, used in the trend line. */
   previousDatacallName?: string
+  /** Resolved full name of the user who decommissioned the system. */
+  decommissionedByName?: string
+  /**
+   * Target-maturity card, rendered after the detail cards. The page owns the
+   * card so its edit state is independent of this view.
+   */
+  targetMaturitySlot?: ReactNode
+  /** Resolved OpDiv display name, shown next to the code badge. */
+  opdivName?: string | null
 }
 
 /**
  * Read-mode view for the System detail page. Renders the score hero (overall
  * + pillar snapshot), the System identity and Organization detail cards, and
- * the ZTMF Insights section (CfactsRecordCard when sdl_sync is on, the new
+ * the ZTMF Insights section (SystemEnrichmentCard when sdl_sync is on, the new
  * EmptyState otherwise).
  * @param {SystemDetailReadViewProps} props - System, OpDivs and score aggregates.
  * @returns {JSX.Element} The detail page body.
  */
 export default function SystemDetailReadView({
   system,
-  opdivs,
+  opdivs = [],
   currentScore,
   previousScore,
   previousDatacallName,
+  decommissionedByName,
+  targetMaturitySlot,
+  opdivName,
 }: SystemDetailReadViewProps) {
   const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
   const extendedFields = getFieldsBySection('extended')
@@ -99,6 +111,17 @@ export default function SystemDetailReadView({
               label: 'FIPS-199 impact',
               value: system.fismaimpactlevel || '-',
             },
+            {
+              // Surfaces the Data Lake Export toggle in read mode so an admin
+              // can see the SDL sync state without entering edit mode.
+              label: 'SDL sync',
+              value:
+                system.sdl_sync_enabled === null
+                  ? 'Not configured'
+                  : system.sdl_sync_enabled
+                    ? 'On'
+                    : 'Off',
+            },
           ]}
         />
         <DetailCard
@@ -106,7 +129,21 @@ export default function SystemDetailReadView({
           rows={[
             {
               label: 'OpDiv',
-              value: opdivCode ? <CodeBadge code={opdivCode} /> : '-',
+              value: opdivCode ? (
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                  }}
+                >
+                  <CodeBadge code={opdivCode} />
+                  {opdivName && <span>{opdivName}</span>}
+                </Box>
+              ) : (
+                opdivName ?? '-'
+              ),
             },
             { label: 'Group acronym', value: system.groupacronym || '-' },
             { label: 'Group name', value: system.groupname || '-' },
@@ -119,6 +156,27 @@ export default function SystemDetailReadView({
           ]}
         />
       </Box>
+      {system.decommissioned && (
+        <Box sx={{ mb: 1.75 }}>
+          <DetailCard
+            title="Decommission details"
+            rows={[
+              {
+                label: 'Decommissioned on',
+                value: system.decommissioned_date
+                  ? new Date(system.decommissioned_date).toLocaleDateString()
+                  : '-',
+              },
+              {
+                label: 'Decommissioned by',
+                value: decommissionedByName || system.decommissioned_by || '-',
+              },
+              { label: 'Notes', value: system.decommissioned_notes || '-' },
+            ]}
+          />
+        </Box>
+      )}
+      {targetMaturitySlot && <Box sx={{ mb: 1.75 }}>{targetMaturitySlot}</Box>}
       {hasAnyExtendedData && (
         <Box sx={{ mb: 1.75 }}>
           <DetailCard
@@ -450,14 +508,14 @@ function DetailCard({
 
 /**
  * ZTMF Insights section. Always renders a card with the "ZTMF Insights" title
- * so the section is consistent; inside, either the CfactsRecordCard content
+ * so the section is consistent; inside, either the SystemEnrichmentCard content
  * (when sdl_sync is on and the upstream returns data) or the insights empty
  * state (when sdl_sync is off, or on but the upstream has no record).
  */
 function InsightsSection({ system }: { system: FismaSystemType }) {
   const body =
     system.fismauid && system.sdl_sync_enabled ? (
-      <CfactsRecordCard fismaUid={system.fismauid} />
+      <SystemEnrichmentCard fismaUid={system.fismauid} />
     ) : (
       <InsightsEmptyState />
     )

@@ -29,6 +29,10 @@ export type TrendRadarProps = {
    * compare-modal pick) can still hide the overlay even if it has data.
    */
   hasPrevious: boolean
+  /** Series label for the current period, e.g. the data-call name. */
+  currentLabel?: string
+  /** Series label for the previous period, e.g. the data-call name. */
+  previousLabel?: string
 }
 
 /**
@@ -46,7 +50,14 @@ export default function TrendRadar({
   latestScore,
   previousScore,
   hasPrevious,
+  currentLabel,
+  previousLabel,
 }: TrendRadarProps) {
+  // Label the series with the actual data-call names when the parent knows
+  // them, so the legend reads "FY24 Q1 vs FY23 Q4" instead of the generic
+  // Current/Previous.
+  const currentName = currentLabel || 'Current'
+  const previousName = previousLabel || 'Previous'
   const radarData = useMemo(() => {
     return (latestScore.pillarscores ?? []).map((p) => ({
       pillar: p.pillar,
@@ -81,7 +92,7 @@ export default function TrendRadar({
             tickCount={5}
           />
           <Radar
-            name="Current"
+            name={currentName}
             dataKey="current"
             stroke={colors.primary}
             fill={colors.primary}
@@ -90,7 +101,7 @@ export default function TrendRadar({
           />
           {hasPrevious && (
             <Radar
-              name="Previous"
+              name={previousName}
               dataKey="previous"
               stroke={colors.neutral400}
               fill={colors.neutral400}
@@ -103,7 +114,7 @@ export default function TrendRadar({
           <Tooltip
             formatter={(value: number, name: string) => [
               value.toFixed(2),
-              name === 'current' ? 'Current' : 'Previous',
+              name === 'current' ? currentName : previousName,
             ]}
           />
         </RadarChart>

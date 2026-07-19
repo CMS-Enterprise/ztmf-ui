@@ -10,6 +10,7 @@ import {
   OpDiv,
   ScoreAggregate,
 } from '@/types'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
@@ -26,11 +27,15 @@ import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import { StatusChip, CodeBadge } from '@/components/ui/StatusChip'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
-import { isAdmin as checkIsAdmin, hasUnscopedRead } from '@/utils/userRoles'
-import { fetchOpDivs } from '@/utils/opdivs'
+import {
+  isAdmin as checkIsAdmin,
+  hasUnscopedRead,
+  isSystemScoped,
+} from '@/utils/userRoles'
 
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
+import TargetMaturityCard from './TargetMaturityCard'
 import { EXTENDED_METADATA_KEYS } from './fieldConfig'
 
 export default function SystemDetailPage() {
@@ -43,11 +48,18 @@ export default function SystemDetailPage() {
     selectedDatacall,
     latestDataCallId,
     datacalls,
+    datacenterEnvironments,
   } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
+  // Target maturity is the one field pair an assigned ISSO may write; the
+  // TargetMaturityCard owns its own edit/save lifecycle and this flag only
+  // gates the Edit affordance on that card. The page-level Edit button
+  // below stays admin-only because the system form is admin-only. The
+  // backend re-checks assignment/OpDiv scope on the target-maturity PUT.
+  const canEditTarget = isAdmin || isSystemScoped(userInfo)
 
   const system = useMemo(
     () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
@@ -87,29 +99,27 @@ export default function SystemDetailPage() {
     }
   }, [fismaSystems, system, systemId, setFismaSystems])
 
+  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
+
+  useEffect(() => {
+    const controller = new AbortController()
+    fetchOpDivs(true, controller.signal)
+      .then(setOpdivs)
+      .catch((error) => {
+        if (controller.signal.aborted || isAuthHandled(error)) return
+        notify('Failed to load OpDiv list.', 'error')
+      })
+    return () => {
+      controller.abort()
+    }
+  }, [])
+
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
   const [isSaving, setIsSaving] = useState(false)
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
   const [openDecommissionDialog, setOpenDecommissionDialog] = useState(false)
   const [openReactivateDialog, setOpenReactivateDialog] = useState(false)
-
-  // OpDiv reference list, for the Organization card chip and subtitle.
-  const [opdivs, setOpDivs] = useState<OpDiv[]>([])
-  useEffect(() => {
-    let active = true
-    fetchOpDivs(true)
-      .then((list) => {
-        if (active) setOpDivs(list)
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        console.error('Failed to load OpDivs', error)
-      })
-    return () => {
-      active = false
-    }
-  }, [])
 
   // Score aggregates across every datacall for this system. Used to render the
   // overall score, the pillar snapshot, and the trend line in the score hero.
@@ -266,9 +276,8 @@ export default function SystemDetailPage() {
     return true
   }
 
-  const isFormValid = (): boolean => {
-    return Object.values(formValid).every((v) => v === true)
-  }
+  const isFormValid = (): boolean =>
+    Object.values(formValid).every((v) => v === true)
 
   const hasUnsavedChanges = (): boolean => {
     if (!editedSystem || !system) return false
@@ -326,10 +335,31 @@ export default function SystemDetailPage() {
     }
   }
 
+  // Called by TargetMaturityCard after its own save succeeds. Overlays the
+  // two target fields onto the system in fismaSystems so the read view
+  // reflects the change without a refetch. Target maturity lives on its own
+  // endpoint, so the page-level Save below never touches these fields.
+  const handleTargetMaturitySaved = (saved: FismaSystemType) => {
+    setFismaSystems((prev) =>
+      prev.map((s) =>
+        s.fismasystemid !== saved.fismasystemid
+          ? s
+          : {
+              ...s,
+              target_maturity_tier: saved.target_maturity_tier,
+              target_maturity_justification:
+                saved.target_maturity_justification,
+            }
+      )
+    )
+  }
+
   const handleSave = async () => {
     if (!editedSystem) return
     setIsSaving(true)
     try {
+      // Full-system PUT. The page-level Edit button is gated on isAdmin,
+      // so this handler is unreachable for non-admins.
       const putBody: Record<string, unknown> = {
         fismauid: editedSystem.fismauid,
         fismaacronym: editedSystem.fismaacronym,
@@ -343,25 +373,22 @@ export default function SystemDetailPage() {
         datacallcontact: editedSystem.datacallcontact,
         issoemail: editedSystem.issoemail,
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
-        opdiv_id: editedSystem.opdiv_id,
       }
-      // HHS metadata only sent when the caller is an HHS-wide admin, matching
-      // the modal save path. The edit view renders these fields editable for
-      // the same tier; without this the detail-page save silently drops them.
-      // The backend also strips these on scoped users — defense-in-depth.
-      if (hasUnscopedRead(userInfo)) {
-        for (const key of EXTENDED_METADATA_KEYS) {
-          putBody[key] = editedSystem[key] ?? null
-        }
+      // Extended metadata fields are editable across all OpDivs; send each,
+      // using null to leave a value unchanged (the backend writes only
+      // non-null fields, so imported data isn't clobbered).
+      for (const key of EXTENDED_METADATA_KEYS) {
+        putBody[key] = editedSystem[key] ?? null
       }
       await axiosInstance.put(
         `fismasystems/${editedSystem.fismasystemid}`,
         putBody
       )
+
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setFismaSystems((prev) =>
         prev.map((s) =>
-          s.fismasystemid === editedSystem.fismasystemid ? editedSystem : s
+          s.fismasystemid !== editedSystem.fismasystemid ? s : editedSystem
         )
       )
     } catch (error) {
@@ -369,9 +396,14 @@ export default function SystemDetailPage() {
       const parsed = parseApiError(error)
       // Backend 400 with a field map: render each reason inline under its
       // input via formValid + formValidErrorText. The 'Not Saved' toast
-      // is a status flag, not the detail.
-      if (parsed.fieldErrors) {
-        Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
+      // is a status flag, not the detail. Only keys the system form owns are
+      // routed inline; target-maturity field errors fall through to the toast
+      // (they're client-validated, so a 400 here is unexpected).
+      const knownFieldErrors = Object.entries(parsed.fieldErrors ?? {}).filter(
+        ([key]) => key in formValid
+      )
+      if (knownFieldErrors.length > 0) {
+        knownFieldErrors.forEach(([key, message]) => {
           setFormValid((prev) => ({ ...prev, [key]: false }))
           setFormValidErrorText((prev) => ({ ...prev, [key]: message }))
         })
@@ -586,6 +618,23 @@ export default function SystemDetailPage() {
   const datacallNameById = (id?: number) =>
     id ? datacalls.find((dc) => dc.datacallid === id)?.datacall : undefined
   const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
+  const opdivName =
+    opdivs.find((o) => o.opdiv_id === system.opdiv_id)?.name ?? null
+
+  // Target maturity owns its own edit/save lifecycle (see TargetMaturityCard).
+  // The card is slotted into the right column of whichever view renders
+  // (between Data Lake Export and Organization). The card's Edit button is
+  // hidden while the page is in Edit mode so an admin can't run both
+  // edit flows at once: saving the card mid-page-edit would fire the
+  // isEditing/system useEffect and reset editedSystem, wiping any
+  // in-progress page-form edits.
+  const targetMaturityCard = (
+    <TargetMaturityCard
+      system={system}
+      canEdit={canEditTarget && !isEditing}
+      onSaved={handleTargetMaturitySaved}
+    />
+  )
 
   // Header actions vary by mode: View questionnaire + Edit system in read,
   // Cancel + Save in edit. Edit gates on admin and on not being mid-save.
@@ -701,12 +750,13 @@ export default function SystemDetailPage() {
           just static. */}
       <DatacallContextCard readOnly={isEditing} />
 
-      {isEditing && editedSystem ? (
+      {isEditing && editedSystem && isAdmin ? (
         <SystemDetailEditView
           system={system}
           editedSystem={editedSystem}
           formValid={formValid}
           formValidErrorText={formValidErrorText}
+          datacenterEnvironments={datacenterEnvironments}
           decommissionDate={decommissionDate}
           decommissionDateError={decommissionDateError}
           decommissionNotes={decommissionNotes}
@@ -731,6 +781,8 @@ export default function SystemDetailPage() {
               prev ? { ...prev, sdl_sync_enabled: checked } : prev
             )
           }
+          targetMaturitySlot={targetMaturityCard}
+          opdivName={opdivName}
           extendedEditable={hasUnscopedRead(userInfo)}
         />
       ) : (
@@ -740,6 +792,9 @@ export default function SystemDetailPage() {
           currentScore={currentScore}
           previousScore={previousScore}
           previousDatacallName={datacallNameById(previousScore?.datacallid)}
+          decommissionedByName={decommissionedByName}
+          targetMaturitySlot={targetMaturityCard}
+          opdivName={opdivName}
         />
       )}
 

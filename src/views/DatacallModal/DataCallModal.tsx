@@ -18,16 +18,26 @@ const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
 /**
  * Create-datacall modal. Renders through the shared Modal shell and uses
  * label-above-input fields that resist the global CMS Design System
- * resets. Validation and POST behavior are unchanged from the previous
- * implementation; the visual layer is the only change.
- * @param {datacallModalProps} props - Open state and close handler.
+ * resets. The native date input constrains the deadline to real calendar
+ * dates, so no impossible-date rollover check is needed here.
+ * @param {datacallModalProps} props - Open state, close handler, and the
+ *   optional onCreated callback fired after a successful create so the
+ *   caller can refresh its data-call list.
  * @returns {JSX.Element} The create-datacall modal.
  */
-export default function DataCallModal({ open, onClose }: datacallModalProps) {
+export default function DataCallModal({
+  open,
+  onClose,
+  onCreated,
+}: datacallModalProps) {
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
   const [deadlineError, setDeadlineError] = React.useState<string>('')
+  // Guards against a double-submit (fast double-click or double-Enter) that
+  // would otherwise fire two POSTs before the modal auto-closes and creates
+  // duplicate datacalls server-side.
+  const [submitting, setSubmitting] = React.useState<boolean>(false)
 
   // Modals stay mounted across open/close so React preserves their state.
   // Without this reset, a user who triggers a validation error (e.g. blurs
@@ -40,6 +50,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       setDatacallError('')
       setDeadline('')
       setDeadlineError('')
+      setSubmitting(false)
     }
   }, [open])
 
@@ -60,9 +71,23 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
     isValidFormat(value.toUpperCase())
   }
 
+  // Fires "required" only on blur - an untouched field stays quiet on mount
+  // and only complains once the user has engaged with it and left it empty.
+  // The on-change path (above) still reports format errors as-you-type.
+  const handleDatacallBlur = () => {
+    if (datacall.length === 0) {
+      setDatacallError('Datacall name is required')
+    }
+  }
+
   const validateDeadline = (e: React.FocusEvent<HTMLInputElement>) => {
-    if (e.target.value.length === 10 && !isNaN(Date.parse(e.target.value))) {
-      setDeadline(e.target.value)
+    const value = e.target.value
+    if (value.length === 0) {
+      setDeadlineError('Deadline is required')
+      return
+    }
+    if (value.length === 10 && !isNaN(Date.parse(value))) {
+      setDeadline(value)
       setDeadlineError('')
     } else {
       setDeadlineError('Invalid Deadline')
@@ -70,6 +95,8 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
   }
 
   const submitDatacall = async () => {
+    if (submitting) return
+    setSubmitting(true)
     try {
       await axiosInstance.post(`/datacalls`, {
         datacall: datacall.toUpperCase(),
@@ -78,6 +105,10 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
       notify('Datacall has successfully been created', 'success', {
         autoHideDuration: 2500,
       })
+      // Refresh the caller's data-call list so the newly created call
+      // appears in the picker without a manual page reload, then close.
+      onCreated?.()
+      onClose()
     } catch (error) {
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
@@ -92,6 +123,8 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
         return
       }
       notify(parsed.message, 'error', { autoHideDuration: 2500 })
+    } finally {
+      setSubmitting(false)
     }
   }
 
@@ -99,7 +132,8 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
     DATACALL_NAME_PATTERN.test(datacall.toUpperCase()) &&
     deadline.length === 10 &&
     datacallError.length === 0 &&
-    deadlineError.length === 0
+    deadlineError.length === 0 &&
+    !submitting
 
   return (
     <Modal
@@ -121,7 +155,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
             onClick={submitDatacall}
             sx={{ borderRadius: `${radius.button}px` }}
           >
-            Create
+            {submitting ? 'Creating...' : 'Create'}
           </Button>
         </>
       }
@@ -144,6 +178,7 @@ export default function DataCallModal({ open, onClose }: datacallModalProps) {
               'aria-label': 'Datacall name',
             }}
             onChange={handleDatacallChange}
+            onBlur={handleDatacallBlur}
             error={!!datacallError}
             sx={fieldInputSx}
           />

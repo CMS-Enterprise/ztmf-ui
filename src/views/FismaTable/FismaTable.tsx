@@ -9,11 +9,15 @@ import Tooltip from '@mui/material/Tooltip'
 import {
   Box,
   InputBase,
+  ListItemText,
+  ListSubheader,
+  Menu,
+  MenuItem,
   TextField,
   Typography,
   Autocomplete,
 } from '@mui/material'
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import SearchIcon from '@mui/icons-material/Search'
 import { useNavigate, Link } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
@@ -22,9 +26,15 @@ import VisibilityIcon from '@mui/icons-material/Visibility'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import BarChartIcon from '@mui/icons-material/BarChart'
 import { FismaTableProps } from '@/types'
-import type { OpDiv } from '@/types'
+import type { OpDiv, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
+import { toCategoryMap } from '@/utils/dataCenterEnvironments'
+import { parseDatacallName } from '@/utils/datacallGrouping'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
+import { ProgressCell } from './progressColumn'
+import { progressSortValue } from './progressHelpers'
+import { isNotUpdated } from './dashboardFilters'
 import ScoreDisplay from '@/components/ui/ScoreDisplay'
 import { CodeBadge, StatusChip } from '@/components/ui/StatusChip'
 import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
@@ -49,7 +59,8 @@ const PAGE_SIZES = [25, 50, 100]
 
 /**
  * Card header for the systems table: the title and count on the left, with the
- * search box, OpDiv filter and decommissioned toggle on the right.
+ * search box, environment filter, OpDiv filter, not-updated toggle and
+ * decommissioned toggle on the right.
  */
 function TableToolbar({
   count,
@@ -58,6 +69,11 @@ function TableToolbar({
   opdivs,
   opdivFilter,
   setOpDivFilter,
+  envOptions,
+  envFilter,
+  setEnvFilter,
+  notUpdatedOnly,
+  setNotUpdatedOnly,
   showDecommissioned,
   setShowDecommissioned,
 }: {
@@ -67,9 +83,22 @@ function TableToolbar({
   opdivs: OpDiv[]
   opdivFilter: number | 'all'
   setOpDivFilter: (value: number | 'all') => void
+  envOptions: string[]
+  envFilter: string | 'all'
+  setEnvFilter: (value: string | 'all') => void
+  notUpdatedOnly: boolean
+  setNotUpdatedOnly: (value: boolean) => void
   showDecommissioned: boolean
   setShowDecommissioned: (value: boolean) => void
 }) {
+  const compactAutocompleteSx = {
+    '& .MuiInputBase-root': {
+      height: 30,
+      fontSize: 13,
+      py: '0 !important',
+    },
+    '& .MuiAutocomplete-input': { py: '0 !important' },
+  }
   return (
     <Box
       sx={{
@@ -94,6 +123,7 @@ function TableToolbar({
           marginLeft: 'auto',
           display: 'flex',
           alignItems: 'center',
+          flexWrap: 'wrap',
           gap: 1,
         }}
       >
@@ -117,6 +147,27 @@ function TableToolbar({
             inputProps={{ 'aria-label': 'Search systems' }}
           />
         </Box>
+        {/* Environment facet only renders when the rows span more than one
+            category - a single-value filter costs toolbar width for nothing. */}
+        {envOptions.length > 1 && (
+          <Autocomplete
+            size="small"
+            options={envOptions}
+            value={envFilter === 'all' ? null : envFilter}
+            onChange={(_event, env) => setEnvFilter(env ?? 'all')}
+            sx={{ width: 170, ...compactAutocompleteSx }}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="All environments"
+                inputProps={{
+                  ...params.inputProps,
+                  'aria-label': 'Filter by environment',
+                }}
+              />
+            )}
+          />
+        )}
         <Autocomplete
           size="small"
           options={opdivs}
@@ -151,15 +202,7 @@ function TableToolbar({
               </li>
             )
           }}
-          sx={{
-            width: 180,
-            '& .MuiInputBase-root': {
-              height: 30,
-              fontSize: 13,
-              py: '0 !important',
-            },
-            '& .MuiAutocomplete-input': { py: '0 !important' },
-          }}
+          sx={{ width: 180, ...compactAutocompleteSx }}
           renderInput={(params) => (
             <TextField
               {...params}
@@ -170,6 +213,11 @@ function TableToolbar({
               }}
             />
           )}
+        />
+        <CompactSwitchLabel
+          checked={notUpdatedOnly}
+          onChange={setNotUpdatedOnly}
+          label="Not updated only"
         />
         <CompactSwitchLabel
           checked={showDecommissioned}
@@ -183,18 +231,20 @@ function TableToolbar({
 
 /**
  * The FISMA systems table on the dashboard. Renders the systems list with a
- * bar+value+tier score, OpDiv badge and status chip, plus row actions to open
- * the questionnaire, pillar scores, and system detail. Search is shared with
- * the header box; OpDiv and decommissioned filters narrow the rows.
+ * bar+value+tier score, the data-call progress cell (ztmf#299), OpDiv badge
+ * and status chip, plus row actions to open the questionnaire, pillar scores,
+ * and system detail. Search is shared with the header box; environment, OpDiv,
+ * not-updated and decommissioned filters narrow the rows.
  * @param {FismaTableProps} props - Component props.
- * @param {Record<number, SystemScoreEntry>} props.scores - Score map keyed by
- *   fismasystemid.
  * @returns {JSX.Element} The systems table card.
  */
 export default function FismaTable({
   scores,
   selectedRows,
   onSelectionChange,
+  progress,
+  systemCallMap = {},
+  chosenCallMap = {},
 }: FismaTableProps) {
   // Selection mode is opt-in: the parent enables it by passing handlers. This
   // keeps the table usable on pages that don't surface an Export CSV action.
@@ -202,18 +252,74 @@ export default function FismaTable({
     selectedRows !== undefined && onSelectionChange !== undefined
   const {
     fismaSystems,
+    latestDataCallId,
+    selectedDatacall,
+    datacalls,
     userInfo,
+    datacenterEnvironments,
     showDecommissioned,
     setShowDecommissioned,
     dashboardSearch,
     setDashboardSearch,
   } = useContextProp()
+  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const navigate = useNavigate()
   const [opdivs, setOpDivs] = useState<OpDiv[]>([])
   const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
+  const [envFilter, setEnvFilter] = useState<string | 'all'>('all')
+  const [notUpdatedOnly, setNotUpdatedOnly] = useState(false)
+
+  // "Latest by deadline" is not the same as "still open". Once the newest
+  // call's deadline has passed there is no active cycle at all, so nothing is
+  // "current" - every row must render past-call (Complete/Incomplete) rather
+  // than the "0/40 Not updated" laggard framing (ztmf-ui#542).
+  const latestDeadlinePassed = useMemo(() => {
+    if (!latestDataCallId) return false
+    const latest = datacalls.find((d) => d.datacallid === latestDataCallId)
+    return latest ? new Date() > new Date(latest.deadline) : false
+  }, [datacalls, latestDataCallId])
+
+  // Whether the call a given row is displaying (chosen by most-recently-updated
+  // in buildDashboardMaps) is the current/active one. The Data Call Progress
+  // column's current-cycle framing (the "0/40 Not updated" laggard chip and
+  // the not-updated filter) only makes sense then; a past/closed call shows a
+  // neutral Complete/Incomplete chip instead (ztmf#537).
+  const isRowCurrentCall = useCallback(
+    (fismasystemid: number): boolean => {
+      const chosen = chosenCallMap[fismasystemid]
+      if (!latestDataCallId || chosen == null) return true
+      return chosen === latestDataCallId && !latestDeadlinePassed
+    },
+    [chosenCallMap, latestDataCallId, latestDeadlinePassed]
+  )
+
+  // When a system has scores in more than one active call, the questionnaire
+  // button opens a small picker (#467) instead of guessing which call to open.
+  const [callPicker, setCallPicker] = useState<{
+    anchor: HTMLElement
+    fismasystemid: number
+    fismaacronym: string
+    calls: datacall[]
+  } | null>(null)
+  const openQuestionnaire = (
+    fismasystemid: number,
+    fismaacronym: string,
+    call: datacall | undefined
+  ) => {
+    navigate(`/${RouteNames.QUESTIONNAIRE}/${fismaacronym.toLowerCase()}`, {
+      state: {
+        fismasystemid,
+        datacallid: call?.datacallid ?? activeDataCallId,
+        datacall: call?.datacall,
+        deadline: call?.deadline,
+      },
+    })
+  }
 
   // OpDiv reference list, for both the filter dropdown and the code badges.
+  // Include inactive OpDivs so a system tied to a since-deactivated OpDiv
+  // still shows a name, not a bare id.
   useEffect(() => {
     let active = true
     fetchOpDivs(true)
@@ -234,12 +340,84 @@ export default function FismaTable({
     return map
   }, [opdivs])
 
+  // Raw datacenterenvironment -> category label, from the vocabulary in
+  // context. Drives the Environment filter options, row matching, and the
+  // Data center column labels. Falls back to the raw value until the
+  // vocabulary loads or for any unmapped legacy value.
+  const categoryMap = useMemo(
+    () => toCategoryMap(datacenterEnvironments),
+    [datacenterEnvironments]
+  )
+  const envLabel = useCallback(
+    (raw: string | null | undefined): string =>
+      raw ? categoryMap[raw] ?? raw : '',
+    [categoryMap]
+  )
+
+  // Only offer facet values that actually appear in the rows, in the
+  // vocabulary's curated order so the filter matches the system-form
+  // dropdown order rather than alphabetical.
+  const envOptions = useMemo(() => {
+    const present = new Set<string>()
+    for (const system of fismaSystems) {
+      const category = envLabel(system.datacenterenvironment)
+      if (category) present.add(category)
+    }
+    const ordered: string[] = []
+    const seen = new Set<string>()
+    for (const dce of datacenterEnvironments) {
+      if (present.has(dce.category) && !seen.has(dce.category)) {
+        seen.add(dce.category)
+        ordered.push(dce.category)
+      }
+    }
+    // Raw values with no vocabulary mapping still appear as their own facet.
+    for (const value of present) {
+      if (!seen.has(value)) {
+        seen.add(value)
+        ordered.push(value)
+      }
+    }
+    return ordered
+  }, [fismaSystems, envLabel, datacenterEnvironments])
+
+  // Drop a selected environment that is no longer offered (e.g. the
+  // decommissioned toggle refetched the rows) so the grid never over-filters
+  // via an invisible control.
+  useEffect(() => {
+    if (envFilter !== 'all' && !envOptions.includes(envFilter)) {
+      setEnvFilter('all')
+    }
+  }, [envFilter, envOptions])
+
   const rows = useMemo(
     () =>
-      opdivFilter === 'all'
-        ? fismaSystems
-        : fismaSystems.filter((s) => s.opdiv_id === opdivFilter),
-    [fismaSystems, opdivFilter]
+      fismaSystems.filter((s) => {
+        if (opdivFilter !== 'all' && s.opdiv_id !== opdivFilter) return false
+        if (
+          envFilter !== 'all' &&
+          envLabel(s.datacenterenvironment) !== envFilter
+        )
+          return false
+        if (
+          notUpdatedOnly &&
+          !isNotUpdated(
+            progress?.[s.fismasystemid],
+            isRowCurrentCall(s.fismasystemid)
+          )
+        )
+          return false
+        return true
+      }),
+    [
+      fismaSystems,
+      opdivFilter,
+      envFilter,
+      envLabel,
+      notUpdatedOnly,
+      progress,
+      isRowCurrentCall,
+    ]
   )
 
   const quickFilterValues = dashboardSearch.trim()
@@ -307,24 +485,18 @@ export default function FismaTable({
       ),
     },
     {
-      field: 'issoemail',
+      // Bound directly to the backend-resolved isso_name (populated for both
+      // CMS and HHS systems). Replaces the old issoemail.split('@') derivation,
+      // which rendered blank for HHS systems and crashed the sort on null
+      // emails (ztmf-ui#450).
+      field: 'isso_name',
       headerName: 'ISSO',
       flex: 1.1,
       minWidth: 140,
-      // Derive a "First Last" display name from the ISSO email local-part
-      // (john.doe@x.com -> "John Doe"). Falls back to the raw local-part
-      // when the email is a single token. Same logic main has used since
-      // before the redesign so the column reads the same way.
-      valueGetter: (value) => {
-        const local = (value.row.issoemail ?? '').split('@')[0] ?? ''
-        const parts = local.replace(/[0-9]/g, '').split('.')
-        if (parts.length <= 1) return parts[0] ?? ''
-        const cap = (s: string) => (s ? s[0].toUpperCase() + s.slice(1) : '')
-        return `${cap(parts[0])} ${cap(parts[1])}`
-      },
+      valueGetter: (value) => value.row.isso_name ?? '',
       renderCell: (params) => (
         <Typography sx={{ fontSize: 13, color: colors.ink }}>
-          {params.value || '-'}
+          {params.row.isso_name || '-'}
         </Typography>
       ),
     },
@@ -345,9 +517,12 @@ export default function FismaTable({
       headerName: 'Data center',
       flex: 1,
       minWidth: 130,
+      // Sort/search on the reporting category (what the cell shows), not the
+      // raw legacy value.
+      valueGetter: (params) => envLabel(params.row.datacenterenvironment),
       renderCell: (params) => (
         <Typography sx={{ fontSize: 13, color: colors.neutral700 }}>
-          {params.row.datacenterenvironment || '-'}
+          {envLabel(params.row.datacenterenvironment) || '-'}
         </Typography>
       ),
     },
@@ -367,6 +542,34 @@ export default function FismaTable({
         const entry = scores[params.row.fismasystemid]
         return <ScoreDisplay score={entry?.score} tier={entry?.tier} />
       },
+    },
+    {
+      // Questionnaire progress for the row's data call (ztmf#299). The
+      // fraction counts answers genuinely edited this cycle - answers
+      // pre-populated from the previous data call do not count until a
+      // user saves them. Ascending sort is the triage order: not-updated
+      // systems first, then by completion fraction.
+      field: 'datacallprogress',
+      headerName: 'Data Call Progress',
+      // valueGetter returns a numeric sort key, so the column must sort as a
+      // number - otherwise the grid string-compares and "1.5" sorts before
+      // "-1". type: 'number' also right-aligns by default, overridden below.
+      type: 'number',
+      width: 190,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value) =>
+        progressSortValue(
+          progress?.[value.row.fismasystemid],
+          isRowCurrentCall(value.row.fismasystemid)
+        ),
+      renderCell: (params) => (
+        <ProgressCell
+          entry={progress?.[params.row.fismasystemid]}
+          isCurrentCall={isRowCurrentCall(params.row.fismasystemid)}
+          hasScore={Boolean(scores[params.row.fismasystemid])}
+        />
+      ),
     },
     {
       field: 'status',
@@ -392,75 +595,98 @@ export default function FismaTable({
       hideable: false,
       sortable: false,
       disableColumnMenu: true,
-      renderCell: (params: GridRenderCellParams) => (
-        <>
-          <Tooltip title="Questionnaire">
-            <span>
-              <GridActionsCellItem
-                icon={
-                  <QuestionAnswerOutlinedIcon
-                    fontSize="small"
-                    sx={{ color: colors.neutral700 }}
-                  />
-                }
-                key={`question-${params.row.fismasystemid}`}
-                label={`View Questionnaire for ${params.row.fismaname}`}
-                role="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  navigate(
-                    `/${RouteNames.QUESTIONNAIRE}/${params.row.fismaacronym.toLowerCase()}`,
-                    { state: { fismasystemid: params.row.fismasystemid } }
-                  )
-                }}
-                color="inherit"
-              />
-            </span>
-          </Tooltip>
-          <Tooltip title="Pillar scores">
-            <span>
-              <GridActionsCellItem
-                icon={
-                  <BarChartIcon
-                    fontSize="small"
-                    sx={{ color: colors.neutral700 }}
-                  />
-                }
-                key={`chart-${params.row.fismasystemid}`}
-                label={`View Pillar Scores for ${params.row.fismaname}`}
-                role="button"
-                onClick={(event) => {
-                  event.stopPropagation()
-                  navigate(`/systems/${params.row.fismasystemid}/pillar-scores`)
-                }}
-                color="inherit"
-              />
-            </span>
-          </Tooltip>
-          {hasSystemDetailAccess && (
-            <Tooltip title="System details">
+      renderCell: (params: GridRenderCellParams) => {
+        // The system's own call(s) among the active ones, newest first. One
+        // call opens directly; more than one opens a picker so the user
+        // chooses which to open (#467).
+        const rowCallObjs = sortDatacallsByDeadline(
+          (systemCallMap[params.row.fismasystemid] ?? [])
+            .map((id) => datacalls.find((d) => d.datacallid === id))
+            .filter((d): d is datacall => Boolean(d))
+        )
+        return (
+          <>
+            <Tooltip title="Questionnaire">
               <span>
                 <GridActionsCellItem
                   icon={
-                    <VisibilityIcon
+                    <QuestionAnswerOutlinedIcon
                       fontSize="small"
                       sx={{ color: colors.neutral700 }}
                     />
                   }
-                  key={`view-${params.row.fismasystemid}`}
-                  label={`View system details for ${params.row.fismaname}`}
+                  key={`question-${params.row.fismasystemid}`}
+                  label={`View Questionnaire for ${params.row.fismaname}`}
                   role="button"
                   onClick={(event) => {
                     event.stopPropagation()
-                    navigate(`/systems/${params.row.fismasystemid}`)
+                    if (rowCallObjs.length > 1) {
+                      setCallPicker({
+                        anchor: event.currentTarget,
+                        fismasystemid: params.row.fismasystemid,
+                        fismaacronym: params.row.fismaacronym,
+                        calls: rowCallObjs,
+                      })
+                      return
+                    }
+                    openQuestionnaire(
+                      params.row.fismasystemid,
+                      params.row.fismaacronym,
+                      rowCallObjs[0] ??
+                        datacalls.find((d) => d.datacallid === activeDataCallId)
+                    )
                   }}
                   color="inherit"
                 />
               </span>
             </Tooltip>
-          )}
-        </>
-      ),
+            <Tooltip title="Pillar scores">
+              <span>
+                <GridActionsCellItem
+                  icon={
+                    <BarChartIcon
+                      fontSize="small"
+                      sx={{ color: colors.neutral700 }}
+                    />
+                  }
+                  key={`chart-${params.row.fismasystemid}`}
+                  label={`View Pillar Scores for ${params.row.fismaname}`}
+                  role="button"
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    navigate(
+                      `/systems/${params.row.fismasystemid}/pillar-scores`
+                    )
+                  }}
+                  color="inherit"
+                />
+              </span>
+            </Tooltip>
+            {hasSystemDetailAccess && (
+              <Tooltip title="System details">
+                <span>
+                  <GridActionsCellItem
+                    icon={
+                      <VisibilityIcon
+                        fontSize="small"
+                        sx={{ color: colors.neutral700 }}
+                      />
+                    }
+                    key={`view-${params.row.fismasystemid}`}
+                    label={`View system details for ${params.row.fismaname}`}
+                    role="button"
+                    onClick={(event) => {
+                      event.stopPropagation()
+                      navigate(`/systems/${params.row.fismasystemid}`)
+                    }}
+                    color="inherit"
+                  />
+                </span>
+              </Tooltip>
+            )}
+          </>
+        )
+      },
     },
   ]
 
@@ -487,6 +713,11 @@ export default function FismaTable({
         opdivs={opdivs}
         opdivFilter={opdivFilter}
         setOpDivFilter={setOpDivFilter}
+        envOptions={envOptions}
+        envFilter={envFilter}
+        setEnvFilter={setEnvFilter}
+        notUpdatedOnly={notUpdatedOnly}
+        setNotUpdatedOnly={setNotUpdatedOnly}
         showDecommissioned={showDecommissioned}
         setShowDecommissioned={setShowDecommissioned}
       />
@@ -546,6 +777,39 @@ export default function FismaTable({
           }}
         />
       </Box>
+      <Menu
+        anchorEl={callPicker?.anchor ?? null}
+        open={Boolean(callPicker)}
+        onClose={() => setCallPicker(null)}
+        MenuListProps={{ 'aria-label': 'Open which data call' }}
+      >
+        <ListSubheader>Open which data call?</ListSubheader>
+        {callPicker?.calls.map((call) => {
+          const isClosed = new Date() > new Date(call.deadline)
+          const deadlineLabel = new Date(call.deadline).toLocaleDateString(
+            'en-US',
+            { month: 'short', day: 'numeric', year: 'numeric' }
+          )
+          return (
+            <MenuItem
+              key={call.datacallid}
+              onClick={() => {
+                openQuestionnaire(
+                  callPicker.fismasystemid,
+                  callPicker.fismaacronym,
+                  call
+                )
+                setCallPicker(null)
+              }}
+            >
+              <ListItemText
+                primary={`${call.datacall} - ${parseDatacallName(call.datacall).tenant}`}
+                secondary={`${isClosed ? 'Closed' : 'Active'} - deadline ${deadlineLabel}`}
+              />
+            </MenuItem>
+          )
+        })}
+      </Menu>
     </Box>
   )
 }

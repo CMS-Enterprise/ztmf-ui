@@ -25,7 +25,7 @@ jest.mock('@/axiosConfig', () => {
 
 import axiosInstance from '@/axiosConfig'
 import router from '@/router/router'
-import CfactsRecordCard from './CfactsRecordCard'
+import SystemEnrichmentCard from './SystemEnrichmentCard'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 
 const mockedNavigate = (router as unknown as { navigate: jest.Mock }).navigate
@@ -52,7 +52,7 @@ test('200 response renders the enrichment cards with payload fields', async () =
     },
   })
 
-  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText('Test Package')).toBeInTheDocument()
   expect(screen.getByText('Test ISSO')).toBeInTheDocument()
@@ -64,7 +64,7 @@ test('200 response renders the enrichment cards with payload fields', async () =
 test('403 renders the quiet empty state and the interceptor stays out of the way', async () => {
   mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(403)
 
-  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText(/no ztmf insights yet/i)).toBeInTheDocument()
   // The opt-out is real: no permission snackbar fired anywhere.
@@ -76,7 +76,7 @@ test('403 renders the quiet empty state and the interceptor stays out of the way
 test('404 renders the shared insights empty state', async () => {
   mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(404)
 
-  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText(/no ztmf insights yet/i)).toBeInTheDocument()
 })
@@ -84,7 +84,7 @@ test('404 renders the shared insights empty state', async () => {
 test('500 renders the failed-to-load message', async () => {
   mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(500)
 
-  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(
     await screen.findByText(/failed to load ztmf insights data/i)
@@ -103,7 +103,7 @@ test('formats a timestamp-format ATO expiration date instead of "Invalid Date"',
     },
   })
 
-  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText('Test Package')).toBeInTheDocument()
   expect(screen.getByText('12/13/2026')).toBeInTheDocument()
@@ -122,7 +122,7 @@ test('renders the placeholder when no ATO expiration date is present', async () 
     },
   })
 
-  renderWithProviders(<CfactsRecordCard fismaUid={FISMA_UID} />)
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText('Test Package')).toBeInTheDocument()
   expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
