@@ -147,10 +147,14 @@ export default function HomePageContainer() {
   }, [activeDatacallIds])
 
   // Average score for the immediately-prior datacall, for the Avg ZT trend.
-  // datacalls arrives sorted by datacallid descending, so the prior one is the
-  // first with a smaller id than the active datacall.
+  // datacalls arrives deadline-sorted (newest first), so the prior call is
+  // the next entry after the active one - NOT the next-lower datacallid,
+  // which historical loads can out-id (#393).
   useEffect(() => {
-    const prior = datacalls.find((dc) => dc.datacallid < activeDataCallId)
+    const activeIdx = datacalls.findIndex(
+      (dc) => dc.datacallid === activeDataCallId
+    )
+    const prior = activeIdx >= 0 ? datacalls[activeIdx + 1] : undefined
     if (!prior) {
       setPriorAvg(undefined)
       setPriorLabel('')
@@ -178,14 +182,29 @@ export default function HomePageContainer() {
     }
   }, [activeDataCallId, datacalls])
 
+  // The export endpoint targets one data call. Derive it from the selected
+  // rows' own call(s): if they all share one call, export that; an empty
+  // selection falls back to the active call; a selection that spans more
+  // than one call has no single export target, so the button is disabled.
+  const selectedCallIds = new Set<number>()
+  for (const id of selectedRows) {
+    for (const cid of systemCallMap[id] ?? []) selectedCallIds.add(cid)
+  }
+  const exportCallId =
+    selectedCallIds.size === 1
+      ? [...selectedCallIds][0]
+      : selectedCallIds.size === 0
+        ? activeDataCallId
+        : null
+
   const handleExport = async () => {
-    if (!activeDataCallId) return
+    if (!exportCallId) return
     setExporting(true)
     try {
       // Selection drives scope: with rows selected, export just those; with
       // nothing selected, fall back to the full-datacall export.
       const scope = selectedRows.length > 0 ? selectedRows : undefined
-      await exportSystemAnswers(activeDataCallId, scope)
+      await exportSystemAnswers(exportCallId, scope)
     } catch (error) {
       if (!isAuthHandled(error)) {
         notify(ERROR_MESSAGES.tryAgain, 'warning', { autoHideDuration: 4000 })
@@ -254,12 +273,14 @@ export default function HomePageContainer() {
               color="primary"
               startIcon={<FileDownloadOutlinedIcon />}
               onClick={handleExport}
-              disabled={exporting || !activeDataCallId}
+              disabled={exporting || !exportCallId}
               // Title surfaces the scope so it isn't hidden behind the count.
               title={
-                selectedRows.length > 0
-                  ? `Export ${selectedRows.length} selected system${selectedRows.length === 1 ? '' : 's'}`
-                  : 'Export all systems in the active datacall'
+                exportCallId === null
+                  ? 'Selected systems span more than one data call - narrow the selection or the data-call picker'
+                  : selectedRows.length > 0
+                    ? `Export ${selectedRows.length} selected system${selectedRows.length === 1 ? '' : 's'}`
+                    : 'Export all systems in the active datacall'
               }
             >
               {selectedRows.length > 0

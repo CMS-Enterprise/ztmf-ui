@@ -9,6 +9,7 @@ import PillarScoresContent from './PillarScoresContent'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { isAuthHandled } from '@/utils/notify'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import type { ScoreAggregate } from '@/types'
 
 /**
@@ -74,10 +75,20 @@ export default function PillarScoresPage() {
     (dc) => dc.datacallid === activeDataCallId
   )?.datacall
   // Previous-datacall lookup: prefer the user's explicit pick from the modal;
-  // fall back to the most recent prior datacall this system has scores for.
-  const fallbackPreviousId = scores
-    .filter((s) => s.datacallid < (activeDataCallId ?? Number.MAX_SAFE_INTEGER))
-    .sort((a, b) => b.datacallid - a.datacallid)[0]?.datacallid
+  // fall back to the next-older call (by deadline, not datacallid - historical
+  // loads can out-id the real current call, #393) this system has scores for.
+  const scoredCallsByDeadline = sortDatacallsByDeadline(
+    datacalls.filter((dc) => scores.some((s) => s.datacallid === dc.datacallid))
+  )
+  const activeScoredIdx = scoredCallsByDeadline.findIndex(
+    (dc) => dc.datacallid === activeDataCallId
+  )
+  const fallbackPreviousId =
+    activeScoredIdx >= 0
+      ? scoredCallsByDeadline[activeScoredIdx + 1]?.datacallid
+      : // Active call has no scores for this system: the newest scored call
+        // stands in as "current", so the one after it is the fallback.
+        scoredCallsByDeadline[1]?.datacallid
   const previousDatacallId = comparisonFromId ?? fallbackPreviousId
   const previousDatacallName = datacalls.find(
     (dc) => dc.datacallid === previousDatacallId
