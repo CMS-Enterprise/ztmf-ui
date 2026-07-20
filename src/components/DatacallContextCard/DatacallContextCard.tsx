@@ -1,5 +1,6 @@
 import { useContextProp } from '@/views/Title/Context'
 import DatacallContextCardView from '@/components/ui/DatacallContextCardView'
+import type { datacall } from '@/types'
 
 /** Props for {@link DatacallContextCard}. */
 export type DatacallContextCardProps = {
@@ -11,6 +12,23 @@ export type DatacallContextCardProps = {
    * to false, which gives users the full searchable picker.
    */
   readOnly?: boolean
+  /**
+   * The call the page is actually viewing, when it resolves its own call
+   * independently of the global selection (the questionnaire resolves from
+   * its URL/route state). Without this override, a questionnaire opened on
+   * a historical call would show the dashboard's aggregate in the card while
+   * the page content - and its closed-call banner - referred to a different
+   * call entirely.
+   */
+  viewedDatacall?: datacall | null
+  /**
+   * Pick handler paired with viewedDatacall: the page owns what "switch
+   * call" means (e.g. re-open the questionnaire on the picked call), so
+   * picks route here instead of the global selection. Null picks (clear)
+   * are not forwarded - a page viewing a specific call has no aggregate
+   * state to return to.
+   */
+  onPick?: (dc: datacall) => void
 }
 
 /**
@@ -28,6 +46,8 @@ export type DatacallContextCardProps = {
  */
 export default function DatacallContextCard({
   readOnly = false,
+  viewedDatacall,
+  onPick,
 }: DatacallContextCardProps = {}) {
   const {
     datacalls,
@@ -37,13 +57,28 @@ export default function DatacallContextCard({
     activeDatacallIds,
   } = useContextProp()
 
+  const overridden = viewedDatacall != null
   return (
     <DatacallContextCardView
       datacalls={datacalls}
-      selectedDatacall={selectedDatacall}
-      onSelect={setSelectedDatacall}
+      selectedDatacall={overridden ? viewedDatacall : selectedDatacall}
+      onSelect={(dc) => {
+        if (overridden) {
+          if (dc && onPick) onPick(dc)
+          return
+        }
+        setSelectedDatacall(dc)
+      }}
       latestDataCallId={latestDataCallId}
-      activeDatacallIds={activeDatacallIds}
+      // With an override the card describes exactly one call; the global
+      // aggregate set would leak "In view" chips for calls this page is
+      // not showing.
+      activeDatacallIds={
+        overridden ? [viewedDatacall.datacallid] : activeDatacallIds
+      }
+      // Only the global-selection card has an aggregated year to clear back
+      // to; an overridden page views exactly one call.
+      clearable={!overridden}
       readOnly={readOnly}
     />
   )

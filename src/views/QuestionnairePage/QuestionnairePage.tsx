@@ -57,6 +57,8 @@ import {
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
 import { addSpace, type Category } from './helpers'
+// Aliased because a local state variable named `datacall` shadows the type.
+import type { datacall as Datacall } from '@/types'
 import ClosedDatacallBanner from './components/ClosedDatacallBanner'
 import PillarRail from './components/PillarRail'
 import EyebrowLine from './components/EyebrowLine'
@@ -1254,6 +1256,49 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
+
+  // The questionnaire resolves its own call from route state / the URL, which
+  // can differ from the global dashboard selection (e.g. opened on a system's
+  // historical call while the dashboard aggregates the current year). The
+  // context card must describe THIS page's call, or its Active chip and dates
+  // contradict the closed-call banner below it.
+  const viewedDatacall =
+    datacalls.find((dc) => dc.datacallid === datacallID) ?? null
+
+  // Picking a call in the card re-opens the questionnaire on it: same system,
+  // same pillar/function, new datacall segment + route state (the resolution
+  // effect keys on the route state and re-runs).
+  const handleDatacallPick = (dc: Datacall) => {
+    if (dc.datacallid === datacallID) return
+    const dirty =
+      !isReadOnly &&
+      ((selectQuestionOption !== -1 &&
+        initQuestionChoice !== selectQuestionOption) ||
+        initNotes !== notes ||
+        priorReviewNeedsSave)
+    if (dirty) {
+      notify(
+        'Save or discard your changes before switching data calls.',
+        'warning',
+        { autoHideDuration: 3000 }
+      )
+      return
+    }
+    const q = questions[selectedIndex]
+    const tail = q ? `/${toSlug(q.pillar)}/${toSlug(q.function)}` : ''
+    navigate(
+      `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${encodeDatacallSlug(dc.datacall)}${tail}`,
+      {
+        state: {
+          fismasystemid: system,
+          datacallid: dc.datacallid,
+          datacall: dc.datacall,
+          deadline: dc.deadline,
+        },
+        replace: true,
+      }
+    )
+  }
   return (
     <Box sx={{ py: 4 }}>
       <PageHeader
@@ -1316,7 +1361,10 @@ export default function QuestionnarePage() {
           </>
         }
       />
-      <DatacallContextCard />
+      <DatacallContextCard
+        viewedDatacall={viewedDatacall}
+        onPick={handleDatacallPick}
+      />
       {isPastDeadline && <ClosedDatacallBanner readOnly={isReadOnly} />}
       <Box
         sx={{
