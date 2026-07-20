@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -257,6 +257,11 @@ export default function UserTable() {
     const row = rows.find((r) => r.userid === id)
     setAssignModalUserName(row?.fullname ?? '')
     setOpenModal(true)
+    // Refresh the picker's option pool so a system added elsewhere in the
+    // session shows up in the picker without the admin having to navigate
+    // away from /users and back (#574). Called directly from the event
+    // handler; see the loadActiveSystems callback below.
+    void loadActiveSystems()
   }
   const handleCloseModal = () => {
     setOpenModal(false)
@@ -542,26 +547,36 @@ export default function UserTable() {
   // response, which would leave the picker offering only decommissioned
   // systems (or nothing when the assigned system is not in the current
   // view). The picker's option pool must stay stable across dashboard state.
-  useEffect(() => {
+  //
+  // Exposed as a callback so the event handler that opens the Assign
+  // Systems modal can invoke it directly (#574) - "when the user does X,
+  // do Y" belongs in the event handler, not in an effect fired by a state
+  // increment. The ref tracks the latest in-flight controller so a rapid
+  // reopen cancels the earlier request rather than racing it.
+  const activeSystemsCtrlRef = useRef<AbortController | null>(null)
+  const loadActiveSystems = useCallback(async () => {
     if (!canRead) return
+    activeSystemsCtrlRef.current?.abort()
     const controller = new AbortController()
-    async function loadActiveSystems() {
-      try {
-        const res = await axiosInstance.get<{ data: FismaSystemType[] }>(
-          '/fismasystems',
-          { signal: controller.signal }
-        )
-        if (res.status !== 200) return
-        setFismaSystemsMap(buildFismaSystemsMap(res.data.data))
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Fetch active fisma systems error:', error)
-      }
+    activeSystemsCtrlRef.current = controller
+    try {
+      const res = await axiosInstance.get<{ data: FismaSystemType[] }>(
+        '/fismasystems',
+        { signal: controller.signal }
+      )
+      if (controller.signal.aborted) return
+      if (res.status !== 200) return
+      setFismaSystemsMap(buildFismaSystemsMap(res.data.data))
+    } catch (error) {
+      if (controller.signal.aborted) return
+      if (isAuthHandled(error)) return
+      console.error('Fetch active fisma systems error:', error)
     }
-    loadActiveSystems()
-    return () => controller.abort()
   }, [canRead])
+  useEffect(() => {
+    loadActiveSystems()
+    return () => activeSystemsCtrlRef.current?.abort()
+  }, [loadActiveSystems])
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
   // own OpDivs, so narrow the option set to their own grants; the server
