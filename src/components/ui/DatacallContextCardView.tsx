@@ -56,6 +56,13 @@ export type DatacallContextCardViewProps = {
    * Detail edit-mode view, where system metadata is not datacall-scoped).
    */
   readOnly?: boolean
+  /**
+   * Whether clearing the selection is meaningful. True only where there is
+   * an aggregated view to fall back to (the dashboard's active year). Pages
+   * that view one specific call have nothing to clear to, so the affordance
+   * must not render - an X that does nothing is worse than no X.
+   */
+  clearable?: boolean
 }
 
 /**
@@ -84,6 +91,7 @@ export default function DatacallContextCardView({
   latestDataCallId,
   activeDatacallIds = [],
   readOnly = false,
+  clearable = true,
 }: DatacallContextCardViewProps) {
   // Options flattened from the year groups so the Autocomplete's groupBy
   // always sees contiguous groups (newest year first, deadline order within
@@ -191,9 +199,11 @@ export default function DatacallContextCardView({
             return fiscalYear ? `FY${fiscalYear}` : 'Other'
           }}
           onChange={(_event, dc) => onSelect(dc)}
-          // Clearing returns to the aggregated year view; hide the clear
-          // affordance while already aggregating (nothing to clear).
-          disableClearable={!selectedDatacall}
+          // Clearing returns to the aggregated year view. Hidden while
+          // already aggregating (nothing to clear) and on pages that view
+          // one specific call (nothing to clear TO).
+          disableClearable={!clearable || !selectedDatacall}
+          clearText="Show the whole year"
           renderOption={(props, option) => {
             const isCurrent = option.datacallid === latestDataCallId
             const inActiveSet = activeDatacallIds.includes(option.datacallid)
