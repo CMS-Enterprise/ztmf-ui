@@ -12,12 +12,20 @@ jest.mock('@/axiosConfig', () => ({
   default: { get: jest.fn() },
 }))
 
-// GridToolbarQuickFilter calls useGridApiContext, which needs a mounted DataGrid.
-// The toolbar renders it, but this test only exercises the filter controls, so
-// stub it to a plain node (mirrors the GridFooter stub in FismaTable.test.tsx).
+// GridToolbarQuickFilter — and now the toolbar itself (#573) — call grid hooks
+// that need a mounted DataGrid. This test renders the toolbar bare, so stub the
+// quick-filter node and the grid API/selector hooks. mockQuickFilterValues is
+// controllable per test to drive the "quick filter is active" state.
+const mockSetQuickFilterValues = jest.fn()
+let mockQuickFilterValues: string[] = []
 jest.mock('@mui/x-data-grid', () => ({
   ...jest.requireActual('@mui/x-data-grid'),
   GridToolbarQuickFilter: () => <div data-testid="quick-filter" />,
+  useGridApiContext: () => ({
+    current: { setQuickFilterValues: mockSetQuickFilterValues },
+  }),
+  useGridSelector: () => mockQuickFilterValues,
+  gridQuickFilterValuesSelector: jest.fn(),
 }))
 
 // The toolbar reads Show Decommissioned from the Title outlet context (it gates
@@ -47,6 +55,7 @@ const clearBtn = () => screen.getByRole('button', { name: /clear filters/i })
 beforeEach(() => {
   jest.clearAllMocks()
   mockShowDecommissioned = false
+  mockQuickFilterValues = []
 })
 
 describe('QuickSearchToolbar — Clear filters vs Show Decommissioned (#566)', () => {
@@ -87,5 +96,30 @@ describe('QuickSearchToolbar — Clear filters vs Show Decommissioned (#566)', (
     })
     fireEvent.click(toggle)
     expect(mockSetShowDecommissioned).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('QuickSearchToolbar — Clear filters vs quick-filter (#573)', () => {
+  it('enables Clear filters when only the quick-filter is active', () => {
+    // The quick-filter lives in the grid's own model, not DashboardFilterState;
+    // without counting it, Clear stayed greyed out and couldn't clear the term.
+    mockQuickFilterValues = ['star destroyer']
+    renderToolbar()
+    expect(clearBtn()).toBeEnabled()
+  })
+
+  it('keeps Clear filters disabled when the quick-filter is empty and nothing else is active', () => {
+    mockQuickFilterValues = []
+    renderToolbar()
+    expect(clearBtn()).toBeDisabled()
+  })
+
+  it('Clear filters resets the grid quick-filter alongside the other facets', () => {
+    mockQuickFilterValues = ['star destroyer']
+    const onFiltersChange = jest.fn()
+    renderToolbar(EMPTY_DASHBOARD_FILTERS, onFiltersChange)
+    fireEvent.click(clearBtn())
+    expect(mockSetQuickFilterValues).toHaveBeenCalledWith([])
+    expect(onFiltersChange).toHaveBeenCalledWith(EMPTY_DASHBOARD_FILTERS)
   })
 })
