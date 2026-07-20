@@ -12,6 +12,74 @@ jest.mock('@/router/router', () => ({
   default: { navigate: jest.fn() },
 }))
 
+// MUI DataGrid virtualizes rows and won't render them under jsdom (no
+// layout, no measured height). Stub it with a minimal implementation
+// that renders each row's action column so the Assign Systems row action
+// is clickable in tests. Everything else in the DataGrid API is passed
+// through from the real module.
+jest.mock('@mui/x-data-grid', () => {
+  const actual = jest.requireActual('@mui/x-data-grid')
+  const react = require('react')
+  return {
+    ...actual,
+    // GridActionsCellItem uses useGridRootProps and only works inside a
+    // real DataGrid. Replace it with a plain button so it renders under
+    // our mocked DataGrid below.
+    GridActionsCellItem: (props: {
+      icon?: React.ReactNode
+      label?: string
+      onClick?: () => void
+    }) =>
+      react.createElement(
+        'button',
+        {
+          type: 'button',
+          'aria-label': props.label,
+          onClick: props.onClick,
+        },
+        props.label
+      ),
+    // MUI DataGrid virtualizes rows and won't render them under jsdom (no
+    // layout, no measured height). Stub it with a minimal implementation
+    // that renders each row's action column so row-level buttons are
+    // clickable in tests.
+    DataGrid: (props: {
+      rows?: Array<Record<string, unknown>>
+      columns?: Array<Record<string, unknown>>
+      getRowId?: (row: Record<string, unknown>) => string | number
+    }) => {
+      const { rows = [], columns = [], getRowId } = props
+      return react.createElement(
+        'div',
+        { 'data-testid': 'datagrid-mock' },
+        rows.map((row) => {
+          const id = getRowId ? getRowId(row) : (row.id as string | number)
+          return react.createElement(
+            'div',
+            { key: String(id), 'data-testid': `datagrid-row-${id}` },
+            columns.map((col) => {
+              const getActions = col.getActions as
+                | ((params: {
+                    id: string | number
+                    row: Record<string, unknown>
+                  }) => React.ReactNode[])
+                | undefined
+              if (col.type === 'actions' && getActions) {
+                return react.createElement(
+                  'div',
+                  { key: String(col.field) },
+                  getActions({ id, row })
+                )
+              }
+              return null
+            })
+          )
+        })
+      )
+    },
+  }
+})
+
 jest.mock('@/utils/config', () => ({
   __esModule: true,
   default: { IDP_ENABLED: false },
@@ -52,10 +120,11 @@ jest.mock('../Title/Context', () => ({
   },
 }))
 
-import { waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import UserTable, { buildFismaSystemsMap } from './UserTable'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import type { FismaSystemType, userData } from '@/types'
+import type { FismaSystemType, userData, users } from '@/types'
 
 const ACTIVE_SYSTEMS: FismaSystemType[] = [
   {
@@ -300,4 +369,48 @@ test('malformed response (data: null) does not crash the map build', async () =>
   // No throw = pass. If the for-of loop had iterated over null, jest would
   // have failed the test with a "not iterable" TypeError.
   await new Promise((r) => setTimeout(r, 20))
+})
+
+// ---------------------------------------------------------------------------
+// #574: opening the Assign Systems modal refetches so any system added
+// elsewhere in the session shows up in the picker without the admin having
+// to navigate away from /users and back. handleOpenModal invokes
+// loadActiveSystems directly (no state-as-signal), so this test also
+// implicitly locks in "no spurious refetch on unrelated interactions" by
+// counting requests - only clicking the row action bumps the count.
+// ---------------------------------------------------------------------------
+
+test('clicking the Assign Systems row action refetches /fismasystems', async () => {
+  const user = userEvent.setup()
+  const piett: users = {
+    userid: '22222222-2222-2222-2222-222222222222',
+    email: 'Admiral.Piett@executor.empire',
+    fullname: 'Admiral Piett',
+    role: 'ISSO',
+    assignedfismasystems: [1002],
+    assignedopdivids: [],
+  }
+  axios.get.mockImplementation((url: string) => {
+    if (url.startsWith('/users'))
+      return Promise.resolve({ status: 200, data: { data: [piett] } })
+    if (url === '/fismasystems')
+      return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
+
+  renderWithProviders(<UserTable />)
+
+  // Initial mount fires the fetch exactly once.
+  await waitFor(() => expect(fismaSystemsCalls()).toHaveLength(1))
+  // GridActionsCellItem is stubbed to a plain button whose aria-label is
+  // the action's label prop ("assignedSystems" in UserTable's columns).
+  const assignBtn = await screen.findByRole('button', {
+    name: 'assignedSystems',
+  })
+
+  // Clicking the icon opens the modal AND invokes loadActiveSystems
+  // directly from the event handler, issuing a second /fismasystems
+  // request.
+  await user.click(assignBtn)
+  await waitFor(() => expect(fismaSystemsCalls()).toHaveLength(2))
 })
