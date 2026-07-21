@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Chip,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -12,7 +13,7 @@ import axiosInstance from '@/axiosConfig'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import Checkbox from '@mui/material/Checkbox'
 import TextField from '@mui/material/TextField'
-import Autocomplete from '@mui/material/Autocomplete'
+import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete'
 import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
 import CheckBoxIcon from '@mui/icons-material/CheckBox'
 import { ERROR_MESSAGES } from '@/constants'
@@ -21,12 +22,33 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
 
+// Default MUI substring filter; wrapped below to also strip decommissioned
+// entries from the dropdown (they should still surface as chips for
+// existing assignments but not be selectable for new ones).
+const defaultOptionFilter = createFilterOptions<number>()
+
+type FismaSystemEntry = {
+  name: string
+  acronym: string
+  decommissioned: boolean
+}
+
 type Props = {
-  fismaSystemMap: Record<number, { name: string; acronym: string }>
+  fismaSystemMap: Record<number, FismaSystemEntry>
   open: boolean
   handleClose: () => void
   userid: GridRowId
   userName: string
+}
+
+function labelFor(
+  option: number,
+  fismaSystemMap: Record<number, FismaSystemEntry>
+): string {
+  const system = fismaSystemMap[option]
+  if (!system) return `Unknown or decommissioned system (id ${option})`
+  const base = `${system.acronym} - ${system.name}`
+  return system.decommissioned ? `${base} (Decommissioned)` : base
 }
 
 export default function AssignSystemModal({
@@ -103,10 +125,25 @@ export default function AssignSystemModal({
               return acrA.localeCompare(acrB)
             })}
             disableClearable
-            getOptionLabel={(option: number) => {
-              const system = fismaSystemMap[option]
-              return system ? `${system.acronym} - ${system.name}` : ''
-            }}
+            // Suffix " (Decommissioned)" when the map flags the entry, or
+            // fall back to an id-based label for genuinely-unknown ids
+            // (e.g. a system removed between the fetch and this render).
+            // Because UserTable fetches both active and decommissioned
+            // systems into the map, decommissioned assignments render a
+            // real name; the fallback is a belt-and-suspenders safety net.
+            getOptionLabel={(option: number) =>
+              labelFor(option, fismaSystemMap)
+            }
+            // Decommissioned entries stay in `options` so MUI's value-vs-
+            // options reconciliation matches an existing decommissioned
+            // assignment (no "None of the options match with <id>" warning).
+            // Strip them from the dropdown here so an admin cannot select
+            // one as a new assignment.
+            filterOptions={(options, params) =>
+              defaultOptionFilter(options, params).filter(
+                (o) => !fismaSystemMap[o]?.decommissioned
+              )
+            }
             renderOption={(props, option, { selected }) => {
               const isAssigned = assignedSystems.includes(option)
               return (
@@ -125,6 +162,28 @@ export default function AssignSystemModal({
                 </li>
               )
             }}
+            // Custom chip render so decommissioned assignments get a
+            // subdued visual (reduced opacity + italics) that reads as
+            // "this is historical, not active", while remaining deletable
+            // so an admin can still unassign the user from it.
+            renderTags={(value, getTagProps) =>
+              value.map((option, index) => {
+                const isDecommissioned =
+                  fismaSystemMap[option]?.decommissioned === true
+                return (
+                  <Chip
+                    {...getTagProps({ index })}
+                    key={option}
+                    label={labelFor(option, fismaSystemMap)}
+                    sx={
+                      isDecommissioned
+                        ? { opacity: 0.65, fontStyle: 'italic' }
+                        : undefined
+                    }
+                  />
+                )
+              })
+            }
             value={assignedSystems}
             onChange={async (_event, newValue) => {
               const added = newValue.filter(
@@ -184,14 +243,10 @@ export default function AssignSystemModal({
         title="Confirm Unassign System"
         confirmationText={
           pendingUnassign
-            ? `Are you sure you want to unassign ${
-                fismaSystemMap[pendingUnassign.systemid]?.acronym ??
-                'this system'
-              }${
-                fismaSystemMap[pendingUnassign.systemid]
-                  ? ` - ${fismaSystemMap[pendingUnassign.systemid].name}`
-                  : ''
-              } from ${userName || 'this user'}?`
+            ? `Are you sure you want to unassign ${labelFor(
+                pendingUnassign.systemid,
+                fismaSystemMap
+              )} from ${userName || 'this user'}?`
             : ''
         }
         open={pendingUnassign !== null}
