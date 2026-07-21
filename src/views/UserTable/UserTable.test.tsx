@@ -309,6 +309,69 @@ test('decommissioned fetch failure degrades gracefully: active systems still pop
   warn.mockRestore()
 })
 
+test('decommissioned fetch fulfilled with data:null still populates the picker from active', async () => {
+  // Fulfilled sibling of the rejection path. `?? []` in the loader
+  // normalizes the null payload; dropping it would blow up the mapper's
+  // for-of and blank the picker.
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+  const err = jest.spyOn(console, 'error').mockImplementation(() => {})
+  const user = userEvent.setup()
+  const piett: users = {
+    userid: '22222222-2222-2222-2222-222222222222',
+    email: 'Admiral.Piett@executor.empire',
+    fullname: 'Admiral Piett',
+    role: 'ISSO',
+    assignedfismasystems: [],
+    assignedopdivids: [],
+  }
+  axios.get.mockImplementation((url: string) => {
+    if (url === '/users' || url.startsWith('/users?'))
+      return Promise.resolve({ status: 200, data: { data: [piett] } })
+    if (url === '/fismasystems')
+      return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
+    if (url === '/fismasystems?decommissioned=true')
+      return Promise.resolve({ status: 200, data: { data: null } })
+    if (url.includes('/assignedfismasystems'))
+      return Promise.resolve({ status: 200, data: { data: [] } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
+
+  renderWithProviders(<UserTable />)
+
+  await waitFor(() =>
+    expect(fismaSystemsCalls()).toContain('/fismasystems?decommissioned=true')
+  )
+  expect(fismaSystemsCalls()).toContain('/fismasystems')
+
+  const assignBtn = await screen.findByRole('button', {
+    name: 'assignedSystems',
+  })
+  await user.click(assignBtn)
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+
+  // Fulfilled path: no graceful-degradation warn, no critical error.
+  expect(warn).not.toHaveBeenCalledWith(
+    expect.stringContaining('Fetch decommissioned fisma systems failed'),
+    expect.anything()
+  )
+  const criticalErrors = err.mock.calls.filter((c) =>
+    c.some(
+      (arg) =>
+        typeof arg === 'string' &&
+        arg.includes('Fetch active fisma systems error')
+    )
+  )
+  expect(criticalErrors).toHaveLength(0)
+  warn.mockRestore()
+  err.mockRestore()
+})
+
 test('fetch error is swallowed without crashing the table', async () => {
   const err = jest.spyOn(console, 'error').mockImplementation(() => {})
   axios.get.mockImplementation((url: string) => {
