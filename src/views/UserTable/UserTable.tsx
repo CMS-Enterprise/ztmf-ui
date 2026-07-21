@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useRef, useState } from 'react'
 import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -29,7 +29,7 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
-import { users, OpDiv } from '@/types'
+import { users, OpDiv, FismaSystemType } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
@@ -135,10 +135,34 @@ function EditToolbar(props: EditToolbarProps) {
 function validateEmail(email: string) {
   return /^[a-zA-Z0-9._:$!%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+$/.test(email)
 }
+
+/**
+ * Reshape a FismaSystemType[] into the {id: {acronym, name}} map the
+ * Assign Systems picker consumes. Exported so the map-build logic can be
+ * unit tested against the same fixtures the parent fetch test uses,
+ * without having to drive the DataGrid + modal chain end to end.
+ *
+ * @param systems - The active FISMA systems returned by GET /fismasystems.
+ * @returns A map keyed by fismasystemid with a display-ready label pair.
+ */
+export function buildFismaSystemsMap(
+  systems: FismaSystemType[] | null | undefined
+): Record<number, { name: string; acronym: string }> {
+  const map: Record<number, { name: string; acronym: string }> = {}
+  for (const obj of systems ?? []) {
+    map[obj.fismasystemid] = {
+      name: obj.fismasubsystem
+        ? obj.fismaname + ' - ' + obj.fismasubsystem
+        : obj.fismaname,
+      acronym: obj.fismaacronym,
+    }
+  }
+  return map
+}
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
-  const { userInfo, fismaSystems } = useContextProp()
+  const { userInfo } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
   // admins may view the table but every mutating control is withheld. The
   // backend is the security boundary - this only governs which controls render.
@@ -233,6 +257,11 @@ export default function UserTable() {
     const row = rows.find((r) => r.userid === id)
     setAssignModalUserName(row?.fullname ?? '')
     setOpenModal(true)
+    // Refresh the picker's option pool so a system added elsewhere in the
+    // session shows up in the picker without the admin having to navigate
+    // away from /users and back (#574). Called directly from the event
+    // handler; see the loadActiveSystems callback below.
+    void loadActiveSystems()
   }
   const handleCloseModal = () => {
     setOpenModal(false)
@@ -462,16 +491,6 @@ export default function UserTable() {
           role: row.role.trim(),
         }))
         setRows(data)
-        const map: Record<number, { name: string; acronym: string }> = {}
-        for (const obj of fismaSystems) {
-          map[obj.fismasystemid] = {
-            name: obj.fismasubsystem
-              ? obj.fismaname + ' - ' + obj.fismasubsystem
-              : obj.fismaname,
-            acronym: obj.fismaacronym,
-          }
-        }
-        setFismaSystemsMap(map)
         // Grants now arrive inline on each list row (assignedopdivids), so the
         // OpDivs column reads them directly with no per-user calls. Fall back to
         // the per-user detail endpoint only against an older backend that omits
@@ -520,7 +539,44 @@ export default function UserTable() {
       controller.abort()
       backfillAborted = true
     }
-  }, [canRead, fismaSystems, navigate, showDeleted])
+  }, [canRead, navigate, showDeleted])
+
+  // Fetch the active FISMA systems list for the Assign Systems picker.
+  // Deliberately does NOT reuse context.fismaSystems: the dashboard's
+  // Show Decommissioned toggle swaps that array to the decommissioned-only
+  // response, which would leave the picker offering only decommissioned
+  // systems (or nothing when the assigned system is not in the current
+  // view). The picker's option pool must stay stable across dashboard state.
+  //
+  // Exposed as a callback so the event handler that opens the Assign
+  // Systems modal can invoke it directly (#574) - "when the user does X,
+  // do Y" belongs in the event handler, not in an effect fired by a state
+  // increment. The ref tracks the latest in-flight controller so a rapid
+  // reopen cancels the earlier request rather than racing it.
+  const activeSystemsCtrlRef = useRef<AbortController | null>(null)
+  const loadActiveSystems = useCallback(async () => {
+    if (!canRead) return
+    activeSystemsCtrlRef.current?.abort()
+    const controller = new AbortController()
+    activeSystemsCtrlRef.current = controller
+    try {
+      const res = await axiosInstance.get<{ data: FismaSystemType[] }>(
+        '/fismasystems',
+        { signal: controller.signal }
+      )
+      if (controller.signal.aborted) return
+      if (res.status !== 200) return
+      setFismaSystemsMap(buildFismaSystemsMap(res.data.data))
+    } catch (error) {
+      if (controller.signal.aborted) return
+      if (isAuthHandled(error)) return
+      console.error('Fetch active fisma systems error:', error)
+    }
+  }, [canRead])
+  useEffect(() => {
+    loadActiveSystems()
+    return () => activeSystemsCtrlRef.current?.abort()
+  }, [loadActiveSystems])
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
   // own OpDivs, so narrow the option set to their own grants; the server

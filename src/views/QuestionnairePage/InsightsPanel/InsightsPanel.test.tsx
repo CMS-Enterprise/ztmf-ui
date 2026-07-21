@@ -253,6 +253,48 @@ describe('InsightsPanel', () => {
     expect(screen.getByText('IA-02(08)').textContent).toContain('○')
   })
 
+  it('gives each ARS control chip a plain-language state reason (role=img name = tooltip) for hover + AT', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          ...fullPayload,
+          ars_satisfied_controls: ['IA-01'],
+          ars_not_satisfied_controls: ['IA-02(02)'],
+          ars_failing_controls: ['AC-17'],
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // The chip's accessible name is "<id>: <state reason>" — the same string the
+    // Tooltip surfaces on hover — so passed / not-satisfied / failed is exposed
+    // both visually (✓/○/✗ + colour) and to a screen reader, keyed off which
+    // array the control came from.
+    expect(
+      screen.getByRole('img', { name: /^IA-01: Satisfied/ })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', { name: /^IA-02\(02\): Not satisfied/ })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('img', { name: /^AC-17: Other Than Satisfied/ })
+    ).toBeInTheDocument()
+  })
+
+  it('makes each ARS control chip keyboard-focusable so its tooltip is not mouse-only (508)', async () => {
+    render(
+      <InsightsPanel
+        payload={{ ...fullPayload, ars_satisfied_controls: ['IA-01'] }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const chip = screen.getByRole('img', { name: /^IA-01: Satisfied/ })
+    // Focusable, and the MUI Tooltip fires on focus (not just hover) so a
+    // keyboard-only sighted user can read the state reason.
+    expect(chip).toHaveAttribute('tabindex', '0')
+    fireEvent.focus(chip)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/Satisfied/)
+  })
+
   it('renders non-satisfied ARS controls even when the satisfied array is absent', () => {
     render(
       <InsightsPanel

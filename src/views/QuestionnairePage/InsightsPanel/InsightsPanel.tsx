@@ -669,6 +669,18 @@ const CONTROL_CHIP_STYLE: Record<
   },
 }
 
+// Plain-language reason behind each ARS chip's state, surfaced on hover and as the
+// chip's accessible name. The three arrays the pipeline emits ARE the reason: a
+// control lands in exactly one of satisfied / not-satisfied / failing, so the
+// variant fully determines why it's coloured the way it is — no per-control text
+// needed. Ordered passed / not-assessed / failed to match ✓ / ○ / ✗.
+const CONTROL_CHIP_HELP: Record<ControlChipVariant, string> = {
+  satisfied: 'Satisfied — assessed and met (per CFACTS/Archer).',
+  unsatisfied:
+    'Not satisfied — applies to this question but is not marked Satisfied (may be unassessed).',
+  failing: 'Other Than Satisfied — Archer flagged this control as failing.',
+}
+
 function ControlChip({
   id,
   variant,
@@ -685,16 +697,25 @@ function ControlChip({
   ariaLabel?: string
 }) {
   const style = CONTROL_CHIP_STYLE[variant]
+  // Callers may pass their own tooltip/ariaLabel (the feed pass/fail chips do,
+  // with a rich CheckTooltip); ARS chips pass neither, so fall back to the
+  // variant's plain-language reason. Either way the chip always carries a hover
+  // and an accessible name.
+  const effectiveTooltip = tooltip ?? CONTROL_CHIP_HELP[variant]
+  const effectiveAriaLabel = ariaLabel ?? `${id}: ${CONTROL_CHIP_HELP[variant]}`
   const chip = (
     <Box
       component="span"
-      // role="img" only when we supply an accessible name: aria-label on a
-      // role-less generic span is not reliably exposed by AT (NVDA/VoiceOver
-      // often ignore it), so a role is required for the pass/fail context to
-      // actually reach screen-reader users. ARS chips pass no ariaLabel and
-      // stay role-less — they're announced via their visible control-ID text.
-      role={ariaLabel ? 'img' : undefined}
-      aria-label={ariaLabel || undefined}
+      // role="img" + aria-label carries the pass/fail context to screen readers:
+      // the ✓/○/✗ marker and colour are otherwise the only place the state lives
+      // and neither is exposed to AT. A role is required — aria-label on a
+      // role-less generic span is not reliably announced (NVDA/VoiceOver).
+      role="img"
+      aria-label={effectiveAriaLabel}
+      // tabIndex makes the chip keyboard-focusable so the MUI Tooltip (which
+      // listens for focus, not just hover) reaches keyboard-only sighted users —
+      // the hover text would otherwise be mouse-only (508 / WCAG 1.4.13, 2.1.1).
+      tabIndex={0}
       sx={{
         display: 'inline-flex',
         alignItems: 'center',
@@ -709,24 +730,28 @@ function ControlChip({
         bgcolor: style.bgcolor,
         color: style.color,
         border: style.border,
-        cursor: tooltip ? 'help' : undefined,
+        cursor: 'help',
+        // Visible focus indicator (WCAG 2.4.7). Reuses the chip's own text colour,
+        // which already meets contrast against its background.
+        '&:focus-visible': {
+          outline: `2px solid ${style.color}`,
+          outlineOffset: '1px',
+        },
       }}
     >
       <Box component="span">{style.marker}</Box>
       {id}
     </Box>
   )
-  return tooltip ? (
+  return (
     <Tooltip
-      title={tooltip}
+      title={effectiveTooltip}
       placement="top"
       arrow
       slotProps={{ tooltip: { sx: { maxWidth: 340 } } }}
     >
       {chip}
     </Tooltip>
-  ) : (
-    chip
   )
 }
 
