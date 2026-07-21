@@ -137,24 +137,34 @@ function validateEmail(email: string) {
 }
 
 /**
- * Reshape a FismaSystemType[] into the {id: {acronym, name}} map the
- * Assign Systems picker consumes. Exported so the map-build logic can be
- * unit tested against the same fixtures the parent fetch test uses,
- * without having to drive the DataGrid + modal chain end to end.
+ * Reshape a FismaSystemType[] into the map the Assign Systems picker
+ * consumes. Each entry carries a `decommissioned` flag so the modal can
+ * render a "(Decommissioned)" suffix and greyed styling for assignments
+ * to systems that were later retired. Callers pass the union of active
+ * and decommissioned systems.
  *
- * @param systems - The active FISMA systems returned by GET /fismasystems.
- * @returns A map keyed by fismasystemid with a display-ready label pair.
+ * Exported so the map-build logic can be unit tested against the same
+ * fixtures the parent fetch test uses, without having to drive the
+ * DataGrid + modal chain end to end.
+ *
+ * @param systems - Union of active and decommissioned FISMA systems.
+ * @returns A map keyed by fismasystemid with a display-ready label pair
+ *   and the decommissioned flag.
  */
 export function buildFismaSystemsMap(
   systems: FismaSystemType[] | null | undefined
-): Record<number, { name: string; acronym: string }> {
-  const map: Record<number, { name: string; acronym: string }> = {}
+): Record<number, { name: string; acronym: string; decommissioned: boolean }> {
+  const map: Record<
+    number,
+    { name: string; acronym: string; decommissioned: boolean }
+  > = {}
   for (const obj of systems ?? []) {
     map[obj.fismasystemid] = {
       name: obj.fismasubsystem
         ? obj.fismaname + ' - ' + obj.fismasubsystem
         : obj.fismaname,
       acronym: obj.fismaacronym,
+      decommissioned: !!obj.decommissioned,
     }
   }
   return map
@@ -195,7 +205,7 @@ export default function UserTable() {
     assignedfismasystems: [],
   })
   const [fismaSystemsMap, setFismaSystemsMap] = useState<
-    Record<number, { name: string; acronym: string }>
+    Record<number, { name: string; acronym: string; decommissioned: boolean }>
   >({})
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
@@ -259,9 +269,9 @@ export default function UserTable() {
     setOpenModal(true)
     // Refresh the picker's option pool so a system added elsewhere in the
     // session shows up in the picker without the admin having to navigate
-    // away from /users and back (#574). Called directly from the event
-    // handler; see the loadActiveSystems callback below.
-    void loadActiveSystems()
+    // away from /users and back. Called directly from the event handler;
+    // see the loadFismaSystems callback below.
+    void loadFismaSystems()
   }
   const handleCloseModal = () => {
     setOpenModal(false)
@@ -541,42 +551,75 @@ export default function UserTable() {
     }
   }, [canRead, navigate, showDeleted])
 
-  // Fetch the active FISMA systems list for the Assign Systems picker.
-  // Deliberately does NOT reuse context.fismaSystems: the dashboard's
-  // Show Decommissioned toggle swaps that array to the decommissioned-only
-  // response, which would leave the picker offering only decommissioned
-  // systems (or nothing when the assigned system is not in the current
-  // view). The picker's option pool must stay stable across dashboard state.
+  // Fetch the FISMA systems used by the Assign Systems picker. Two
+  // requests in parallel:
+  //   /fismasystems                     -> active systems (assignable pool)
+  //   /fismasystems?decommissioned=true -> decommissioned systems
+  //
+  // Both are merged into fismaSystemsMap with a `decommissioned` flag per
+  // entry so the modal can (a) render a readable label for an assignment
+  // that points at a decommissioned system, (b) tag those chips visually,
+  // and (c) hide decommissioned entries from the dropdown so an admin
+  // cannot re-assign one. Deliberately does NOT reuse context.fismaSystems:
+  // the dashboard's Show Decommissioned toggle swaps that array to one
+  // or the other, and the picker needs both regardless of the toggle.
   //
   // Exposed as a callback so the event handler that opens the Assign
-  // Systems modal can invoke it directly (#574) - "when the user does X,
-  // do Y" belongs in the event handler, not in an effect fired by a state
+  // Systems modal can invoke it directly - "when the user does X, do Y"
+  // belongs in the event handler, not in an effect fired by a state
   // increment. The ref tracks the latest in-flight controller so a rapid
-  // reopen cancels the earlier request rather than racing it.
+  // reopen cancels the earlier requests rather than racing them.
+  //
+  // Uses Promise.allSettled - not Promise.all - so a failure in the
+  // secondary (decommissioned) fetch does NOT block the primary active
+  // list. The picker still populates with active systems; chips for
+  // orphan assignments fall back to the id-based label in the modal.
   const activeSystemsCtrlRef = useRef<AbortController | null>(null)
-  const loadActiveSystems = useCallback(async () => {
+  const loadFismaSystems = useCallback(async () => {
     if (!canRead) return
     activeSystemsCtrlRef.current?.abort()
     const controller = new AbortController()
     activeSystemsCtrlRef.current = controller
-    try {
-      const res = await axiosInstance.get<{ data: FismaSystemType[] }>(
-        '/fismasystems',
+    const [activeResult, decommResult] = await Promise.allSettled([
+      axiosInstance.get<{ data: FismaSystemType[] }>('/fismasystems', {
+        signal: controller.signal,
+      }),
+      axiosInstance.get<{ data: FismaSystemType[] }>(
+        '/fismasystems?decommissioned=true',
         { signal: controller.signal }
-      )
-      if (controller.signal.aborted) return
-      if (res.status !== 200) return
-      setFismaSystemsMap(buildFismaSystemsMap(res.data.data))
-    } catch (error) {
-      if (controller.signal.aborted) return
-      if (isAuthHandled(error)) return
-      console.error('Fetch active fisma systems error:', error)
+      ),
+    ])
+    if (controller.signal.aborted) return
+    // Active is the critical fetch. If it failed, don't touch the map -
+    // any pre-existing entries stay so a transient failure doesn't
+    // blank the picker.
+    if (activeResult.status === 'rejected') {
+      if (!isAuthHandled(activeResult.reason)) {
+        console.error('Fetch active fisma systems error:', activeResult.reason)
+      }
+      return
     }
+    // Decommissioned is best-effort. Warn on failure but proceed with
+    // active only; the modal's id-based fallback label handles orphans.
+    let decommData: FismaSystemType[] = []
+    if (decommResult.status === 'fulfilled') {
+      decommData = decommResult.value.data.data ?? []
+    } else if (!isAuthHandled(decommResult.reason)) {
+      console.warn(
+        'Fetch decommissioned fisma systems failed; chips for assignments to decommissioned systems will show an id-based label until the next refresh:',
+        decommResult.reason
+      )
+    }
+    // Merge order matters: decommissioned first, active last, so an
+    // active entry overwrites on the unlikely case of a duplicate id
+    // (the two endpoints are mutually exclusive by contract).
+    const combined = [...decommData, ...(activeResult.value.data.data ?? [])]
+    setFismaSystemsMap(buildFismaSystemsMap(combined))
   }, [canRead])
   useEffect(() => {
-    loadActiveSystems()
+    loadFismaSystems()
     return () => activeSystemsCtrlRef.current?.abort()
-  }, [loadActiveSystems])
+  }, [loadFismaSystems])
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
   // own OpDivs, so narrow the option set to their own grants; the server
