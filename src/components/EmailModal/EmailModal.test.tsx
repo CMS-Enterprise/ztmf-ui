@@ -77,6 +77,46 @@ test('success path fires the success snackbar and surfaces sent emails', async (
   expect(mockedNavigate).not.toHaveBeenCalled()
 })
 
+test('offers System Delegate as a targetable email group and posts its key', async () => {
+  // The backend (ztmf#458) accepts a SYSTEM_DELEGATE group key on
+  // /massemails, so the delegate cohort must be selectable here. Assert both
+  // the option exists and the raw key (not the friendly label) is submitted.
+  let posted: Record<string, unknown> = {}
+  mock.onPost('/massemails').reply((config) => {
+    posted = JSON.parse(config.data as string)
+    return [200, { data: ['delegate@example.com'] }]
+  })
+
+  renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
+
+  const group = document.querySelector(
+    'select[name="email_group"]'
+  ) as HTMLSelectElement
+  // The option renders with the friendly label but carries the raw role key.
+  const option = group.querySelector(
+    'option[value="SYSTEM_DELEGATE"]'
+  ) as HTMLOptionElement
+  expect(option).not.toBeNull()
+  expect(option.textContent).toBe('System Delegate')
+
+  await userEvent.selectOptions(group, 'SYSTEM_DELEGATE')
+  await userEvent.type(
+    document.querySelector('input[name="email_subject"]') as HTMLInputElement,
+    'hello'
+  )
+  await userEvent.type(
+    document.querySelector(
+      'textarea[name="email_body"]'
+    ) as HTMLTextAreaElement,
+    'world'
+  )
+  await userEvent.click(screen.getByRole('button', { name: /^send$/i }))
+
+  await waitFor(() => {
+    expect(posted.group).toBe('SYSTEM_DELEGATE')
+  })
+})
+
 test('401 redirects to sign-in with the expired-session message and reason', async () => {
   mock.onPost('/massemails').reply(401)
 

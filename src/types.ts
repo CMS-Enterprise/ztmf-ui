@@ -40,6 +40,7 @@ export type UserRole =
   | 'OPDIV_READONLY_ADMIN'
   | 'ISSO'
   | 'ISSM'
+  | 'SYSTEM_DELEGATE'
   | 'ADMIN'
   | 'READONLY_ADMIN'
 
