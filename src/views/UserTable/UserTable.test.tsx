@@ -119,7 +119,8 @@ jest.mock('../Title/Context', () => ({
 
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import UserTable, { buildFismaSystemsMap } from './UserTable'
+import UserTable from './UserTable'
+import { buildFismaSystemsMap } from './buildFismaSystemsMap'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, userData, users } from '@/types'
 
