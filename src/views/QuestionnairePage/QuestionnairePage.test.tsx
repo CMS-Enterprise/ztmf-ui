@@ -319,14 +319,14 @@ test('read-only session evicts the current-question draft on mount', async () =>
 
 // ---------------------------------------------------------------------------
 // 2c. Time-spent view pings (#368): every session emits one 'events/view' per
-//     opened question with the DB questionid, tagged with the session mode via
-//     `readonly` (editors false, read-only viewers true).
+//     opened question with the DB questionid. The payload carries no readonly
+//     flag — editor-vs-viewer is decided server-side from role + deadline.
 // ---------------------------------------------------------------------------
 
 const viewPings = () =>
   axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'events/view')
 
-test('records an events/view ping with the DB questionid when an editor opens a question', async () => {
+test('records an events/view ping with the DB questionid when a question opens', async () => {
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
@@ -340,17 +340,17 @@ test('records an events/view ping with the DB questionid when an editor opens a 
 
   // The opened function is 7006 (Imperial Identity Verification), whose DB
   // questionid is 900 - the payload must carry the questionid, not the
-  // functionid, and the system + data call from context.
+  // functionid, and the system + data call from context. No readonly flag: the
+  // server derives editor-vs-viewer.
   await waitFor(() => expect(viewPings()).toHaveLength(1))
   expect(viewPings()[0][1]).toEqual({
     fismasystemid: 1002,
     datacallid: 5,
     questionid: 900,
-    readonly: false,
   })
 })
 
-test('records an events/view ping with readonly:true in a read-only session', async () => {
+test('records an events/view ping in a read-only session too', async () => {
   const pastDeadline = '2001-01-01T00:00:00Z'
   setMockCtx(
     makeCtx({
@@ -389,14 +389,13 @@ test('records an events/view ping with readonly:true in a read-only session', as
 
   renderAt(DEEP_LINK)
 
-  // Read-only viewers are captured too (#368), tagged with readonly:true so
-  // analytics can distinguish browsing from editing effort.
+  // Read-only viewers are captured too (#368) — the ping still fires; whether
+  // it counts as viewer time is decided server-side, so the body is identical.
   await waitFor(() => expect(viewPings()).toHaveLength(1))
   expect(viewPings()[0][1]).toEqual({
     fismasystemid: 1002,
     datacallid: 5,
     questionid: 900,
-    readonly: true,
   })
 })
 

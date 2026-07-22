@@ -946,13 +946,14 @@ export default function QuestionnarePage() {
   }, [questionId, questions, isReadOnly, datacallID, userInfo.userid])
 
   // Record that the user opened this question, so time-spent analytics can
-  // bound how long it was worked on before the next event (a save, or opening
-  // another question). Fire-and-forget for all sessions: viewers are captured
-  // too, tagged with the session mode via `readonly`, and a failed ping must
-  // never disrupt answering. Keyed on the system x data call x question context
-  // so it fires exactly once per question open (initial load, Next/Back, or
-  // sidebar). questionId holds the functionid; the recorded questionid is the
-  // DB question the answer maps to.
+  // bound how long it was worked on before the next question is opened (only
+  // views bound a view; saves are not boundaries). Fire-and-forget for all
+  // sessions (viewers are captured too); a failed ping must never disrupt
+  // answering. Editor-vs-viewer is decided server-side from role + deadline, so
+  // the client sends no such flag.
+  // Keyed on the system x data call x question context so it fires exactly once
+  // per question open (initial load, Next/Back, or sidebar). questionId holds
+  // the functionid; the recorded questionid is the DB question it maps to.
   const viewedQuestionId = questionId ? questions[questionId]?.questionid : null
   React.useEffect(() => {
     if (!system || datacallID <= 0 || !viewedQuestionId) return
@@ -962,13 +963,12 @@ export default function QuestionnarePage() {
           fismasystemid: system,
           datacallid: datacallID,
           questionid: viewedQuestionId,
-          readonly: isReadOnly,
         })
       } catch {
         // Analytics only — swallow errors (including auth-handled ones).
       }
     })()
-  }, [isReadOnly, system, datacallID, viewedQuestionId])
+  }, [system, datacallID, viewedQuestionId])
 
   // Debounced draft save: 1 second after the user pauses editing, persist
   // the current answer and notes to localStorage so a reload can recover them.
