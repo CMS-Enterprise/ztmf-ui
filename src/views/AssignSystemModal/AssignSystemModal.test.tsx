@@ -198,3 +198,102 @@ test('assigned id absent from the map entirely still renders an identifiable fal
   )
   ;(console.error as jest.Mock).mockRestore?.()
 })
+
+test('typing an acronym filters the list to the matching system', async () => {
+  // Regression for #587: the picker must match on the acronym, not just the
+  // system name. Typing "ISD" surfaces ISD-CHI and drops DS-1 / Death Star.
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+
+  await user.type(combobox, 'ISD')
+
+  await waitFor(() =>
+    expect(
+      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
+    ).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
+})
+
+test('typing a system name filters the list to the matching system', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/ISD-CHI/)).toBeInTheDocument())
+
+  await user.type(combobox, 'Death')
+
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/ISD-CHI/)).not.toBeInTheDocument()
+})
+
+test('acronym matching is case-insensitive', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
+
+  await user.type(combobox, 'isd')
+
+  await waitFor(() =>
+    expect(
+      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
+    ).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
+})
+
+test('searching by a decommissioned system acronym does not surface it as an option', async () => {
+  // The new acronym/name search composes with the decommissioned-stripping
+  // filter: even an exact acronym match must not offer a decommissioned
+  // system as a selectable option.
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal({
+    fismaSystemMap: {
+      ...ACTIVE_MAP,
+      9001: {
+        acronym: 'DECOM-A',
+        name: 'Decommissioned System A',
+        decommissioned: true,
+      },
+    },
+  })
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
+
+  await user.type(combobox, 'DECOM-A')
+
+  // No option surfaces - the decommissioned entry is stripped even though
+  // its acronym matches the query exactly.
+  expect(screen.queryByText(/DECOM-A/)).not.toBeInTheDocument()
+})

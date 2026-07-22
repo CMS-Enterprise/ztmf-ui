@@ -22,11 +22,6 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
 
-// Default MUI substring filter; wrapped below to also strip decommissioned
-// entries from the dropdown (they should still surface as chips for
-// existing assignments but not be selectable for new ones).
-const defaultOptionFilter = createFilterOptions<number>()
-
 type FismaSystemEntry = {
   name: string
   acronym: string
@@ -65,6 +60,24 @@ export default function AssignSystemModal({
     systemid: number
     nextValue: number[]
   } | null>(null)
+  // Substring filter that matches on the raw acronym + name rather than the
+  // display label. `labelFor` decorates the label ("(Decommissioned)" suffix,
+  // "Unknown or decommissioned system (id X)" fallback), so filtering off the
+  // label would couple search to that formatting. Wrapped below to also strip
+  // decommissioned entries from the dropdown (they still surface as chips for
+  // existing assignments but are not selectable for new ones). MUI defaults
+  // (ignoreCase: true, matchFrom: 'any') give case-insensitive substring match.
+  const optionFilter = React.useMemo(
+    () =>
+      createFilterOptions<number>({
+        stringify: (option) => {
+          const system = fismaSystemMap[option]
+          if (!system) return String(option)
+          return `${system.acronym} ${system.name}`
+        },
+      }),
+    [fismaSystemMap]
+  )
   React.useEffect(() => {
     if (!open || !userid) return
     const controller = new AbortController()
@@ -140,7 +153,7 @@ export default function AssignSystemModal({
             // Strip them from the dropdown here so an admin cannot select
             // one as a new assignment.
             filterOptions={(options, params) =>
-              defaultOptionFilter(options, params).filter(
+              optionFilter(options, params).filter(
                 (o) => !fismaSystemMap[o]?.decommissioned
               )
             }
