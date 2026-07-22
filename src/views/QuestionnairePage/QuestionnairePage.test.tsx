@@ -27,6 +27,12 @@ const axios = require('@/axiosConfig').default as {
   put: jest.Mock
 }
 
+// The questionnaire POSTs a fire-and-forget 'events/view' analytics ping on
+// every question open (time-spent tracking, #368). These assertions care about
+// score *saves* (POST 'scores'), so filter the view pings out.
+const saveScorePosts = () =>
+  axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'scores')
+
 const saveDraftMock = jest
   .fn<
     Promise<boolean>,
@@ -312,6 +318,89 @@ test('read-only session evicts the current-question draft on mount', async () =>
 })
 
 // ---------------------------------------------------------------------------
+// 2c. Time-spent view pings (#368): every session emits one 'events/view' per
+//     opened question with the DB questionid, tagged with the session mode via
+//     `readonly` (editors false, read-only viewers true).
+// ---------------------------------------------------------------------------
+
+const viewPings = () =>
+  axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'events/view')
+
+test('records an events/view ping with the DB questionid when an editor opens a question', async () => {
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // The opened function is 7006 (Imperial Identity Verification), whose DB
+  // questionid is 900 - the payload must carry the questionid, not the
+  // functionid, and the system + data call from context.
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(viewPings()[0][1]).toEqual({
+    fismasystemid: 1002,
+    datacallid: 5,
+    questionid: 900,
+    readonly: false,
+  })
+})
+
+test('records an events/view ping with readonly:true in a read-only session', async () => {
+  const pastDeadline = '2001-01-01T00:00:00Z'
+  setMockCtx(
+    makeCtx({
+      userInfo: {
+        userid: 'u-1',
+        email: 'x@x',
+        fullname: 'ISSO',
+        role: 'ISSO',
+      } as userData,
+      latestDeadline: pastDeadline,
+      selectedDatacall: {
+        datacallid: 5,
+        datacall: 'FY2026 Q1',
+        datecreated: '',
+        deadline: pastDeadline,
+      },
+      datacalls: [
+        {
+          datacallid: 5,
+          datacall: 'FY2026 Q1',
+          datecreated: '',
+          deadline: pastDeadline,
+        },
+      ],
+    })
+  )
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // Read-only viewers are captured too (#368), tagged with readonly:true so
+  // analytics can distinguish browsing from editing effort.
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(viewPings()[0][1]).toEqual({
+    fismasystemid: 1002,
+    datacallid: 5,
+    questionid: 900,
+    readonly: true,
+  })
+})
+
+// ---------------------------------------------------------------------------
 // 3. Out-of-band scores refresh re-seeds the answer
 // ---------------------------------------------------------------------------
 
@@ -538,7 +627,7 @@ test('out-of-band scores refresh re-seeds the answer after save-and-back', async
   // flight (held by scoresGate) and questionId moves to Q2.
   await user.click(baseline)
   await user.click(screen.getByText(/^Next$/i))
-  await waitFor(() => expect(axios.post).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1. fetchOptions runs with an empty scores ref (the second
   // /scores call is still pending), so Q1 briefly shows unanswered.
@@ -558,7 +647,7 @@ test('out-of-band scores refresh re-seeds the answer after save-and-back', async
     expect(el.checked).toBe(true)
   })
   // No duplicate POST - re-seed picked up the existing scoreid.
-  expect(axios.post).toHaveBeenCalledTimes(1)
+  expect(saveScorePosts()).toHaveLength(1)
 })
 
 // ---------------------------------------------------------------------------
@@ -597,7 +686,7 @@ test('out-of-band scores refresh does not overwrite an unsaved in-progress edit'
   )) as HTMLInputElement
   await user.click(baseline)
   await user.click(screen.getByText(/^Next$/i))
-  await waitFor(() => expect(axios.post).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1 - fetchOptions seeds from an empty ref so Q1 shows
   // unanswered, and initQuestionChoice is now -1.
@@ -678,7 +767,7 @@ test('the questionId effect reads live scores via ref and seeds the answer at mo
 
   // No POST fired - the saved answer was seeded from GET, not written
   // back as a fresh score.
-  expect(axios.post).not.toHaveBeenCalled()
+  expect(saveScorePosts()).toHaveLength(0)
 })
 
 // ---------------------------------------------------------------------------

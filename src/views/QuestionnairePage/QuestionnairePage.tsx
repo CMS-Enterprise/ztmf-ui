@@ -945,6 +945,31 @@ export default function QuestionnarePage() {
     }
   }, [questionId, questions, isReadOnly, datacallID, userInfo.userid])
 
+  // Record that the user opened this question, so time-spent analytics can
+  // bound how long it was worked on before the next event (a save, or opening
+  // another question). Fire-and-forget for all sessions: viewers are captured
+  // too, tagged with the session mode via `readonly`, and a failed ping must
+  // never disrupt answering. Keyed on the system x data call x question context
+  // so it fires exactly once per question open (initial load, Next/Back, or
+  // sidebar). questionId holds the functionid; the recorded questionid is the
+  // DB question the answer maps to.
+  const viewedQuestionId = questionId ? questions[questionId]?.questionid : null
+  React.useEffect(() => {
+    if (!system || datacallID <= 0 || !viewedQuestionId) return
+    void (async () => {
+      try {
+        await axiosInstance.post('events/view', {
+          fismasystemid: system,
+          datacallid: datacallID,
+          questionid: viewedQuestionId,
+          readonly: isReadOnly,
+        })
+      } catch {
+        // Analytics only — swallow errors (including auth-handled ones).
+      }
+    })()
+  }, [isReadOnly, system, datacallID, viewedQuestionId])
+
   // Debounced draft save: 1 second after the user pauses editing, persist
   // the current answer and notes to localStorage so a reload can recover them.
   // Only fires when the user has actually changed something from the server-side

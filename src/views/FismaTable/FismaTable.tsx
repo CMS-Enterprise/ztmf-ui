@@ -33,6 +33,7 @@ import { useState, useEffect, useMemo, useCallback } from 'react'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
+import AccessTimeIcon from '@mui/icons-material/AccessTime'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
@@ -113,25 +114,35 @@ export function CustomFooterSaveComponent(
     !props.selectedRows ||
     props.selectedRows.length === 0 ||
     exportCallId === null
-  const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${exportCallId}/export`
-    if (props.selectedRows && props.selectedRows.length > 0) {
-      exportUrl += '?'
-      let idString: string = ''
-      props.selectedRows.forEach((id, index) => {
-        idString += 'fsids=' + id
-        if (props.selectedRows && index < props.selectedRows.length - 1) {
-          idString += '&'
-        }
-      })
-      exportUrl += idString
-    }
+  // Build the `?fsids=...` query for the selected rows, shared by both exports.
+  const buildFsidsQuery = () => {
+    if (!props.selectedRows || props.selectedRows.length === 0) return ''
+    let query = '?'
+    let idString: string = ''
+    props.selectedRows.forEach((id, index) => {
+      idString += 'fsids=' + id
+      if (props.selectedRows && index < props.selectedRows.length - 1) {
+        idString += '&'
+      }
+    })
+    query += idString
+    return query
+  }
+  // Fetch an xlsx blob from `exportUrl` and trigger a browser download,
+  // falling back to `fallbackFilename` when the server omits one.
+  const downloadExport = async (
+    exportUrl: string,
+    fallbackFilename: string
+  ) => {
     try {
       const response = await axiosInstance.get(exportUrl, {
         responseType: 'blob',
       })
-      const [, filename] =
-        response.headers['content-disposition'].split('filename=')
+      const disposition = response.headers['content-disposition']
+      const filename =
+        typeof disposition === 'string' && disposition.includes('filename=')
+          ? disposition.split('filename=')[1]
+          : fallbackFilename
       const contentType = response.headers['content-type']
       const data = new Blob([response.data], {
         type: typeof contentType === 'string' ? contentType : undefined,
@@ -149,6 +160,14 @@ export function CustomFooterSaveComponent(
       setSnackBarSeverity('warning')
       setOpenSnackbar(true)
     }
+  }
+  const saveSystemAnswers = async () => {
+    const exportUrl = `/datacalls/${exportCallId}/export${buildFsidsQuery()}`
+    await downloadExport(exportUrl, 'system-answers.xlsx')
+  }
+  const saveTimeSpent = async () => {
+    const exportUrl = `/datacalls/${exportCallId}/export/timespent${buildFsidsQuery()}`
+    await downloadExport(exportUrl, 'time-spent.xlsx')
   }
   return (
     <>
@@ -178,6 +197,24 @@ export function CustomFooterSaveComponent(
                 aria-label={`Download selected system answers${props.selectedRows && props.selectedRows.length > 0 ? ` (${props.selectedRows.length} selected)` : ' (no systems selected)'}`}
               >
                 <FileDownloadSharpIcon />
+              </IconButton>
+            </span>
+          </Tooltip>
+          <Tooltip
+            title={
+              exportCallId === null
+                ? 'Selected systems span more than one data call — narrow the selection or the data-call selector'
+                : 'Download time spent'
+            }
+          >
+            <span role="presentation">
+              <IconButton
+                sx={{ color: '#004297' }}
+                onClick={saveTimeSpent}
+                disabled={exportBlocked}
+                aria-label={`Download time spent${props.selectedRows && props.selectedRows.length > 0 ? ` (${props.selectedRows.length} selected)` : ' (no systems selected)'}`}
+              >
+                <AccessTimeIcon />
               </IconButton>
             </span>
           </Tooltip>

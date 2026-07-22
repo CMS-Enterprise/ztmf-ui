@@ -98,3 +98,26 @@ describe('CustomFooterSaveComponent download button', () => {
     expect(calledUrl).not.toMatch(/\/export\?$/)
   })
 })
+
+describe('CustomFooterSaveComponent time-spent download button (#368)', () => {
+  it('is disabled when no rows are selected', () => {
+    renderFooter([])
+    expect(
+      screen.getByRole('button', { name: /download time spent/i })
+    ).toBeDisabled()
+  })
+
+  it('GETs the /export/timespent URL with fsids and a blob responseType', () => {
+    renderFooter([1, 2])
+    fireEvent.click(
+      screen.getByRole('button', { name: /download time spent/i })
+    )
+    expect(mockAxiosGet).toHaveBeenCalledWith(
+      expect.stringContaining('/datacalls/42/export/timespent'),
+      expect.objectContaining({ responseType: 'blob' })
+    )
+    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
+    expect(calledUrl).toContain('fsids=1')
+    expect(calledUrl).toContain('fsids=2')
+  })
+})
