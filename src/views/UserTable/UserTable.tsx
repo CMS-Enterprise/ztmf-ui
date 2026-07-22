@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -30,7 +30,6 @@ import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
 import { users, OpDiv, FismaSystemType } from '@/types'
-import { buildFismaSystemsMap } from './buildFismaSystemsMap'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
@@ -172,9 +171,6 @@ export default function UserTable() {
     role: '' as users['role'],
     assignedfismasystems: [],
   })
-  const [fismaSystemsMap, setFismaSystemsMap] = useState<
-    Record<number, { name: string; acronym: string; decommissioned: boolean }>
-  >({})
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
@@ -190,6 +186,12 @@ export default function UserTable() {
   // holds rows refreshed since load, plus a one-time backfill against older
   // backends that omit the inline grants (see the load effect).
   const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
+  // Global fisma-system metadata for the Assign Systems modal. Fetched once
+  // per page load and passed down so the modal doesn't re-fetch on every
+  // open. allSystems labels cross-OpDiv orphan assignments; decommSystems
+  // adds the "(Decommissioned)" flag for retired-system chips.
+  const [allSystems, setAllSystems] = useState<FismaSystemType[]>([])
+  const [decommSystems, setDecommSystems] = useState<FismaSystemType[]>([])
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -235,11 +237,6 @@ export default function UserTable() {
     const row = rows.find((r) => r.userid === id)
     setAssignModalUserName(row?.fullname ?? '')
     setOpenModal(true)
-    // Refresh the picker's option pool so a system added elsewhere in the
-    // session shows up in the picker without the admin having to navigate
-    // away from /users and back. Called directly from the event handler;
-    // see the loadFismaSystems callback below.
-    void loadFismaSystems()
   }
   const handleCloseModal = () => {
     setOpenModal(false)
@@ -519,75 +516,47 @@ export default function UserTable() {
     }
   }, [canRead, navigate, showDeleted])
 
-  // Fetch the FISMA systems used by the Assign Systems picker. Two
-  // requests in parallel:
-  //   /fismasystems                     -> active systems (assignable pool)
-  //   /fismasystems?decommissioned=true -> decommissioned systems
-  //
-  // Both are merged into fismaSystemsMap with a `decommissioned` flag per
-  // entry so the modal can (a) render a readable label for an assignment
-  // that points at a decommissioned system, (b) tag those chips visually,
-  // and (c) hide decommissioned entries from the dropdown so an admin
-  // cannot re-assign one. Deliberately does NOT reuse context.fismaSystems:
-  // the dashboard's Show Decommissioned toggle swaps that array to one
-  // or the other, and the picker needs both regardless of the toggle.
-  //
-  // Exposed as a callback so the event handler that opens the Assign
-  // Systems modal can invoke it directly - "when the user does X, do Y"
-  // belongs in the event handler, not in an effect fired by a state
-  // increment. The ref tracks the latest in-flight controller so a rapid
-  // reopen cancels the earlier requests rather than racing them.
-  //
-  // Uses Promise.allSettled - not Promise.all - so a failure in the
-  // secondary (decommissioned) fetch does NOT block the primary active
-  // list. The picker still populates with active systems; chips for
-  // orphan assignments fall back to the id-based label in the modal.
-  const activeSystemsCtrlRef = useRef<AbortController | null>(null)
-  const loadFismaSystems = useCallback(async () => {
-    if (!canRead) return
-    activeSystemsCtrlRef.current?.abort()
-    const controller = new AbortController()
-    activeSystemsCtrlRef.current = controller
-    const [activeResult, decommResult] = await Promise.allSettled([
-      axiosInstance.get<{ data: FismaSystemType[] }>('/fismasystems', {
-        signal: controller.signal,
-      }),
-      axiosInstance.get<{ data: FismaSystemType[] }>(
-        '/fismasystems?decommissioned=true',
-        { signal: controller.signal }
-      ),
-    ])
-    if (controller.signal.aborted) return
-    // Active is the critical fetch. If it failed, don't touch the map -
-    // any pre-existing entries stay so a transient failure doesn't
-    // blank the picker.
-    if (activeResult.status === 'rejected') {
-      if (!isAuthHandled(activeResult.reason)) {
-        console.error('Fetch active fisma systems error:', activeResult.reason)
-      }
-      return
-    }
-    // Decommissioned is best-effort. Warn on failure but proceed with
-    // active only; the modal's id-based fallback label handles orphans.
-    let decommData: FismaSystemType[] = []
-    if (decommResult.status === 'fulfilled') {
-      decommData = decommResult.value.data.data ?? []
-    } else if (!isAuthHandled(decommResult.reason)) {
-      console.warn(
-        'Fetch decommissioned fisma systems failed; chips for assignments to decommissioned systems will show an id-based label until the next refresh:',
-        decommResult.reason
-      )
-    }
-    // Merge order matters: decommissioned first, active last, so an
-    // active entry overwrites on the unlikely case of a duplicate id
-    // (the two endpoints are mutually exclusive by contract).
-    const combined = [...decommData, ...(activeResult.value.data.data ?? [])]
-    setFismaSystemsMap(buildFismaSystemsMap(combined))
-  }, [canRead])
+  // Fisma-system metadata for the Assign Systems modal. Fetched once here
+  // instead of inside the modal so opening the modal only costs the two
+  // per-user reads (assigned + assignable) - not the two global reads
+  // (active + decommissioned). Held for as long as the table is mounted,
+  // so repeat opens reuse it. Both reads are label sources only, so a
+  // failure is non-fatal: the picker still offers the right options and
+  // in-scope chips still label from the per-user assignable response.
   useEffect(() => {
+    if (!isAdmin) return
+    const controller = new AbortController()
+    async function loadFismaSystems() {
+      const [activeRes, decommRes] = await Promise.allSettled([
+        axiosInstance.get<{ data: FismaSystemType[] | null }>('/fismasystems', {
+          signal: controller.signal,
+        }),
+        axiosInstance.get<{ data: FismaSystemType[] | null }>(
+          '/fismasystems?decommissioned=true',
+          { signal: controller.signal }
+        ),
+      ])
+      if (controller.signal.aborted) return
+      if (activeRes.status === 'fulfilled') {
+        setAllSystems(activeRes.value.data.data ?? [])
+      } else if (!isAuthHandled(activeRes.reason)) {
+        console.error('Fetch active fisma systems failed:', activeRes.reason)
+      }
+      if (decommRes.status === 'fulfilled') {
+        setDecommSystems(decommRes.value.data.data ?? [])
+      } else if (!isAuthHandled(decommRes.reason)) {
+        console.warn(
+          'Fetch decommissioned fisma systems failed; decommissioned assignments will chip without a "(Decommissioned)" suffix until the next refresh:',
+          decommRes.reason
+        )
+      }
+    }
     loadFismaSystems()
-    return () => activeSystemsCtrlRef.current?.abort()
-  }, [loadFismaSystems])
+    return () => {
+      controller.abort()
+    }
+  }, [isAdmin])
+
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
   // own OpDivs, so narrow the option set to their own grants; the server
@@ -942,11 +911,12 @@ export default function UserTable() {
         text={snackBarText}
       />
       <AssignSystemModal
-        fismaSystemMap={fismaSystemsMap}
         open={openModal}
         handleClose={handleCloseModal}
         userid={userId}
         userName={assignModalUserName}
+        allSystems={allSystems}
+        decommSystems={decommSystems}
       />
       <OpDivGrantModal
         open={openOpDivModal}
