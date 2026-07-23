@@ -76,7 +76,12 @@ export async function addSystemDelegate(
   systemId: number,
   body: AddDelegateBody
 ): Promise<void> {
-  await axiosInstance.post(`/fismasystems/${systemId}/delegates`, body)
+  // skipAuthHandling so the capability-off 403 reaches this caller instead of the
+  // global interceptor swallowing it into a generic toast; the component keys on
+  // the DELEGATE_NOT_ENABLED code to render an in-dialog guard.
+  await axiosInstance.post(`/fismasystems/${systemId}/delegates`, body, {
+    skipAuthHandling: true,
+  })
 }
 
 /**

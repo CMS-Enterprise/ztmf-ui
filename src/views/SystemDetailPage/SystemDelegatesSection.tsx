@@ -201,7 +201,8 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
     const parsed = parseApiError(error)
     if (parsed.code === 'DELEGATE_REQUIRES_ADMIN')
       return { guard: ADMIN_REQUIRED_MSG }
-    if (parsed.status === 403) return { guard: CAPABILITY_OFF_MSG }
+    if (parsed.code === 'DELEGATE_NOT_ENABLED')
+      return { guard: CAPABILITY_OFF_MSG }
     if (parsed.fieldErrors) return { fieldErrors: parsed.fieldErrors }
     notify(parsed.message, 'error')
     return null

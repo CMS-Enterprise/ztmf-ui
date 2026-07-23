@@ -278,7 +278,14 @@ test('an administrator-required email shows an inline guard, not a provision', a
 
 test('a capability-off 403 shows the OpDiv-disabled inline guard', async () => {
   const user = userEvent.setup()
-  addMock.mockRejectedValueOnce(axiosError(403, { error: 'forbidden' }))
+  // The add call opts out of the global auth interceptor (skipAuthHandling), so
+  // the coded 403 reaches the component and classifyAddError keys on the code.
+  addMock.mockRejectedValueOnce(
+    axiosError(403, {
+      error: 'system delegate role is not enabled for this opdiv',
+      code: 'DELEGATE_NOT_ENABLED',
+    })
+  )
   renderSection()
   await screen.findByText('Active Delegate')
 
