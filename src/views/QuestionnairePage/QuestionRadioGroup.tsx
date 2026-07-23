@@ -43,6 +43,9 @@ type Props = {
   onChange: (event: React.ChangeEvent<HTMLInputElement>) => void
   disabled?: boolean
   insight?: InsightPayload
+  // When false, suppresses the CMS-specific OptionInsightBadges (suggested +
+  // prior-answer chips) while leaving the FIPS baseline treatment intact.
+  showInsightBadges?: boolean
   viewedDatacall?: string
 }
 
@@ -53,6 +56,7 @@ export default function QuestionRadioGroup({
   onChange,
   disabled,
   insight,
+  showInsightBadges = true,
   viewedDatacall,
 }: Props) {
   const ceiling = baselineCeiling(insight?.fips_ceiling)
@@ -257,11 +261,13 @@ export default function QuestionRadioGroup({
                       </Box>
                     </Tooltip>
                   )}
-                  <OptionInsightBadges
-                    score={o.score}
-                    insight={insight}
-                    viewedDatacall={viewedDatacall}
-                  />
+                  {showInsightBadges && (
+                    <OptionInsightBadges
+                      score={o.score}
+                      insight={insight}
+                      viewedDatacall={viewedDatacall}
+                    />
+                  )}
                 </Box>
               </Box>
             </React.Fragment>

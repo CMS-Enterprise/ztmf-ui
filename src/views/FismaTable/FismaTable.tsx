@@ -10,6 +10,9 @@ import {
   GridFooter,
   GridRowId,
   useGridApiRef,
+  useGridApiContext,
+  useGridSelector,
+  gridQuickFilterValuesSelector,
   GridRowParams,
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
@@ -26,7 +29,7 @@ import {
   Button,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect, useMemo, useCallback } from 'react'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Switch from '@mui/material/Switch'
 import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
@@ -208,7 +211,7 @@ export function CustomFooterSaveComponent(
   )
 }
 
-function QuickSearchToolbar(props: {
+export function QuickSearchToolbar(props: {
   filters?: DashboardFilterState
   onFiltersChange?: (next: DashboardFilterState) => void
   envOptions?: string[]
@@ -217,6 +220,15 @@ function QuickSearchToolbar(props: {
   showOpDivFilter?: boolean
 }) {
   const { showDecommissioned, setShowDecommissioned } = useContextProp()
+  // The free-text quick-filter lives in the grid's own filter model, not in
+  // DashboardFilterState — read it reactively so it counts toward the Clear
+  // button's enabled state, and clear it alongside the other facets (#573).
+  const apiRef = useGridApiContext()
+  const quickFilterValues = useGridSelector(
+    apiRef,
+    gridQuickFilterValuesSelector
+  )
+  const hasQuickFilter = (quickFilterValues ?? []).length > 0
   const filters = props.filters ?? EMPTY_DASHBOARD_FILTERS
   const onFiltersChange = props.onFiltersChange ?? (() => {})
   const envOptions = props.envOptions ?? []
@@ -382,8 +394,25 @@ function QuickSearchToolbar(props: {
         <Button
           size="small"
           startIcon={<CloseIcon />}
-          onClick={() => onFiltersChange(EMPTY_DASHBOARD_FILTERS)}
-          disabled={hasNoActiveFilters(filters)}
+          onClick={() => {
+            onFiltersChange(EMPTY_DASHBOARD_FILTERS)
+            // Show Decommissioned lives in Title context (it gates a refetch),
+            // not in the client-side filter model — so clear it separately or it
+            // would survive "Clear filters".
+            setShowDecommissioned(false)
+            // The DataGrid quick-filter is grid state, not DashboardFilterState,
+            // so reset it via the grid API or the typed term survives (#573).
+            apiRef.current.setQuickFilterValues([])
+          }}
+          // ...and both Show Decommissioned and the quick-filter are active
+          // filters for the button's own enabled state: without this, toggling
+          // only Show Decommissioned left Clear filters greyed out (#566), and
+          // typing only a search term would leave it greyed out too (#573).
+          disabled={
+            hasNoActiveFilters(filters) &&
+            !showDecommissioned &&
+            !hasQuickFilter
+          }
           sx={{ color: '#004297', textTransform: 'none', mr: 2, flexShrink: 0 }}
         >
           Clear filters
@@ -415,6 +444,33 @@ export default function FismaTable({
     datacenterEnvironments,
   } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
+  // "Latest by deadline" is not the same as "still open". Once the newest
+  // call's deadline has passed there is no active cycle at all, so nothing is
+  // "current" - every row must render past-call (Complete/Incomplete) rather
+  // than the "0/40 Not updated" laggard framing. This mirrors the
+  // Current-while-open / Latest-once-closed distinction the call picker already
+  // makes (ztmf#393). Without this gate the newest *closed* call stays labeled
+  // current and shows 0/40 forever (ztmf-ui#542).
+  const latestDeadlinePassed = useMemo(() => {
+    if (!latestDataCallId) return false
+    const latest = datacalls.find((d) => d.datacallid === latestDataCallId)
+    return latest ? new Date() > new Date(latest.deadline) : false
+  }, [datacalls, latestDataCallId])
+  // Whether the call a given row is displaying (chosen by most-recently-updated
+  // in buildDashboardMaps) is the current/active one: the latest-by-deadline
+  // call AND that call is still open. The Data Call Progress column's
+  // current-cycle framing (the "0/40 Not updated" laggard chip and the
+  // not-updated filter) only makes sense then; a past/closed call shows a
+  // neutral Complete/Incomplete chip instead (ztmf#537). Rows without a chosen
+  // call, or before latestDataCallId has loaded, keep the current rendering.
+  const isRowCurrentCall = useCallback(
+    (fismasystemid: number): boolean => {
+      const chosen = chosenCallMap[fismasystemid]
+      if (!latestDataCallId || chosen == null) return true
+      return chosen === latestDataCallId && !latestDeadlinePassed
+    },
+    [chosenCallMap, latestDataCallId, latestDeadlinePassed]
+  )
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
   const [selectedRow, setSelectedRow] = useState<FismaSystemType | null>(null)
@@ -532,8 +588,14 @@ export default function FismaTable({
 
   const filteredRows = useMemo(
     () =>
-      applyDashboardFilters(fismaSystems, progress ?? {}, categoryMap, filters),
-    [fismaSystems, progress, categoryMap, filters]
+      applyDashboardFilters(
+        fismaSystems,
+        progress ?? {},
+        categoryMap,
+        filters,
+        isRowCurrentCall
+      ),
+    [fismaSystems, progress, categoryMap, filters, isRowCurrentCall]
   )
   const [pillarScoresModal, setPillarScoresModal] = useState<{
     open: boolean
@@ -713,9 +775,16 @@ export default function FismaTable({
       align: 'center',
       headerAlign: 'center',
       valueGetter: (value) =>
-        progressSortValue(progress?.[value.row.fismasystemid]),
+        progressSortValue(
+          progress?.[value.row.fismasystemid],
+          isRowCurrentCall(value.row.fismasystemid)
+        ),
       renderCell: (params) => (
-        <ProgressCell entry={progress?.[params.row.fismasystemid]} />
+        <ProgressCell
+          entry={progress?.[params.row.fismasystemid]}
+          isCurrentCall={isRowCurrentCall(params.row.fismasystemid)}
+          hasScore={Boolean(scores[params.row.fismasystemid])}
+        />
       ),
     },
     {
