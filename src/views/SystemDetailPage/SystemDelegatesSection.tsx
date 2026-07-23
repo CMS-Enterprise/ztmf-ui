@@ -12,7 +12,6 @@ import {
   DialogActions,
   DialogContent,
   DialogTitle,
-  Divider,
   IconButton,
   List,
   ListItem,
@@ -22,6 +21,7 @@ import {
   Typography,
 } from '@mui/material'
 import { Button as CmsButton } from '@cmsgov/design-system'
+import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EventRepeatIcon from '@mui/icons-material/EventRepeat'
 import { FismaSystemType, DelegateRow, DelegateCandidate } from '@/types'
@@ -86,9 +86,9 @@ function formatExpiry(iso: string | null): string {
 interface Props {
   system: FismaSystemType
   /**
-   * Whether the current user may add/invite/remove/renew delegates. ISSO and
-   * admins qualify; ISSM (and other assigned viewers) see the roster read-only.
-   * The backend re-checks on every write.
+   * Whether the current user may attach/provision/remove/renew delegates.
+   * ISSO and admins qualify; ISSM (and other assigned viewers) see the roster
+   * read-only. The backend re-checks on every write.
    */
   canManage: boolean
 }
@@ -96,9 +96,12 @@ interface Props {
 /**
  * Delegates section for the FISMA system detail page. Lists the system's
  * current delegates with their expiration, and - for a manager - lets an
- * ISSO attach an existing eligible delegate, invite a new person, renew an
+ * ISSO attach an existing eligible delegate, provision a new one, renew an
  * expiration, or remove a delegate. All scope is the one system in `system`;
  * the backend enforces assignment and OpDiv rules.
+ *
+ * "Provision" (not "invite") is deliberate: the backend creates the account
+ * directly; no email is sent, and the person signs in through SSO afterward.
  */
 export default function SystemDelegatesSection({ system, canManage }: Props) {
   const systemId = system.fismasystemid
@@ -111,17 +114,19 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
   const [candidateInput, setCandidateInput] = useState('')
   const [attaching, setAttaching] = useState(false)
 
-  // Invite-new dialog.
-  const [inviteOpen, setInviteOpen] = useState(false)
-  const [inviteName, setInviteName] = useState('')
-  const [inviteEmail, setInviteEmail] = useState('')
-  const [inviteExpiry, setInviteExpiry] = useState(addMonthsISO(3))
-  const [inviteErrors, setInviteErrors] = useState<Record<string, string>>({})
-  const [inviteGuard, setInviteGuard] = useState('')
-  const [inviting, setInviting] = useState(false)
+  // Provision-new dialog.
+  const [provisionOpen, setProvisionOpen] = useState(false)
+  const [provisionName, setProvisionName] = useState('')
+  const [provisionEmail, setProvisionEmail] = useState('')
+  const [provisionExpiry, setProvisionExpiry] = useState(addMonthsISO(3))
+  const [provisionErrors, setProvisionErrors] = useState<
+    Record<string, string>
+  >({})
+  const [provisionGuard, setProvisionGuard] = useState('')
+  const [provisioning, setProvisioning] = useState(false)
 
   // Inline guard for administrator-required / capability-off on the ATTACH
-  // path (card-level). The invite path shows its own guard inside the dialog.
+  // path (card-level). The provision path shows its own guard in the dialog.
   const [guardMessage, setGuardMessage] = useState('')
 
   const [pendingRemove, setPendingRemove] = useState<DelegateRow | null>(null)
@@ -174,8 +179,8 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
 
   // Classify an add failure so the caller can place it: administrator-required
   // and capability-off become an inline guard string; a 400 field map is
-  // returned for the invite form; anything else is toasted here. Returns null
-  // when there is nothing to render inline (auth-handled, or already toasted).
+  // returned for the provision form; anything else is toasted here. Returns
+  // null when there is nothing to render inline (auth-handled, or toasted).
   const classifyAddError = (
     error: unknown
   ): { guard?: string; fieldErrors?: Record<string, string> } | null => {
@@ -200,52 +205,59 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
     } catch (error) {
       const c = classifyAddError(error)
       if (c?.guard) setGuardMessage(c.guard)
+      // The attach call sends only a validated email, so a 400 field map is
+      // not expected here - but surface it rather than swallowing it if the
+      // backend ever returns one (no provision form to route it into).
+      else if (c?.fieldErrors)
+        setGuardMessage(Object.values(c.fieldErrors).join(' '))
     } finally {
       setAttaching(false)
     }
   }
 
-  const validateInvite = (): boolean => {
+  const validateProvision = (): boolean => {
     const errors: Record<string, string> = {}
-    if (!inviteName.trim()) errors.fullname = 'Name is required'
-    if (!EMAIL_RE.test(inviteEmail.trim()))
+    if (!provisionName.trim()) errors.fullname = 'Name is required'
+    if (!EMAIL_RE.test(provisionEmail.trim()))
       errors.email = 'A valid email is required'
-    if (!inviteExpiry) errors.access_expires_at = 'Expiration is required'
-    else if (inviteExpiry < getTodayISO())
+    if (!provisionExpiry) errors.access_expires_at = 'Expiration is required'
+    else if (provisionExpiry < getTodayISO())
       errors.access_expires_at = 'Expiration cannot be in the past'
-    setInviteErrors(errors)
+    setProvisionErrors(errors)
     return Object.keys(errors).length === 0
   }
 
-  const openInvite = () => {
+  const openProvision = () => {
     setGuardMessage('')
-    setInviteName('')
-    setInviteEmail('')
-    setInviteExpiry(addMonthsISO(3))
-    setInviteErrors({})
-    setInviteGuard('')
-    setInviteOpen(true)
+    setProvisionName('')
+    setProvisionEmail('')
+    setProvisionExpiry(addMonthsISO(3))
+    setProvisionErrors({})
+    setProvisionGuard('')
+    setProvisionOpen(true)
   }
 
-  const handleInvite = async () => {
-    setInviteGuard('')
-    if (!validateInvite()) return
-    setInviting(true)
+  const handleProvision = async () => {
+    setProvisionGuard('')
+    if (!validateProvision()) return
+    setProvisioning(true)
     try {
       await addSystemDelegate(systemId, {
-        email: inviteEmail.trim(),
-        fullname: inviteName.trim(),
-        access_expires_at: dateToExpiryISO(inviteExpiry),
+        email: provisionEmail.trim(),
+        fullname: provisionName.trim(),
+        access_expires_at: dateToExpiryISO(provisionExpiry),
       })
       await loadRoster()
-      setInviteOpen(false)
-      notify('Saved - delegate invited', 'success', { autoHideDuration: 1500 })
+      setProvisionOpen(false)
+      notify('Saved - delegate provisioned', 'success', {
+        autoHideDuration: 1500,
+      })
     } catch (error) {
       const c = classifyAddError(error)
-      if (c?.guard) setInviteGuard(c.guard)
-      if (c?.fieldErrors) setInviteErrors(c.fieldErrors)
+      if (c?.guard) setProvisionGuard(c.guard)
+      if (c?.fieldErrors) setProvisionErrors(c.fieldErrors)
     } finally {
-      setInviting(false)
+      setProvisioning(false)
     }
   }
 
@@ -292,12 +304,21 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
     }
   }
 
+  const count = !loading && delegates.length > 0 ? ` (${delegates.length})` : ''
+
   return (
     <Card variant="outlined">
       <CardHeader
-        title="Delegates"
+        title={`Delegates${count}`}
         titleTypographyProps={{ variant: 'h6' }}
         subheader="Contractor and support-staff access to this system's data-call answers"
+        action={
+          canManage ? (
+            <Button startIcon={<AddIcon />} onClick={openProvision}>
+              Provision new delegate
+            </Button>
+          ) : undefined
+        }
         sx={{ pb: 0 }}
       />
       <CardContent>
@@ -338,12 +359,6 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
                 />
               )}
             />
-
-            <Button size="small" sx={{ mt: 1.5 }} onClick={openInvite}>
-              + Invite new delegate
-            </Button>
-
-            <Divider sx={{ mt: 3 }} />
           </Box>
         )}
 
@@ -461,38 +476,42 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
       </Dialog>
 
       <Dialog
-        open={inviteOpen}
-        onClose={() => setInviteOpen(false)}
+        open={provisionOpen}
+        onClose={() => setProvisionOpen(false)}
         maxWidth="xs"
         fullWidth
-        aria-label="Invite new delegate"
+        aria-label="Provision new delegate"
       >
-        <DialogTitle>Invite New Delegate</DialogTitle>
+        <DialogTitle>Provision new delegate</DialogTitle>
         <DialogContent>
-          {inviteGuard && (
+          {provisionGuard && (
             <Alert severity="warning" sx={{ mb: 2 }}>
-              {inviteGuard}
+              {provisionGuard}
             </Alert>
           )}
+          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
+            Creates a delegate account for this system. No email is sent; the
+            person signs in through the usual login.
+          </Typography>
           <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
             <TextField
               label="Name"
               variant="standard"
               required
-              value={inviteName}
-              onChange={(e) => setInviteName(e.target.value)}
-              error={!!inviteErrors.fullname}
-              helperText={inviteErrors.fullname}
+              value={provisionName}
+              onChange={(e) => setProvisionName(e.target.value)}
+              error={!!provisionErrors.fullname}
+              helperText={provisionErrors.fullname}
               InputLabelProps={{ sx: { marginTop: 0 } }}
             />
             <TextField
               label="Email"
               variant="standard"
               required
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-              error={!!inviteErrors.email}
-              helperText={inviteErrors.email}
+              value={provisionEmail}
+              onChange={(e) => setProvisionEmail(e.target.value)}
+              error={!!provisionErrors.email}
+              helperText={provisionErrors.email}
               InputLabelProps={{ sx: { marginTop: 0 } }}
             />
             <TextField
@@ -500,11 +519,11 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
               type="date"
               variant="standard"
               required
-              value={inviteExpiry}
-              onChange={(e) => setInviteExpiry(e.target.value)}
-              error={!!inviteErrors.access_expires_at}
+              value={provisionExpiry}
+              onChange={(e) => setProvisionExpiry(e.target.value)}
+              error={!!provisionErrors.access_expires_at}
               helperText={
-                inviteErrors.access_expires_at ??
+                provisionErrors.access_expires_at ??
                 'Defaults to three months from today'
               }
               InputLabelProps={{ shrink: true, sx: { marginTop: 0 } }}
@@ -512,11 +531,14 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
           </Box>
         </DialogContent>
         <DialogActions>
-          <CmsButton onClick={() => setInviteOpen(false)} disabled={inviting}>
+          <CmsButton
+            onClick={() => setProvisionOpen(false)}
+            disabled={provisioning}
+          >
             Cancel
           </CmsButton>
-          <CmsButton onClick={handleInvite} disabled={inviting}>
-            {inviting ? 'Inviting...' : 'Invite'}
+          <CmsButton onClick={handleProvision} disabled={provisioning}>
+            {provisioning ? 'Provisioning...' : 'Provision'}
           </CmsButton>
         </DialogActions>
       </Dialog>

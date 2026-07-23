@@ -1,7 +1,7 @@
 // Coverage for the delegates section on the system detail page
 // (ztmf-ui#598). Backend calls are mocked at the util seam
 // (src/utils/delegates). Verifies the roster + expired badge, attach /
-// invite / remove / renew round-trips, the administrator-required and
+// attach / provision / remove / renew round-trips, the administrator-
 // capability-off inline guards, the +3mo expiry default, and that a
 // non-manager (ISSM) sees the roster without any controls.
 
@@ -114,18 +114,20 @@ test('a delegate within 30 days of expiry shows an Expiring soon chip', async ()
   expect(within(soonRow).getByText('Expiring soon')).toBeInTheDocument()
 })
 
-test('the invite control opens a dialog rather than an inline form', async () => {
+test('the provision control opens a dialog rather than an inline form', async () => {
   const user = userEvent.setup()
   renderSection()
   await screen.findByText('Active Delegate')
 
-  // No invite form fields until the dialog is opened.
+  // No provision form fields until the dialog is opened.
   expect(screen.queryByLabelText(/^name/i)).not.toBeInTheDocument()
 
-  await user.click(screen.getByRole('button', { name: /invite new delegate/i }))
+  await user.click(
+    screen.getByRole('button', { name: /provision new delegate/i })
+  )
 
   const dialog = await screen.findByRole('dialog', {
-    name: /invite new delegate/i,
+    name: /provision new delegate/i,
   })
   expect(within(dialog).getByLabelText(/^name/i)).toBeInTheDocument()
   expect(within(dialog).getByLabelText(/^email/i)).toBeInTheDocument()
@@ -153,25 +155,45 @@ test('attaching an existing candidate POSTs just the email and refetches', async
   await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
 })
 
-test('the invite expiry defaults to three months out', async () => {
+test('a field-map error on attach is surfaced rather than swallowed', async () => {
+  const user = userEvent.setup()
+  addMock.mockRejectedValueOnce(
+    axiosError(400, { data: { email: 'not attachable' } })
+  )
+  renderSection()
+  await screen.findByText('Active Delegate')
+
+  await user.click(
+    screen.getByRole('combobox', { name: /attach an existing delegate/i })
+  )
+  await user.click(await screen.findByText(/Wilhuff Tarkin/i))
+
+  expect(await screen.findByText(/not attachable/i)).toBeInTheDocument()
+})
+
+test('the provision expiry defaults to three months out', async () => {
   const user = userEvent.setup()
   renderSection()
   await screen.findByText('Active Delegate')
 
-  await user.click(screen.getByRole('button', { name: /invite new delegate/i }))
+  await user.click(
+    screen.getByRole('button', { name: /provision new delegate/i })
+  )
   const dateInput = screen.getByLabelText(/access expires/i) as HTMLInputElement
   expect(dateInput.value).toBe(addMonthsISO(3))
 })
 
-test('inviting a new person POSTs email, name, and expiry', async () => {
+test('provisioning a new person POSTs email, name, and expiry', async () => {
   const user = userEvent.setup()
   renderSection()
   await screen.findByText('Active Delegate')
 
-  await user.click(screen.getByRole('button', { name: /invite new delegate/i }))
+  await user.click(
+    screen.getByRole('button', { name: /provision new delegate/i })
+  )
   await user.type(screen.getByLabelText(/^name/i), 'Moff Jerjerrod')
   await user.type(screen.getByLabelText(/^email/i), 'jerjerrod@empire.gov')
-  await user.click(screen.getByRole('button', { name: /^invite$/i }))
+  await user.click(screen.getByRole('button', { name: /^provision$/i }))
 
   await waitFor(() => expect(addMock).toHaveBeenCalledTimes(1))
   const [, body] = addMock.mock.calls[0]
@@ -180,7 +202,7 @@ test('inviting a new person POSTs email, name, and expiry', async () => {
   expect(typeof body.access_expires_at).toBe('string')
 })
 
-test('an administrator-required email shows an inline guard, not an invite', async () => {
+test('an administrator-required email shows an inline guard, not a provision', async () => {
   const user = userEvent.setup()
   addMock.mockRejectedValueOnce(
     axiosError(400, {
@@ -191,14 +213,16 @@ test('an administrator-required email shows an inline guard, not an invite', asy
   renderSection()
   await screen.findByText('Active Delegate')
 
-  await user.click(screen.getByRole('button', { name: /invite new delegate/i }))
+  await user.click(
+    screen.getByRole('button', { name: /provision new delegate/i })
+  )
   await user.type(screen.getByLabelText(/^name/i), 'Existing Person')
   await user.type(screen.getByLabelText(/^email/i), 'existing@empire.gov')
-  await user.click(screen.getByRole('button', { name: /^invite$/i }))
+  await user.click(screen.getByRole('button', { name: /^provision$/i }))
 
-  // Guard renders inside the still-open invite dialog (not as a card alert or
-  // toast), so the ISSO sees why the invite was refused where they acted.
-  const dialog = screen.getByRole('dialog', { name: /invite new delegate/i })
+  // Guard renders inside the still-open provision dialog (not as a card alert
+  // or toast), so the ISSO sees why the provision was refused where they acted.
+  const dialog = screen.getByRole('dialog', { name: /provision new delegate/i })
   expect(
     await within(dialog).findByText(/must be handled by an administrator/i)
   ).toBeInTheDocument()
@@ -210,12 +234,14 @@ test('a capability-off 403 shows the OpDiv-disabled inline guard', async () => {
   renderSection()
   await screen.findByText('Active Delegate')
 
-  await user.click(screen.getByRole('button', { name: /invite new delegate/i }))
+  await user.click(
+    screen.getByRole('button', { name: /provision new delegate/i })
+  )
   await user.type(screen.getByLabelText(/^name/i), 'Someone')
   await user.type(screen.getByLabelText(/^email/i), 'someone@empire.gov')
-  await user.click(screen.getByRole('button', { name: /^invite$/i }))
+  await user.click(screen.getByRole('button', { name: /^provision$/i }))
 
-  const dialog = screen.getByRole('dialog', { name: /invite new delegate/i })
+  const dialog = screen.getByRole('dialog', { name: /provision new delegate/i })
   expect(
     await within(dialog).findByText(/not enabled for this OpDiv/i)
   ).toBeInTheDocument()
@@ -264,7 +290,7 @@ test('a non-manager (ISSM) sees the roster but no controls', async () => {
     screen.queryByRole('combobox', { name: /attach an existing delegate/i })
   ).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('button', { name: /invite new delegate/i })
+    screen.queryByRole('button', { name: /provision new delegate/i })
   ).not.toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: /remove Active Delegate/i })
