@@ -42,6 +42,7 @@ const opdivOptions: OpDiv[] = [
     name: 'Division A',
     is_parent: false,
     active: true,
+    system_delegate_enabled: false,
   },
   {
     opdiv_id: 2,
@@ -49,6 +50,7 @@ const opdivOptions: OpDiv[] = [
     name: 'Division B',
     is_parent: false,
     active: true,
+    system_delegate_enabled: false,
   },
 ]
 
