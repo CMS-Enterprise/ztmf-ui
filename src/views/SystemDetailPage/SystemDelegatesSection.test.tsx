@@ -134,6 +134,54 @@ test('the provision control opens a dialog rather than an inline form', async ()
   expect(within(dialog).getByLabelText(/access expires/i)).toBeInTheDocument()
 })
 
+test('an expired candidate carries the same Expired chip as the roster', async () => {
+  const user = userEvent.setup()
+  searchMock.mockResolvedValue([
+    { ...CANDIDATE, access_expires_at: '2000-01-01T00:00:00Z' },
+  ])
+  renderSection()
+  await screen.findByText('Active Delegate')
+
+  await user.click(
+    screen.getByRole('combobox', { name: /attach an existing delegate/i })
+  )
+  const option = (await screen.findByText(/Wilhuff Tarkin/i)).closest('li')!
+  expect(within(option).getByText('Expired')).toBeInTheDocument()
+})
+
+test('an active candidate carries an Active chip', async () => {
+  const user = userEvent.setup()
+  searchMock.mockResolvedValue([
+    { ...CANDIDATE, access_expires_at: '2099-12-31T23:59:59Z' },
+  ])
+  renderSection()
+  await screen.findByText('Active Delegate')
+
+  await user.click(
+    screen.getByRole('combobox', { name: /attach an existing delegate/i })
+  )
+  const option = (await screen.findByText(/Wilhuff Tarkin/i)).closest('li')!
+  expect(within(option).getByText('Active')).toBeInTheDocument()
+  expect(within(option).queryByText('Expired')).not.toBeInTheDocument()
+})
+
+test('removing a delegate refreshes the candidate list', async () => {
+  // A removed delegate becomes eligible again, so the picker must refetch
+  // rather than stay stale until a page reload.
+  const user = userEvent.setup()
+  renderSection()
+  await screen.findByText('Active Delegate')
+  await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(1))
+
+  await user.click(
+    screen.getByRole('button', { name: /remove Active Delegate/i })
+  )
+  await user.click(screen.getByRole('button', { name: /^remove$/i }))
+
+  await waitFor(() => expect(removeMock).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(2))
+})
+
 test('attaching an existing candidate POSTs just the email and refetches', async () => {
   const user = userEvent.setup()
   renderSection()

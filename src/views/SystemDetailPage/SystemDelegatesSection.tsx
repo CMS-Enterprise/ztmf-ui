@@ -83,6 +83,10 @@ function formatExpiry(iso: string | null): string {
   return isNaN(d.getTime()) ? iso : d.toLocaleDateString()
 }
 
+function candidateLabel(o: DelegateCandidate): string {
+  return `${o.fullname} (${o.email})`
+}
+
 interface Props {
   system: FismaSystemType
   /**
@@ -108,6 +112,10 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
 
   const [delegates, setDelegates] = useState<DelegateRow[]>([])
   const [loading, setLoading] = useState(true)
+  // Bumped on every successful roster load. The candidate search keys off
+  // this rather than the `delegates` array so the refresh does not depend on
+  // the array's referential identity changing.
+  const [rosterVersion, setRosterVersion] = useState(0)
 
   // Attach-existing picker.
   const [candidates, setCandidates] = useState<DelegateCandidate[]>([])
@@ -141,6 +149,7 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
         const rows = await fetchSystemDelegates(systemId, signal)
         if (signal?.aborted) return
         setDelegates(rows)
+        setRosterVersion((v) => v + 1)
       } catch (error) {
         if (signal?.aborted || isAuthHandled(error)) return
         notify(parseApiError(error).message, 'error')
@@ -158,7 +167,11 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
     return () => controller.abort()
   }, [loadRoster])
 
-  // Debounced candidate search; only managers see the picker.
+  // Debounced candidate search; only managers see the picker. Re-runs on
+  // rosterVersion because the eligible set excludes anyone already on the
+  // system: removing a delegate makes them a candidate again, and attaching
+  // one drops them from the list, so the picker has to refresh whenever the
+  // roster does rather than going stale until a page reload.
   useEffect(() => {
     if (!canManage) return
     const controller = new AbortController()
@@ -175,7 +188,7 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
       clearTimeout(t)
       controller.abort()
     }
-  }, [systemId, candidateInput, canManage])
+  }, [systemId, candidateInput, canManage, rosterVersion])
 
   // Classify an add failure so the caller can place it: administrator-required
   // and capability-off become an inline guard string; a 400 field map is
@@ -341,8 +354,29 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
               clearOnBlur
               disabled={attaching}
               filterOptions={(x) => x}
-              getOptionLabel={(o) => `${o.fullname} (${o.email})`}
+              getOptionLabel={(o) => candidateLabel(o)}
               isOptionEqualToValue={(a, b) => a.userid === b.userid}
+              // Same status chip the roster uses, so an expiring or expired
+              // candidate reads the same way in both places. Attaching an
+              // expired one is allowed but still needs a renew to grant access.
+              renderOption={(props, option) => {
+                const status = delegateStatus(option.access_expires_at ?? null)
+                return (
+                  <li {...props} key={option.userid}>
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <span>{candidateLabel(option)}</span>
+                      <Chip
+                        label={status.label}
+                        color={status.color}
+                        size="small"
+                        variant={
+                          status.color === 'success' ? 'outlined' : 'filled'
+                        }
+                      />
+                    </Box>
+                  </li>
+                )
+              }}
               inputValue={candidateInput}
               onInputChange={(_e, v) => setCandidateInput(v)}
               onChange={(_e, value) => {

@@ -74,6 +74,11 @@ export type DelegateCandidate = {
   userid: string
   fullname: string
   email: string
+  // The candidate query returns the full user row, so this always arrives
+  // (null only for a non-expiring account). Optional here so fixtures can
+  // omit it. An expired candidate can still be attached, but stays denied at
+  // auth until renewed, so the picker flags it.
+  access_expires_at?: string | null
 }
 
 // One known datacenter environment from GET /api/v1/datacenterenvironments.
