@@ -50,6 +50,30 @@ export type OpDiv = {
   name: string
   is_parent: boolean
   active: boolean
+  // Per-OpDiv "Add System Delegate Role" capability. NOT NULL on the backend
+  // (defaults false), so every OpDiv resolves to a real boolean. Gates the
+  // ISSO delegate self-service surface for systems in this OpDiv.
+  system_delegate_enabled: boolean
+}
+
+// A system delegate as returned by GET /fismasystems/:id/delegates (the
+// roster). access_expires_at is RFC3339; null means never expires (only
+// non-delegate users are null, so a delegate row always carries a date).
+export type DelegateRow = {
+  userid: string
+  fullname: string
+  email: string
+  access_expires_at: string | null
+}
+
+// An attachable delegate candidate from
+// GET /fismasystems/:id/delegate-candidates. The backend returns only
+// eligible users (already a delegate, in the system's OpDiv, not deleted,
+// not already attached), so the picker trusts the list as-is.
+export type DelegateCandidate = {
+  userid: string
+  fullname: string
+  email: string
 }
 
 // One known datacenter environment from GET /api/v1/datacenterenvironments.
