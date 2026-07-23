@@ -6,9 +6,11 @@ import {
   isAdmin,
   isAdminTierRole,
   isHHSTier,
+  isISSO,
   isOpDivTier,
   isReadOnlyAdmin,
   isReadOnlyAdminRole,
+  isSystemDelegate,
   isSystemScoped,
   isWriteAdminRole,
   selectableRoles,
@@ -215,6 +217,44 @@ test('ISSO and ISSM remain both system-accessible and system-scoped', () => {
     const user = roleUser(role)
     expect(hasSystemAccess(user)).toBe(true)
     expect(isSystemScoped(user)).toBe(true)
+  })
+})
+
+// isSystemDelegate gates the delegate self-service surface's "hide from
+// delegates" rule; only the delegate role qualifies.
+const isSystemDelegateCases: Case[] = [
+  ['SYSTEM_DELEGATE', true],
+  ['ISSO', false],
+  ['ISSM', false],
+  ['OWNER', false],
+  ['OPDIV_ADMIN', false],
+]
+test.each(isSystemDelegateCases)(
+  'isSystemDelegate(%s) === %s',
+  (role, expected) => {
+    expect(isSystemDelegate(roleUser(role))).toBe(expected)
+  }
+)
+
+// isISSO is split out from isSystemScoped (which also covers ISSM) so the
+// delegate section can gate MANAGE controls to ISSO + admin while ISSM stays
+// read-only. It must be true for ISSO alone among the system-scoped tiers.
+const isISSOCases: Case[] = [
+  ['ISSO', true],
+  ['ISSM', false],
+  ['SYSTEM_DELEGATE', false],
+  ['OWNER', false],
+  ['OPDIV_ADMIN', false],
+]
+test.each(isISSOCases)('isISSO(%s) === %s', (role, expected) => {
+  expect(isISSO(roleUser(role))).toBe(expected)
+})
+
+test('isISSO and isSystemDelegate reject null, undefined, and placeholder', () => {
+  const placeholder = { role: '' as UserRole }
+  ;[null, undefined, placeholder].forEach((user) => {
+    expect(isISSO(user)).toBe(false)
+    expect(isSystemDelegate(user)).toBe(false)
   })
 })
 

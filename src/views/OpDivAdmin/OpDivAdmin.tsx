@@ -239,7 +239,11 @@ export default function OpDivAdmin() {
       },
       {
         field: 'system_delegate_enabled',
+        // Short visible header; the full spec label "Add System Delegate Role"
+        // rides along as the header tooltip (description) and the switch's
+        // aria-label, so it fits the grid without losing the exact wording.
         headerName: 'System Delegate',
+        description: 'Add System Delegate Role',
         flex: 0.7,
         sortable: false,
         renderCell: (params) => {
