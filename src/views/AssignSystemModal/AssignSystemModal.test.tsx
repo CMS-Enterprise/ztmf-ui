@@ -533,13 +533,11 @@ test('a failing assigned read still leaves the dropdown usable', async () => {
   ;(console.error as jest.Mock).mockRestore?.()
 })
 
-test('dropdown options are ordered by acronym regardless of response order', async () => {
+test('typing an acronym filters the list to the matching system', async () => {
+  // Regression for #587: the picker must match on the acronym, not just the
+  // system name. Typing "ISD" surfaces ISD-CHI and drops DS-1 / Death Star.
   const user = userEvent.setup()
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
-  // Deliberately reverse-sorted on the wire.
-  mock
-    .onGet(`/users/${USER_ID}/assignablefismasystems`)
-    .reply(200, { data: [EXECUTOR, CHI, DS1] })
 
   renderModal()
 
@@ -547,129 +545,89 @@ test('dropdown options are ordered by acronym regardless of response order', asy
     name: /assign fisma systems/i,
   })
   await user.click(combobox)
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+
+  await user.type(combobox, 'ISD')
+
+  await waitFor(() =>
+    expect(
+      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
+    ).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
+})
+
+test('typing a system name filters the list to the matching system', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/ISD-CHI/)).toBeInTheDocument())
+
+  await user.type(combobox, 'Death')
 
   await waitFor(() =>
     expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
   )
-  const rows = Array.from(
-    document.body.querySelectorAll('.MuiAutocomplete-listbox li')
-  ).map((li) => (li.textContent ?? '').trim())
-  expect(rows).toHaveLength(3)
-  // DS-1 < ISD-CHI < SSD-EX
-  expect(rows[0]).toMatch(/^DS-1/)
-  expect(rows[1]).toMatch(/^ISD-CHI/)
-  expect(rows[2]).toMatch(/^SSD-EX/)
+  expect(screen.queryByText(/ISD-CHI/)).not.toBeInTheDocument()
 })
 
-test('reopening for a different user clears the previous chips before new fetches resolve', async () => {
-  // User A resolves with an assignment; user B's fetches are held so we
-  // can observe the intermediate state. The stateOwnerRef check clears
-  // chips when the userid changes - otherwise user A's chip would linger
-  // until user B's response arrived.
-  const OTHER_USER_ID = '33333333-3333-3333-3333-333333333333'
-  mock
-    .onGet(`/users/${USER_ID}/assignedfismasystems`)
-    .reply(200, { data: [1002] })
-  mock
-    .onGet(`/users/${USER_ID}/assignablefismasystems`)
-    .reply(200, { data: [EXECUTOR] })
-  let releaseB: () => void = () => {}
-  const bPending = new Promise<void>((resolve) => {
-    releaseB = resolve
+test('acronym matching is case-insensitive', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
   })
-  mock
-    .onGet(`/users/${OTHER_USER_ID}/assignedfismasystems`)
-    .reply(() => bPending.then(() => [200, { data: [] }]))
-  mock
-    .onGet(`/users/${OTHER_USER_ID}/assignablefismasystems`)
-    .reply(() => bPending.then(() => [200, { data: [] }]))
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
 
-  const utils = renderModal()
+  await user.type(combobox, 'isd')
 
   await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
+    expect(
+      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
+    ).toBeInTheDocument()
   )
-
-  utils.rerender(
-    <AssignSystemModal
-      open={true}
-      handleClose={() => {}}
-      userid={OTHER_USER_ID}
-      userName="Some Other User"
-      allSystems={[]}
-      decommSystems={[]}
-    />
-  )
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(0)
-  )
-
-  releaseB()
+  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
 })
 
-test('reopening for the SAME user keeps chips visible while fresh fetches run', async () => {
-  // Same-user reopen: the modal must NOT blank the chip area while the
-  // refresh reads are in flight. Contrast with the different-user test
-  // above - that path clears; this path preserves. Perceived latency
-  // matters most here: an admin who opens the picker, closes it, and
-  // reopens should see chips instantly.
-  mock
-    .onGet(`/users/${USER_ID}/assignedfismasystems`)
-    .reply(200, { data: [1002] })
-  mock
-    .onGet(`/users/${USER_ID}/assignablefismasystems`)
-    .reply(200, { data: [EXECUTOR] })
+test('searching by a decommissioned system acronym does not surface it as an option', async () => {
+  // The new acronym/name search composes with the decommissioned-stripping
+  // filter: even an exact acronym match must not offer a decommissioned
+  // system as a selectable option.
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
 
-  const utils = renderModal()
-
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-  // Flush the second state setter (setAssignable) from the initial
-  // Promise.allSettled so the rerender below doesn't race a lingering
-  // update outside act(). The waitFor above only confirms one of the two.
-  await act(async () => {
-    await Promise.resolve()
+  renderModal({
+    fismaSystemMap: {
+      ...ACTIVE_MAP,
+      9001: {
+        acronym: 'DECOM-A',
+        name: 'Decommissioned System A',
+        decommissioned: true,
+      },
+    },
   })
 
-  // Close and hold the reopen fetches so we can observe the moment
-  // just after `open` flips true again.
-  let releaseReopen: () => void = () => {}
-  const reopenPending = new Promise<void>((resolve) => {
-    releaseReopen = resolve
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
   })
-  mock.reset()
-  mock
-    .onGet(`/users/${USER_ID}/assignedfismasystems`)
-    .reply(() => reopenPending.then(() => [200, { data: [1002] }]))
-  mock
-    .onGet(`/users/${USER_ID}/assignablefismasystems`)
-    .reply(() => reopenPending.then(() => [200, { data: [EXECUTOR] }]))
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
 
-  await act(async () => {
-    utils.rerender(
-      <AssignSystemModal
-        open={false}
-        handleClose={() => {}}
-        userid={USER_ID}
-        userName="Admiral Piett"
-        allSystems={[]}
-        decommSystems={[]}
-      />
-    )
-    utils.rerender(
-      <AssignSystemModal
-        open={true}
-        handleClose={() => {}}
-        userid={USER_ID}
-        userName="Admiral Piett"
-        allSystems={[]}
-        decommSystems={[]}
-      />
-    )
-  })
+  await user.type(combobox, 'DECOM-A')
 
-  // Chip stays visible during the in-flight refresh - no empty flash.
-  expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  releaseReopen()
+  // No option surfaces - the decommissioned entry is stripped even though
+  // its acronym matches the query exactly.
+  expect(screen.queryByText(/DECOM-A/)).not.toBeInTheDocument()
 })

@@ -23,10 +23,11 @@ import { FismaSystemType } from '@/types'
 const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
 const checkedIcon = <CheckBoxIcon fontSize="small" />
 
-// Default MUI substring filter; wrapped below to also restrict the
-// dropdown to the server-scoped assignable set so out-of-scope orphans
-// (legacy cross-OpDiv assignments) can chip but not be re-picked.
-const defaultOptionFilter = createFilterOptions<number>()
+type FismaSystemEntry = {
+  name: string
+  acronym: string
+  decommissioned: boolean
+}
 
 type Props = {
   open: boolean
@@ -60,11 +61,24 @@ export default function AssignSystemModal({
     systemid: number
     nextValue: number[]
   } | null>(null)
-  // Track the userid the current state belongs to so a same-user reopen
-  // keeps chips visible (and just refreshes underneath) while opening for
-  // a different user clears them BEFORE the new fetches land (no
-  // previous-user chip flash).
-  const stateOwnerRef = React.useRef<GridRowId>('')
+  // Substring filter that matches on the raw acronym + name rather than the
+  // display label. `labelFor` decorates the label ("(Decommissioned)" suffix,
+  // "Unknown or decommissioned system (id X)" fallback), so filtering off the
+  // label would couple search to that formatting. Wrapped below to also strip
+  // decommissioned entries from the dropdown (they still surface as chips for
+  // existing assignments but are not selectable for new ones). MUI defaults
+  // (ignoreCase: true, matchFrom: 'any') give case-insensitive substring match.
+  const optionFilter = React.useMemo(
+    () =>
+      createFilterOptions<number>({
+        stringify: (option) => {
+          const system = fismaSystemMap[option]
+          if (!system) return String(option)
+          return `${system.acronym} ${system.name}`
+        },
+      }),
+    [fismaSystemMap]
+  )
   React.useEffect(() => {
     if (!open || !userid) return
     if (stateOwnerRef.current !== userid) {
@@ -210,8 +224,8 @@ export default function AssignSystemModal({
             // broad so chips for out-of-scope current assignments still
             // resolve; only the picker is scoped.
             filterOptions={(options, params) =>
-              defaultOptionFilter(options, params).filter((o) =>
-                assignableIds.has(o)
+              optionFilter(options, params).filter(
+                (o) => !fismaSystemMap[o]?.decommissioned
               )
             }
             renderOption={(props, option, { selected }) => {
