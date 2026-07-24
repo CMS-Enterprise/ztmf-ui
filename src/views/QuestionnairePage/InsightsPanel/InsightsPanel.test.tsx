@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import InsightsPanel, {
   OptionInsightBadges,
   severityStyle,
+  rollupControls,
 } from './InsightsPanel'
 import type { InsightPayload } from '@/types'
 import CONFIG from '@/utils/config'
@@ -52,19 +53,16 @@ const fullPayload: InsightPayload = {
 }
 
 describe('InsightsPanel', () => {
-  it('renders the ZTMF Insights label and all five source chips', () => {
+  it('renders the ZTMF Insights label and the four source chips', () => {
     render(<InsightsPanel payload={fullPayload} />)
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
-    // Chips render the source name with a trailing colon (e.g. "Kion:").
-    for (const source of [
-      'Kion',
-      'SecurityHub',
-      'Hardenize',
-      'CFACTS',
-      'ARS',
-    ]) {
+    // Chips render the source name with a trailing colon (e.g. "Kion:"). ARS is
+    // the control catalog (the "ARS Controls" section), not an evidence source —
+    // its coverage rolls up under CFACTS, so there is no standalone ARS chip.
+    for (const source of ['Kion', 'SecurityHub', 'Hardenize', 'CFACTS']) {
       expect(screen.getByText(`${source}:`)).toBeInTheDocument()
     }
+    expect(screen.queryByText('ARS:')).not.toBeInTheDocument()
   })
 
   it('renders the suggested maturity pill when the suggestion differs from the prior score', () => {
@@ -152,17 +150,19 @@ describe('InsightsPanel', () => {
   })
 
   it('renders a finding uniformly: code, title, description, severity, How to fix', () => {
+    // Hardenize is the remaining FindingRow source (Kion/SecurityHub now render as
+    // the compact chip block), so the uniform card shape is asserted through it.
     render(
       <InsightsPanel
         payload={{
           suggested_score: 1,
           findings: {
-            sechub: [
+            hardenize: [
               {
-                id: 'IAM.10',
-                title: 'MFA should be enabled',
-                description: 'Enable MFA for all IAM users.',
-                remediation: 'Turn on MFA in the IAM console.',
+                id: 'WWW_HSTS_MISSING',
+                title: 'HSTS not enabled',
+                description: 'Enable HSTS on this host.',
+                remediation: 'Send a Strict-Transport-Security header.',
                 severity: 'MEDIUM',
               },
             ],
@@ -171,11 +171,11 @@ describe('InsightsPanel', () => {
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    expect(screen.getByText('IAM.10')).toBeInTheDocument()
-    expect(screen.getByText('MFA should be enabled')).toBeInTheDocument()
+    expect(screen.getByText('WWW_HSTS_MISSING')).toBeInTheDocument()
+    expect(screen.getByText('HSTS not enabled')).toBeInTheDocument()
     // Description surfaces in the severity badge hover, not the card body.
     expect(
-      screen.getByLabelText(/MEDIUM: Enable MFA for all IAM users\./)
+      screen.getByLabelText(/MEDIUM: Enable HSTS on this host\./)
     ).toBeInTheDocument()
     expect(screen.getByText('MEDIUM')).toBeInTheDocument()
     expect(screen.getByText(/How to fix/)).toBeInTheDocument()
@@ -190,11 +190,11 @@ describe('InsightsPanel', () => {
             suggested_score: 1,
             cfacts_reasoning: 'IDM-Okta detected. MFA required.',
             findings: {
-              sechub: [
+              hardenize: [
                 {
-                  id: 'IAM.10',
-                  title: 'MFA should be enabled',
-                  remediation: 'Turn on MFA in the IAM console.',
+                  id: 'WWW_HSTS_MISSING',
+                  title: 'HSTS not enabled',
+                  remediation: 'Send a Strict-Transport-Security header.',
                   severity: 'MEDIUM',
                 },
               ],
@@ -206,11 +206,11 @@ describe('InsightsPanel', () => {
       // Remediation gated off...
       expect(screen.queryByText(/How to fix/)).not.toBeInTheDocument()
       expect(
-        screen.queryByText(/Turn on MFA in the IAM console/)
+        screen.queryByText(/Strict-Transport-Security/)
       ).not.toBeInTheDocument()
       // ...but the finding itself and the CFACTS reasoning still render.
-      expect(screen.getByText('IAM.10')).toBeInTheDocument()
-      expect(screen.getByText('MFA should be enabled')).toBeInTheDocument()
+      expect(screen.getByText('WWW_HSTS_MISSING')).toBeInTheDocument()
+      expect(screen.getByText('HSTS not enabled')).toBeInTheDocument()
       expect(screen.getByText(/IDM-Okta detected/)).toBeInTheDocument()
     } finally {
       CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED = true
@@ -221,14 +221,76 @@ describe('InsightsPanel', () => {
     render(<InsightsPanel payload={fullPayload} />)
     // Nothing in the drawer shows until expanded.
     expect(screen.queryByText(/IAM\.10/)).not.toBeInTheDocument()
-    expect(screen.queryByText('IA-02')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('iam-user-without-mfa-device-enabled')
+    ).not.toBeInTheDocument()
 
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
 
     // Kion renders as its pass/fail chip block (failing chip labeled by the
-    // NIST tag, ✗); the sechub finding renders as a FindingRow (slug visible).
-    expect(screen.getByText('IA-02').textContent).toContain('✗')
+    // finding name, ✗ — the NIST control moved into the hover); the sechub
+    // finding renders as a FindingRow (slug visible).
+    expect(
+      screen.getByText('iam-user-without-mfa-device-enabled').textContent
+    ).toContain('✗')
     expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
+  })
+
+  it('labels each Kion check by its finding name (green pass / red fail) with the description + control + state in the hover', async () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          has_kion_data: true,
+          findings: {
+            kion: [
+              {
+                id: 'iam-user-without-mfa-device-enabled',
+                nist_controls: 'IA-02',
+                description: 'Identify IAM users without an MFA device enabled',
+              },
+            ],
+          },
+          kion_passing: [
+            {
+              id: 'iam-user-inactive',
+              nist_controls: 'AC-2',
+              description: 'Identify inactive IAM Users',
+              level: 1,
+            },
+          ],
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+
+    // Chip label is the finding name itself, coloured by state: ✗ for a check
+    // that has a finding (failing), ✓ for one with no finding (passing).
+    const fail = screen.getByRole('img', {
+      name: /^iam-user-without-mfa-device-enabled — .* — Failed$/,
+    })
+    const pass = screen.getByRole('img', {
+      name: /^iam-user-inactive — .* — Passed$/,
+    })
+    expect(fail.textContent).toContain('✗')
+    expect(fail.textContent).toContain('iam-user-without-mfa-device-enabled')
+    expect(pass.textContent).toContain('✓')
+
+    // Per-check rollup: 1 passing + 1 failing reads "1 of 2 checks passed".
+    expect(screen.getByText(/1 of 2 checks passed/)).toBeInTheDocument()
+
+    // The control now lives in the hover, not on the chip label.
+    expect(fail.textContent).not.toContain('IA-02')
+
+    // Hover/focus reveals the description, the mapped control, and met/failed —
+    // the signal Mack asked to surface instead of a bare control tag.
+    fireEvent.focus(fail)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent(
+      'Identify IAM users without an MFA device enabled'
+    )
+    expect(tip).toHaveTextContent('Control: IA-02')
+    expect(tip).toHaveTextContent('Failed')
   })
 
   it('lists satisfied, non-satisfied, and failing ARS control IDs when the pipeline provides them', () => {
@@ -275,12 +337,12 @@ describe('InsightsPanel', () => {
     expect(ac17[0].textContent).not.toContain('○')
     // The genuinely-not-satisfied control still renders grey.
     expect(screen.getByText('IA-02(02)').textContent).toContain('○')
-    // Accessible name reflects failing, not not-satisfied.
+    // Accessible name reflects the failing net state, not merely not-satisfied.
     expect(
-      screen.getByRole('img', { name: /^AC-17: Other Than Satisfied/ })
+      screen.getByRole('img', { name: /^AC-17: failing/ })
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('img', { name: /^AC-17: Not satisfied/ })
+      screen.queryByRole('img', { name: /^AC-17: not satisfied/ })
     ).not.toBeInTheDocument()
   })
 
@@ -296,18 +358,17 @@ describe('InsightsPanel', () => {
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    // The chip's accessible name is "<id>: <state reason>" — the same string the
-    // Tooltip surfaces on hover — so passed / not-satisfied / failed is exposed
-    // both visually (✓/○/✗ + colour) and to a screen reader, keyed off which
-    // array the control came from.
+    // The chip's accessible name is "<id>: <net state>. <source · check · verb>…"
+    // — the same evidence the Tooltip surfaces on hover — so the state and its
+    // provenance reach a screen reader, not just the ✓/○/✗ marker and colour.
     expect(
-      screen.getByRole('img', { name: /^IA-01: Satisfied/ })
+      screen.getByRole('img', { name: /^IA-01: satisfied/ })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('img', { name: /^IA-02\(02\): Not satisfied/ })
+      screen.getByRole('img', { name: /^IA-02\(02\): not satisfied/ })
     ).toBeInTheDocument()
     expect(
-      screen.getByRole('img', { name: /^AC-17: Other Than Satisfied/ })
+      screen.getByRole('img', { name: /^AC-17: failing/ })
     ).toBeInTheDocument()
   })
 
@@ -318,12 +379,12 @@ describe('InsightsPanel', () => {
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    const chip = screen.getByRole('img', { name: /^IA-01: Satisfied/ })
+    const chip = screen.getByRole('img', { name: /^IA-01: satisfied/ })
     // Focusable, and the MUI Tooltip fires on focus (not just hover) so a
-    // keyboard-only sighted user can read the state reason.
+    // keyboard-only sighted user can read the per-source evidence.
     expect(chip).toHaveAttribute('tabindex', '0')
     fireEvent.focus(chip)
-    expect(await screen.findByRole('tooltip')).toHaveTextContent(/Satisfied/)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(/CFACTS/)
   })
 
   it('renders non-satisfied ARS controls even when the satisfied array is absent', () => {
@@ -353,16 +414,80 @@ describe('InsightsPanel', () => {
       />
     )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    // The valid string still renders; the panel is not blanked.
+    // The valid string renders; the non-string elements are dropped (not coerced
+    // into junk "42" / "[object Object]" chips), and the panel is not blanked.
     expect(screen.getByText('IA-01')).toBeInTheDocument()
+    expect(screen.queryByText('42')).not.toBeInTheDocument()
+    expect(screen.queryByText('[object Object]')).not.toBeInTheDocument()
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
   })
 
-  it('shows the ARS Controls count with no chips when the control arrays are absent', () => {
+  it('derives the ARS Controls total from the sources, not a standalone count', () => {
+    // fullPayload carries no ars_* arrays, but its Kion finding maps to IA-02 — the
+    // union surfaces that control (failing) and the header counts it. There is no
+    // longer a source-less count: the total IS the union of source controls.
     render(<InsightsPanel payload={fullPayload} />)
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    expect(screen.getByText(/4 of 4 satisfied/)).toBeInTheDocument()
+    expect(screen.getByText(/0 of 1 satisfied/)).toBeInTheDocument()
+    expect(screen.getByText('IA-02').textContent).toContain('✗')
+    // A control no source touched does not appear.
     expect(screen.queryByText('IA-01')).not.toBeInTheDocument()
+  })
+
+  it('surfaces a control a Kion check passes in the ARS Controls union (SC-12)', () => {
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 1,
+            kion_passing: [
+              {
+                id: 'kms-key-with-rotation-disabled',
+                nist_controls: 'SC-12',
+                level: 2,
+              },
+            ],
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // SC-12 shows satisfied even though CFACTS never assessed it — the row is the
+    // cross-source total, and Kion passed the check that maps to SC-12.
+    expect(screen.getByText('SC-12').textContent).toContain('✓')
+  })
+
+  it('flags a control passed by one check and failed by another as an amber conflict, netting to failing, and names both sources on hover', async () => {
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 1,
+            kion_passing: [
+              { id: 'kms-key-with-rotation-disabled', nist_controls: 'SC-12' },
+            ],
+            findings: {
+              kion: [
+                {
+                  id: 'kms-key-with-cross-account-access',
+                  nist_controls: 'SC-12',
+                },
+              ],
+            },
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Amber ⚠ conflict chip — not a plain ✓ or ✗ — so the disagreement is visible.
+    const chip = screen.getByRole('img', { name: /^SC-12: sources disagree/ })
+    expect(chip.textContent).toContain('⚠')
+    // Hover names each source + check and states how the score resolved it.
+    fireEvent.focus(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('kms-key-with-rotation-disabled')
+    expect(tip).toHaveTextContent('kms-key-with-cross-account-access')
+    expect(tip).toHaveTextContent(/counted as failing/)
   })
 
   it('renders a minimal payload without a details toggle', () => {
@@ -472,25 +597,27 @@ describe('InsightsPanel resilience (opaque payload)', () => {
       <InsightsPanel
         payload={{
           suggested_score: 2,
-          evidence_sources: 'ARS, CFACTS',
+          has_kion_data: true,
           findings: { kion: 'not-an-array' as unknown as [] },
         }}
       />
     )
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
-    // The malformed findings block is skipped, not thrown on.
+    // The malformed findings block is skipped, not thrown on. The panel still
+    // renders, and "Based on" is derived from the active source chips.
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    expect(screen.getByText(/ARS, CFACTS/)).toBeInTheDocument()
+    expect(screen.getByText(/Based on:/)).toBeInTheDocument()
   })
 
   it('degrades a malformed non-string text field instead of blanking the panel', () => {
-    // evidence_sources arriving as an object would throw "Objects are not valid
-    // as a React child"; asText coerces it so the panel stays intact.
+    // A field arriving as an object would throw "Objects are not valid as a React
+    // child"; asText coerces it so the panel stays intact.
     render(
       <InsightsPanel
         payload={{
           suggested_score: 2,
-          evidence_sources: { bad: true } as unknown as string,
+          has_kion_data: true,
+          cfacts_reasoning: { bad: true } as unknown as string,
         }}
       />
     )
@@ -513,6 +640,65 @@ describe('InsightsPanel resilience (opaque payload)', () => {
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
     expect(screen.getByText(/IAM\.10/)).toBeInTheDocument()
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
+  })
+})
+
+describe('rollupControls (cross-source ARS control union)', () => {
+  const roll = (p: unknown) => rollupControls(p as InsightPayload)
+
+  it('unions a Kion passing check control into satisfied with no CFACTS arrays', () => {
+    expect(
+      roll({
+        kion_passing: [
+          { id: 'kms-rotation', nist_controls: 'SC-12', level: 2 },
+        ],
+      })
+    ).toEqual([
+      {
+        id: 'SC-12',
+        state: 'satisfied',
+        conflict: false,
+        evidence: [
+          { source: 'Kion', check: 'kms-rotation', state: 'satisfied' },
+        ],
+      },
+    ])
+  })
+
+  it('nets weakest-link across sources: a SecHub fail overrides a CFACTS satisfied (and flags conflict)', () => {
+    const rolled = roll({
+      ars_satisfied_controls: ['AC-2'],
+      ars_not_satisfied_controls: ['AC-3'],
+      findings: { sechub: [{ id: 'EC2.10', nist_controls: 'AC-2' }] },
+    })
+    const map = Object.fromEntries(rolled.map((c) => [c.id, c.state]))
+    expect(map['AC-2']).toBe('failing')
+    expect(map['AC-3']).toBe('unsatisfied')
+    // AC-2 is satisfied by CFACTS but failed by SecHub → conflict (amber ⚠), not a
+    // plain red fail.
+    expect(rolled.find((c) => c.id === 'AC-2')?.conflict).toBe(true)
+  })
+
+  it('flags pass+fail on the same control as a conflict that nets to failing', () => {
+    const sc12 = roll({
+      kion_passing: [{ id: 'rot', nist_controls: 'SC-12' }],
+      findings: { kion: [{ id: 'xacct', nist_controls: 'SC-12' }] },
+    }).find((c) => c.id === 'SC-12')
+    expect(sc12).toMatchObject({ state: 'failing', conflict: true })
+    expect(sc12?.evidence).toHaveLength(2)
+  })
+
+  it('splits a multi-control mapping and skips malformed evidence without throwing', () => {
+    const rolled = roll({
+      findings: {
+        kion: [
+          { id: 'x', nist_controls: 'AC-2, AC-3' },
+          null,
+          { id: 'no-control' },
+        ],
+      },
+    })
+    expect(rolled.map((c) => c.id).sort()).toEqual(['AC-2', 'AC-3'])
   })
 })
 
@@ -639,17 +825,28 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     render(<InsightsPanel payload={kionPassFail} />)
     expand()
     expect(screen.getByText(/3 of 4 checks passed/)).toBeInTheDocument()
-    // 3 passing (green ✓) + 1 failing (red ✗), labeled by NIST tag.
-    expect(screen.getByText('IA-5').textContent).toContain('✓')
-    expect(screen.getByText('IA-2').textContent).toContain('✗')
+    // 3 passing (green ✓) + 1 failing (red ✗), each labeled by its check name.
+    expect(
+      screen.getByText('account-without-compliant-password-policy').textContent
+    ).toContain('✓')
+    expect(
+      screen.getByText('iam-user-without-mfa-device-enabled').textContent
+    ).toContain('✗')
   })
 
-  it('renders a chip per check even when a NIST tag repeats (distinct checks)', () => {
+  it('renders a chip per check even when two checks map to the same control', () => {
     render(<InsightsPanel payload={kionPassFail} />)
     expand()
-    const ac2 = screen.getAllByText('AC-2')
-    expect(ac2).toHaveLength(2)
-    ac2.forEach((chip) => expect(chip.textContent).toContain('✓'))
+    // Two distinct checks share control AC-2; each still gets its own feed chip
+    // (labeled by check name)…
+    expect(
+      screen.getByText('root-account-without-mfa-enabled').textContent
+    ).toContain('✓')
+    expect(
+      screen.getByText('iam-user-with-password-and-no-mfa').textContent
+    ).toContain('✓')
+    // …while the ARS Controls union collapses AC-2 to a single control chip.
+    expect(screen.getAllByText('AC-2')).toHaveLength(1)
   })
 
   it('folds pass/fail status into each chip accessible name (role=img so AT exposes it)', () => {
@@ -710,15 +907,15 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
       />
     )
     expand()
-    // No fabricated pass count — labeled "N finding(s)" — but still the chip
-    // block (NIST tag + ✗), NOT the old verbose FindingRow (slug is not body
-    // text, only reachable via the chip's accessible name).
+    // No fabricated pass count — labeled "N finding(s)" — but still the chip block
+    // (finding name + ✗), NOT the old verbose FindingRow.
     expect(screen.getByText(/1 finding/)).toBeInTheDocument()
     expect(screen.queryByText(/checks? passed/)).not.toBeInTheDocument()
-    expect(screen.getByText('AC-6-10').textContent).toContain('✗')
     expect(
-      screen.queryByText('iam-role-missing-permissions-boundary')
-    ).not.toBeInTheDocument()
+      screen.getByText('iam-role-missing-permissions-boundary').textContent
+    ).toContain('✗')
+    // The control it maps to also surfaces in the ARS Controls union.
+    expect(screen.getByText('AC-6-10').textContent).toContain('✗')
   })
 
   it('renders SecurityHub as the block when its passing array ships', () => {
@@ -739,13 +936,12 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     )
     expand()
     expect(screen.getByText(/1 of 2 checks passed/)).toBeInTheDocument()
-    expect(screen.getByText('AC-3').textContent).toContain('✓')
-    expect(screen.getByText('IA-2').textContent).toContain('✗')
-    // As a block the finding slug is not rendered as body text.
-    expect(screen.queryByText('IAM.10')).not.toBeInTheDocument()
+    // Feed chips are labeled by the SecurityHub finding code.
+    expect(screen.getByText('IAM.1').textContent).toContain('✓')
+    expect(screen.getByText('IAM.10').textContent).toContain('✗')
   })
 
-  it('keeps SecurityHub on the FindingRow list until its passing array ships', () => {
+  it('renders SecurityHub as a chip block even with only failing findings', () => {
     render(
       <InsightsPanel
         payload={{
@@ -757,6 +953,7 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
                 title: 'MFA should be enabled',
                 description: 'Enable MFA',
                 severity: 'MEDIUM',
+                nist_controls: 'IA-2',
               },
             ],
           },
@@ -764,11 +961,58 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
       />
     )
     expand()
-    // No passing array → old FindingRow: slug + title visible as body text.
-    expect(screen.getByText('IAM.10')).toBeInTheDocument()
-    expect(screen.getByText('MFA should be enabled')).toBeInTheDocument()
-    // Not the block — no "N of M checks passed" header for SecurityHub.
-    expect(screen.queryByText(/checks? passed/)).not.toBeInTheDocument()
+    // One "SecurityHub:" header + a chip labeled by the finding code (✗) — the
+    // compact block, not the old per-finding FindingRow list.
+    expect(screen.getByText(/1 finding/)).toBeInTheDocument()
+    expect(screen.getByText('IAM.10').textContent).toContain('✗')
+    // Title lives in the hover now, not as body text.
+    expect(screen.queryByText('MFA should be enabled')).not.toBeInTheDocument()
+  })
+
+  it('renders Hardenize as chips when its passing array ships, keeping affected domains in the hover', async () => {
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 2,
+            has_hardenize_data: true,
+            hardenize_passing: [
+              {
+                id: 'DNS_DANGLING',
+                nist_controls: 'SC-7',
+                description: 'No dangling DNS records',
+                level: 1,
+              },
+            ],
+            findings: {
+              hardenize: [
+                {
+                  id: 'WWW_CERT_HOST_MISMATCH',
+                  title: "Certificate doesn't match hostname",
+                  severity: 'error',
+                  nist_controls: 'SC-8',
+                  instances: [
+                    { domain: 'idm.cms.gov', detail: 'cert CN mismatch' },
+                  ],
+                },
+              ],
+            },
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Passing array present → Hardenize flips to the same green/red chip block as
+    // Kion/SecurityHub (not the FindingRow list).
+    expect(screen.getByText('DNS_DANGLING').textContent).toContain('✓')
+    const fail = screen.getByRole('img', {
+      name: /^WWW_CERT_HOST_MISMATCH — .* — Failed$/,
+    })
+    expect(fail.textContent).toContain('✗')
+    // Affected domains ride along in the chip hover so nothing is lost vs FindingRow.
+    fireEvent.focus(fail)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('idm.cms.gov')
   })
 
   it('degrades when a passing array arrives as a non-array', () => {
