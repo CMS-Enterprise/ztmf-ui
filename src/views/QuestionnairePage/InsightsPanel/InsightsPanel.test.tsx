@@ -422,16 +422,45 @@ describe('InsightsPanel', () => {
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
   })
 
-  it('derives the ARS Controls total from the sources, not a standalone count', () => {
+  it('surfaces source-touched controls under "Aligns with ARS Controls", with no standalone count', () => {
     // fullPayload carries no ars_* arrays, but its Kion finding maps to IA-02 — the
-    // union surfaces that control (failing) and the header counts it. There is no
-    // longer a source-less count: the total IS the union of source controls.
+    // union surfaces that control (failing) under the alignment section. There is no
+    // "N of M satisfied" count (the union denominator is not the official ARS total).
     render(<InsightsPanel payload={fullPayload} />)
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    expect(screen.getByText(/0 of 1 satisfied/)).toBeInTheDocument()
+    expect(screen.getByText('Aligns with ARS Controls:')).toBeInTheDocument()
+    expect(screen.queryByText(/of \d+ satisfied/)).not.toBeInTheDocument()
     expect(screen.getByText('IA-02').textContent).toContain('✗')
     // A control no source touched does not appear.
     expect(screen.queryByText('IA-01')).not.toBeInTheDocument()
+  })
+
+  it('carries a keyboard-reachable disclaimer that alignment is not a control determination', async () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Short accessible name; the full compliance disclaimer rides in the tooltip.
+    const info = screen.getByLabelText(/About ARS alignment/i)
+    expect(info).toBeInTheDocument()
+    // Focusable (508) and the tooltip fires on focus, not just hover.
+    expect(info).toHaveAttribute('tabindex', '0')
+    fireEvent.focus(info)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /does not constitute an assessed control satisfaction determination/i
+    )
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /CFACTS remains the system of record/
+    )
+  })
+
+  it('orders the drawer with "Based on" first and the ARS alignment last', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const based = screen.getByText('Based on:')
+    const aligns = screen.getByText('Aligns with ARS Controls:')
+    // "Based on" leads the drawer; the control-union alignment sits at the bottom.
+    expect(
+      based.compareDocumentPosition(aligns) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
   })
 
   it('surfaces a control a Kion check passes in the ARS Controls union (SC-12)', () => {
@@ -967,6 +996,45 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     expect(screen.getByText('IAM.10').textContent).toContain('✗')
     // Title lives in the hover now, not as body text.
     expect(screen.queryByText('MFA should be enabled')).not.toBeInTheDocument()
+  })
+
+  it('collapses the passing bulk behind a toggle, keeps failing chips at the top, and expands on click', () => {
+    const passing = Array.from({ length: 9 }, (_, i) => ({
+      id: `pass-check-${i}`,
+      nist_controls: 'SC-7',
+      level: 1,
+    }))
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 2,
+            has_hardenize_data: true,
+            hardenize_passing: passing,
+            findings: {
+              hardenize: [
+                { id: 'fail-check', nist_controls: 'SC-8', severity: 'error' },
+              ],
+            },
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Failing chip shown at the top; the 9 passing checks are collapsed away.
+    expect(screen.getByText('fail-check').textContent).toContain('✗')
+    expect(screen.queryByText('pass-check-0')).not.toBeInTheDocument()
+    // Toggle reveals them.
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    )
+    expect(screen.getByText('pass-check-0')).toBeInTheDocument()
+    // Failing still precedes the passing chips in the DOM.
+    const fail = screen.getByText('fail-check')
+    const pass0 = screen.getByText('pass-check-0')
+    expect(
+      fail.compareDocumentPosition(pass0) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
   })
 
   it('renders Hardenize as chips when its passing array ships, keeping affected domains in the hover', async () => {
