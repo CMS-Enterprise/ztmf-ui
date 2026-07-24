@@ -111,6 +111,17 @@ export const hasUnscopedRead = (user: UserLike): boolean =>
 export const isSystemScoped = (user: UserLike): boolean =>
   !!user && SYSTEM_SCOPED_ROLES.has(user.role as UserRole)
 
+// A system delegate - answers-only, and the one tier the delegate
+// self-service surface is hidden from (a delegate cannot manage delegates).
+export const isSystemDelegate = (user: UserLike): boolean =>
+  !!user && user.role === 'SYSTEM_DELEGATE'
+
+// ISSO specifically, split out from isSystemScoped (which also covers ISSM).
+// The delegate self-service actor scope is ISSO-only among non-admins (epic
+// decision 5), so ISSM sees the roster read-only while ISSO can manage it.
+export const isISSO = (user: UserLike): boolean =>
+  !!user && user.role === 'ISSO'
+
 // Row-level OpDiv scoping is server-enforced - the backend narrows the
 // fismaSystems list before it reaches the frontend, so this gate only needs
 // to decide whether the user belongs to a tier that gets system-detail UI at

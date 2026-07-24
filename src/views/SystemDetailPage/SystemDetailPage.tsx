@@ -23,7 +23,13 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
-import { isAdmin as checkIsAdmin, isSystemScoped } from '@/utils/userRoles'
+import {
+  isAdmin as checkIsAdmin,
+  isSystemScoped,
+  isSystemDelegate,
+  isISSO,
+  hasSystemAccess,
+} from '@/utils/userRoles'
 
 import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
@@ -31,6 +37,7 @@ import SystemDetailEditView from './SystemDetailEditView'
 import TargetMaturityCard from './TargetMaturityCard'
 import { EXTENDED_METADATA_KEYS } from './fieldConfig'
 import SystemEnrichmentCard from './SystemEnrichmentCard'
+import SystemDelegatesSection from './SystemDelegatesSection'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
@@ -560,8 +567,19 @@ export default function SystemDetailPage() {
     )
   }
 
-  const opdivName =
-    opdivs.find((o) => o.opdiv_id === system.opdiv_id)?.name ?? null
+  const systemOpDiv = opdivs.find((o) => o.opdiv_id === system.opdiv_id)
+  const opdivName = systemOpDiv?.name ?? null
+
+  // Delegates section: visible to any assigned non-delegate (incl. ISSM) when
+  // the system's OpDiv has the capability enabled; hidden from delegates.
+  // Managing (add/invite/remove/renew) is ISSO + admin only - ISSM sees the
+  // roster read-only (the backend would 404 an ISSM write). The toggle read
+  // comes from the already-fetched opdivs list.
+  const canViewDelegates =
+    hasSystemAccess(userInfo) &&
+    !isSystemDelegate(userInfo) &&
+    !!systemOpDiv?.system_delegate_enabled
+  const canManageDelegates = isAdmin || isISSO(userInfo)
 
   // Target maturity owns its own edit/save lifecycle (see TargetMaturityCard).
   // The card is slotted into the right column of whichever view renders
@@ -647,6 +665,16 @@ export default function SystemDetailPage() {
           <SystemEnrichmentCard
             fismaUid={system.fismauid}
             systemDataCenterEnvironment={system.datacenterenvironment}
+          />
+        </>
+      )}
+
+      {canViewDelegates && (
+        <>
+          <Divider sx={{ my: 4 }} />
+          <SystemDelegatesSection
+            system={system}
+            canManage={canManageDelegates}
           />
         </>
       )}
