@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
 import Collapse from '@mui/material/Collapse'
 import Link from '@mui/material/Link'
+import InfoOutlined from '@mui/icons-material/InfoOutlined'
 import type { InsightPayload, InsightFinding } from '@/types'
 import CONFIG from '@/utils/config'
 import {
@@ -32,6 +33,13 @@ function maturityLabel(score?: number | null): string | null {
   if (score == null) return null
   return MATURITY_LABEL[score] ?? null
 }
+
+// Disclaimer on the "Aligns with ARS Controls" section. Alignment is a mapping of
+// automated evidence to ARS controls — not an assessed control determination.
+// CFACTS stays the system of record, so a green chip here must not be read as the
+// control being satisfied for authorization purposes.
+const ARS_ALIGN_DISCLAIMER =
+  'Alignment maps automated security evidence to ARS 5.2 controls. It is indicative only and does not constitute an assessed control satisfaction determination or a compliance attestation. CFACTS remains the system of record for control status.'
 
 // Suggested-pill tint keyed by score. Mirrors the prototype's trad/init/adv/opt
 // palette. Unknown/blank score renders neutral.
@@ -547,58 +555,26 @@ function InsightsPanelInner({ payload }: Props) {
 
       <Collapse in={open} unmountOnExit>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #e0e4f0' }}>
-          {/* ARS Controls — the cross-source control TOTAL: the union of every
-              control any evidence source touches (CFACTS coverage + the NIST
-              control each Kion / SecurityHub / Hardenize check maps to), each
-              rolled up weakest-link. Leads the drawer as the richest signal. A
-              control Kion passes (e.g. SC-12) shows satisfied here even if CFACTS
-              never assessed it — this row is the total, not CFACTS alone. */}
-          {controlsTotal > 0 && (
-            <Box sx={{ mb: 0.75 }}>
-              <Typography sx={{ fontSize: 12, color: '#555' }}>
-                <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                  ARS Controls:
-                </Box>{' '}
-                {controlsSatisfied.length} of {controlsTotal} satisfied
-              </Typography>
-              <Box
-                sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
-              >
-                {[
-                  ...controlsSatisfied,
-                  ...controlsUnsatisfied,
-                  ...controlsFailing,
-                ].map((c, i) => (
-                  <ControlChip
-                    key={`${c.state}-${c.id}-${i}`}
-                    id={c.id}
-                    variant={c.conflict ? 'conflict' : c.state}
-                    tooltip={<ControlTooltip control={c} />}
-                    ariaLabel={controlAriaLabel(c)}
-                  />
-                ))}
-              </Box>
-            </Box>
-          )}
-
-          {/* CFACTS — its own section, distinct from the ARS Controls total. Shown
-              whenever CFACTS has any of its own signal (reasoning, auth methods, or
-              a score) so a scored CFACTS chip always has a matching "why". */}
-          {cfactsText && (
-            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                CFACTS:
-              </Box>{' '}
-              {cfactsText}
-            </Typography>
-          )}
-
+          {/* "Based on" leads the drawer — the active source chips that produced
+              this insight, before any per-source detail. */}
           {basedOnSources.length > 0 && (
             <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
               <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                 Based on:
               </Box>{' '}
               {basedOnSources.join(', ')}
+            </Typography>
+          )}
+
+          {/* CFACTS — its own section. Shown whenever CFACTS has any of its own
+              signal (reasoning, auth methods, or a score) so a scored CFACTS chip
+              always has a matching "why". */}
+          {cfactsText && (
+            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
+              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                CFACTS:
+              </Box>{' '}
+              {cfactsText}
             </Typography>
           )}
 
@@ -647,6 +623,67 @@ function InsightsPanelInner({ payload }: Props) {
               </Typography>
             )
           })}
+
+          {/* ARS Controls — the cross-source control union, at the bottom and
+              framed as alignment: the ARS controls the evidence touches, each
+              rolled up weakest-link. No "N of M" count — the union denominator is
+              not the official ARS total, so the chips carry the state instead. */}
+          {controlsTotal > 0 && (
+            <Box sx={{ mb: 0.75 }}>
+              <Typography
+                component="div"
+                sx={{
+                  fontSize: 12,
+                  color: '#555',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                }}
+              >
+                <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                  Aligns with ARS Controls:
+                </Box>
+                <Tooltip title={ARS_ALIGN_DISCLAIMER} placement="top" arrow>
+                  <InfoOutlined
+                    role="img"
+                    // Short accessible name; the full disclaimer rides in the
+                    // tooltip, which MUI wires as aria-describedby on focus. Putting
+                    // the full text in BOTH aria-label and the tooltip would make a
+                    // screen reader announce it twice (name + description).
+                    aria-label="About ARS alignment"
+                    tabIndex={0}
+                    sx={{
+                      fontSize: 14,
+                      color: '#8a94a6',
+                      cursor: 'help',
+                      '&:focus-visible': {
+                        outline: '2px solid #5666b8',
+                        outlineOffset: '1px',
+                        borderRadius: '2px',
+                      },
+                    }}
+                  />
+                </Tooltip>
+              </Typography>
+              <Box
+                sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
+              >
+                {[
+                  ...controlsFailing,
+                  ...controlsSatisfied,
+                  ...controlsUnsatisfied,
+                ].map((c, i) => (
+                  <ControlChip
+                    key={`${c.state}-${c.id}-${i}`}
+                    id={c.id}
+                    variant={c.conflict ? 'conflict' : c.state}
+                    tooltip={<ControlTooltip control={c} />}
+                    ariaLabel={controlAriaLabel(c)}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
         </Box>
       </Collapse>
     </Box>
@@ -905,15 +942,42 @@ function FeedCheckBlock({
   failing: InsightFinding[]
   hasPassing: boolean
 }) {
-  const chips = [
-    ...passing.map((f) => ({ pass: true, f })),
-    ...failing.map((f) => ({ pass: false, f })),
-  ]
+  const [showAllPassing, setShowAllPassing] = React.useState(false)
+  // Ties the toggle to the chip region it reveals (aria-controls), so assistive
+  // tech announces the button/region relationship, not just the expanded state.
+  const chipRegionId = React.useId()
   const passed = passing.length
-  const total = chips.length
+  const total = passing.length + failing.length
   const summary = hasPassing
     ? `${passed} of ${total} check${total === 1 ? '' : 's'} passed`
     : `${failing.length} finding${failing.length === 1 ? '' : 's'}`
+  // Collapse the passing bulk once it spills past a couple of rows (mainly
+  // Hardenize, which can carry 30+ passing checks). Failing chips (findings) are
+  // always shown AND rendered first, so problems stay at the top and visible even
+  // when the passing checks are hidden behind the toggle.
+  const COLLAPSE_PASSING_ABOVE = 8
+  const collapsePassing = passing.length > COLLAPSE_PASSING_ABOVE
+  const passingShown = !collapsePassing || showAllPassing ? passing : []
+
+  const renderChip = (f: InsightFinding, pass: boolean, key: string) => {
+    const nist = asText(f?.nist_controls)
+    const slug = asText(f?.id) ?? asText(f?.title)
+    const desc = asText(f?.description) ?? asText(f?.title)
+    // Fold pass/fail into the accessible name — the ✓/✗ + color is the only other
+    // place that distinction lives, and neither is exposed to a screen reader (508).
+    const ariaLabel = [slug, desc, pass ? 'Passed' : 'Failed']
+      .filter(Boolean)
+      .join(' — ')
+    return (
+      <ControlChip
+        key={key}
+        id={slug ?? nist ?? '—'}
+        variant={pass ? 'satisfied' : 'failing'}
+        tooltip={<CheckTooltip finding={f} pass={pass} />}
+        ariaLabel={ariaLabel || undefined}
+      />
+    )
+  }
   return (
     <Box sx={{ mb: 0.75 }}>
       <Typography sx={{ fontSize: 12, color: '#555' }}>
@@ -923,28 +987,37 @@ function FeedCheckBlock({
         {summary}
       </Typography>
       {total > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-          {chips.map(({ pass, f }, i) => {
-            const nist = asText(f?.nist_controls)
-            const slug = asText(f?.id) ?? asText(f?.title)
-            const desc = asText(f?.description) ?? asText(f?.title)
-            // Fold pass/fail into the accessible name — the ✓/✗ + color is the
-            // only other place that distinction lives, and neither is exposed to
-            // a screen reader (508).
-            const ariaLabel = [slug, desc, pass ? 'Passed' : 'Failed']
-              .filter(Boolean)
-              .join(' — ')
-            return (
-              <ControlChip
-                key={`${pass ? 'p' : 'f'}-${slug ?? ''}-${i}`}
-                id={slug ?? nist ?? '—'}
-                variant={pass ? 'satisfied' : 'failing'}
-                tooltip={<CheckTooltip finding={f} pass={pass} />}
-                ariaLabel={ariaLabel || undefined}
-              />
-            )
-          })}
+        <Box
+          id={chipRegionId}
+          sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
+        >
+          {failing.map((f, i) =>
+            renderChip(f, false, `f-${asText(f?.id) ?? ''}-${i}`)
+          )}
+          {passingShown.map((f, i) =>
+            renderChip(f, true, `p-${asText(f?.id) ?? ''}-${i}`)
+          )}
         </Box>
+      )}
+      {collapsePassing && (
+        <Link
+          component="button"
+          type="button"
+          onClick={() => setShowAllPassing((v) => !v)}
+          aria-expanded={showAllPassing}
+          aria-controls={chipRegionId}
+          sx={{
+            fontSize: 11,
+            mt: 0.5,
+            color: '#3d5a99',
+            cursor: 'pointer',
+            display: 'inline-block',
+          }}
+        >
+          {showAllPassing
+            ? 'Show fewer'
+            : `Show all ${passing.length} passing checks`}
+        </Link>
       )}
     </Box>
   )
