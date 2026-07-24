@@ -54,30 +54,25 @@ type SourceConfig = {
 // solid vs greyed chip; it is derived from the source's own availability flag /
 // key presence rather than assuming every source contributed.
 function buildSources(p: InsightPayload): SourceConfig[] {
+  // Chip order MUST match the drawer's section order (below). Kion sits last — it
+  // usually has the most checks — with SecurityHub second-to-last; CFACTS leads
+  // because its ARS-control coverage renders first in the drawer.
   return [
     {
-      // ARS leads — its control-coverage signal (satisfied + not-satisfied) is
-      // the richest, and the drawer renders the ARS Controls block first, so the
-      // chip order matches.
-      key: 'ars',
-      label: 'ARS',
-      color: '#7c5cbf',
-      score: p.ars_control_score,
-      active: p.ars_control_score != null || p.ars_controls_total != null,
-    },
-    {
-      key: 'kion',
-      label: 'Kion',
-      color: '#e86c25',
-      score: p.kion_suggested_score,
-      active: p.has_kion_data === true || p.kion_suggested_score != null,
-    },
-    {
-      key: 'sechub',
-      label: 'SecurityHub',
-      color: '#3a7ca5',
-      score: p.sechub_suggested_score,
-      active: p.has_sechub_data === true || p.sechub_suggested_score != null,
+      // CFACTS is the source that assesses the ARS-framework controls, so its chip
+      // subsumes the old standalone "ARS" chip: it's active and scored off EITHER
+      // the CFACTS reasoning fields OR the ARS control-coverage fields. ARS itself
+      // is the control catalog (the "ARS Controls" section), not a source chip.
+      key: 'cfacts',
+      label: 'CFACTS',
+      color: '#0071bc',
+      score: p.cfacts_suggested_score ?? p.ars_control_score,
+      active:
+        p.cfacts_suggested_score != null ||
+        p.cfacts_auth_methods != null ||
+        p.cfacts_reasoning != null ||
+        p.ars_control_score != null ||
+        p.ars_controls_total != null,
     },
     {
       key: 'hardenize',
@@ -88,11 +83,18 @@ function buildSources(p: InsightPayload): SourceConfig[] {
         p.has_hardenize_data === true || p.hardenize_suggested_score != null,
     },
     {
-      key: 'cfacts',
-      label: 'CFACTS',
-      color: '#0071bc',
-      score: p.cfacts_suggested_score,
-      active: p.cfacts_suggested_score != null || p.cfacts_auth_methods != null,
+      key: 'sechub',
+      label: 'SecurityHub',
+      color: '#3a7ca5',
+      score: p.sechub_suggested_score,
+      active: p.has_sechub_data === true || p.sechub_suggested_score != null,
+    },
+    {
+      key: 'kion',
+      label: 'Kion',
+      color: '#e86c25',
+      score: p.kion_suggested_score,
+      active: p.has_kion_data === true || p.kion_suggested_score != null,
     },
   ]
 }
@@ -302,6 +304,10 @@ function InsightsPanelInner({ payload }: Props) {
   if (!payload) return null
 
   const sources = buildSources(payload)
+  // "Based on" is derived from the active source chips, NOT the backend
+  // evidence_sources string — that string still lists "ARS", which is the control
+  // catalog, not a source. Deriving keeps the line consistent with the chip row.
+  const basedOnSources = sources.filter((s) => s.active).map((s) => s.label)
   const suggestedScore = payload.suggested_score
   const suggestedLabel =
     payload.suggested_label ?? maturityLabel(suggestedScore)
@@ -334,32 +340,16 @@ function InsightsPanelInner({ payload }: Props) {
     kionFindings.length > 0 ||
     sechubFindings.length > 0 ||
     hardenizeFindings.length > 0
-  // ARS control IDs behind the counts. Optional/additive — undefined, null, or
-  // [] until the pipeline emits them; render only when non-empty. The payload is
-  // opaque, so filter to strings: a non-string element would otherwise render as
-  // a React child and throw, blanking the whole panel via the boundary.
-  const toStringArray = (v: unknown): string[] =>
-    Array.isArray(v) ? v.filter((c): c is string => typeof c === 'string') : []
-  const arsSatisfied = toStringArray(payload.ars_satisfied_controls)
-  const arsNotSatisfied = toStringArray(payload.ars_not_satisfied_controls)
-  const arsFailing = toStringArray(payload.ars_failing_controls)
-
-  // The three ARS arrays are NOT mutually exclusive: the pipeline builds
-  // ars_not_satisfied_controls as (applicable AND NOT Satisfied), which is a
-  // SUPERSET of ars_failing_controls (Other Than Satisfied) — a failing control
-  // appears in BOTH. Rendering each array on its own would show that control
-  // twice, once grey ○ (not-satisfied) and once red ✗ (failing), or label a
-  // failing control as merely not-satisfied. Assign each control to exactly one
-  // bucket by precedence — failing > satisfied > not-satisfied remainder — so a
-  // flagged control always renders once, in its most-severe state. (Satisfied vs
-  // not-satisfied are already disjoint by the backend's definition; the subtract
-  // is defensive.)
-  const arsFailingSet = new Set(arsFailing)
-  const arsSatisfiedOnly = arsSatisfied.filter((id) => !arsFailingSet.has(id))
-  const arsSatisfiedOnlySet = new Set(arsSatisfiedOnly)
-  const arsNotSatisfiedOnly = arsNotSatisfied.filter(
-    (id) => !arsFailingSet.has(id) && !arsSatisfiedOnlySet.has(id)
-  )
+  // ARS Controls is the UNION of every control any source touches (CFACTS +
+  // per-check NIST mappings from Kion/SecurityHub/Hardenize), each rolled up to a
+  // single state by weakest-link. Split into the three render buckets, ordered
+  // satisfied → not-satisfied → failing so a flagged control renders once, in its
+  // most-severe state. Additive/opaque-safe: empty until sources emit controls.
+  const controls = rollupControls(payload)
+  const controlsSatisfied = controls.filter((c) => c.state === 'satisfied')
+  const controlsUnsatisfied = controls.filter((c) => c.state === 'unsatisfied')
+  const controlsFailing = controls.filter((c) => c.state === 'failing')
+  const controlsTotal = controls.length
 
   // Per-source pass/fail. A finding = a FAILED check (failing side, `findings`);
   // the PASSING side ships separately as `{source}_passing` (same InsightFinding
@@ -369,11 +359,13 @@ function InsightsPanelInner({ payload }: Props) {
   // — Kion is live, sechub/hardenize light up when their arrays land, no code
   // change. `hasPassing` keys on the array being PRESENT (even empty) so an
   // all-failing source with a shipped passing array still reads "0 of M".
+  // Feed section order matches the chip order: Hardenize, SecurityHub, Kion — Kion
+  // last because it usually has the most checks.
   const feedSources = (
     [
-      { key: 'kion', label: 'Kion', failing: kionFindings },
-      { key: 'sechub', label: 'SecurityHub', failing: sechubFindings },
       { key: 'hardenize', label: 'Hardenize', failing: hardenizeFindings },
+      { key: 'sechub', label: 'SecurityHub', failing: sechubFindings },
+      { key: 'kion', label: 'Kion', failing: kionFindings },
     ] as const
   ).map((s) => {
     const raw = payload[`${s.key}_passing`]
@@ -385,12 +377,36 @@ function InsightsPanelInner({ payload }: Props) {
   })
   const anyFeedBlock = feedSources.some((s) => s.hasPassing)
 
+  // Every source chip that carries data must have a matching section explaining its
+  // score — a scored chip with no section reads as "passed, but no reason why".
+  // Hardenize renders a section whenever it has data (even clean, where the reason
+  // IS the absence of failures); CFACTS renders its reasoning/auth (or, failing
+  // that, its score) whenever it has any of its own signal.
+  const hardenizeActive =
+    payload.has_hardenize_data === true ||
+    payload.hardenize_suggested_score != null
+  // The CFACTS chip scores off cfacts_suggested_score ?? ars_control_score, so the
+  // section falls back the same way — but only to ars_control_score when there's no
+  // ARS Controls section (controlsTotal === 0) to already serve as the reason.
+  // Otherwise a scored CFACTS chip could have no matching section at all.
+  const cfactsScore =
+    payload.cfacts_suggested_score ?? payload.ars_control_score
+  const cfactsText =
+    [asText(payload.cfacts_reasoning), asText(payload.cfacts_auth_methods)]
+      .filter(Boolean)
+      .join(' · ') ||
+    (payload.cfacts_suggested_score != null ||
+    (controlsTotal === 0 && cfactsScore != null)
+      ? `scored ${maturityLabel(cfactsScore) ?? `Score ${cfactsScore}`}`
+      : undefined)
+
   const hasDetail =
     hasFindings ||
     anyFeedBlock ||
-    !!payload.cfacts_reasoning ||
-    !!payload.ars_controls_total ||
-    !!payload.evidence_sources
+    hardenizeActive ||
+    !!cfactsText ||
+    controlsTotal > 0 ||
+    basedOnSources.length > 0
 
   return (
     <Box
@@ -531,82 +547,67 @@ function InsightsPanelInner({ payload }: Props) {
 
       <Collapse in={open} unmountOnExit>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #e0e4f0' }}>
-          {/* ARS Controls first — richest signal (satisfied + not-satisfied
-              control coverage), so it leads the drawer ahead of the other
-              enrichment sources. */}
-          {payload.ars_controls_total != null && (
+          {/* ARS Controls — the cross-source control TOTAL: the union of every
+              control any evidence source touches (CFACTS coverage + the NIST
+              control each Kion / SecurityHub / Hardenize check maps to), each
+              rolled up weakest-link. Leads the drawer as the richest signal. A
+              control Kion passes (e.g. SC-12) shows satisfied here even if CFACTS
+              never assessed it — this row is the total, not CFACTS alone. */}
+          {controlsTotal > 0 && (
             <Box sx={{ mb: 0.75 }}>
               <Typography sx={{ fontSize: 12, color: '#555' }}>
                 <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                   ARS Controls:
                 </Box>{' '}
-                {asText(payload.ars_controls_satisfied) ?? 0} of{' '}
-                {asText(payload.ars_controls_total)} satisfied
+                {controlsSatisfied.length} of {controlsTotal} satisfied
               </Typography>
-              {(arsSatisfiedOnly.length > 0 ||
-                arsNotSatisfiedOnly.length > 0 ||
-                arsFailing.length > 0) && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexWrap: 'wrap',
-                    gap: 0.5,
-                    mt: 0.5,
-                  }}
-                >
-                  {arsSatisfiedOnly.map((id, i) => (
-                    <ControlChip
-                      key={`sat-${id}-${i}`}
-                      id={id}
-                      variant="satisfied"
-                    />
-                  ))}
-                  {arsNotSatisfiedOnly.map((id, i) => (
-                    <ControlChip
-                      key={`unsat-${id}-${i}`}
-                      id={id}
-                      variant="unsatisfied"
-                    />
-                  ))}
-                  {arsFailing.map((id, i) => (
-                    <ControlChip
-                      key={`fail-${id}-${i}`}
-                      id={id}
-                      variant="failing"
-                    />
-                  ))}
-                </Box>
-              )}
+              <Box
+                sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
+              >
+                {[
+                  ...controlsSatisfied,
+                  ...controlsUnsatisfied,
+                  ...controlsFailing,
+                ].map((c, i) => (
+                  <ControlChip
+                    key={`${c.state}-${c.id}-${i}`}
+                    id={c.id}
+                    variant={c.conflict ? 'conflict' : c.state}
+                    tooltip={<ControlTooltip control={c} />}
+                    ariaLabel={controlAriaLabel(c)}
+                  />
+                ))}
+              </Box>
             </Box>
           )}
 
-          {payload.evidence_sources && (
-            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                Based on:
-              </Box>{' '}
-              {asText(payload.evidence_sources)}
-            </Typography>
-          )}
-
-          {payload.cfacts_reasoning && (
+          {/* CFACTS — its own section, distinct from the ARS Controls total. Shown
+              whenever CFACTS has any of its own signal (reasoning, auth methods, or
+              a score) so a scored CFACTS chip always has a matching "why". */}
+          {cfactsText && (
             <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
               <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                 CFACTS:
               </Box>{' '}
-              {asText(payload.cfacts_reasoning)}
+              {cfactsText}
+            </Typography>
+          )}
+
+          {basedOnSources.length > 0 && (
+            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
+              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                Based on:
+              </Box>{' '}
+              {basedOnSources.join(', ')}
             </Typography>
           )}
 
           {feedSources.map((s) => {
-            // Kion renders as the chip block on EVERY question (its passing array
-            // is rolling out and its FindingRow detail is low-value — no
-            // instances, unreliable remediation), so all Kion sections look
-            // uniform even before the passing array ships for a given question.
-            // SecHub/Hardenize keep the richer FindingRow (affected domains,
-            // severity) until their own passing arrays land, at which point
-            // `hasPassing` flips them to the same block automatically.
-            const asBlock = s.hasPassing || s.key === 'kion'
+            // Kion and SecurityHub render as the compact chip block (finding-name
+            // chips, ✓/✗). Hardenize keeps the richer FindingRow (affected domains)
+            // for its failing findings.
+            const asBlock =
+              s.hasPassing || s.key === 'kion' || s.key === 'sechub'
             if (asBlock) {
               return s.hasPassing || s.failing.length > 0 ? (
                 <FeedCheckBlock
@@ -618,13 +619,33 @@ function InsightsPanelInner({ payload }: Props) {
                 />
               ) : null
             }
-            return s.failing.map((f, i) => (
-              <FindingRow
-                key={`${s.key}-${f?.id ?? i}`}
-                source={s.label}
-                finding={f}
-              />
-            ))
+            // Hardenize (the only non-block source): a scored chip must have a
+            // section. Failing findings render as rows (with affected domains).
+            // When there are none but the source has data, still render the section
+            // and state WHY it passed — scanned clean — rather than showing nothing.
+            if (s.failing.length > 0) {
+              return s.failing.map((f, i) => (
+                <FindingRow
+                  key={`${s.key}-${f?.id ?? 'x'}-${i}`}
+                  source={s.label}
+                  finding={f}
+                />
+              ))
+            }
+            if (!hardenizeActive) return null
+            const hzLabel = maturityLabel(payload.hardenize_suggested_score)
+            return (
+              <Typography
+                key="feed-hardenize-clean"
+                sx={{ fontSize: 12, color: '#555', mb: 0.75 }}
+              >
+                <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                  {s.label}:
+                </Box>{' '}
+                no failing findings — scanned clean
+                {hzLabel ? `, scored ${hzLabel}` : ''}
+              </Typography>
+            )
           })}
         </Box>
       </Collapse>
@@ -660,8 +681,8 @@ export default function InsightsPanel(props: Props) {
 
 // A single ARS control ID pill. Three states: satisfied (green ✓), unsatisfied
 // (grey ○ — informational, applicable-but-not-satisfied, no alarm), failing
-// (red ✗ — Archer-explicit fails).
-type ControlChipVariant = 'satisfied' | 'unsatisfied' | 'failing'
+// (red ✗ — a source found the control failing).
+type ControlChipVariant = 'satisfied' | 'unsatisfied' | 'failing' | 'conflict'
 const CONTROL_CHIP_STYLE: Record<
   ControlChipVariant,
   { marker: string; bgcolor: string; color: string; border: string }
@@ -684,18 +705,30 @@ const CONTROL_CHIP_STYLE: Record<
     color: '#b02a37',
     border: '1px solid #f1b0b0',
   },
+  // Sources disagree (a pass AND a fail for the same control). Amber ⚠ so it reads
+  // as "needs a human" rather than a settled pass/fail; the hover names both sides
+  // and states how the score resolved it (weakest-link → failing).
+  conflict: {
+    marker: '⚠',
+    bgcolor: '#fff4e5',
+    color: '#a1560a',
+    border: '1px solid #f0c680',
+  },
 }
 
 // Plain-language reason behind each ARS chip's state, surfaced on hover and as the
-// chip's accessible name. The three arrays the pipeline emits ARE the reason: a
-// control lands in exactly one of satisfied / not-satisfied / failing, so the
-// variant fully determines why it's coloured the way it is — no per-control text
-// needed. Ordered passed / not-assessed / failed to match ✓ / ○ / ✗.
+// chip's accessible name. The rollup assigns a control exactly one of satisfied /
+// not-satisfied / failing (weakest-link across sources), so the variant fully
+// determines why it's coloured the way it is — no per-control text needed. Ordered
+// passed / not-assessed / failed to match ✓ / ○ / ✗.
 const CONTROL_CHIP_HELP: Record<ControlChipVariant, string> = {
-  satisfied: 'Satisfied — assessed and met (per CFACTS/Archer).',
+  satisfied:
+    'Satisfied — an evidence source passed this control and none failed it.',
   unsatisfied:
-    'Not satisfied — applies to this question but is not marked Satisfied (may be unassessed).',
-  failing: 'Other Than Satisfied — Archer flagged this control as failing.',
+    'Not satisfied — applies to this question (per CFACTS) but no source has confirmed it satisfied.',
+  failing: 'Failing — an evidence source found this control failing.',
+  conflict:
+    'Sources disagree — at least one passed this control and at least one failed it. Counted as failing (weakest-link); review the failing check.',
 }
 
 function ControlChip({
@@ -706,9 +739,10 @@ function ControlChip({
 }: {
   id: string
   variant: ControlChipVariant
-  // When set, the chip label (a short NIST tag) carries a hover with the fuller
-  // context — used by the feed pass/fail chips whose underlying check slug is
-  // too long to be the label itself. May be rich (multi-line) node.
+  // When set, the chip label carries a hover with the fuller context — used by
+  // the feed pass/fail chips, whose label is the check name and whose hover holds
+  // the description, mapped control, and met/failed state. May be a rich
+  // (multi-line) node.
   tooltip?: React.ReactNode
   // Plain-text equivalent of a rich tooltip, for the accessible name.
   ariaLabel?: string
@@ -784,27 +818,62 @@ function CheckTooltip({
   pass: boolean
 }) {
   const slug = asText(finding?.id) ?? asText(finding?.title)
-  const desc = asText(finding?.description)
+  // The chip label now carries the check name (its code/slug), so the hover leads
+  // with the human sentence, then the control it maps to, its severity, and the
+  // met/failed state — what a reviewer needs to judge the finding. Kion puts that
+  // sentence in `description`, SecurityHub in `title`; lead with whichever is
+  // present so both feeds read the same. The slug is only a last-resort title so
+  // the hover never names nothing.
+  const name = asText(finding?.description) ?? asText(finding?.title)
   const nist = asText(finding?.nist_controls)
+  const severity = asText(finding?.severity)
   const level = typeof finding?.level === 'number' ? finding.level : null
   const meta = [
-    nist,
+    nist ? `Control: ${nist}` : undefined,
     level != null ? `Level ${level}` : undefined,
+    severity ? severity.toUpperCase() : undefined,
     pass ? 'Passed' : 'Failed',
   ]
     .filter(Boolean)
     .join(' · ')
+  // Affected hosts (Hardenize-only). When Hardenize renders as chips, its findings'
+  // domains must live in the hover — chips have no room for the FindingRow's "N
+  // domains" affordance, so without this the affected hosts would be lost. Kion and
+  // SecurityHub carry no instances, so this is empty for them.
+  const domains = (Array.isArray(finding?.instances) ? finding.instances : [])
+    .map((inst) => ({
+      domain: asText(inst?.domain),
+      detail: formatHardenizeDetail(inst?.detail),
+    }))
+    .filter((d) => d.domain)
   return (
     <Box sx={{ py: 0.25 }}>
-      {slug && (
-        <Box sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>
-          {slug}
-        </Box>
-      )}
-      {desc && (
-        <Box sx={{ fontSize: 11, mt: 0.5, lineHeight: 1.5 }}>{desc}</Box>
+      {name ? (
+        <Box sx={{ fontSize: 11, lineHeight: 1.5 }}>{name}</Box>
+      ) : (
+        slug && (
+          <Box sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>
+            {slug}
+          </Box>
+        )
       )}
       {meta && <Box sx={{ fontSize: 10, mt: 0.5, opacity: 0.8 }}>{meta}</Box>}
+      {domains.length > 0 && (
+        <Box sx={{ mt: 0.5 }}>
+          <Box sx={{ fontSize: 10, fontWeight: 600, opacity: 0.9 }}>
+            Affected {domains.length === 1 ? 'domain' : 'domains'}:
+          </Box>
+          {domains.map((d, i) => (
+            <Box
+              key={`${d.domain}-${i}`}
+              sx={{ fontSize: 10, lineHeight: 1.5, opacity: 0.85 }}
+            >
+              {d.domain}
+              {d.detail ? ` — ${d.detail}` : ''}
+            </Box>
+          ))}
+        </Box>
+      )}
     </Box>
   )
 }
@@ -812,9 +881,12 @@ function CheckTooltip({
 // ARS-style pass/fail block for one finding-source — the SINGLE rendering path
 // for every finding-source, so all questions look uniform (no fallback to the
 // old verbose FindingRow list). One ✓/✗ chip per check: passing from
-// `{source}_passing` (green), failing from `findings.{source}` (red), labeled by
-// the short NIST tag with the slug + description in the hover. Rollup is
-// per-check — a control tag can repeat because each check is distinct.
+// `{source}_passing` (green — no finding), failing from `findings.{source}`
+// (red — has a finding), labeled by the check name (finding slug) with the
+// description + mapped control + met/failed state in the hover. Reviewers asked
+// to see the finding itself, not the control it rolls up to, so the name is on
+// the chip and the control moved into the tooltip. Rollup is per-check — the
+// same control can repeat because each check is distinct.
 //
 // Header adapts to what shipped: when the passing array is present we can state
 // the full "N of M checks passed"; when it's absent (source has only failing
@@ -855,7 +927,7 @@ function FeedCheckBlock({
           {chips.map(({ pass, f }, i) => {
             const nist = asText(f?.nist_controls)
             const slug = asText(f?.id) ?? asText(f?.title)
-            const desc = asText(f?.description)
+            const desc = asText(f?.description) ?? asText(f?.title)
             // Fold pass/fail into the accessible name — the ✓/✗ + color is the
             // only other place that distinction lives, and neither is exposed to
             // a screen reader (508).
@@ -865,7 +937,7 @@ function FeedCheckBlock({
             return (
               <ControlChip
                 key={`${pass ? 'p' : 'f'}-${slug ?? ''}-${i}`}
-                id={nist ?? slug ?? '—'}
+                id={slug ?? nist ?? '—'}
                 variant={pass ? 'satisfied' : 'failing'}
                 tooltip={<CheckTooltip finding={f} pass={pass} />}
                 ariaLabel={ariaLabel || undefined}
@@ -942,6 +1014,186 @@ const SEVERITY_HELP: Record<string, string> = {
 }
 function severityHelp(sev?: string): string | undefined {
   return SEVERITY_HELP[(sev ?? '').toLowerCase()]
+}
+
+// The state of one control in the ARS Controls rollup. `unsatisfied` = CFACTS says
+// the control applies here but nothing has confirmed it satisfied (may be
+// unassessed) — informational, not an alarm.
+export type ControlRollupState = 'satisfied' | 'unsatisfied' | 'failing'
+
+// One piece of evidence behind a control's state: which source spoke to it, the
+// specific check (when the evidence is a finding-source check rather than a CFACTS
+// coverage flag), and what that evidence said.
+export type ControlEvidence = {
+  source: string
+  check?: string
+  state: ControlRollupState
+}
+
+// A control after the cross-source rollup: its net (weakest-link) state, whether
+// its sources disagree, and the full evidence list so the UI can name every source
+// and show how a conflict resolved.
+export type ControlRollup = {
+  id: string
+  state: ControlRollupState
+  conflict: boolean
+  evidence: ControlEvidence[]
+}
+
+// Weakest-link precedence for a control's NET state: failing beats satisfied beats
+// unsatisfied. So a control is failing if ANY source fails it, else satisfied if
+// ANY source passes it, else unsatisfied. Matches the zero-trust scoring principle
+// (lowest signal wins).
+const CONTROL_RANK: Record<ControlRollupState, number> = {
+  failing: 3,
+  satisfied: 2,
+  unsatisfied: 1,
+}
+
+// The ARS Controls total is the UNION of every ARS control any evidence source
+// touches — CFACTS applicable/failing controls PLUS the NIST control each Kion,
+// SecurityHub, and Hardenize check maps to. Each control keeps its full evidence
+// list, nets to a weakest-link state, and is flagged `conflict` when at least one
+// source passes it AND at least one source fails it (e.g. SC-12: Kion passes
+// key-rotation but fails cross-account-access). This is why a control Kion passes
+// appears here even though CFACTS never assessed it, and why a conflicted control
+// can net to failing. The payload is opaque, so every value is coerced and
+// guarded; a malformed element is skipped, never thrown.
+export function rollupControls(
+  payload: Partial<InsightPayload>
+): ControlRollup[] {
+  const map = new Map<string, ControlEvidence[]>()
+  const add = (
+    raw: unknown,
+    source: string,
+    state: ControlRollupState,
+    check?: string
+  ) => {
+    const text = asText(raw)
+    if (!text) return
+    // One check can map to several controls, e.g. "AC-2, AC-3".
+    for (const part of text.split(',')) {
+      const id = part.trim()
+      if (!id) continue
+      const list = map.get(id) ?? []
+      list.push({ source, state, check })
+      map.set(id, list)
+    }
+  }
+  const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
+  const finding = (f: unknown) =>
+    f && typeof f === 'object'
+      ? (f as { nist_controls?: unknown; id?: unknown; title?: unknown })
+      : null
+  // CFACTS assesses the ARS-framework controls (the ars_* fields carry CFACTS's
+  // satisfied / applicable-but-not-satisfied / failing coverage). ARS is the
+  // control catalog, not a source — CFACTS is the source of this coverage. These
+  // arrays are plain control-id strings (unlike nist_controls, which may arrive as
+  // an array and needs asText coercion), so filter to strings: a non-string
+  // element would otherwise coerce to a junk chip ("42", "[object Object]").
+  const isStr = (v: unknown): v is string => typeof v === 'string'
+  // ars_not_satisfied is a SUPERSET of ars_failing — a failing control appears in
+  // both. Subtract the failing ids so the control isn't listed twice in the hover
+  // (once "not assessed", once "failed"); the net state is failing either way.
+  const arsFailingIds = new Set(arr(payload.ars_failing_controls).filter(isStr))
+  arr(payload.ars_satisfied_controls)
+    .filter(isStr)
+    .forEach((c) => add(c, 'CFACTS', 'satisfied'))
+  arr(payload.ars_not_satisfied_controls)
+    .filter(isStr)
+    .filter((c) => !arsFailingIds.has(c))
+    .forEach((c) => add(c, 'CFACTS', 'unsatisfied'))
+  arr(payload.ars_failing_controls)
+    .filter(isStr)
+    .forEach((c) => add(c, 'CFACTS', 'failing'))
+  // Finding-source checks: a passing check satisfies its control, a failing one (a
+  // finding) fails it. Carry the check id/title so the hover can name it.
+  const findings = (payload.findings ?? {}) as Record<string, unknown>
+  const SRC_LABEL: Record<string, string> = {
+    kion: 'Kion',
+    sechub: 'SecurityHub',
+    hardenize: 'Hardenize',
+  }
+  for (const src of ['kion', 'sechub', 'hardenize'] as const) {
+    const label = SRC_LABEL[src]
+    arr((payload as Record<string, unknown>)[`${src}_passing`]).forEach((f) => {
+      const o = finding(f)
+      add(
+        o?.nist_controls,
+        label,
+        'satisfied',
+        asText(o?.id) ?? asText(o?.title)
+      )
+    })
+    arr(findings[src]).forEach((f) => {
+      const o = finding(f)
+      add(o?.nist_controls, label, 'failing', asText(o?.id) ?? asText(o?.title))
+    })
+  }
+  return [...map.entries()].map(([id, evidence]) => {
+    const state = evidence.reduce<ControlRollupState>(
+      (net, e) => (CONTROL_RANK[e.state] > CONTROL_RANK[net] ? e.state : net),
+      'unsatisfied'
+    )
+    const conflict =
+      evidence.some((e) => e.state === 'satisfied') &&
+      evidence.some((e) => e.state === 'failing')
+    return { id, state, conflict, evidence }
+  })
+}
+
+// Plain-text words for a control's net state and each evidence line — shared by the
+// hover and the accessible name so sighted and AT users read the same thing.
+const CONTROL_STATE_WORD: Record<ControlRollupState, string> = {
+  satisfied: 'satisfied',
+  failing: 'failing',
+  unsatisfied: 'not satisfied',
+}
+const CONTROL_EVIDENCE_WORD: Record<ControlRollupState, string> = {
+  satisfied: 'passed',
+  failing: 'failed',
+  unsatisfied: 'not assessed',
+}
+function controlEvidenceLine(e: ControlEvidence): string {
+  return `${e.source}${e.check ? ` · ${e.check}` : ''} · ${CONTROL_EVIDENCE_WORD[e.state]}`
+}
+// Accessible name folds the net state, the conflict note, and every source line
+// into one string — the ✓/○/✗/⚠ marker and colour are otherwise the only place the
+// state and its provenance live, and neither reaches a screen reader (508).
+function controlAriaLabel(c: ControlRollup): string {
+  const head = c.conflict
+    ? `${c.id}: sources disagree, counted as ${CONTROL_STATE_WORD[c.state]}`
+    : `${c.id}: ${CONTROL_STATE_WORD[c.state]}`
+  return `${head}. ${c.evidence.map(controlEvidenceLine).join('; ')}.`
+}
+
+// Rich hover for an ARS control chip: the control id, a conflict note stating how a
+// disagreement resolved, then one line per source/check so the user can see exactly
+// why the control is met or failed and address a conflict at its source.
+function ControlTooltip({ control }: { control: ControlRollup }) {
+  return (
+    <Box sx={{ py: 0.25 }}>
+      <Box sx={{ fontFamily: 'monospace', fontSize: 11, fontWeight: 700 }}>
+        {control.id}
+      </Box>
+      {control.conflict && (
+        <Box sx={{ fontSize: 10, mt: 0.5, color: '#ffd9a0', lineHeight: 1.5 }}>
+          ⚠ Sources disagree — counted as {CONTROL_STATE_WORD[control.state]}{' '}
+          (weakest-link). Review the failing check to resolve.
+        </Box>
+      )}
+      <Box sx={{ mt: 0.5 }}>
+        {control.evidence.map((e, i) => (
+          <Box
+            key={`${e.source}-${e.check ?? ''}-${i}`}
+            sx={{ fontSize: 10, lineHeight: 1.5, opacity: 0.9 }}
+          >
+            {controlEvidenceLine(e)}
+          </Box>
+        ))}
+      </Box>
+    </Box>
+  )
 }
 
 // One structured finding, uniform across sources. Card = id (code) + title +
