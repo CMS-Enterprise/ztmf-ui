@@ -21,6 +21,19 @@ const UNSCOPED_READ_ROLES = new Set<UserRole>([
   'READONLY_ADMIN', // legacy, removed in Stage D
 ])
 
+// Two distinct system concepts, deliberately kept separate:
+//   SYSTEM_ACCESS_ROLES - tiers that get system-detail UI (dashboard, system
+//     pages). Includes SYSTEM_DELEGATE.
+//   SYSTEM_SCOPED_ROLES - tiers allowed to edit a system's target maturity.
+//     Excludes SYSTEM_DELEGATE: a delegate is answers-only, barred from the
+//     target-maturity control (mirrors the backend carve-out for ztmf#455).
+// A delegate has access but is not "scoped" for the target-maturity write.
+const SYSTEM_ACCESS_ROLES = new Set<UserRole>([
+  'ISSO',
+  'ISSM',
+  'SYSTEM_DELEGATE',
+])
+
 const SYSTEM_SCOPED_ROLES = new Set<UserRole>(['ISSO', 'ISSM'])
 
 // Roles an admin may assign, narrowed by the acting admin's own tier so the
@@ -42,6 +55,7 @@ const OWNER_ASSIGNABLE_ROLES: UserRole[] = [
   'OPDIV_READONLY_ADMIN',
   'ISSO',
   'ISSM',
+  'SYSTEM_DELEGATE',
 ]
 
 // HHS_ADMIN sits below OWNER, so it may assign everything except OWNER.
@@ -52,6 +66,7 @@ const HHS_ASSIGNABLE_ROLES: UserRole[] = [
   'OPDIV_READONLY_ADMIN',
   'ISSO',
   'ISSM',
+  'SYSTEM_DELEGATE',
 ]
 
 // An OPDIV_ADMIN cannot mint OWNER/HHS tiers - they may only assign roles at
@@ -61,6 +76,7 @@ const OPDIV_ASSIGNABLE_ROLES: UserRole[] = [
   'OPDIV_READONLY_ADMIN',
   'ISSO',
   'ISSM',
+  'SYSTEM_DELEGATE',
 ]
 
 type UserLike = Pick<userData, 'role'> | null | undefined
@@ -98,10 +114,12 @@ export const isSystemScoped = (user: UserLike): boolean =>
 // Row-level OpDiv scoping is server-enforced - the backend narrows the
 // fismaSystems list before it reaches the frontend, so this gate only needs
 // to decide whether the user belongs to a tier that gets system-detail UI at
-// all (any admin tier + ISSO/ISSM).
+// all (any admin tier + ISSO/ISSM/SYSTEM_DELEGATE). Uses SYSTEM_ACCESS_ROLES,
+// not SYSTEM_SCOPED_ROLES: a delegate gets the system UI but is not
+// target-maturity-scoped (see isSystemScoped).
 export const hasSystemAccess = (user: UserLike): boolean =>
   hasAdminRead(user) ||
-  (!!user && SYSTEM_SCOPED_ROLES.has(user.role as UserRole))
+  (!!user && SYSTEM_ACCESS_ROLES.has(user.role as UserRole))
 
 // Tier membership checks mirror the backend's IsHHSTier and IsOpDivTier
 // helpers. Both cover the read-only variant of the tier, so callers must

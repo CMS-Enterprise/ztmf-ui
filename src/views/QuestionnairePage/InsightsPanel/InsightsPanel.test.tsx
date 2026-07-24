@@ -253,6 +253,37 @@ describe('InsightsPanel', () => {
     expect(screen.getByText('IA-02(08)').textContent).toContain('○')
   })
 
+  it('renders a control present in BOTH not-satisfied and failing once, as failing (arrays are not mutually exclusive)', () => {
+    // The pipeline builds ars_not_satisfied_controls as a SUPERSET of
+    // ars_failing_controls, so a flagged control (AC-17 here) arrives in both.
+    // It must render exactly one chip, red ✗ failing — never a second grey ○.
+    render(
+      <InsightsPanel
+        payload={{
+          ...fullPayload,
+          ars_satisfied_controls: ['IA-01'],
+          ars_not_satisfied_controls: ['IA-02(02)', 'AC-17'],
+          ars_failing_controls: ['AC-17'],
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Exactly one AC-17 chip, and it is the failing (✗) one, not a grey ○.
+    const ac17 = screen.getAllByText('AC-17')
+    expect(ac17).toHaveLength(1)
+    expect(ac17[0].textContent).toContain('✗')
+    expect(ac17[0].textContent).not.toContain('○')
+    // The genuinely-not-satisfied control still renders grey.
+    expect(screen.getByText('IA-02(02)').textContent).toContain('○')
+    // Accessible name reflects failing, not not-satisfied.
+    expect(
+      screen.getByRole('img', { name: /^AC-17: Other Than Satisfied/ })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('img', { name: /^AC-17: Not satisfied/ })
+    ).not.toBeInTheDocument()
+  })
+
   it('gives each ARS control chip a plain-language state reason (role=img name = tooltip) for hover + AT', () => {
     render(
       <InsightsPanel

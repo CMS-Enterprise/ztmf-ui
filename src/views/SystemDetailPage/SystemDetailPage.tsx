@@ -644,7 +644,10 @@ export default function SystemDetailPage() {
           <Typography variant="h6" sx={{ mb: 2 }}>
             ZTMF Insights
           </Typography>
-          <SystemEnrichmentCard fismaUid={system.fismauid} />
+          <SystemEnrichmentCard
+            fismaUid={system.fismauid}
+            systemDataCenterEnvironment={system.datacenterenvironment}
+          />
         </>
       )}
 
