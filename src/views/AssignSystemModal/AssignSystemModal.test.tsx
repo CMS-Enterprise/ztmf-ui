@@ -1,7 +1,12 @@
-// Picker-side coverage for #532. The parent UserTable builds fismaSystemMap
-// from the active /fismasystems response (see UserTable.test.tsx); this
-// file verifies the picker actually surfaces the map's entries as options
-// and doesn't smuggle in the poisoned decommissioned entries any other way.
+// Picker-side coverage for the Assign Systems modal. The parent
+// UserTable builds fismaSystemMap from both /fismasystems and
+// /fismasystems?decommissioned=true (see UserTable.test.tsx). This file
+// verifies that the picker
+//   - surfaces active entries as options,
+//   - keeps decommissioned entries in the value pool so their assignments
+//     render as labeled chips (with a "(Decommissioned)" suffix and a
+//     subdued visual), and
+//   - filters those decommissioned entries out of the selectable dropdown.
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -31,8 +36,12 @@ const mock = new MockAdapter(axiosInstance)
 const USER_ID = '22222222-2222-2222-2222-222222222222'
 
 const ACTIVE_MAP = {
-  1001: { acronym: 'DS-1', name: 'Death Star' },
-  1101: { acronym: 'ISD-CHI', name: 'Star Destroyer Chimaera' },
+  1001: { acronym: 'DS-1', name: 'Death Star', decommissioned: false },
+  1101: {
+    acronym: 'ISD-CHI',
+    name: 'Star Destroyer Chimaera',
+    decommissioned: false,
+  },
 }
 
 function renderModal(
@@ -75,17 +84,23 @@ test('renders the active systems from the map as picker options', async () => {
   ).toBeInTheDocument()
 })
 
-test('a poisoned decommissioned map entry never leaks into the picker', async () => {
-  // Simulates the pre-fix bug: if the map contained a decommissioned
-  // system, the picker would render it. This test locks in that the
-  // picker rendering faithfully reflects whatever map it is given, so
-  // upstream #532 fix is the single source of truth for what's shown.
+test('decommissioned entries in the map are hidden from the selectable dropdown', async () => {
+  // The map carries decommissioned entries so their existing assignments
+  // can render as labeled chips (see the "(Decommissioned)" chip test
+  // below). They must NOT appear in the dropdown as new options - an
+  // admin cannot assign a user to a decommissioned system. filterOptions
+  // strips them; this test locks it in.
   const user = userEvent.setup()
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
 
   renderModal({
     fismaSystemMap: {
-      1001: { acronym: 'DS-1', name: 'Death Star' },
+      ...ACTIVE_MAP,
+      9001: {
+        acronym: 'DECOM-A',
+        name: 'Decommissioned System A',
+        decommissioned: true,
+      },
     },
   })
 
@@ -95,11 +110,17 @@ test('a poisoned decommissioned map entry never leaks into the picker', async ()
   await user.click(combobox)
 
   await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
-  expect(screen.queryByText(/DECOM/i)).not.toBeInTheDocument()
+  // Active entries render as options, but DECOM-A does not.
+  expect(screen.getByText(/ISD-CHI/)).toBeInTheDocument()
+  expect(screen.queryByText(/DECOM-A/)).not.toBeInTheDocument()
 })
 
-test('assigned system present in the map renders a labeled chip', async () => {
-  const executor = { acronym: 'SSD-EX', name: 'Super Star Destroyer Executor' }
+test('assigned system present as an active map entry renders a plain labeled chip', async () => {
+  const executor = {
+    acronym: 'SSD-EX',
+    name: 'Super Star Destroyer Executor',
+    decommissioned: false,
+  }
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [1002] })
@@ -108,8 +129,7 @@ test('assigned system present in the map renders a labeled chip', async () => {
     fismaSystemMap: { ...ACTIVE_MAP, 1002: executor },
   })
 
-  // The Dialog renders through a portal, so query document.body rather than
-  // the render container.
+  // Dialog renders through a portal, so query document.body.
   await waitFor(() =>
     expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
   )
@@ -117,18 +137,49 @@ test('assigned system present in the map renders a labeled chip', async () => {
   expect(chip.textContent).toMatch(
     /SSD-EX\s*-\s*Super Star Destroyer Executor/i
   )
+  expect(chip.textContent).not.toMatch(/Decommissioned/i)
 })
 
-test('assigned system id absent from the map renders a chip with an empty label', async () => {
-  // Locks in the pre-existing edge case flagged in the #532 review: when
-  // an assigned system id is not in the active map (e.g. because it was
-  // decommissioned since the assignment), MUI still renders the value as
-  // a chip - but getOptionLabel returns '' for that id, so the chip's
-  // label is empty. A future change that renders a real fallback like
-  // "(unknown system)" would make this label non-empty and (intentionally)
-  // flip the test. A change that pulls the id itself into the picker's
-  // options pool would make the "labeled chip" test above render a chip
-  // for 9999 instead.
+test('assignment to a decommissioned system renders a labeled chip with "(Decommissioned)" suffix', async () => {
+  // A user assigned to a system that was later decommissioned still has
+  // that id in /users/:id/assignedfismasystems. The chip picks up the
+  // decommissioned flag from the map and renders
+  // "SSD-EX - Super Star Destroyer Executor (Decommissioned)" with a
+  // subdued visual (opacity 0.65 + italic).
+  const retiredExecutor = {
+    acronym: 'SSD-EX',
+    name: 'Super Star Destroyer Executor',
+    decommissioned: true,
+  }
+  mock
+    .onGet(`/users/${USER_ID}/assignedfismasystems`)
+    .reply(200, { data: [1002] })
+
+  renderModal({
+    fismaSystemMap: { ...ACTIVE_MAP, 1002: retiredExecutor },
+  })
+
+  await waitFor(() =>
+    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
+  )
+  const chip = document.body.querySelector('.MuiChip-root') as HTMLElement
+  const label = chip.querySelector('.MuiChip-label') as HTMLElement | null
+  expect(label).not.toBeNull()
+  // Full readable label with the "(Decommissioned)" suffix.
+  expect(label!.textContent).toMatch(
+    /SSD-EX\s*-\s*Super Star Destroyer Executor\s*\(Decommissioned\)/i
+  )
+  // Subdued visual: opacity < 1 and italic.
+  const chipStyle = window.getComputedStyle(chip)
+  expect(parseFloat(chipStyle.opacity)).toBeLessThan(1)
+  expect(chipStyle.fontStyle).toBe('italic')
+})
+
+test('assigned id absent from the map entirely still renders an identifiable fallback chip', async () => {
+  // Defense-in-depth: if for any reason the map lacks the id (race
+  // between fetch and render, or a system removed between assignment
+  // and load), the chip still gets a readable id-based label so the
+  // admin can unassign it.
   jest.spyOn(console, 'error').mockImplementation(() => {})
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
@@ -136,16 +187,113 @@ test('assigned system id absent from the map renders a chip with an empty label'
 
   renderModal({ fismaSystemMap: ACTIVE_MAP }) // 9999 is deliberately absent
 
-  // Portal-mounted DOM: query document.body, not the render container.
   await waitFor(() =>
     expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
   )
   const chip = document.body.querySelector('.MuiChip-root') as HTMLElement
   const label = chip.querySelector('.MuiChip-label') as HTMLElement | null
   expect(label).not.toBeNull()
-  // The empty label is the actual pre-existing UX gap: the user sees a
-  // deletable chip with no readable name for the assignment. Any real
-  // fallback label would make this trim() non-empty and flip the test.
-  expect(label!.textContent?.trim() ?? '').toBe('')
+  expect(label!.textContent).toMatch(
+    /Unknown or decommissioned system \(id 9999\)/
+  )
   ;(console.error as jest.Mock).mockRestore?.()
+})
+
+test('typing an acronym filters the list to the matching system', async () => {
+  // Regression for #587: the picker must match on the acronym, not just the
+  // system name. Typing "ISD" surfaces ISD-CHI and drops DS-1 / Death Star.
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+
+  await user.type(combobox, 'ISD')
+
+  await waitFor(() =>
+    expect(
+      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
+    ).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
+})
+
+test('typing a system name filters the list to the matching system', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/ISD-CHI/)).toBeInTheDocument())
+
+  await user.type(combobox, 'Death')
+
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/ISD-CHI/)).not.toBeInTheDocument()
+})
+
+test('acronym matching is case-insensitive', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal()
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
+
+  await user.type(combobox, 'isd')
+
+  await waitFor(() =>
+    expect(
+      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
+    ).toBeInTheDocument()
+  )
+  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
+})
+
+test('searching by a decommissioned system acronym does not surface it as an option', async () => {
+  // The new acronym/name search composes with the decommissioned-stripping
+  // filter: even an exact acronym match must not offer a decommissioned
+  // system as a selectable option.
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
+
+  renderModal({
+    fismaSystemMap: {
+      ...ACTIVE_MAP,
+      9001: {
+        acronym: 'DECOM-A',
+        name: 'Decommissioned System A',
+        decommissioned: true,
+      },
+    },
+  })
+
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
+
+  await user.type(combobox, 'DECOM-A')
+
+  // No option surfaces - the decommissioned entry is stripped even though
+  // its acronym matches the query exactly.
+  expect(screen.queryByText(/DECOM-A/)).not.toBeInTheDocument()
 })

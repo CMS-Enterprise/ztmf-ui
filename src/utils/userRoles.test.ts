@@ -9,7 +9,9 @@ import {
   isOpDivTier,
   isReadOnlyAdmin,
   isReadOnlyAdminRole,
+  isSystemScoped,
   isWriteAdminRole,
+  selectableRoles,
 } from '@/utils/userRoles'
 
 /**
@@ -38,6 +40,7 @@ const isAdminCases: Case[] = [
   ['READONLY_ADMIN', false], // legacy, removed in Stage D
   ['ISSO', false],
   ['ISSM', false],
+  ['SYSTEM_DELEGATE', false],
 ]
 
 const isReadOnlyAdminCases: Case[] = [
@@ -50,6 +53,7 @@ const isReadOnlyAdminCases: Case[] = [
   ['ADMIN', false],
   ['ISSO', false],
   ['ISSM', false],
+  ['SYSTEM_DELEGATE', false],
 ]
 
 const hasUnscopedReadCases: Case[] = [
@@ -62,6 +66,7 @@ const hasUnscopedReadCases: Case[] = [
   ['OPDIV_READONLY_ADMIN', false],
   ['ISSO', false],
   ['ISSM', false],
+  ['SYSTEM_DELEGATE', false],
 ]
 
 const hasSystemAccessCases: Case[] = [
@@ -74,6 +79,7 @@ const hasSystemAccessCases: Case[] = [
   ['READONLY_ADMIN', true], // legacy, removed in Stage D
   ['ISSO', true],
   ['ISSM', true],
+  ['SYSTEM_DELEGATE', true],
 ]
 
 const isHHSTierCases: Case[] = [
@@ -86,6 +92,7 @@ const isHHSTierCases: Case[] = [
   ['ISSM', false],
   ['ADMIN', false], // legacy is CMS-tenant pre-migration, not HHS tier
   ['READONLY_ADMIN', false],
+  ['SYSTEM_DELEGATE', false],
 ]
 
 const isOpDivTierCases: Case[] = [
@@ -98,6 +105,7 @@ const isOpDivTierCases: Case[] = [
   ['ISSM', false],
   ['ADMIN', false],
   ['READONLY_ADMIN', false],
+  ['SYSTEM_DELEGATE', false],
 ]
 
 test.each(isAdminCases)('isAdmin(%s) === %s', (role, expected) => {
@@ -185,11 +193,40 @@ test('isAdminTierRole returns true for every admin tier (write or read-only)', (
     expect(isAdminTierRole(role)).toBe(true)
   })
 
-  const nonAdmin: UserRole[] = ['ISSO', 'ISSM']
+  const nonAdmin: UserRole[] = ['ISSO', 'ISSM', 'SYSTEM_DELEGATE']
   nonAdmin.forEach((role) => {
     expect(isAdminTierRole(role)).toBe(false)
   })
 })
+
+// SYSTEM_DELEGATE is the frontend mirror of the backend answers-only carve-out
+// (ztmf#455): it gets system-detail access exactly like ISSO/ISSM, but is
+// barred from the target-maturity edit control. hasSystemAccess and
+// isSystemScoped must therefore diverge for this role — that divergence is the
+// whole point of the role, so pin it explicitly.
+test('SYSTEM_DELEGATE has system access but is NOT system-scoped (answers-only)', () => {
+  const delegate = roleUser('SYSTEM_DELEGATE')
+  expect(hasSystemAccess(delegate)).toBe(true)
+  expect(isSystemScoped(delegate)).toBe(false)
+})
+
+test('ISSO and ISSM remain both system-accessible and system-scoped', () => {
+  ;(['ISSO', 'ISSM'] as UserRole[]).forEach((role) => {
+    const user = roleUser(role)
+    expect(hasSystemAccess(user)).toBe(true)
+    expect(isSystemScoped(user)).toBe(true)
+  })
+})
+
+// The role dropdown when adding/editing a user is driven by selectableRoles,
+// narrowed to the acting admin's tier. A delegate must be assignable by every
+// admin tier that can assign the sibling ISSO/ISSM roles.
+test.each(['OWNER', 'ADMIN', 'HHS_ADMIN', 'OPDIV_ADMIN'])(
+  'selectableRoles(%s) offers SYSTEM_DELEGATE',
+  (actor) => {
+    expect(selectableRoles(actor)).toContain('SYSTEM_DELEGATE')
+  }
+)
 
 test('all helpers reject null, undefined, and empty-role placeholder users', () => {
   const placeholder = { role: '' as UserRole }

@@ -344,6 +344,23 @@ function InsightsPanelInner({ payload }: Props) {
   const arsNotSatisfied = toStringArray(payload.ars_not_satisfied_controls)
   const arsFailing = toStringArray(payload.ars_failing_controls)
 
+  // The three ARS arrays are NOT mutually exclusive: the pipeline builds
+  // ars_not_satisfied_controls as (applicable AND NOT Satisfied), which is a
+  // SUPERSET of ars_failing_controls (Other Than Satisfied) — a failing control
+  // appears in BOTH. Rendering each array on its own would show that control
+  // twice, once grey ○ (not-satisfied) and once red ✗ (failing), or label a
+  // failing control as merely not-satisfied. Assign each control to exactly one
+  // bucket by precedence — failing > satisfied > not-satisfied remainder — so a
+  // flagged control always renders once, in its most-severe state. (Satisfied vs
+  // not-satisfied are already disjoint by the backend's definition; the subtract
+  // is defensive.)
+  const arsFailingSet = new Set(arsFailing)
+  const arsSatisfiedOnly = arsSatisfied.filter((id) => !arsFailingSet.has(id))
+  const arsSatisfiedOnlySet = new Set(arsSatisfiedOnly)
+  const arsNotSatisfiedOnly = arsNotSatisfied.filter(
+    (id) => !arsFailingSet.has(id) && !arsSatisfiedOnlySet.has(id)
+  )
+
   // Per-source pass/fail. A finding = a FAILED check (failing side, `findings`);
   // the PASSING side ships separately as `{source}_passing` (same InsightFinding
   // shape + level). When a source ships its passing array we render an ARS-style
@@ -526,8 +543,8 @@ function InsightsPanelInner({ payload }: Props) {
                 {asText(payload.ars_controls_satisfied) ?? 0} of{' '}
                 {asText(payload.ars_controls_total)} satisfied
               </Typography>
-              {(arsSatisfied.length > 0 ||
-                arsNotSatisfied.length > 0 ||
+              {(arsSatisfiedOnly.length > 0 ||
+                arsNotSatisfiedOnly.length > 0 ||
                 arsFailing.length > 0) && (
                 <Box
                   sx={{
@@ -537,14 +554,14 @@ function InsightsPanelInner({ payload }: Props) {
                     mt: 0.5,
                   }}
                 >
-                  {arsSatisfied.map((id, i) => (
+                  {arsSatisfiedOnly.map((id, i) => (
                     <ControlChip
                       key={`sat-${id}-${i}`}
                       id={id}
                       variant="satisfied"
                     />
                   ))}
-                  {arsNotSatisfied.map((id, i) => (
+                  {arsNotSatisfiedOnly.map((id, i) => (
                     <ControlChip
                       key={`unsat-${id}-${i}`}
                       id={id}

@@ -1,11 +1,9 @@
-// Regression coverage for #532. The Assign Systems picker's option pool
-// comes from a map built inside UserTable. Before the fix, that map
-// mirrored context.fismaSystems, which the dashboard's Show Decommissioned
-// toggle swaps to the decommissioned-only response - so the picker
-// silently switched to decommissioned-only options along with it. The fix
-// makes UserTable fetch the active systems list directly, independent of
-// the dashboard toggle. See AssignSystemModal.test.tsx for the paired
-// picker-rendering assertion (the map keys become the picker options).
+// Regression coverage for the Assign Systems picker's option pool. The
+// map is built inside UserTable from dedicated /fismasystems fetches
+// rather than context.fismaSystems, which the dashboard's Show
+// Decommissioned toggle would otherwise swap to the decommissioned-only
+// response. See AssignSystemModal.test.tsx for the paired picker-
+// rendering assertions.
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -15,8 +13,9 @@ jest.mock('@/router/router', () => ({
 // MUI DataGrid virtualizes rows and won't render them under jsdom (no
 // layout, no measured height). Stub it with a minimal implementation
 // that renders each row's action column so the Assign Systems row action
-// is clickable in tests. Everything else in the DataGrid API is passed
-// through from the real module.
+// is clickable in tests. GridActionsCellItem needs the DataGrid context
+// (useGridRootProps), so it's stubbed as a plain button too. Everything
+// else in the DataGrid API is passed through from the real module.
 jest.mock('@mui/x-data-grid', () => {
   const actual = jest.requireActual('@mui/x-data-grid')
   const react = require('react')
@@ -39,10 +38,8 @@ jest.mock('@mui/x-data-grid', () => {
         },
         props.label
       ),
-    // MUI DataGrid virtualizes rows and won't render them under jsdom (no
-    // layout, no measured height). Stub it with a minimal implementation
-    // that renders each row's action column so row-level buttons are
-    // clickable in tests.
+    // Minimal DataGrid that renders each row's action column so row-level
+    // buttons are clickable in tests.
     DataGrid: (props: {
       rows?: Array<Record<string, unknown>>
       columns?: Array<Record<string, unknown>>
@@ -122,7 +119,8 @@ jest.mock('../Title/Context', () => ({
 
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import UserTable, { buildFismaSystemsMap } from './UserTable'
+import UserTable from './UserTable'
+import { buildFismaSystemsMap } from './buildFismaSystemsMap'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, userData, users } from '@/types'
 
@@ -193,22 +191,28 @@ beforeEach(() => {
   axios.delete.mockReset()
 })
 
-test('fetches /fismasystems (active-only) even when context has showDecommissioned=true', async () => {
+test('fetches both /fismasystems and /fismasystems?decommissioned=true regardless of context', async () => {
+  // The picker map needs both active and decommissioned systems so the
+  // modal can render a labeled chip (with a "(Decommissioned)" suffix)
+  // for an assignment to a system that was later retired. Both fetches
+  // fire from UserTable directly, so the dashboard's Show Decommissioned
+  // toggle (truthy in makeCtx()) has no bearing on which endpoints hit.
   axios.get.mockImplementation((url: string) => {
     if (url.startsWith('/users'))
       return Promise.resolve({ status: 200, data: { data: [] } })
     if (url === '/fismasystems')
       return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
+    if (url === '/fismasystems?decommissioned=true')
+      return Promise.resolve({ status: 200, data: { data: [] } })
     return Promise.resolve({ status: 200, data: { data: [] } })
   })
 
   renderWithProviders(<UserTable />)
 
   await waitFor(() => expect(fismaSystemsCalls()).toContain('/fismasystems'))
-  // Never reaches for the decommissioned-only variant.
-  expect(
-    fismaSystemsCalls().some((u) => u.includes('decommissioned=true'))
-  ).toBe(false)
+  await waitFor(() =>
+    expect(fismaSystemsCalls()).toContain('/fismasystems?decommissioned=true')
+  )
 })
 
 test('does not fetch /fismasystems when the user has no admin-read access', async () => {
@@ -231,6 +235,141 @@ test('does not fetch /fismasystems when the user has no admin-read access', asyn
   // Give any queued effects a chance to fire before asserting the negative.
   await new Promise((r) => setTimeout(r, 20))
   expect(fismaSystemsCalls()).toHaveLength(0)
+})
+
+test('decommissioned fetch failure degrades gracefully: active systems still populate the picker', async () => {
+  // Partial-failure path. Promise.allSettled decouples the two fetches -
+  // a decommissioned-endpoint failure must NOT block the primary active
+  // fetch, which is the picker's source of truth for assignable systems.
+  // Regression: reverting to Promise.all - OR returning early after the
+  // warn without calling setFismaSystemsMap - would blank the picker
+  // entirely, recreating the original context-poisoning symptom (admin
+  // sees zero systems to assign).
+  //
+  // Assertion drives the modal open and inspects the picker options, so
+  // it fails if setFismaSystemsMap is skipped (empty map -> empty
+  // Autocomplete). Logging assertions are secondary.
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+  const user = userEvent.setup()
+  const piett: users = {
+    userid: '22222222-2222-2222-2222-222222222222',
+    email: 'Admiral.Piett@executor.empire',
+    fullname: 'Admiral Piett',
+    role: 'ISSO',
+    assignedfismasystems: [],
+    assignedopdivids: [],
+  }
+  axios.get.mockImplementation((url: string) => {
+    if (url === '/users' || url.startsWith('/users?'))
+      return Promise.resolve({ status: 200, data: { data: [piett] } })
+    if (url === '/fismasystems')
+      return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
+    if (url === '/fismasystems?decommissioned=true')
+      return Promise.reject(new Error('backend 500'))
+    if (url.includes('/assignedfismasystems'))
+      return Promise.resolve({ status: 200, data: { data: [] } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
+
+  renderWithProviders(<UserTable />)
+
+  // Both endpoints were attempted (parallel fetch fired).
+  await waitFor(() =>
+    expect(fismaSystemsCalls()).toContain('/fismasystems?decommissioned=true')
+  )
+  expect(fismaSystemsCalls()).toContain('/fismasystems')
+
+  // Open the Assign Systems modal for Piett so the picker renders with
+  // the map that (should) have been populated from the active response.
+  const assignBtn = await screen.findByRole('button', {
+    name: 'assignedSystems',
+  })
+  await user.click(assignBtn)
+
+  // Click into the Autocomplete to expand the dropdown, then assert an
+  // active system's option is present. If setFismaSystemsMap was skipped,
+  // the map is {}, the picker has zero options, and this findByText
+  // times out.
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+  expect(
+    screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
+  ).toBeInTheDocument()
+
+  // Secondary: the graceful-degradation warning fired.
+  expect(warn).toHaveBeenCalledWith(
+    expect.stringContaining('Fetch decommissioned fisma systems failed'),
+    expect.any(Error)
+  )
+  warn.mockRestore()
+})
+
+test('decommissioned fetch fulfilled with data:null still populates the picker from active', async () => {
+  // Fulfilled sibling of the rejection path. `?? []` in the loader
+  // normalizes the null payload; dropping it would blow up the mapper's
+  // for-of and blank the picker.
+  const warn = jest.spyOn(console, 'warn').mockImplementation(() => {})
+  const err = jest.spyOn(console, 'error').mockImplementation(() => {})
+  const user = userEvent.setup()
+  const piett: users = {
+    userid: '22222222-2222-2222-2222-222222222222',
+    email: 'Admiral.Piett@executor.empire',
+    fullname: 'Admiral Piett',
+    role: 'ISSO',
+    assignedfismasystems: [],
+    assignedopdivids: [],
+  }
+  axios.get.mockImplementation((url: string) => {
+    if (url === '/users' || url.startsWith('/users?'))
+      return Promise.resolve({ status: 200, data: { data: [piett] } })
+    if (url === '/fismasystems')
+      return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
+    if (url === '/fismasystems?decommissioned=true')
+      return Promise.resolve({ status: 200, data: { data: null } })
+    if (url.includes('/assignedfismasystems'))
+      return Promise.resolve({ status: 200, data: { data: [] } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
+
+  renderWithProviders(<UserTable />)
+
+  await waitFor(() =>
+    expect(fismaSystemsCalls()).toContain('/fismasystems?decommissioned=true')
+  )
+  expect(fismaSystemsCalls()).toContain('/fismasystems')
+
+  const assignBtn = await screen.findByRole('button', {
+    name: 'assignedSystems',
+  })
+  await user.click(assignBtn)
+  const combobox = await screen.findByRole('combobox', {
+    name: /assign fisma systems/i,
+  })
+  await user.click(combobox)
+  await waitFor(() =>
+    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  )
+
+  // Fulfilled path: no graceful-degradation warn, no critical error.
+  expect(warn).not.toHaveBeenCalledWith(
+    expect.stringContaining('Fetch decommissioned fisma systems failed'),
+    expect.anything()
+  )
+  const criticalErrors = err.mock.calls.filter((c) =>
+    c.some(
+      (arg) =>
+        typeof arg === 'string' &&
+        arg.includes('Fetch active fisma systems error')
+    )
+  )
+  expect(criticalErrors).toHaveLength(0)
+  warn.mockRestore()
+  err.mockRestore()
 })
 
 test('fetch error is swallowed without crashing the table', async () => {
@@ -265,8 +404,36 @@ test('fetch error is swallowed without crashing the table', async () => {
 test('buildFismaSystemsMap turns the /fismasystems response into picker-ready entries', () => {
   const map = buildFismaSystemsMap(ACTIVE_SYSTEMS)
   expect(map).toEqual({
-    1001: { acronym: 'DS-1', name: 'Death Star' },
-    1101: { acronym: 'ISD-CHI', name: 'Star Destroyer Chimaera' },
+    1001: { acronym: 'DS-1', name: 'Death Star', decommissioned: false },
+    1101: {
+      acronym: 'ISD-CHI',
+      name: 'Star Destroyer Chimaera',
+      decommissioned: false,
+    },
+  })
+})
+
+test('buildFismaSystemsMap tags decommissioned entries with decommissioned: true', () => {
+  // Callers pass the union of active and decommissioned systems; the
+  // mapper carries the flag through so the modal can render a
+  // "(Decommissioned)" suffix + subdued styling and filter these entries
+  // out of the selectable dropdown.
+  const mixed: FismaSystemType[] = [
+    ...ACTIVE_SYSTEMS,
+    {
+      fismasystemid: 9001,
+      fismaacronym: 'DECOM-A',
+      fismaname: 'Decommissioned System A',
+      fismasubsystem: null,
+      decommissioned: true,
+    } as unknown as FismaSystemType,
+  ]
+  const map = buildFismaSystemsMap(mixed)
+  expect(map[1001].decommissioned).toBe(false)
+  expect(map[9001]).toEqual({
+    acronym: 'DECOM-A',
+    name: 'Decommissioned System A',
+    decommissioned: true,
   })
 })
 
@@ -282,6 +449,7 @@ test('buildFismaSystemsMap appends the subsystem name when present', () => {
   expect(map[1002]).toEqual({
     acronym: 'SSD-EX',
     name: 'Super Star Destroyer Executor - Flagship Communication Hub',
+    decommissioned: false,
   })
 })
 
@@ -291,13 +459,15 @@ test('buildFismaSystemsMap returns an empty map for null/undefined/empty input',
   expect(buildFismaSystemsMap([])).toEqual({})
 })
 
-test('unmount during an in-flight fetch: catch guard swallows the abort-time rejection', async () => {
+test('unmount during an in-flight fetch: the aborted-guard skips state updates and logging', async () => {
   // React runs the effect cleanup on unmount, which calls
   // controller.abort() and flips signal.aborted to true. The pending
-  // axios request then rejects with a cancel-like error, and the catch
-  // block's `if (controller.signal.aborted) return` is the specific line
-  // that swallows it before console.error runs. Regression: mutating or
-  // dropping that guard would let the error slip through and log a
+  // axios request(s) then reject with cancel-like errors, and the
+  // aborted-guard right after `await Promise.allSettled(...)`
+  //   if (controller.signal.aborted) return
+  // is the specific line that skips both setFismaSystemsMap and any
+  // console.error branch. Regression: mutating or dropping that guard
+  // would let the active-rejection error slip through and log a
   // spurious "Fetch active fisma systems error" every time the admin
   // navigates away from the users page mid-load.
   const errorSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
@@ -400,17 +570,16 @@ test('clicking the Assign Systems row action refetches /fismasystems', async () 
 
   renderWithProviders(<UserTable />)
 
-  // Initial mount fires the fetch exactly once.
-  await waitFor(() => expect(fismaSystemsCalls()).toHaveLength(1))
+  // Initial mount fires both endpoints once (active + decommissioned).
+  await waitFor(() => expect(fismaSystemsCalls()).toHaveLength(2))
   // GridActionsCellItem is stubbed to a plain button whose aria-label is
   // the action's label prop ("assignedSystems" in UserTable's columns).
   const assignBtn = await screen.findByRole('button', {
     name: 'assignedSystems',
   })
 
-  // Clicking the icon opens the modal AND invokes loadActiveSystems
-  // directly from the event handler, issuing a second /fismasystems
-  // request.
+  // Clicking the icon opens the modal AND invokes loadFismaSystems
+  // directly from the event handler, issuing both requests again.
   await user.click(assignBtn)
-  await waitFor(() => expect(fismaSystemsCalls()).toHaveLength(2))
+  await waitFor(() => expect(fismaSystemsCalls()).toHaveLength(4))
 })

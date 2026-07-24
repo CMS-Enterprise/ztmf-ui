@@ -40,6 +40,7 @@ export type UserRole =
   | 'OPDIV_READONLY_ADMIN'
   | 'ISSO'
   | 'ISSM'
+  | 'SYSTEM_DELEGATE'
   | 'ADMIN'
   | 'READONLY_ADMIN'
 
@@ -341,6 +342,9 @@ export type SystemEnrichmentType = {
   fisma_uuid: string
   fisma_acronym: string
   authorization_package_name: string | null
+  // CFACTS-reported data center environment (ztmf#239). Provisional payload
+  // key: absent until the ztmf-insights pipeline ships the field.
+  data_center_environment?: string | null
   primary_isso_name: string | null
   primary_isso_email: string | null
   is_active: boolean | null
