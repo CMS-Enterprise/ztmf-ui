@@ -469,11 +469,9 @@ describe('InsightsPanel', () => {
     // aria-hidden slipped through. getByRole resolves the real accessible name.
     const info = screen.getByRole('img', { name: /About ARS alignment/i })
     expect(info).toHaveAttribute('aria-hidden', 'false')
-    // The disclaimer itself is in the accessible name — MUI Tooltip lets the
-    // child's aria-label win, so it never becomes an aria-describedby.
-    expect(info).toHaveAccessibleName(
-      /does not constitute an assessed control satisfaction determination/i
-    )
+    // Name stays short; the disclaimer prose is the description, not the name.
+    expect(info).toHaveAccessibleName('About ARS alignment')
+    expect(info).not.toHaveAccessibleName(/does not constitute/i)
     // Focusable (508) and the tooltip fires on focus, not just hover.
     expect(info).toHaveAttribute('tabindex', '0')
     fireEvent.focus(info)
@@ -500,16 +498,25 @@ describe('InsightsPanel', () => {
     // outer assertions. Full order is Based on → CFACTS → sources → ARS align.
     const follows = (a: HTMLElement, b: HTMLElement) =>
       Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
-    // Each source name appears twice — once on its chip in the "Based on" row and
-    // once as its section heading below — so take the last match to get the
-    // section. CFACTS is anchored on its reasoning text, which is unambiguous.
-    const section = (text: string) => {
-      const all = screen.getAllByText(text)
-      return all[all.length - 1]
+    // "SecurityHub:" appears twice once the drawer is open: on the source chip in
+    // the header and again as the section heading. Pick the section by what makes
+    // it the section — its heading sits next to the check rollup summary — rather
+    // than by DOM position, so this cannot silently latch onto the wrong node.
+    const sectionHeading = (label: string) => {
+      const match = screen
+        .getAllByText(`${label}:`)
+        .find((el) =>
+          /\d+ of \d+ checks? passed|\d+ findings?/.test(
+            el.parentElement?.textContent ?? ''
+          )
+        )
+      if (!match) throw new Error(`no section heading found for ${label}`)
+      return match
     }
+    // CFACTS has no check rollup, so anchor it on its reasoning text.
     const cfacts = screen.getByText(/IDM-Okta detected/)
-    const sechub = section('SecurityHub:')
-    const kion = section('Kion:')
+    const sechub = sectionHeading('SecurityHub')
+    const kion = sectionHeading('Kion')
     expect(follows(based, cfacts)).toBe(true)
     expect(follows(cfacts, sechub)).toBe(true)
     // Kion sits last among the sources (it usually carries the most checks).
@@ -992,6 +999,41 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     expect(tip).toHaveTextContent('Control: IA-5')
   })
 
+  it('never offers "How to fix" on a passing check, even when the entry carries remediation', async () => {
+    // A pass has nothing to fix; surfacing remediation there is wrong guidance in
+    // a compliance tool. The pipeline does not emit remediation on passing entries
+    // today, but InsightFinding permits it, so the guard is on the render path.
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 2,
+            has_kion_data: true,
+            kion_passing: [
+              {
+                id: 'iam-user-inactive',
+                nist_controls: 'AC-2',
+                description: 'Identify inactive IAM Users',
+                remediation: 'Disable the unused IAM user.',
+                level: 1,
+              },
+            ],
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    expand()
+    const chip = screen.getByRole('img', {
+      name: /^iam-user-inactive — Identify inactive IAM Users — Passed$/,
+    })
+    expect(chip).not.toHaveAccessibleName(/How to fix/)
+    fireEvent.focus(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('Identify inactive IAM Users')
+    expect(tip).not.toHaveTextContent('How to fix')
+    expect(tip).not.toHaveTextContent(/Disable the unused IAM user/)
+  })
+
   it('drops the chip remediation from hover and accessible name when INSIGHTS_SUGGEST_FIX_ENABLED is off', async () => {
     CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED = false
     try {
@@ -1168,7 +1210,9 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
         },
       }) as unknown as InsightPayload
 
-    const { rerender } = render(<InsightsPanel payload={block('q1')} />)
+    const { rerender } = render(
+      <InsightsPanel payload={block('q1')} questionId={101} />
+    )
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
     fireEvent.click(
       screen.getByRole('button', { name: /Show all 9 passing checks/i })
@@ -1179,13 +1223,76 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     // React keys, so the expanded state has to be reset explicitly. The drawer
     // itself stays open across the change (separate pre-existing behavior), so
     // the new question's chips are on screen without another details click.
-    rerender(<InsightsPanel payload={block('q2')} />)
+    rerender(<InsightsPanel payload={block('q2')} questionId={102} />)
     expect(screen.queryByText('q2-pass-0')).not.toBeInTheDocument()
     expect(
       screen.getByRole('button', { name: /Show all 9 passing checks/i })
     ).toHaveAttribute('aria-expanded', 'false')
     // The failing chip is never collapsed, on either question.
     expect(screen.getByText('q2-fail')).toBeInTheDocument()
+  })
+
+  it('collapses on a question change even when the two questions share an identical check set', () => {
+    // The same check legitimately maps to several questions, so a key derived
+    // from the rendered findings would alias and skip the reset. The question id
+    // is what distinguishes them.
+    const sameChecks = {
+      suggested_score: 2,
+      has_hardenize_data: true,
+      hardenize_passing: Array.from({ length: 9 }, (_, i) => ({
+        id: `shared-pass-${i}`,
+        nist_controls: 'SC-7',
+        level: 1,
+      })),
+      findings: {
+        hardenize: [
+          { id: 'shared-fail', nist_controls: 'SC-8', severity: 'error' },
+        ],
+      },
+    } as unknown as InsightPayload
+
+    const { rerender } = render(
+      <InsightsPanel payload={sameChecks} questionId={201} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    )
+    expect(screen.getByText('shared-pass-0')).toBeInTheDocument()
+
+    rerender(<InsightsPanel payload={sameChecks} questionId={202} />)
+    expect(screen.queryByText('shared-pass-0')).not.toBeInTheDocument()
+  })
+
+  it('keeps the block expanded while staying on the same question', () => {
+    // The reset is tied to the question changing, not to any re-render: a parent
+    // re-render on the same question must not collapse what the user opened.
+    const payload = {
+      suggested_score: 2,
+      has_hardenize_data: true,
+      hardenize_passing: Array.from({ length: 9 }, (_, i) => ({
+        id: `stay-pass-${i}`,
+        nist_controls: 'SC-7',
+        level: 1,
+      })),
+      findings: {
+        hardenize: [
+          { id: 'stay-fail', nist_controls: 'SC-8', severity: 'error' },
+        ],
+      },
+    } as unknown as InsightPayload
+
+    const { rerender } = render(
+      <InsightsPanel payload={payload} questionId={301} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    )
+    expect(screen.getByText('stay-pass-0')).toBeInTheDocument()
+
+    rerender(<InsightsPanel payload={payload} questionId={301} />)
+    expect(screen.getByText('stay-pass-0')).toBeInTheDocument()
   })
 
   it('renders Hardenize as chips when its passing array ships, keeping affected domains in the hover', async () => {

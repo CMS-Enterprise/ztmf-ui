@@ -17,6 +17,11 @@ import {
 
 type Props = {
   payload: InsightPayload
+  // Identity of the question this payload belongs to. The panel stays mounted
+  // across a question change, so per-question UI state (the collapsed passing
+  // bulk) needs an explicit signal that the question moved. Optional: the panel
+  // renders fine without it, it just cannot reset that state.
+  questionId?: string | number
 }
 
 // ZTMF maturity levels. The pipeline sends numeric scores; labels come with
@@ -304,7 +309,7 @@ export function OptionInsightBadges({
   )
 }
 
-function InsightsPanelInner({ payload }: Props) {
+function InsightsPanelInner({ payload, questionId }: Props) {
   const [open, setOpen] = React.useState(false)
 
   // Parent already gates on payload presence, but guard so the component is
@@ -592,6 +597,7 @@ function InsightsPanelInner({ payload }: Props) {
                   passing={s.passing}
                   failing={s.failing}
                   hasPassing={s.hasPassing}
+                  resetKey={questionId}
                 />
               ) : null
             }
@@ -643,18 +649,29 @@ function InsightsPanelInner({ payload }: Props) {
                 <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                   Aligns with ARS Controls:
                 </Box>
-                <Tooltip title={ARS_ALIGN_DISCLAIMER} placement="top" arrow>
+                {/* describeChild + a node (not string) title is what splits name
+                    from description here. Without describeChild, Tooltip takes the
+                    aria-label branch and the child's own aria-label wins the props
+                    spread, so the disclaimer is never wired up at all and the
+                    popper's text sits orphaned in the a11y tree. With it, the
+                    disclaimer becomes aria-describedby. The title has to be a node
+                    rather than the bare string, or Tooltip also sets a native title
+                    attribute and the browser renders a second tooltip over ours. */}
+                <Tooltip
+                  describeChild
+                  title={<span>{ARS_ALIGN_DISCLAIMER}</span>}
+                  placement="top"
+                  arrow
+                >
                   <InfoOutlined
                     role="img"
                     // SvgIcon defaults to aria-hidden when no titleAccess is given,
                     // which would drop this from the accessibility tree even with a
                     // role and a name. Un-hide it explicitly.
                     aria-hidden={false}
-                    // The name carries the whole disclaimer, not a summary: MUI
-                    // Tooltip lets the child's own aria-label win, so it never wires
-                    // the tooltip up as a description and the text would otherwise
-                    // be sighted-only. One announcement, no duplication.
-                    aria-label={`About ARS alignment: ${ARS_ALIGN_DISCLAIMER}`}
+                    // Short name; the disclaimer prose rides in the description
+                    // (aria-describedby) rather than bloating the accessible name.
+                    aria-label="About ARS alignment"
                     tabIndex={0}
                     sx={{
                       fontSize: 14,
@@ -875,7 +892,12 @@ function CheckTooltip({
   // Hardenize; without it here the remediation is unreachable for those sources.
   // It also carries the substance when a dictionary description is a bare label
   // (e.g. account-without-compliant-password-policy → "Password Policy").
-  const remediation = asText(finding?.remediation)
+  // Failing checks only: a passing check has nothing to fix, and telling a
+  // reviewer how to remediate something that passed is wrong guidance in a
+  // compliance tool. Same call the passing arrays make for severity ("a pass
+  // isn't a severity event"). The type allows remediation on a passing entry
+  // even though the pipeline does not emit it today.
+  const remediation = pass ? undefined : asText(finding?.remediation)
   const nist = asText(finding?.nist_controls)
   const severity = asText(finding?.severity)
   const level = typeof finding?.level === 'number' ? finding.level : null
@@ -958,11 +980,13 @@ function FeedCheckBlock({
   passing,
   failing,
   hasPassing,
+  resetKey,
 }: {
   label: string
   passing: InsightFinding[]
   failing: InsightFinding[]
   hasPassing: boolean
+  resetKey?: string | number
 }) {
   const [showAllPassing, setShowAllPassing] = React.useState(false)
   // Ties the toggle to the chip region it reveals (aria-controls), so assistive
@@ -971,18 +995,21 @@ function FeedCheckBlock({
   // Moving to another question swaps the payload but keeps this component mounted
   // (the panel and this block hold the same React key across a question change),
   // so without an explicit reset an expanded block stays expanded on the next
-  // question with no click. Reset off the check set actually rendered rather than
-  // a question id: the payload carries no question identity (fismasystemid /
-  // questionid live on the Insight wrapper, not inside it), and keying the panel
-  // at its callsite would also reset the drawer's open/details state, which is a
-  // separate pre-existing issue. Two questions sharing an identical check set are
-  // indistinguishable here, and carrying the state over is invisible in that case.
-  const checkSetKey = [...failing, ...passing]
-    .map((f) => asText(f?.id) ?? '')
-    .join('|')
-  React.useEffect(() => {
+  // question with no click. resetKey is the real question id, threaded from the
+  // page: InsightPayload itself carries no question identity (fismasystemid /
+  // questionid live on the Insight wrapper), but the callsite that renders the
+  // panel has it. Deriving a key from the rendered check set instead would alias
+  // whenever two questions share the same checks — exactly the leak being fixed.
+  //
+  // Adjusted during render rather than in an effect: an effect runs after commit,
+  // so the next question would paint expanded for a frame before collapsing, and
+  // aria-expanded would flip true→false after paint (announced as a spurious
+  // state change). This is React's documented way to reset state on a prop change.
+  const [prevResetKey, setPrevResetKey] = React.useState(resetKey)
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey)
     setShowAllPassing(false)
-  }, [checkSetKey])
+  }
   const passed = passing.length
   const total = passing.length + failing.length
   const summary = hasPassing
@@ -1005,9 +1032,11 @@ function FeedCheckBlock({
     // Remediation joins it too: the chip carries its own aria-label, so the
     // tooltip's node content is never announced, and without this the "how to fix"
     // text the hover shows would be sighted-only.
-    const remediation = CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED
-      ? asText(f?.remediation)
-      : undefined
+    // Failing checks only, matching CheckTooltip — see the note there.
+    const remediation =
+      !pass && CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED
+        ? asText(f?.remediation)
+        : undefined
     const ariaLabel = [
       slug,
       desc,

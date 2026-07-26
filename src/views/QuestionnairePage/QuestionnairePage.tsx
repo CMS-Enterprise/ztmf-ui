@@ -1335,7 +1335,10 @@ export default function QuestionnarePage() {
                 </Typography>
               )}
               {showInsights && currentInsight && (
-                <InsightsPanel payload={currentInsight} />
+                <InsightsPanel
+                  payload={currentInsight}
+                  questionId={currentDatabaseQuestionId}
+                />
               )}
               {loadingQuestion ? (
                 <Box
