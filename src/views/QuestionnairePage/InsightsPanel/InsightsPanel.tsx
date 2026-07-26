@@ -646,15 +646,21 @@ function InsightsPanelInner({ payload }: Props) {
                 <Tooltip title={ARS_ALIGN_DISCLAIMER} placement="top" arrow>
                   <InfoOutlined
                     role="img"
-                    // Short accessible name; the full disclaimer rides in the
-                    // tooltip, which MUI wires as aria-describedby on focus. Putting
-                    // the full text in BOTH aria-label and the tooltip would make a
-                    // screen reader announce it twice (name + description).
-                    aria-label="About ARS alignment"
+                    // SvgIcon defaults to aria-hidden when no titleAccess is given,
+                    // which would drop this from the accessibility tree even with a
+                    // role and a name. Un-hide it explicitly.
+                    aria-hidden={false}
+                    // The name carries the whole disclaimer, not a summary: MUI
+                    // Tooltip lets the child's own aria-label win, so it never wires
+                    // the tooltip up as a description and the text would otherwise
+                    // be sighted-only. One announcement, no duplication.
+                    aria-label={`About ARS alignment: ${ARS_ALIGN_DISCLAIMER}`}
                     tabIndex={0}
                     sx={{
                       fontSize: 14,
-                      color: '#8a94a6',
+                      // AA non-text contrast (WCAG 1.4.11): needs 3:1 on the panel's
+                      // #f8f9fe. Matches the greys used elsewhere in this file.
+                      color: '#5c636a',
                       cursor: 'help',
                       '&:focus-visible': {
                         outline: '2px solid #5666b8',
@@ -672,9 +678,11 @@ function InsightsPanelInner({ payload }: Props) {
                   ...controlsFailing,
                   ...controlsSatisfied,
                   ...controlsUnsatisfied,
-                ].map((c, i) => (
+                ].map((c) => (
                   <ControlChip
-                    key={`${c.state}-${c.id}-${i}`}
+                    // rollupControls dedupes by control id, so the id alone is
+                    // unique across all three state buckets.
+                    key={c.id}
                     id={c.id}
                     variant={c.conflict ? 'conflict' : c.state}
                     tooltip={<ControlTooltip control={c} />}
@@ -862,6 +870,12 @@ function CheckTooltip({
   // present so both feeds read the same. The slug is only a last-resort title so
   // the hover never names nothing.
   const name = asText(finding?.description) ?? asText(finding?.title)
+  // "How to fix" — the same remediation text FindingRow shows. Kion/SecurityHub
+  // render as chips now, so the card that used to carry this is only reached by
+  // Hardenize; without it here the remediation is unreachable for those sources.
+  // It also carries the substance when a dictionary description is a bare label
+  // (e.g. account-without-compliant-password-policy → "Password Policy").
+  const remediation = asText(finding?.remediation)
   const nist = asText(finding?.nist_controls)
   const severity = asText(finding?.severity)
   const level = typeof finding?.level === 'number' ? finding.level : null
@@ -895,6 +909,14 @@ function CheckTooltip({
         )
       )}
       {meta && <Box sx={{ fontSize: 10, mt: 0.5, opacity: 0.8 }}>{meta}</Box>}
+      {CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED && remediation && (
+        <Box sx={{ fontSize: 10, lineHeight: 1.5, mt: 0.5, opacity: 0.9 }}>
+          <Box component="span" sx={{ fontWeight: 600 }}>
+            How to fix:
+          </Box>{' '}
+          {remediation}
+        </Box>
+      )}
       {domains.length > 0 && (
         <Box sx={{ mt: 0.5 }}>
           <Box sx={{ fontSize: 10, fontWeight: 600, opacity: 0.9 }}>
@@ -946,6 +968,21 @@ function FeedCheckBlock({
   // Ties the toggle to the chip region it reveals (aria-controls), so assistive
   // tech announces the button/region relationship, not just the expanded state.
   const chipRegionId = React.useId()
+  // Moving to another question swaps the payload but keeps this component mounted
+  // (the panel and this block hold the same React key across a question change),
+  // so without an explicit reset an expanded block stays expanded on the next
+  // question with no click. Reset off the check set actually rendered rather than
+  // a question id: the payload carries no question identity (fismasystemid /
+  // questionid live on the Insight wrapper, not inside it), and keying the panel
+  // at its callsite would also reset the drawer's open/details state, which is a
+  // separate pre-existing issue. Two questions sharing an identical check set are
+  // indistinguishable here, and carrying the state over is invisible in that case.
+  const checkSetKey = [...failing, ...passing]
+    .map((f) => asText(f?.id) ?? '')
+    .join('|')
+  React.useEffect(() => {
+    setShowAllPassing(false)
+  }, [checkSetKey])
   const passed = passing.length
   const total = passing.length + failing.length
   const summary = hasPassing
@@ -965,7 +1002,18 @@ function FeedCheckBlock({
     const desc = asText(f?.description) ?? asText(f?.title)
     // Fold pass/fail into the accessible name — the ✓/✗ + color is the only other
     // place that distinction lives, and neither is exposed to a screen reader (508).
-    const ariaLabel = [slug, desc, pass ? 'Passed' : 'Failed']
+    // Remediation joins it too: the chip carries its own aria-label, so the
+    // tooltip's node content is never announced, and without this the "how to fix"
+    // text the hover shows would be sighted-only.
+    const remediation = CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED
+      ? asText(f?.remediation)
+      : undefined
+    const ariaLabel = [
+      slug,
+      desc,
+      pass ? 'Passed' : 'Failed',
+      remediation ? `How to fix: ${remediation}` : undefined,
+    ]
       .filter(Boolean)
       .join(' — ')
     return (
