@@ -92,4 +92,17 @@ describe('extended metadata formatting', () => {
     renderWithExtended({ cloud_system: false })
     expect(screen.getByText('Cloud System')).toBeInTheDocument()
   })
+
+  test('hides the cloud dependents when cloud_system is No', () => {
+    // Cloud service model and vendor do not apply to a non-cloud system, so the
+    // read view omits them just as the edit view does.
+    renderWithExtended({
+      cloud_system: false,
+      cloud_vendor: 'AWS',
+      cloud_service_model: ['IaaS'],
+    })
+    expect(screen.getByText('Cloud System')).toBeInTheDocument()
+    expect(screen.queryByText('Cloud Vendor')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cloud Service Model')).not.toBeInTheDocument()
+  })
 })

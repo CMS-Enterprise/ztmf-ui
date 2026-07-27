@@ -16,7 +16,11 @@ import {
   EXTENDED_METADATA_SUBHEADER,
 } from '@/constants'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
-import { formatBool, formatList } from '@/utils/systemMetadataVocab'
+import {
+  formatBool,
+  formatList,
+  isCrossFieldHidden,
+} from '@/utils/systemMetadataVocab'
 
 interface SystemDetailReadViewProps {
   system: FismaSystemType
@@ -80,7 +84,12 @@ export default function SystemDetailReadView({
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
-  const extendedFields = getFieldsBySection('extended')
+  // cloud_service_model and cloud_vendor do not apply to a non-cloud system, so
+  // they are hidden here just as the edit view hides them when cloud_system is
+  // No (they are empty in that case anyway).
+  const extendedFields = getFieldsBySection('extended').filter(
+    (field) => !isCrossFieldHidden(field.key, system)
+  )
   // Only show the Extended Metadata card when at least one field is populated.
   // Systems without extended metadata have every field null and would otherwise
   // render an empty card. (Read view is not role-gated; the values are the
