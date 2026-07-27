@@ -25,6 +25,14 @@ import {
   optionalEmailValidator,
 } from '@/views/EditSystemModal/validators'
 import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
+import {
+  useSystemMetadataVocab,
+  toSelectOptionsWithCurrent,
+  parseCombo,
+  serializeCombo,
+  multiSelectOptionsWithCurrent,
+  type SystemMetadataVocab,
+} from '@/utils/systemMetadataVocab'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import {
@@ -72,6 +80,7 @@ interface SystemDetailEditViewProps {
 function renderEditField(
   field: FieldConfig,
   props: SystemDetailEditViewProps,
+  vocab: SystemMetadataVocab,
   disabled = false
 ) {
   const {
@@ -79,6 +88,7 @@ function renderEditField(
     formValid,
     formValidErrorText,
     onInputChange,
+    onFieldChange,
     onValidatedFieldChange,
     datacenterEnvironments,
   } = props
@@ -101,6 +111,17 @@ function renderEditField(
   }
 
   if (field.type === 'select') {
+    const current = editedSystem[field.key] as string | null | undefined
+    // datacenterenvironment draws from its own reference vocab; the extended
+    // metadata fields draw from the canonical vocab. Both preserve the current
+    // value as a disabled option when it is not in the served set.
+    const isDataCenter = field.key === 'datacenterenvironment'
+    const options = isDataCenter
+      ? toDropdownOptionsWithCurrent(datacenterEnvironments, current)
+      : toSelectOptionsWithCurrent(
+          (vocab as Record<string, string[]>)[field.key] ?? [],
+          current
+        )
     return (
       <TextField
         key={field.key}
@@ -109,25 +130,64 @@ function renderEditField(
         required={field.required}
         label={field.label}
         variant="standard"
-        value={editedSystem[field.key] || ''}
+        value={current || ''}
         fullWidth
         disabled={disabled}
         error={!formValid[field.key]}
         helperText={!formValid[field.key] ? formValidErrorText[field.key] : ''}
         InputLabelProps={{ sx: { marginTop: 0 } }}
         sx={{ mt: 2 }}
-        onChange={(e) => onInputChange(e, field.key)}
+        onChange={(e) =>
+          field.required
+            ? onInputChange(e, field.key)
+            : onFieldChange(field.key, e.target.value)
+        }
       >
-        {toDropdownOptionsWithCurrent(
-          datacenterEnvironments,
-          editedSystem[field.key] as string | null | undefined
-        ).map((option) => (
+        {/* Optional fields offer a blank option so a value can be cleared. */}
+        {!field.required && <MenuItem value="">&mdash; None &mdash;</MenuItem>}
+        {options.map((option) => (
           <MenuItem
             key={option.value}
             value={option.value}
             disabled={option.disabled}
           >
             {option.label}
+          </MenuItem>
+        ))}
+      </TextField>
+    )
+  }
+
+  if (field.type === 'multiselect') {
+    const currentParts = parseCombo(editedSystem[field.key] as string | null)
+    const options = multiSelectOptionsWithCurrent(
+      (vocab as Record<string, string[]>)[field.key] ?? [],
+      currentParts
+    )
+    return (
+      <TextField
+        key={field.key}
+        id={`edit-${field.key}`}
+        select
+        label={field.label}
+        variant="standard"
+        value={currentParts}
+        fullWidth
+        disabled={disabled}
+        SelectProps={{
+          multiple: true,
+          renderValue: (selected) => (selected as string[]).join(', '),
+        }}
+        InputLabelProps={{ sx: { marginTop: 0 } }}
+        sx={{ mt: 2 }}
+        onChange={(e) => {
+          const parts = e.target.value as unknown as string[]
+          onFieldChange(field.key, serializeCombo(parts) ?? '')
+        }}
+      >
+        {options.map((opt) => (
+          <MenuItem key={opt} value={opt}>
+            {opt}
           </MenuItem>
         ))}
       </TextField>
@@ -290,6 +350,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     onSdlSyncToggle,
     targetMaturitySlot,
   } = props
+  const vocab = useSystemMetadataVocab()
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
@@ -313,7 +374,9 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             sx={{ pb: 0 }}
           />
           <CardContent>
-            {identityFields.map((field) => renderEditField(field, props))}
+            {identityFields.map((field) =>
+              renderEditField(field, props, vocab)
+            )}
           </CardContent>
         </Card>
       </Grid>
@@ -530,7 +593,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               InputLabelProps={{ shrink: true, sx: { marginTop: 0 } }}
               value={props.opdivName ?? ''}
             />
-            {orgFields.map((field) => renderEditField(field, props))}
+            {orgFields.map((field) => renderEditField(field, props, vocab))}
           </CardContent>
         </Card>
       </Grid>
@@ -547,7 +610,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             <Grid container spacing={3}>
               {contactFields.map((field) => (
                 <Grid item xs={12} sm={6} key={field.key}>
-                  {renderEditField(field, props)}
+                  {renderEditField(field, props, vocab)}
                 </Grid>
               ))}
             </Grid>
@@ -571,7 +634,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             <Grid container spacing={3}>
               {extendedFields.map((field) => (
                 <Grid item xs={12} sm={6} md={4} key={field.key}>
-                  {renderEditField(field, props, field.readOnly)}
+                  {renderEditField(field, props, vocab, field.readOnly)}
                 </Grid>
               ))}
             </Grid>
