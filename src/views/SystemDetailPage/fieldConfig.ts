@@ -2,7 +2,7 @@ import { FismaSystemType } from '@/types'
 
 export type FieldSection = 'identity' | 'organization' | 'contacts' | 'extended'
 
-export type FieldType = 'text' | 'email' | 'select'
+export type FieldType = 'text' | 'email' | 'select' | 'multiselect'
 
 export interface FieldConfig {
   key: keyof FismaSystemType
@@ -116,35 +116,35 @@ export const fieldConfigs: FieldConfig[] = [
     label: 'HVA',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'fips',
     label: 'FIPS Impact Level',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'system_type',
     label: 'System Type',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'cloud_system',
     label: 'Cloud System',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'cloud_service_model',
     label: 'Cloud Service Model',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'multiselect',
   },
   {
     key: 'cloud_vendor',
@@ -158,14 +158,14 @@ export const fieldConfigs: FieldConfig[] = [
     label: 'System Operator',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'goco_coco_gogo',
     label: 'GOCO/COCO/GOGO',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'system_owner',
@@ -186,7 +186,7 @@ export const fieldConfigs: FieldConfig[] = [
     label: 'Legacy',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
 ]
 

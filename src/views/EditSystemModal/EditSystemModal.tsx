@@ -44,7 +44,15 @@ import type { OpDiv } from '@/types'
 import {
   getFieldsBySection,
   EXTENDED_METADATA_KEYS,
+  type FieldConfig,
 } from '@/views/SystemDetailPage/fieldConfig'
+import {
+  useSystemMetadataVocab,
+  toSelectOptionsWithCurrent,
+  parseCombo,
+  serializeCombo,
+  multiSelectOptionsWithCurrent,
+} from '@/utils/systemMetadataVocab'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -65,6 +73,7 @@ export default function EditSystemModal({
     system?.datacenterenvironment
   )
   const extendedFields = getFieldsBySection('extended')
+  const vocab = useSystemMetadataVocab()
 
   const [formValid, setFormValid] = React.useState<FormValidType>({
     issoemail: false,
@@ -156,6 +165,99 @@ export default function EditSystemModal({
   }
   const [editedFismaSystem, setEditedFismaSystem] =
     React.useState<FismaSystemType>(EMPTY_SYSTEM)
+
+  // Renders an extended-metadata field per its configured type: canonical
+  // single-select, cloud_service_model multi-select, or free text. Selects
+  // preserve a legacy/unmapped current value and offer a blank to clear.
+  const renderExtendedControl = (field: FieldConfig) => {
+    const current = editedFismaSystem[field.key] as string | null | undefined
+    if (field.type === 'select') {
+      const options = toSelectOptionsWithCurrent(
+        (vocab as Record<string, string[]>)[field.key] ?? [],
+        current
+      )
+      return (
+        <TextField
+          id={`${mode}-${field.key}`}
+          select
+          label={field.label}
+          variant="standard"
+          margin="normal"
+          fullWidth
+          value={current || ''}
+          InputLabelProps={{ sx: { marginTop: 0 } }}
+          onChange={(e) =>
+            setEditedFismaSystem((prev) => ({
+              ...prev,
+              [field.key]: e.target.value || null,
+            }))
+          }
+        >
+          <MenuItem value="">&mdash; None &mdash;</MenuItem>
+          {options.map((o) => (
+            <MenuItem key={o.value} value={o.value} disabled={o.disabled}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      )
+    }
+    if (field.type === 'multiselect') {
+      const currentParts = parseCombo(current)
+      const options = multiSelectOptionsWithCurrent(
+        (vocab as Record<string, string[]>)[field.key] ?? [],
+        currentParts
+      )
+      return (
+        <TextField
+          id={`${mode}-${field.key}`}
+          select
+          label={field.label}
+          variant="standard"
+          margin="normal"
+          fullWidth
+          value={currentParts}
+          SelectProps={{
+            multiple: true,
+            renderValue: (selected) => (selected as string[]).join(', '),
+          }}
+          InputLabelProps={{ sx: { marginTop: 0 } }}
+          onChange={(e) => {
+            const parts = e.target.value as unknown as string[]
+            setEditedFismaSystem((prev) => ({
+              ...prev,
+              [field.key]: serializeCombo(parts),
+            }))
+          }}
+        >
+          {options.map((opt) => (
+            <MenuItem key={opt} value={opt}>
+              {opt}
+            </MenuItem>
+          ))}
+        </TextField>
+      )
+    }
+    return (
+      <TextField
+        id={`${mode}-${field.key}`}
+        label={field.label}
+        variant="standard"
+        margin="normal"
+        fullWidth
+        disabled={field.readOnly}
+        value={current ?? ''}
+        InputLabelProps={{ sx: { marginTop: 0 } }}
+        onChange={(e) =>
+          setEditedFismaSystem((prev) => ({
+            ...prev,
+            [field.key]: e.target.value || null,
+          }))
+        }
+      />
+    )
+  }
+
   React.useEffect(() => {
     if (system && open) {
       setFormValid((prevState) => ({
@@ -1218,27 +1320,7 @@ export default function EditSystemModal({
                     <Grid container spacing={2}>
                       {extendedFields.map((field) => (
                         <Grid item xs={12} sm={6} md={4} key={field.key}>
-                          <TextField
-                            id={`${mode}-${field.key}`}
-                            label={field.label}
-                            variant="standard"
-                            margin="normal"
-                            fullWidth
-                            disabled={field.readOnly}
-                            value={
-                              (editedFismaSystem[field.key] as
-                                | string
-                                | null
-                                | undefined) ?? ''
-                            }
-                            InputLabelProps={{ sx: { marginTop: 0 } }}
-                            onChange={(e) => {
-                              setEditedFismaSystem((prevState) => ({
-                                ...prevState,
-                                [field.key]: e.target.value || null,
-                              }))
-                            }}
-                          />
+                          {renderExtendedControl(field)}
                         </Grid>
                       ))}
                     </Grid>
