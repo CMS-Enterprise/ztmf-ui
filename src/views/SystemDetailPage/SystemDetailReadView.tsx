@@ -135,7 +135,7 @@ export default function SystemDetailReadView({
           <CardContent>
             <Grid container spacing={3}>
               {contactFields.map((field) => (
-                <Grid item xs={12} sm={6} key={field.key}>
+                <Grid item xs={12} key={field.key}>
                   <FieldDisplay
                     label={field.label}
                     value={String(system[field.key] ?? '')}
