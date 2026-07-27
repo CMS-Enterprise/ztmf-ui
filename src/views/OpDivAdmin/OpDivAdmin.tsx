@@ -35,6 +35,8 @@ import {
   updateOpDiv,
   type OpDivInput,
 } from '@/utils/opdivs'
+import { setOpDivDelegateEnabled } from '@/utils/delegates'
+import { isUnscopedWriteAdmin } from '@/utils/userRoles'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import type { OpDiv } from '@/types'
@@ -45,18 +47,26 @@ const NAME_MAX = 128
 type FormState = { code: string; name: string; is_parent: boolean }
 const EMPTY_FORM: FormState = { code: '', name: '', is_parent: false }
 
-function CreateToolbar({ onCreate }: { onCreate: () => void }) {
+function CreateToolbar({
+  onCreate,
+  canCreate,
+}: {
+  onCreate: () => void
+  canCreate: boolean
+}) {
   return (
     <GridToolbarContainer sx={{ justifyContent: 'space-between' }}>
       <GridToolbarQuickFilter debounceMs={250} />
-      <Button
-        color="primary"
-        startIcon={<AddIcon />}
-        onClick={onCreate}
-        sx={{ color: '#5666b8' }}
-      >
-        Create OpDiv
-      </Button>
+      {canCreate && (
+        <Button
+          color="primary"
+          startIcon={<AddIcon />}
+          onClick={onCreate}
+          sx={{ color: '#5666b8' }}
+        >
+          Create OpDiv
+        </Button>
+      )}
     </GridToolbarContainer>
   )
 }
@@ -64,7 +74,14 @@ function CreateToolbar({ onCreate }: { onCreate: () => void }) {
 export default function OpDivAdmin() {
   const navigate = useNavigate()
   const { userInfo } = useContextProp()
+  // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
+  // the page only to flip the per-OpDiv System Delegate toggle - every other
+  // control stays OWNER-only. The backend enforces both boundaries (OpDiv
+  // CRUD is OWNER-only; the delegate-toggle endpoint is OWNER + HHS admin).
   const isOwner = userInfo.role === 'OWNER'
+  const canAccess = isUnscopedWriteAdmin(userInfo)
+  const canManage = isOwner
+  const canToggleDelegate = canAccess
 
   const [rows, setRows] = useState<OpDiv[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
@@ -72,14 +89,17 @@ export default function OpDivAdmin() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pendingToggle, setPendingToggle] = useState<OpDiv | null>(null)
+  const [pendingDelegateToggle, setPendingDelegateToggle] =
+    useState<OpDiv | null>(null)
 
-  // OWNER is the tenant boundary - everyone else is bounced, mirroring the
-  // redirect guard UserTable uses. The backend also returns 403.
+  // Unscoped write admins (OWNER + HHS admin) reach the page; everyone else is
+  // bounced, mirroring the redirect guard UserTable uses. The backend also
+  // returns 403 on any mutation the caller isn't allowed to make.
   useEffect(() => {
-    if (userInfo.role && !isOwner) {
+    if (userInfo.role && !canAccess) {
       navigate(Routes.ROOT, { replace: true })
     }
-  }, [userInfo.role, isOwner, navigate])
+  }, [userInfo.role, canAccess, navigate])
 
   const loadOpDivs = useCallback(() => {
     fetchOpDivs(true)
@@ -92,8 +112,8 @@ export default function OpDivAdmin() {
   }, [])
 
   useEffect(() => {
-    if (isOwner) loadOpDivs()
-  }, [isOwner, loadOpDivs])
+    if (canAccess) loadOpDivs()
+  }, [canAccess, loadOpDivs])
 
   const openCreate = () => {
     setEditing(null)
@@ -180,8 +200,29 @@ export default function OpDivAdmin() {
       })
   }
 
-  const columns: GridColDef[] = useMemo(
-    () => [
+  const handleConfirmDelegateToggle = (confirm: boolean) => {
+    const target = pendingDelegateToggle
+    setPendingDelegateToggle(null)
+    if (!confirm || !target) return
+    setOpDivDelegateEnabled(target.opdiv_id, !target.system_delegate_enabled)
+      .then(() => {
+        notify(
+          target.system_delegate_enabled
+            ? 'Saved - System Delegate disabled'
+            : 'Saved - System Delegate enabled',
+          'success'
+        )
+        loadOpDivs()
+      })
+      .catch((error) => {
+        if (isAuthHandled(error)) return
+        const parsed = parseApiError(error)
+        notify(parsed.message, 'error')
+      })
+  }
+
+  const columns: GridColDef[] = useMemo(() => {
+    const cols: GridColDef[] = [
       { field: 'code', headerName: 'Code', flex: 0.6 },
       { field: 'name', headerName: 'Name', flex: 1.4 },
       {
@@ -197,6 +238,33 @@ export default function OpDivAdmin() {
         valueGetter: (params) => (params.row.active ? 'Active' : 'Inactive'),
       },
       {
+        field: 'system_delegate_enabled',
+        // Short visible header; the full spec label "Add System Delegate Role"
+        // rides along as the header tooltip (description) and the switch's
+        // aria-label, so it fits the grid without losing the exact wording.
+        headerName: 'System Delegate',
+        description: 'Add System Delegate Role',
+        flex: 0.7,
+        sortable: false,
+        renderCell: (params) => {
+          const row = params.row as OpDiv
+          return (
+            <Switch
+              checked={row.system_delegate_enabled}
+              disabled={!canToggleDelegate}
+              onChange={() => setPendingDelegateToggle(row)}
+              inputProps={{
+                'aria-label': `Add System Delegate Role for ${row.code}`,
+              }}
+            />
+          )
+        },
+      },
+    ]
+    // Create / edit / activate stay OWNER-only; HHS admin sees the grid but can
+    // only flip the delegate toggle above.
+    if (canManage) {
+      cols.push({
         field: 'actions',
         type: 'actions',
         headerName: 'Actions',
@@ -231,12 +299,12 @@ export default function OpDivAdmin() {
             </Tooltip>,
           ]
         },
-      },
-    ],
-    []
-  )
+      })
+    }
+    return cols
+  }, [canManage, canToggleDelegate])
 
-  if (!isOwner) return null
+  if (!canAccess) return null
 
   return (
     <>
@@ -254,7 +322,9 @@ export default function OpDivAdmin() {
             sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },
           }}
           slots={{ toolbar: CreateToolbar }}
-          slotProps={{ toolbar: { onCreate: openCreate } }}
+          slotProps={{
+            toolbar: { onCreate: openCreate, canCreate: canManage },
+          }}
           disableColumnSelector
           sx={{
             '& .MuiDataGrid-columnHeaders': {
@@ -340,6 +410,27 @@ export default function OpDivAdmin() {
         onClose={() => setPendingToggle(null)}
         confirmClick={handleConfirmToggle}
         confirmLabel={pendingToggle?.active ? 'Deactivate' : 'Reactivate'}
+      />
+
+      <ConfirmDialog
+        title={
+          pendingDelegateToggle?.system_delegate_enabled
+            ? 'Disable System Delegate'
+            : 'Enable System Delegate'
+        }
+        confirmationText={
+          pendingDelegateToggle
+            ? pendingDelegateToggle.system_delegate_enabled
+              ? `Turn off System Delegate self-service for ${pendingDelegateToggle.code} - ${pendingDelegateToggle.name}? ISSOs will no longer be able to add delegates to systems in this OpDiv.`
+              : `Turn on System Delegate self-service for ${pendingDelegateToggle.code} - ${pendingDelegateToggle.name}? ISSOs will be able to add delegates to systems in this OpDiv.`
+            : ''
+        }
+        open={pendingDelegateToggle !== null}
+        onClose={() => setPendingDelegateToggle(null)}
+        confirmClick={handleConfirmDelegateToggle}
+        confirmLabel={
+          pendingDelegateToggle?.system_delegate_enabled ? 'Disable' : 'Enable'
+        }
       />
     </>
   )

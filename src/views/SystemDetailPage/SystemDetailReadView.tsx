@@ -73,9 +73,15 @@ export default function SystemDetailReadView({
 
   return (
     <Grid container spacing={3}>
-      {/* System Identity */}
-      <Grid item xs={12} md={7}>
-        <Card variant="outlined">
+      {/* Left column: System Identity, then Contacts. Contacts fills the
+          vertical space the taller right column would otherwise leave blank. */}
+      <Grid
+        item
+        xs={12}
+        md={7}
+        sx={{ display: 'flex', flexDirection: 'column' }}
+      >
+        <Card variant="outlined" sx={{ mb: 3 }}>
           <CardHeader
             title="System Identity"
             titleTypographyProps={{ variant: 'h6' }}
@@ -89,6 +95,25 @@ export default function SystemDetailReadView({
             sx={{ pb: 0 }}
           />
           <CardContent>{renderFields(identityFields, system)}</CardContent>
+        </Card>
+        <Card variant="outlined" sx={{ flex: 1 }}>
+          <CardHeader
+            title="Contacts"
+            titleTypographyProps={{ variant: 'h6' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            <Grid container spacing={3}>
+              {contactFields.map((field) => (
+                <Grid item xs={12} sm={6} key={field.key}>
+                  <FieldDisplay
+                    label={field.label}
+                    value={String(system[field.key] ?? '')}
+                  />
+                </Grid>
+              ))}
+            </Grid>
+          </CardContent>
         </Card>
       </Grid>
 
@@ -198,29 +223,6 @@ export default function SystemDetailReadView({
           <CardContent>
             <FieldDisplay label="OpDiv" value={opdivName} />
             {renderFields(orgFields, system)}
-          </CardContent>
-        </Card>
-      </Grid>
-
-      {/* Contacts — full width, fields horizontal */}
-      <Grid item xs={12}>
-        <Card variant="outlined">
-          <CardHeader
-            title="Contacts"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            <Grid container spacing={3}>
-              {contactFields.map((field) => (
-                <Grid item xs={12} sm={6} key={field.key}>
-                  <FieldDisplay
-                    label={field.label}
-                    value={String(system[field.key] ?? '')}
-                  />
-                </Grid>
-              ))}
-            </Grid>
           </CardContent>
         </Card>
       </Grid>

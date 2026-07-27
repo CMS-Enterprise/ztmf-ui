@@ -14,6 +14,12 @@ import axiosInstance from '@/axiosConfig'
 
 interface SystemEnrichmentCardProps {
   fismaUid: string
+  /**
+   * The system's own datacenterenvironment value, for comparison against the
+   * CFACTS-reported one in the enrichment payload (ztmf#239). When they
+   * disagree, the card flags the difference.
+   */
+  systemDataCenterEnvironment?: string | null
 }
 
 function FieldDisplay({
@@ -84,8 +90,15 @@ function formatDate(dateStr: string | null): string | null {
   return date.toLocaleDateString()
 }
 
+// normalizeDCE mirrors the backend report's comparison (ztmf#239): trimmed,
+// case-insensitive, with null/undefined and "" both meaning "no value".
+function normalizeDCE(value: string | null | undefined): string {
+  return (value ?? '').trim().toLowerCase()
+}
+
 export default function SystemEnrichmentCard({
   fismaUid,
+  systemDataCenterEnvironment,
 }: SystemEnrichmentCardProps) {
   const [enrichment, setEnrichment] = useState<SystemEnrichmentType | null>(
     null
@@ -173,6 +186,14 @@ export default function SystemEnrichmentCard({
 
   const atoColor = getAtoColor(enrichment.ato_expiration_date)
 
+  // Flag when CFACTS reports a data center environment that disagrees with the
+  // system's own value - including when ZTMF has none recorded, which is drift
+  // worth surfacing, same as the backend /datacentermismatches report.
+  const cfactsDCE = enrichment.data_center_environment
+  const dceMismatch =
+    normalizeDCE(cfactsDCE) !== '' &&
+    normalizeDCE(cfactsDCE) !== normalizeDCE(systemDataCenterEnvironment)
+
   return (
     <Grid container spacing={3}>
       {/* Row 1: Identity, Status, Organization — 3 across on md+ */}
@@ -198,6 +219,14 @@ export default function SystemEnrichmentCard({
               label="Lifecycle Phase"
               value={enrichment.lifecycle_phase}
             />
+            <FieldDisplay label="Data Center Environment" value={cfactsDCE} />
+            {dceMismatch && (
+              <Chip
+                label={`Differs from ZTMF: ${systemDataCenterEnvironment?.trim() || 'not set'}`}
+                color="warning"
+                size="small"
+              />
+            )}
           </CardContent>
         </Card>
       </Grid>

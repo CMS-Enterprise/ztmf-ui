@@ -464,7 +464,9 @@ export default function Title() {
                       <MenuItem onClick={() => handleOption()}>Users</MenuItem>
                     </Link>
                   )}
-                  {userInfo.role === 'OWNER' && (
+                  {/* OWNER manages OpDivs fully; HHS admin reaches the page
+                      only to flip the per-OpDiv System Delegate toggle. */}
+                  {isUnscopedWriteAdmin(userInfo) && (
                     <Link
                       to={Routes.ADMIN_OPDIVS}
                       style={{ textDecoration: 'none', color: 'black' }}

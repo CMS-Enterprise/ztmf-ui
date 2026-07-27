@@ -175,6 +175,10 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
                   value: 'ISSM',
                 },
                 {
+                  label: 'System Delegate',
+                  value: 'SYSTEM_DELEGATE',
+                },
+                {
                   label: 'ADMIN',
                   value: 'ADMIN',
                 },

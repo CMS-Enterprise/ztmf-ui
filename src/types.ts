@@ -40,6 +40,7 @@ export type UserRole =
   | 'OPDIV_READONLY_ADMIN'
   | 'ISSO'
   | 'ISSM'
+  | 'SYSTEM_DELEGATE'
   | 'ADMIN'
   | 'READONLY_ADMIN'
 
@@ -49,6 +50,35 @@ export type OpDiv = {
   name: string
   is_parent: boolean
   active: boolean
+  // Per-OpDiv "Add System Delegate Role" capability. NOT NULL on the backend
+  // (defaults false), so every OpDiv resolves to a real boolean. Gates the
+  // ISSO delegate self-service surface for systems in this OpDiv.
+  system_delegate_enabled: boolean
+}
+
+// A system delegate as returned by GET /fismasystems/:id/delegates (the
+// roster). access_expires_at is RFC3339; null means never expires (only
+// non-delegate users are null, so a delegate row always carries a date).
+export type DelegateRow = {
+  userid: string
+  fullname: string
+  email: string
+  access_expires_at: string | null
+}
+
+// An attachable delegate candidate from
+// GET /fismasystems/:id/delegate-candidates. The backend returns only
+// eligible users (already a delegate, in the system's OpDiv, not deleted,
+// not already attached), so the picker trusts the list as-is.
+export type DelegateCandidate = {
+  userid: string
+  fullname: string
+  email: string
+  // The candidate query returns the full user row, so this always arrives
+  // (null only for a non-expiring account). Optional here so fixtures can
+  // omit it. An expired candidate can still be attached, but stays denied at
+  // auth until renewed, so the picker flags it.
+  access_expires_at?: string | null
 }
 
 // One known datacenter environment from GET /api/v1/datacenterenvironments.
@@ -341,6 +371,9 @@ export type SystemEnrichmentType = {
   fisma_uuid: string
   fisma_acronym: string
   authorization_package_name: string | null
+  // CFACTS-reported data center environment (ztmf#239). Provisional payload
+  // key: absent until the ztmf-insights pipeline ships the field.
+  data_center_environment?: string | null
   primary_isso_name: string | null
   primary_isso_email: string | null
   is_active: boolean | null
@@ -467,7 +500,7 @@ export type InsightPayload = {
   // or []. `ars_satisfied_controls` length == `ars_controls_satisfied`.
   ars_satisfied_controls?: string[] | null
   // Applicable-but-not-satisfied controls (applicable − satisfied). Informational,
-  // rendered greyed — distinct from `ars_failing_controls` (Archer-explicit fails).
+  // rendered greyed — distinct from `ars_failing_controls` (explicit fails).
   // satisfied + not_satisfied == ars_controls_total when the pipeline emits them.
   ars_not_satisfied_controls?: string[] | null
   ars_failing_controls?: string[] | null

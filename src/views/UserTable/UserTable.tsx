@@ -136,29 +136,6 @@ function validateEmail(email: string) {
   return /^[a-zA-Z0-9._:$!%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+$/.test(email)
 }
 
-/**
- * Reshape a FismaSystemType[] into the {id: {acronym, name}} map the
- * Assign Systems picker consumes. Exported so the map-build logic can be
- * unit tested against the same fixtures the parent fetch test uses,
- * without having to drive the DataGrid + modal chain end to end.
- *
- * @param systems - The active FISMA systems returned by GET /fismasystems.
- * @returns A map keyed by fismasystemid with a display-ready label pair.
- */
-export function buildFismaSystemsMap(
-  systems: FismaSystemType[] | null | undefined
-): Record<number, { name: string; acronym: string }> {
-  const map: Record<number, { name: string; acronym: string }> = {}
-  for (const obj of systems ?? []) {
-    map[obj.fismasystemid] = {
-      name: obj.fismasubsystem
-        ? obj.fismaname + ' - ' + obj.fismasubsystem
-        : obj.fismaname,
-      acronym: obj.fismaacronym,
-    }
-  }
-  return map
-}
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
@@ -194,9 +171,6 @@ export default function UserTable() {
     role: '' as users['role'],
     assignedfismasystems: [],
   })
-  const [fismaSystemsMap, setFismaSystemsMap] = useState<
-    Record<number, { name: string; acronym: string }>
-  >({})
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
@@ -212,6 +186,12 @@ export default function UserTable() {
   // holds rows refreshed since load, plus a one-time backfill against older
   // backends that omit the inline grants (see the load effect).
   const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
+  // Global fisma-system metadata for the Assign Systems modal. Fetched once
+  // per page load and passed down so the modal doesn't re-fetch on every
+  // open. allSystems labels cross-OpDiv orphan assignments; decommSystems
+  // adds the "(Decommissioned)" flag for retired-system chips.
+  const [allSystems, setAllSystems] = useState<FismaSystemType[]>([])
+  const [decommSystems, setDecommSystems] = useState<FismaSystemType[]>([])
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -541,42 +521,47 @@ export default function UserTable() {
     }
   }, [canRead, navigate, showDeleted])
 
-  // Fetch the active FISMA systems list for the Assign Systems picker.
-  // Deliberately does NOT reuse context.fismaSystems: the dashboard's
-  // Show Decommissioned toggle swaps that array to the decommissioned-only
-  // response, which would leave the picker offering only decommissioned
-  // systems (or nothing when the assigned system is not in the current
-  // view). The picker's option pool must stay stable across dashboard state.
-  //
-  // Exposed as a callback so the event handler that opens the Assign
-  // Systems modal can invoke it directly (#574) - "when the user does X,
-  // do Y" belongs in the event handler, not in an effect fired by a state
-  // increment. The ref tracks the latest in-flight controller so a rapid
-  // reopen cancels the earlier request rather than racing it.
-  const activeSystemsCtrlRef = useRef<AbortController | null>(null)
-  const loadActiveSystems = useCallback(async () => {
-    if (!canRead) return
-    activeSystemsCtrlRef.current?.abort()
-    const controller = new AbortController()
-    activeSystemsCtrlRef.current = controller
-    try {
-      const res = await axiosInstance.get<{ data: FismaSystemType[] }>(
-        '/fismasystems',
-        { signal: controller.signal }
-      )
-      if (controller.signal.aborted) return
-      if (res.status !== 200) return
-      setFismaSystemsMap(buildFismaSystemsMap(res.data.data))
-    } catch (error) {
-      if (controller.signal.aborted) return
-      if (isAuthHandled(error)) return
-      console.error('Fetch active fisma systems error:', error)
-    }
-  }, [canRead])
+  // Fisma-system metadata for the Assign Systems modal. Fetched once here
+  // instead of inside the modal so opening the modal only costs the two
+  // per-user reads (assigned + assignable) - not the two global reads
+  // (active + decommissioned). Held for as long as the table is mounted,
+  // so repeat opens reuse it. Both reads are label sources only, so a
+  // failure is non-fatal: the picker still offers the right options and
+  // in-scope chips still label from the per-user assignable response.
   useEffect(() => {
-    loadActiveSystems()
-    return () => activeSystemsCtrlRef.current?.abort()
-  }, [loadActiveSystems])
+    if (!isAdmin) return
+    const controller = new AbortController()
+    async function loadFismaSystems() {
+      const [activeRes, decommRes] = await Promise.allSettled([
+        axiosInstance.get<{ data: FismaSystemType[] | null }>('/fismasystems', {
+          signal: controller.signal,
+        }),
+        axiosInstance.get<{ data: FismaSystemType[] | null }>(
+          '/fismasystems?decommissioned=true',
+          { signal: controller.signal }
+        ),
+      ])
+      if (controller.signal.aborted) return
+      if (activeRes.status === 'fulfilled') {
+        setAllSystems(activeRes.value.data.data ?? [])
+      } else if (!isAuthHandled(activeRes.reason)) {
+        console.error('Fetch active fisma systems failed:', activeRes.reason)
+      }
+      if (decommRes.status === 'fulfilled') {
+        setDecommSystems(decommRes.value.data.data ?? [])
+      } else if (!isAuthHandled(decommRes.reason)) {
+        console.warn(
+          'Fetch decommissioned fisma systems failed; decommissioned assignments will chip without a "(Decommissioned)" suffix until the next refresh:',
+          decommRes.reason
+        )
+      }
+    }
+    loadFismaSystems()
+    return () => {
+      controller.abort()
+    }
+  }, [isAdmin])
+
   // OpDiv options for the grant modal: assignable children only (the HHS
   // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
   // own OpDivs, so narrow the option set to their own grants; the server
@@ -931,11 +916,12 @@ export default function UserTable() {
         text={snackBarText}
       />
       <AssignSystemModal
-        fismaSystemMap={fismaSystemsMap}
         open={openModal}
         handleClose={handleCloseModal}
         userid={userId}
         userName={assignModalUserName}
+        allSystems={allSystems}
+        decommSystems={decommSystems}
       />
       <OpDivGrantModal
         open={openOpDivModal}
