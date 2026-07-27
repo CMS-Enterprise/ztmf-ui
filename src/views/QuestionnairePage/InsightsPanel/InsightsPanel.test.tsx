@@ -422,16 +422,106 @@ describe('InsightsPanel', () => {
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
   })
 
-  it('derives the ARS Controls total from the sources, not a standalone count', () => {
+  it('surfaces source-touched controls under "Aligns with ARS Controls", with no standalone count', () => {
     // fullPayload carries no ars_* arrays, but its Kion finding maps to IA-02 — the
-    // union surfaces that control (failing) and the header counts it. There is no
-    // longer a source-less count: the total IS the union of source controls.
+    // union surfaces that control (failing) under the alignment section. There is no
+    // "N of M satisfied" count (the union denominator is not the official ARS total).
     render(<InsightsPanel payload={fullPayload} />)
     fireEvent.click(screen.getByRole('button', { name: /details/i }))
-    expect(screen.getByText(/0 of 1 satisfied/)).toBeInTheDocument()
+    expect(screen.getByText('Aligns with ARS Controls:')).toBeInTheDocument()
+    expect(screen.queryByText(/of \d+ satisfied/)).not.toBeInTheDocument()
     expect(screen.getByText('IA-02').textContent).toContain('✗')
     // A control no source touched does not appear.
     expect(screen.queryByText('IA-01')).not.toBeInTheDocument()
+  })
+
+  it('orders the ARS control union failing first, then satisfied, then not satisfied', () => {
+    render(
+      <InsightsPanel
+        payload={{
+          suggested_score: 1,
+          ars_satisfied_controls: ['AC-2'],
+          ars_not_satisfied_controls: ['CM-6'],
+          ars_failing_controls: ['SC-7'],
+        }}
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Same failing-first rule the feed blocks follow: problems sit at the top.
+    const failing = screen.getByText('SC-7')
+    const satisfied = screen.getByText('AC-2')
+    const unsatisfied = screen.getByText('CM-6')
+    expect(
+      failing.compareDocumentPosition(satisfied) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+    expect(
+      satisfied.compareDocumentPosition(unsatisfied) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it('carries a keyboard-reachable disclaimer that alignment is not a control determination', async () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Query by role, not by label: getByLabelText reads the attribute directly and
+    // passes even on an aria-hidden node, which is how SvgIcon's default
+    // aria-hidden slipped through. getByRole resolves the real accessible name.
+    const info = screen.getByRole('img', { name: /About ARS alignment/i })
+    expect(info).toHaveAttribute('aria-hidden', 'false')
+    // Name stays short; the disclaimer prose is the description, not the name.
+    expect(info).toHaveAccessibleName('About ARS alignment')
+    expect(info).not.toHaveAccessibleName(/does not constitute/i)
+    // Focusable (508) and the tooltip fires on focus, not just hover.
+    expect(info).toHaveAttribute('tabindex', '0')
+    fireEvent.focus(info)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /does not constitute an assessed control satisfaction determination/i
+    )
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /CFACTS remains the system of record/
+    )
+  })
+
+  it('orders the drawer with "Based on" first and the ARS alignment last', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const based = screen.getByText('Based on:')
+    const aligns = screen.getByText('Aligns with ARS Controls:')
+    // "Based on" leads the drawer; the control-union alignment sits at the bottom.
+    expect(
+      based.compareDocumentPosition(aligns) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+
+    // Assert the middle too, not just the bookends: a partial reorder that left
+    // CFACTS or a per-source section on the wrong side would still pass the two
+    // outer assertions. Full order is Based on → CFACTS → sources → ARS align.
+    const follows = (a: HTMLElement, b: HTMLElement) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING)
+    // "SecurityHub:" appears twice once the drawer is open: on the source chip in
+    // the header and again as the section heading. Pick the section by what makes
+    // it the section — its heading sits next to the check rollup summary — rather
+    // than by DOM position, so this cannot silently latch onto the wrong node.
+    const sectionHeading = (label: string) => {
+      const match = screen
+        .getAllByText(`${label}:`)
+        .find((el) =>
+          /\d+ of \d+ checks? passed|\d+ findings?/.test(
+            el.parentElement?.textContent ?? ''
+          )
+        )
+      if (!match) throw new Error(`no section heading found for ${label}`)
+      return match
+    }
+    // CFACTS has no check rollup, so anchor it on its reasoning text.
+    const cfacts = screen.getByText(/IDM-Okta detected/)
+    const sechub = sectionHeading('SecurityHub')
+    const kion = sectionHeading('Kion')
+    expect(follows(based, cfacts)).toBe(true)
+    expect(follows(cfacts, sechub)).toBe(true)
+    // Kion sits last among the sources (it usually carries the most checks).
+    expect(follows(sechub, kion)).toBe(true)
+    expect(follows(kion, aligns)).toBe(true)
   })
 
   it('surfaces a control a Kion check passes in the ARS Controls union (SC-12)', () => {
@@ -867,6 +957,101 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     ).toBeInTheDocument()
   })
 
+  // A Kion check whose dictionary description is a bare label ("Password Policy")
+  // while the substance — what it means and how to fix it — sits in remediation.
+  // Real XOC q10 shape; the chip swap in the prior PR left that text unreachable.
+  const kionWithRemediation: InsightPayload = {
+    suggested_score: 1,
+    has_kion_data: true,
+    findings: {
+      kion: [
+        {
+          id: 'account-without-compliant-password-policy',
+          nist_controls: 'IA-5',
+          description: 'Password Policy',
+          remediation:
+            'At the infrastructure layer, Kion integrated with Active Directory works with AWS IAM to enforce the password policy.',
+        },
+      ],
+    },
+  }
+
+  it('keeps the "How to fix" remediation reachable on a feed chip, in the hover and the accessible name', async () => {
+    render(<InsightsPanel payload={kionWithRemediation} />)
+    expand()
+
+    // The chip carries its own aria-label, so MUI never wires the tooltip node up
+    // as a description — the remediation has to be in both places or it is
+    // sighted-only. Assert both, not just the visual hover.
+    const chip = screen.getByRole('img', {
+      name: /account-without-compliant-password-policy.*Password Policy.*Failed.*How to fix: At the infrastructure layer/,
+    })
+    expect(chip).toBeInTheDocument()
+
+    fireEvent.focus(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('How to fix:')
+    expect(tip).toHaveTextContent(
+      /At the infrastructure layer, Kion integrated/
+    )
+    // The thin description and the control/state footer still lead the hover.
+    expect(tip).toHaveTextContent('Password Policy')
+    expect(tip).toHaveTextContent('Control: IA-5')
+  })
+
+  it('never offers "How to fix" on a passing check, even when the entry carries remediation', async () => {
+    // A pass has nothing to fix; surfacing remediation there is wrong guidance in
+    // a compliance tool. The pipeline does not emit remediation on passing entries
+    // today, but InsightFinding permits it, so the guard is on the render path.
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 2,
+            has_kion_data: true,
+            kion_passing: [
+              {
+                id: 'iam-user-inactive',
+                nist_controls: 'AC-2',
+                description: 'Identify inactive IAM Users',
+                remediation: 'Disable the unused IAM user.',
+                level: 1,
+              },
+            ],
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    expand()
+    const chip = screen.getByRole('img', {
+      name: /^iam-user-inactive — Identify inactive IAM Users — Passed$/,
+    })
+    expect(chip).not.toHaveAccessibleName(/How to fix/)
+    fireEvent.focus(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('Identify inactive IAM Users')
+    expect(tip).not.toHaveTextContent('How to fix')
+    expect(tip).not.toHaveTextContent(/Disable the unused IAM user/)
+  })
+
+  it('drops the chip remediation from hover and accessible name when INSIGHTS_SUGGEST_FIX_ENABLED is off', async () => {
+    CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED = false
+    try {
+      render(<InsightsPanel payload={kionWithRemediation} />)
+      expand()
+      const chip = screen.getByRole('img', {
+        name: /^account-without-compliant-password-policy — Password Policy — Failed$/,
+      })
+      fireEvent.focus(chip)
+      const tip = await screen.findByRole('tooltip')
+      expect(tip).toHaveTextContent('Password Policy')
+      expect(tip).not.toHaveTextContent('How to fix')
+      expect(tip).not.toHaveTextContent(/At the infrastructure layer/)
+    } finally {
+      CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED = true
+    }
+  })
+
   it('pluralizes the header for a single check', () => {
     render(
       <InsightsPanel
@@ -967,6 +1152,147 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     expect(screen.getByText('IAM.10').textContent).toContain('✗')
     // Title lives in the hover now, not as body text.
     expect(screen.queryByText('MFA should be enabled')).not.toBeInTheDocument()
+  })
+
+  it('collapses the passing bulk behind a toggle, keeps failing chips at the top, and expands on click', () => {
+    const passing = Array.from({ length: 9 }, (_, i) => ({
+      id: `pass-check-${i}`,
+      nist_controls: 'SC-7',
+      level: 1,
+    }))
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 2,
+            has_hardenize_data: true,
+            hardenize_passing: passing,
+            findings: {
+              hardenize: [
+                { id: 'fail-check', nist_controls: 'SC-8', severity: 'error' },
+              ],
+            },
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    // Failing chip shown at the top; the 9 passing checks are collapsed away.
+    expect(screen.getByText('fail-check').textContent).toContain('✗')
+    expect(screen.queryByText('pass-check-0')).not.toBeInTheDocument()
+    // Toggle reveals them.
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    )
+    expect(screen.getByText('pass-check-0')).toBeInTheDocument()
+    // Failing still precedes the passing chips in the DOM.
+    const fail = screen.getByText('fail-check')
+    const pass0 = screen.getByText('pass-check-0')
+    expect(
+      fail.compareDocumentPosition(pass0) & Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  })
+
+  it('collapses again when the payload changes, so an expanded block does not leak into the next question', () => {
+    const block = (prefix: string) =>
+      ({
+        suggested_score: 2,
+        has_hardenize_data: true,
+        hardenize_passing: Array.from({ length: 9 }, (_, i) => ({
+          id: `${prefix}-pass-${i}`,
+          nist_controls: 'SC-7',
+          level: 1,
+        })),
+        findings: {
+          hardenize: [
+            { id: `${prefix}-fail`, nist_controls: 'SC-8', severity: 'error' },
+          ],
+        },
+      }) as unknown as InsightPayload
+
+    const { rerender } = render(
+      <InsightsPanel payload={block('q1')} questionId={101} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    )
+    expect(screen.getByText('q1-pass-0')).toBeInTheDocument()
+
+    // Same component instance, new question: the panel and the block keep their
+    // React keys, so the expanded state has to be reset explicitly. The drawer
+    // itself stays open across the change (separate pre-existing behavior), so
+    // the new question's chips are on screen without another details click.
+    rerender(<InsightsPanel payload={block('q2')} questionId={102} />)
+    expect(screen.queryByText('q2-pass-0')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    ).toHaveAttribute('aria-expanded', 'false')
+    // The failing chip is never collapsed, on either question.
+    expect(screen.getByText('q2-fail')).toBeInTheDocument()
+  })
+
+  it('collapses on a question change even when the two questions share an identical check set', () => {
+    // The same check legitimately maps to several questions, so a key derived
+    // from the rendered findings would alias and skip the reset. The question id
+    // is what distinguishes them.
+    const sameChecks = {
+      suggested_score: 2,
+      has_hardenize_data: true,
+      hardenize_passing: Array.from({ length: 9 }, (_, i) => ({
+        id: `shared-pass-${i}`,
+        nist_controls: 'SC-7',
+        level: 1,
+      })),
+      findings: {
+        hardenize: [
+          { id: 'shared-fail', nist_controls: 'SC-8', severity: 'error' },
+        ],
+      },
+    } as unknown as InsightPayload
+
+    const { rerender } = render(
+      <InsightsPanel payload={sameChecks} questionId={201} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    )
+    expect(screen.getByText('shared-pass-0')).toBeInTheDocument()
+
+    rerender(<InsightsPanel payload={sameChecks} questionId={202} />)
+    expect(screen.queryByText('shared-pass-0')).not.toBeInTheDocument()
+  })
+
+  it('keeps the block expanded while staying on the same question', () => {
+    // The reset is tied to the question changing, not to any re-render: a parent
+    // re-render on the same question must not collapse what the user opened.
+    const payload = {
+      suggested_score: 2,
+      has_hardenize_data: true,
+      hardenize_passing: Array.from({ length: 9 }, (_, i) => ({
+        id: `stay-pass-${i}`,
+        nist_controls: 'SC-7',
+        level: 1,
+      })),
+      findings: {
+        hardenize: [
+          { id: 'stay-fail', nist_controls: 'SC-8', severity: 'error' },
+        ],
+      },
+    } as unknown as InsightPayload
+
+    const { rerender } = render(
+      <InsightsPanel payload={payload} questionId={301} />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    fireEvent.click(
+      screen.getByRole('button', { name: /Show all 9 passing checks/i })
+    )
+    expect(screen.getByText('stay-pass-0')).toBeInTheDocument()
+
+    rerender(<InsightsPanel payload={payload} questionId={301} />)
+    expect(screen.getByText('stay-pass-0')).toBeInTheDocument()
   })
 
   it('renders Hardenize as chips when its passing array ships, keeping affected domains in the hover', async () => {

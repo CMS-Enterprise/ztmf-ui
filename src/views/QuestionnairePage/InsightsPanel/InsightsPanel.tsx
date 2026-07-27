@@ -4,6 +4,7 @@ import Typography from '@mui/material/Typography'
 import Tooltip from '@mui/material/Tooltip'
 import Collapse from '@mui/material/Collapse'
 import Link from '@mui/material/Link'
+import InfoOutlined from '@mui/icons-material/InfoOutlined'
 import type { InsightPayload, InsightFinding } from '@/types'
 import CONFIG from '@/utils/config'
 import {
@@ -16,6 +17,11 @@ import {
 
 type Props = {
   payload: InsightPayload
+  // Identity of the question this payload belongs to. The panel stays mounted
+  // across a question change, so per-question UI state (the collapsed passing
+  // bulk) needs an explicit signal that the question moved. Optional: the panel
+  // renders fine without it, it just cannot reset that state.
+  questionId?: string | number
 }
 
 // ZTMF maturity levels. The pipeline sends numeric scores; labels come with
@@ -32,6 +38,13 @@ function maturityLabel(score?: number | null): string | null {
   if (score == null) return null
   return MATURITY_LABEL[score] ?? null
 }
+
+// Disclaimer on the "Aligns with ARS Controls" section. Alignment is a mapping of
+// automated evidence to ARS controls — not an assessed control determination.
+// CFACTS stays the system of record, so a green chip here must not be read as the
+// control being satisfied for authorization purposes.
+const ARS_ALIGN_DISCLAIMER =
+  'Alignment maps automated security evidence to ARS 5.2 controls. It is indicative only and does not constitute an assessed control satisfaction determination or a compliance attestation. CFACTS remains the system of record for control status.'
 
 // Suggested-pill tint keyed by score. Mirrors the prototype's trad/init/adv/opt
 // palette. Unknown/blank score renders neutral.
@@ -296,7 +309,7 @@ export function OptionInsightBadges({
   )
 }
 
-function InsightsPanelInner({ payload }: Props) {
+function InsightsPanelInner({ payload, questionId }: Props) {
   const [open, setOpen] = React.useState(false)
 
   // Parent already gates on payload presence, but guard so the component is
@@ -547,58 +560,26 @@ function InsightsPanelInner({ payload }: Props) {
 
       <Collapse in={open} unmountOnExit>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #e0e4f0' }}>
-          {/* ARS Controls — the cross-source control TOTAL: the union of every
-              control any evidence source touches (CFACTS coverage + the NIST
-              control each Kion / SecurityHub / Hardenize check maps to), each
-              rolled up weakest-link. Leads the drawer as the richest signal. A
-              control Kion passes (e.g. SC-12) shows satisfied here even if CFACTS
-              never assessed it — this row is the total, not CFACTS alone. */}
-          {controlsTotal > 0 && (
-            <Box sx={{ mb: 0.75 }}>
-              <Typography sx={{ fontSize: 12, color: '#555' }}>
-                <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                  ARS Controls:
-                </Box>{' '}
-                {controlsSatisfied.length} of {controlsTotal} satisfied
-              </Typography>
-              <Box
-                sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
-              >
-                {[
-                  ...controlsSatisfied,
-                  ...controlsUnsatisfied,
-                  ...controlsFailing,
-                ].map((c, i) => (
-                  <ControlChip
-                    key={`${c.state}-${c.id}-${i}`}
-                    id={c.id}
-                    variant={c.conflict ? 'conflict' : c.state}
-                    tooltip={<ControlTooltip control={c} />}
-                    ariaLabel={controlAriaLabel(c)}
-                  />
-                ))}
-              </Box>
-            </Box>
-          )}
-
-          {/* CFACTS — its own section, distinct from the ARS Controls total. Shown
-              whenever CFACTS has any of its own signal (reasoning, auth methods, or
-              a score) so a scored CFACTS chip always has a matching "why". */}
-          {cfactsText && (
-            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
-              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
-                CFACTS:
-              </Box>{' '}
-              {cfactsText}
-            </Typography>
-          )}
-
+          {/* "Based on" leads the drawer — the active source chips that produced
+              this insight, before any per-source detail. */}
           {basedOnSources.length > 0 && (
             <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
               <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                 Based on:
               </Box>{' '}
               {basedOnSources.join(', ')}
+            </Typography>
+          )}
+
+          {/* CFACTS — its own section. Shown whenever CFACTS has any of its own
+              signal (reasoning, auth methods, or a score) so a scored CFACTS chip
+              always has a matching "why". */}
+          {cfactsText && (
+            <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
+              <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                CFACTS:
+              </Box>{' '}
+              {cfactsText}
             </Typography>
           )}
 
@@ -616,6 +597,7 @@ function InsightsPanelInner({ payload }: Props) {
                   passing={s.passing}
                   failing={s.failing}
                   hasPassing={s.hasPassing}
+                  resetKey={questionId}
                 />
               ) : null
             }
@@ -647,6 +629,86 @@ function InsightsPanelInner({ payload }: Props) {
               </Typography>
             )
           })}
+
+          {/* ARS Controls — the cross-source control union, at the bottom and
+              framed as alignment: the ARS controls the evidence touches, each
+              rolled up weakest-link. No "N of M" count — the union denominator is
+              not the official ARS total, so the chips carry the state instead. */}
+          {controlsTotal > 0 && (
+            <Box sx={{ mb: 0.75 }}>
+              <Typography
+                component="div"
+                sx={{
+                  fontSize: 12,
+                  color: '#555',
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                }}
+              >
+                <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
+                  Aligns with ARS Controls:
+                </Box>
+                {/* describeChild + a node (not string) title is what splits name
+                    from description here. Without describeChild, Tooltip takes the
+                    aria-label branch and the child's own aria-label wins the props
+                    spread, so the disclaimer is never wired up at all and the
+                    popper's text sits orphaned in the a11y tree. With it, the
+                    disclaimer becomes aria-describedby. The title has to be a node
+                    rather than the bare string, or Tooltip also sets a native title
+                    attribute and the browser renders a second tooltip over ours. */}
+                <Tooltip
+                  describeChild
+                  title={<span>{ARS_ALIGN_DISCLAIMER}</span>}
+                  placement="top"
+                  arrow
+                >
+                  <InfoOutlined
+                    role="img"
+                    // SvgIcon defaults to aria-hidden when no titleAccess is given,
+                    // which would drop this from the accessibility tree even with a
+                    // role and a name. Un-hide it explicitly.
+                    aria-hidden={false}
+                    // Short name; the disclaimer prose rides in the description
+                    // (aria-describedby) rather than bloating the accessible name.
+                    aria-label="About ARS alignment"
+                    tabIndex={0}
+                    sx={{
+                      fontSize: 14,
+                      // AA non-text contrast (WCAG 1.4.11): needs 3:1 on the panel's
+                      // #f8f9fe. Matches the greys used elsewhere in this file.
+                      color: '#5c636a',
+                      cursor: 'help',
+                      '&:focus-visible': {
+                        outline: '2px solid #5666b8',
+                        outlineOffset: '1px',
+                        borderRadius: '2px',
+                      },
+                    }}
+                  />
+                </Tooltip>
+              </Typography>
+              <Box
+                sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
+              >
+                {[
+                  ...controlsFailing,
+                  ...controlsSatisfied,
+                  ...controlsUnsatisfied,
+                ].map((c) => (
+                  <ControlChip
+                    // rollupControls dedupes by control id, so the id alone is
+                    // unique across all three state buckets.
+                    key={c.id}
+                    id={c.id}
+                    variant={c.conflict ? 'conflict' : c.state}
+                    tooltip={<ControlTooltip control={c} />}
+                    ariaLabel={controlAriaLabel(c)}
+                  />
+                ))}
+              </Box>
+            </Box>
+          )}
         </Box>
       </Collapse>
     </Box>
@@ -825,6 +887,17 @@ function CheckTooltip({
   // present so both feeds read the same. The slug is only a last-resort title so
   // the hover never names nothing.
   const name = asText(finding?.description) ?? asText(finding?.title)
+  // "How to fix" — the same remediation text FindingRow shows. Kion/SecurityHub
+  // render as chips now, so the card that used to carry this is only reached by
+  // Hardenize; without it here the remediation is unreachable for those sources.
+  // It also carries the substance when a dictionary description is a bare label
+  // (e.g. account-without-compliant-password-policy → "Password Policy").
+  // Failing checks only: a passing check has nothing to fix, and telling a
+  // reviewer how to remediate something that passed is wrong guidance in a
+  // compliance tool. Same call the passing arrays make for severity ("a pass
+  // isn't a severity event"). The type allows remediation on a passing entry
+  // even though the pipeline does not emit it today.
+  const remediation = pass ? undefined : asText(finding?.remediation)
   const nist = asText(finding?.nist_controls)
   const severity = asText(finding?.severity)
   const level = typeof finding?.level === 'number' ? finding.level : null
@@ -858,6 +931,14 @@ function CheckTooltip({
         )
       )}
       {meta && <Box sx={{ fontSize: 10, mt: 0.5, opacity: 0.8 }}>{meta}</Box>}
+      {CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED && remediation && (
+        <Box sx={{ fontSize: 10, lineHeight: 1.5, mt: 0.5, opacity: 0.9 }}>
+          <Box component="span" sx={{ fontWeight: 600 }}>
+            How to fix:
+          </Box>{' '}
+          {remediation}
+        </Box>
+      )}
       {domains.length > 0 && (
         <Box sx={{ mt: 0.5 }}>
           <Box sx={{ fontSize: 10, fontWeight: 600, opacity: 0.9 }}>
@@ -899,21 +980,81 @@ function FeedCheckBlock({
   passing,
   failing,
   hasPassing,
+  resetKey,
 }: {
   label: string
   passing: InsightFinding[]
   failing: InsightFinding[]
   hasPassing: boolean
+  resetKey?: string | number
 }) {
-  const chips = [
-    ...passing.map((f) => ({ pass: true, f })),
-    ...failing.map((f) => ({ pass: false, f })),
-  ]
+  const [showAllPassing, setShowAllPassing] = React.useState(false)
+  // Ties the toggle to the chip region it reveals (aria-controls), so assistive
+  // tech announces the button/region relationship, not just the expanded state.
+  const chipRegionId = React.useId()
+  // Moving to another question swaps the payload but keeps this component mounted
+  // (the panel and this block hold the same React key across a question change),
+  // so without an explicit reset an expanded block stays expanded on the next
+  // question with no click. resetKey is the real question id, threaded from the
+  // page: InsightPayload itself carries no question identity (fismasystemid /
+  // questionid live on the Insight wrapper), but the callsite that renders the
+  // panel has it. Deriving a key from the rendered check set instead would alias
+  // whenever two questions share the same checks — exactly the leak being fixed.
+  //
+  // Adjusted during render rather than in an effect: an effect runs after commit,
+  // so the next question would paint expanded for a frame before collapsing, and
+  // aria-expanded would flip true→false after paint (announced as a spurious
+  // state change). This is React's documented way to reset state on a prop change.
+  const [prevResetKey, setPrevResetKey] = React.useState(resetKey)
+  if (prevResetKey !== resetKey) {
+    setPrevResetKey(resetKey)
+    setShowAllPassing(false)
+  }
   const passed = passing.length
-  const total = chips.length
+  const total = passing.length + failing.length
   const summary = hasPassing
     ? `${passed} of ${total} check${total === 1 ? '' : 's'} passed`
     : `${failing.length} finding${failing.length === 1 ? '' : 's'}`
+  // Collapse the passing bulk once it spills past a couple of rows (mainly
+  // Hardenize, which can carry 30+ passing checks). Failing chips (findings) are
+  // always shown AND rendered first, so problems stay at the top and visible even
+  // when the passing checks are hidden behind the toggle.
+  const COLLAPSE_PASSING_ABOVE = 8
+  const collapsePassing = passing.length > COLLAPSE_PASSING_ABOVE
+  const passingShown = !collapsePassing || showAllPassing ? passing : []
+
+  const renderChip = (f: InsightFinding, pass: boolean, key: string) => {
+    const nist = asText(f?.nist_controls)
+    const slug = asText(f?.id) ?? asText(f?.title)
+    const desc = asText(f?.description) ?? asText(f?.title)
+    // Fold pass/fail into the accessible name — the ✓/✗ + color is the only other
+    // place that distinction lives, and neither is exposed to a screen reader (508).
+    // Remediation joins it too: the chip carries its own aria-label, so the
+    // tooltip's node content is never announced, and without this the "how to fix"
+    // text the hover shows would be sighted-only.
+    // Failing checks only, matching CheckTooltip — see the note there.
+    const remediation =
+      !pass && CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED
+        ? asText(f?.remediation)
+        : undefined
+    const ariaLabel = [
+      slug,
+      desc,
+      pass ? 'Passed' : 'Failed',
+      remediation ? `How to fix: ${remediation}` : undefined,
+    ]
+      .filter(Boolean)
+      .join(' — ')
+    return (
+      <ControlChip
+        key={key}
+        id={slug ?? nist ?? '—'}
+        variant={pass ? 'satisfied' : 'failing'}
+        tooltip={<CheckTooltip finding={f} pass={pass} />}
+        ariaLabel={ariaLabel || undefined}
+      />
+    )
+  }
   return (
     <Box sx={{ mb: 0.75 }}>
       <Typography sx={{ fontSize: 12, color: '#555' }}>
@@ -923,28 +1064,37 @@ function FeedCheckBlock({
         {summary}
       </Typography>
       {total > 0 && (
-        <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}>
-          {chips.map(({ pass, f }, i) => {
-            const nist = asText(f?.nist_controls)
-            const slug = asText(f?.id) ?? asText(f?.title)
-            const desc = asText(f?.description) ?? asText(f?.title)
-            // Fold pass/fail into the accessible name — the ✓/✗ + color is the
-            // only other place that distinction lives, and neither is exposed to
-            // a screen reader (508).
-            const ariaLabel = [slug, desc, pass ? 'Passed' : 'Failed']
-              .filter(Boolean)
-              .join(' — ')
-            return (
-              <ControlChip
-                key={`${pass ? 'p' : 'f'}-${slug ?? ''}-${i}`}
-                id={slug ?? nist ?? '—'}
-                variant={pass ? 'satisfied' : 'failing'}
-                tooltip={<CheckTooltip finding={f} pass={pass} />}
-                ariaLabel={ariaLabel || undefined}
-              />
-            )
-          })}
+        <Box
+          id={chipRegionId}
+          sx={{ display: 'flex', flexWrap: 'wrap', gap: 0.5, mt: 0.5 }}
+        >
+          {failing.map((f, i) =>
+            renderChip(f, false, `f-${asText(f?.id) ?? ''}-${i}`)
+          )}
+          {passingShown.map((f, i) =>
+            renderChip(f, true, `p-${asText(f?.id) ?? ''}-${i}`)
+          )}
         </Box>
+      )}
+      {collapsePassing && (
+        <Link
+          component="button"
+          type="button"
+          onClick={() => setShowAllPassing((v) => !v)}
+          aria-expanded={showAllPassing}
+          aria-controls={chipRegionId}
+          sx={{
+            fontSize: 11,
+            mt: 0.5,
+            color: '#3d5a99',
+            cursor: 'pointer',
+            display: 'inline-block',
+          }}
+        >
+          {showAllPassing
+            ? 'Show fewer'
+            : `Show all ${passing.length} passing checks`}
+        </Link>
       )}
     </Box>
   )
