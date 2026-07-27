@@ -394,9 +394,16 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
 
   return (
     <Grid container spacing={3}>
-      {/* System Identity */}
-      <Grid item xs={12} md={7}>
-        <Card variant="outlined">
+      {/* Left column: System Identity, then Contacts. Contacts fills the
+          vertical space the taller right column would otherwise leave blank,
+          matching the read view. */}
+      <Grid
+        item
+        xs={12}
+        md={7}
+        sx={{ display: 'flex', flexDirection: 'column' }}
+      >
+        <Card variant="outlined" sx={{ mb: 3 }}>
           <CardHeader
             title="System Identity"
             titleTypographyProps={{ variant: 'h6' }}
@@ -413,6 +420,22 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             {identityFields.map((field) =>
               renderEditField(field, props, attributes)
             )}
+          </CardContent>
+        </Card>
+        <Card variant="outlined" sx={{ flex: 1 }}>
+          <CardHeader
+            title="Contacts"
+            titleTypographyProps={{ variant: 'h6' }}
+            sx={{ pb: 0 }}
+          />
+          <CardContent>
+            <Grid container spacing={3}>
+              {contactFields.map((field) => (
+                <Grid item xs={12} key={field.key}>
+                  {renderEditField(field, props, attributes)}
+                </Grid>
+              ))}
+            </Grid>
           </CardContent>
         </Card>
       </Grid>
@@ -632,26 +655,6 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             {orgFields.map((field) =>
               renderEditField(field, props, attributes)
             )}
-          </CardContent>
-        </Card>
-      </Grid>
-
-      {/* Contacts — full width, fields horizontal */}
-      <Grid item xs={12}>
-        <Card variant="outlined">
-          <CardHeader
-            title="Contacts"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            <Grid container spacing={3}>
-              {contactFields.map((field) => (
-                <Grid item xs={12} sm={6} key={field.key}>
-                  {renderEditField(field, props, attributes)}
-                </Grid>
-              ))}
-            </Grid>
           </CardContent>
         </Card>
       </Grid>
