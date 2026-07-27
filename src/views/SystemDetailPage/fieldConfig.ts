@@ -2,7 +2,7 @@ import { FismaSystemType } from '@/types'
 
 export type FieldSection = 'identity' | 'organization' | 'contacts' | 'extended'
 
-export type FieldType = 'text' | 'email' | 'select' | 'multiselect'
+export type FieldType = 'text' | 'email' | 'select' | 'multiselect' | 'boolean'
 
 export interface FieldConfig {
   key: keyof FismaSystemType
@@ -116,7 +116,7 @@ export const fieldConfigs: FieldConfig[] = [
     label: 'HVA',
     section: 'extended',
     required: false,
-    type: 'select',
+    type: 'boolean',
   },
   {
     key: 'fips',
@@ -137,7 +137,7 @@ export const fieldConfigs: FieldConfig[] = [
     label: 'Cloud System',
     section: 'extended',
     required: false,
-    type: 'select',
+    type: 'boolean',
   },
   {
     key: 'cloud_service_model',
@@ -186,7 +186,7 @@ export const fieldConfigs: FieldConfig[] = [
     label: 'Legacy',
     section: 'extended',
     required: false,
-    type: 'select',
+    type: 'boolean',
   },
 ]
 

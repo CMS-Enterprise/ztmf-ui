@@ -26,13 +26,14 @@ import {
 } from '@/views/EditSystemModal/validators'
 import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import {
-  useSystemMetadataVocab,
-  toSelectOptionsWithCurrent,
-  parseCombo,
-  serializeCombo,
-  multiSelectOptionsWithCurrent,
-  type SystemMetadataVocab,
+  useSystemAttributes,
+  optionsForField,
+  BOOLEAN_OPTIONS,
+  boolToSelectValue,
+  selectValueToBool,
+  isCrossFieldHidden,
 } from '@/utils/systemMetadataVocab'
+import type { SystemAttribute } from '@/types'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import {
@@ -57,7 +58,12 @@ interface SystemDetailEditViewProps {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     key: string
   ) => void
-  onFieldChange: (key: string, value: string) => void
+  // Sets an extended field to its typed value: a string for enums/text, a
+  // boolean|null for the tri-state booleans, or a string[] for the multi-select.
+  onFieldChange: (
+    key: string,
+    value: string | boolean | string[] | null
+  ) => void
   onValidatedFieldChange: (key: string, isValid: boolean, value: string) => void
   onDecommissionDateChange: (value: string) => void
   onDecommissionNotesChange: (value: string) => void
@@ -80,7 +86,7 @@ interface SystemDetailEditViewProps {
 function renderEditField(
   field: FieldConfig,
   props: SystemDetailEditViewProps,
-  vocab: SystemMetadataVocab,
+  attributes: SystemAttribute[],
   disabled = false
 ) {
   const {
@@ -112,16 +118,13 @@ function renderEditField(
 
   if (field.type === 'select') {
     const current = editedSystem[field.key] as string | null | undefined
-    // datacenterenvironment draws from its own reference vocab; the extended
-    // metadata fields draw from the canonical vocab. Both preserve the current
-    // value as a disabled option when it is not in the served set.
+    // datacenterenvironment draws from its own reference vocab (and preserves a
+    // legacy value); the canonical enum fields draw from systemattributes,
+    // where off-canon values cannot occur so no preservation is needed.
     const isDataCenter = field.key === 'datacenterenvironment'
     const options = isDataCenter
       ? toDropdownOptionsWithCurrent(datacenterEnvironments, current)
-      : toSelectOptionsWithCurrent(
-          (vocab as Record<string, string[]>)[field.key] ?? [],
-          current
-        )
+      : optionsForField(attributes, field.key)
     return (
       <TextField
         key={field.key}
@@ -133,23 +136,29 @@ function renderEditField(
         value={current || ''}
         fullWidth
         disabled={disabled}
-        error={!formValid[field.key]}
-        helperText={!formValid[field.key] ? formValidErrorText[field.key] : ''}
+        // Optional fields have no formValid entry; gate the error on required
+        // so they do not render permanently invalid.
+        error={field.required && !formValid[field.key]}
+        helperText={
+          field.required && !formValid[field.key]
+            ? formValidErrorText[field.key]
+            : ''
+        }
         InputLabelProps={{ sx: { marginTop: 0 } }}
         sx={{ mt: 2 }}
         onChange={(e) =>
           field.required
             ? onInputChange(e, field.key)
-            : onFieldChange(field.key, e.target.value)
+            : // enum clear signal is '' so the backend's blankToNil nulls it.
+              onFieldChange(field.key, e.target.value)
         }
       >
-        {/* Optional fields offer a blank option so a value can be cleared. */}
         {!field.required && <MenuItem value="">&mdash; None &mdash;</MenuItem>}
         {options.map((option) => (
           <MenuItem
             key={option.value}
             value={option.value}
-            disabled={option.disabled}
+            disabled={(option as { disabled?: boolean }).disabled}
           >
             {option.label}
           </MenuItem>
@@ -158,12 +167,7 @@ function renderEditField(
     )
   }
 
-  if (field.type === 'multiselect') {
-    const currentParts = parseCombo(editedSystem[field.key] as string | null)
-    const options = multiSelectOptionsWithCurrent(
-      (vocab as Record<string, string[]>)[field.key] ?? [],
-      currentParts
-    )
+  if (field.type === 'boolean') {
     return (
       <TextField
         key={field.key}
@@ -171,7 +175,39 @@ function renderEditField(
         select
         label={field.label}
         variant="standard"
-        value={currentParts}
+        value={boolToSelectValue(
+          editedSystem[field.key] as boolean | null | undefined
+        )}
+        fullWidth
+        disabled={disabled}
+        InputLabelProps={{ sx: { marginTop: 0 } }}
+        sx={{ mt: 2 }}
+        // Unknown ('') maps to null - the boolean clear signal.
+        onChange={(e) =>
+          onFieldChange(field.key, selectValueToBool(e.target.value))
+        }
+      >
+        {BOOLEAN_OPTIONS.map((o) => (
+          <MenuItem key={o.label} value={o.value}>
+            {o.label}
+          </MenuItem>
+        ))}
+      </TextField>
+    )
+  }
+
+  if (field.type === 'multiselect') {
+    const current =
+      (editedSystem[field.key] as string[] | null | undefined) ?? []
+    const options = optionsForField(attributes, field.key)
+    return (
+      <TextField
+        key={field.key}
+        id={`edit-${field.key}`}
+        select
+        label={field.label}
+        variant="standard"
+        value={current}
         fullWidth
         disabled={disabled}
         SelectProps={{
@@ -180,14 +216,14 @@ function renderEditField(
         }}
         InputLabelProps={{ sx: { marginTop: 0 } }}
         sx={{ mt: 2 }}
-        onChange={(e) => {
-          const parts = e.target.value as unknown as string[]
-          onFieldChange(field.key, serializeCombo(parts) ?? '')
-        }}
+        // Deselecting all yields [] - the array clear signal.
+        onChange={(e) =>
+          onFieldChange(field.key, e.target.value as unknown as string[])
+        }
       >
-        {options.map((opt) => (
-          <MenuItem key={opt} value={opt}>
-            {opt}
+        {options.map((o) => (
+          <MenuItem key={o.value} value={o.value}>
+            {o.label}
           </MenuItem>
         ))}
       </TextField>
@@ -350,10 +386,10 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     onSdlSyncToggle,
     targetMaturitySlot,
   } = props
-  const vocab = useSystemMetadataVocab()
   const identityFields = getFieldsBySection('identity')
   const orgFields = getFieldsBySection('organization')
   const contactFields = getFieldsBySection('contacts')
+  const attributes = useSystemAttributes()
   const extendedFields = getFieldsBySection('extended')
 
   return (
@@ -375,7 +411,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           />
           <CardContent>
             {identityFields.map((field) =>
-              renderEditField(field, props, vocab)
+              renderEditField(field, props, attributes)
             )}
           </CardContent>
         </Card>
@@ -593,7 +629,9 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               InputLabelProps={{ shrink: true, sx: { marginTop: 0 } }}
               value={props.opdivName ?? ''}
             />
-            {orgFields.map((field) => renderEditField(field, props, vocab))}
+            {orgFields.map((field) =>
+              renderEditField(field, props, attributes)
+            )}
           </CardContent>
         </Card>
       </Grid>
@@ -610,7 +648,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
             <Grid container spacing={3}>
               {contactFields.map((field) => (
                 <Grid item xs={12} sm={6} key={field.key}>
-                  {renderEditField(field, props, vocab)}
+                  {renderEditField(field, props, attributes)}
                 </Grid>
               ))}
             </Grid>
@@ -632,11 +670,13 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           />
           <CardContent>
             <Grid container spacing={3}>
-              {extendedFields.map((field) => (
-                <Grid item xs={12} sm={6} md={4} key={field.key}>
-                  {renderEditField(field, props, vocab, field.readOnly)}
-                </Grid>
-              ))}
+              {extendedFields
+                .filter((field) => !isCrossFieldHidden(field.key, editedSystem))
+                .map((field) => (
+                  <Grid item xs={12} sm={6} md={4} key={field.key}>
+                    {renderEditField(field, props, attributes, field.readOnly)}
+                  </Grid>
+                ))}
             </Grid>
           </CardContent>
         </Card>

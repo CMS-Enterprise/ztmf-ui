@@ -16,6 +16,7 @@ import {
   EXTENDED_METADATA_SUBHEADER,
 } from '@/constants'
 import { getFieldsBySection, FieldConfig } from './fieldConfig'
+import { formatBool, formatList } from '@/utils/systemMetadataVocab'
 
 interface SystemDetailReadViewProps {
   system: FismaSystemType
@@ -43,12 +44,29 @@ function FieldDisplay({
   )
 }
 
+/**
+ * Read-view display string for a field, keyed off its configured type:
+ * tri-state booleans read as Yes/No/Unknown and decomposed multi-selects as a
+ * comma list, so the raw "true"/array shapes never leak to the page. Text,
+ * email, and single selects fall through to their stored string.
+ *
+ * @param field - The field being rendered.
+ * @param system - The system whose value to format.
+ * @returns The display string (empty string when unset; FieldDisplay shows the placeholder).
+ */
+function formatFieldValue(field: FieldConfig, system: FismaSystemType): string {
+  const raw = system[field.key]
+  if (field.type === 'boolean') return formatBool(raw as boolean | null)
+  if (field.type === 'multiselect') return formatList(raw as string[] | null)
+  return String(raw ?? '')
+}
+
 function renderFields(fields: FieldConfig[], system: FismaSystemType) {
   return fields.map((field) => (
     <FieldDisplay
       key={field.key}
       label={field.label}
-      value={String(system[field.key] ?? '')}
+      value={formatFieldValue(field, system)}
     />
   ))
 }
@@ -67,9 +85,12 @@ export default function SystemDetailReadView({
   // Systems without extended metadata have every field null and would otherwise
   // render an empty card. (Read view is not role-gated; the values are the
   // system's own metadata, visible to anyone who can view the system.)
-  const hasAnyExtendedData = extendedFields.some(
-    (field) => system[field.key] != null && system[field.key] !== ''
-  )
+  const hasAnyExtendedData = extendedFields.some((field) => {
+    const raw = system[field.key]
+    if (raw == null || raw === '') return false
+    if (Array.isArray(raw)) return raw.length > 0
+    return true
+  })
 
   return (
     <Grid container spacing={3}>
@@ -245,7 +266,7 @@ export default function SystemDetailReadView({
                   <Grid item xs={12} sm={6} md={4} key={field.key}>
                     <FieldDisplay
                       label={field.label}
-                      value={String(system[field.key] ?? '')}
+                      value={formatFieldValue(field, system)}
                     />
                   </Grid>
                 ))}

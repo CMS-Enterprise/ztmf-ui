@@ -1,173 +1,213 @@
 import { useEffect, useState } from 'react'
+import axiosInstance from '@/axiosConfig'
+import type { SystemAttribute, FismaSystemType } from '@/types'
 
 /**
- * Canonical allowed values for the extended system-metadata fields
- * (ztmf-ui#460, frontend slice of ztmf#395).
+ * Backend-driven vocabulary for the extended system-metadata fields, from
+ * GET /api/v1/systemattributes. Mirrors dataCenterEnvironments.ts: fetch the
+ * rows, then derive per-field dropdown options client-side, so the server
+ * stays the single source of truth for the allowed values.
  *
- * SWAP POINT: these values are hardcoded from the canonical set agreed on
- * ztmf#395 (2026-07-08) as a stopgap. The backend vocabulary endpoint that
- * serves them is ztmf#433 and is not built yet. When it ships, change ONLY
- * `fetchSystemMetadataVocab` below to read from it (mirroring
- * `fetchDataCenterEnvironments`) - the field configs, the edit views, and the
- * option helpers all consume the fetched result, so nothing else changes.
- *
- * `cloud_vendor` is deliberately absent: it is free text (out of scope on
- * ztmf#395). NULL/unset is always valid ("not yet captured") and is handled by
- * the option helpers, not by listing an empty value here.
+ * The endpoint returns one row per allowed value across every field; callers
+ * narrow to a field with optionsForField. Enum fields (fips, system_type,
+ * system_operator, goco_coco_gogo) and the cloud_service_model parts come from
+ * here. The tri-state booleans (hva, cloud_system, legacy) are structural
+ * Yes/No/Unknown, not a served list - see BOOLEAN_OPTIONS.
  */
 
-// The metadata fields that render as a single-value select.
-export type MetadataSelectField =
-  | 'fips'
-  | 'system_type'
-  | 'hva'
-  | 'cloud_system'
-  | 'goco_coco_gogo'
-  | 'system_operator'
-  | 'legacy'
-
-// The one multi-select field. Stored as a sorted, slash-joined combo of the
-// parts below (e.g. "IaaS/PaaS"); the helpers convert between the string and
-// the parts array.
-export type MetadataMultiSelectField = 'cloud_service_model'
-
-export type SystemMetadataVocab = Record<
-  MetadataSelectField | MetadataMultiSelectField,
-  string[]
->
-
-// Canonical set from ztmf#395. Order is the display order in the dropdown.
-export const SYSTEM_METADATA_VOCAB: SystemMetadataVocab = {
-  fips: ['High', 'Moderate', 'Low'],
-  system_type: [
-    'Major Application',
-    'Minor Standalone',
-    'Minor Application',
-    'General Support System',
-    'Enterprise',
-    'Local',
-    'Other',
-  ],
-  hva: ['Yes', 'No'],
-  cloud_system: ['Yes', 'No'],
-  goco_coco_gogo: ['GOCO', 'COCO', 'GOGO'],
-  system_operator: ['Agency', 'Contractor'],
-  legacy: ['Yes', 'No'],
-  cloud_service_model: ['IaaS', 'PaaS', 'SaaS', 'Other'],
+/**
+ * Fetches the full system-attribute vocabulary.
+ *
+ * @param signal - Optional AbortSignal to cancel the request.
+ * @param selectableOnly - When true, asks the backend for dropdown options
+ *   only (hides help rows carrying just a description).
+ * @returns Every attribute row (empty array when none).
+ */
+export async function fetchSystemAttributes(
+  signal?: AbortSignal,
+  selectableOnly = true
+): Promise<SystemAttribute[]> {
+  const res = await axiosInstance.get<{ data: SystemAttribute[] | null }>(
+    '/systemattributes',
+    { params: selectableOnly ? { selectable_only: true } : undefined, signal }
+  )
+  return res.data.data ?? []
 }
 
 /**
- * Returns the metadata vocabulary. Currently resolves the hardcoded canonical
- * set; becomes a `GET` to the ztmf#433 endpoint when that lands (see SWAP
- * POINT above). Async so callers already await it and the swap is invisible.
+ * Reads the system-attribute vocabulary for a component: empty until the
+ * fetch resolves (selects render their current value in the meantime), then
+ * the served rows. Kept as a hook so each consumer gets it without threading.
  *
- * @param _signal - Reserved for the real fetch's AbortSignal; unused today.
- * @returns The allowed values per field.
+ * @returns The current attribute rows.
  */
-export async function fetchSystemMetadataVocab(
-  _signal?: AbortSignal
-): Promise<SystemMetadataVocab> {
-  return SYSTEM_METADATA_VOCAB
-}
-
-/**
- * Reads the metadata vocabulary for a component. Seeded with the local
- * canonical set so selects render correctly on first paint, then refreshed
- * from `fetchSystemMetadataVocab` (a no-op today, a network read once ztmf#433
- * ships). Kept as a hook so every consumer gets the swap for free.
- *
- * @returns The current vocabulary.
- */
-export function useSystemMetadataVocab(): SystemMetadataVocab {
-  const [vocab, setVocab] = useState<SystemMetadataVocab>(SYSTEM_METADATA_VOCAB)
+export function useSystemAttributes(): SystemAttribute[] {
+  const [rows, setRows] = useState<SystemAttribute[]>([])
   useEffect(() => {
     const controller = new AbortController()
-    fetchSystemMetadataVocab(controller.signal)
-      .then((v) => {
-        if (!controller.signal.aborted) setVocab(v)
+    fetchSystemAttributes(controller.signal)
+      .then((r) => {
+        if (!controller.signal.aborted) setRows(r)
       })
       .catch(() => {
-        // Non-fatal: fall back to the seeded canonical set.
+        // Non-fatal: an empty vocab just means no dropdown options yet.
       })
     return () => controller.abort()
   }, [])
-  return vocab
+  return rows
 }
 
-export type SelectOption = {
-  value: string
-  label: string
-  disabled?: boolean
-}
+export type SelectOption = { value: string; label: string }
 
 /**
- * Single-select options for a field, preserving the system's current value
- * when it is not in the served set (a legacy/unmapped value). Without this,
- * editing such a system would show a blank select and drop the value on save.
- * The current value is appended as a disabled option so it renders and stays
- * valid but cannot be re-picked - the same pattern as
- * `toDropdownOptionsWithCurrent` for datacenter environments.
+ * Dropdown options for a single field: its selectable rows in display order.
+ * Off-canon values can no longer be stored (the backend CHECK-constrains these
+ * columns), so there is no legacy-value preservation to do.
  *
- * @param allowed - Canonical values for the field.
- * @param current - The system's stored value (may be null/unset/legacy).
- * @returns Options in display order, with a trailing disabled legacy option
- *   when needed.
+ * @param rows - All attribute rows from the endpoint.
+ * @param field - The field key ("fips", "system_type", "cloud_service_model", ...).
+ * @returns The field's options, ordered by `ordr`.
  */
-export function toSelectOptionsWithCurrent(
-  allowed: string[],
-  current: string | null | undefined
+export function optionsForField(
+  rows: SystemAttribute[],
+  field: string
 ): SelectOption[] {
-  const options: SelectOption[] = allowed.map((v) => ({ value: v, label: v }))
-  if (current && !allowed.includes(current)) {
-    options.push({ value: current, label: current, disabled: true })
+  return rows
+    .filter((r) => r.field === field && r.selectable)
+    .sort((a, b) => a.ordr - b.ordr)
+    .map((r) => ({ value: r.value, label: r.value }))
+}
+
+// Tri-state boolean control. The select values are strings ('' for Unknown)
+// because a MUI Select value must be a string; boolToSelectValue /
+// selectValueToBool convert to and from the wire boolean|null.
+export const BOOLEAN_OPTIONS: SelectOption[] = [
+  { value: 'true', label: 'Yes' },
+  { value: 'false', label: 'No' },
+  { value: '', label: 'Unknown' },
+]
+
+/**
+ * Maps a tri-state boolean to its select value ('' = Unknown).
+ */
+export function boolToSelectValue(v: boolean | null | undefined): string {
+  if (v === true) return 'true'
+  if (v === false) return 'false'
+  return ''
+}
+
+/**
+ * Maps a boolean select value back to the wire boolean|null (Unknown -> null).
+ */
+export function selectValueToBool(v: string): boolean | null {
+  if (v === 'true') return true
+  if (v === 'false') return false
+  return null
+}
+
+/**
+ * Display label for a tri-state boolean (read view / table).
+ */
+export function formatBool(v: boolean | null | undefined): string {
+  if (v === true) return 'Yes'
+  if (v === false) return 'No'
+  return 'Unknown'
+}
+
+/**
+ * Display label for a decomposed multi-select value.
+ *
+ * @param v - The stored parts, or null.
+ * @returns The parts joined for display, or an em-dash when empty.
+ */
+export function formatList(v: string[] | null | undefined): string {
+  return v && v.length > 0 ? v.join(', ') : '—'
+}
+
+/**
+ * Whether two extended-field values are equal, for building a dirty-diff PUT.
+ * Arrays compare order-insensitively (selection order is not meaningful);
+ * null and undefined are treated as the same "unset". Used to send only the
+ * fields the user actually changed - the backend reads an omitted field as
+ * "leave unchanged" and the per-type clear signal (enum '', boolean null,
+ * array []) as "clear".
+ *
+ * @param a - One value.
+ * @param b - The other value.
+ * @returns True when they represent the same stored value.
+ */
+/**
+ * Builds the dirty-diff of extended-metadata fields for a write payload: every
+ * field whose edited value differs from the baseline, at its typed value (an
+ * unset value normalizes to null). Unchanged fields are omitted so the backend
+ * leaves them untouched, while a per-type clear signal (enum '', boolean null,
+ * array []) passes through as the user's clear. On create, pass an empty
+ * baseline so only the fields the user set are sent.
+ *
+ * @param edited - The edited system.
+ * @param baseline - The system to diff against (the loaded system, or an empty
+ *   one when creating); a missing baseline treats every field as unset.
+ * @param keys - The extended-metadata field keys to consider.
+ * @returns A partial payload containing only the changed fields.
+ */
+export function buildExtendedDiff(
+  edited: FismaSystemType,
+  baseline: Partial<FismaSystemType> | null | undefined,
+  keys: (keyof FismaSystemType)[]
+): Partial<FismaSystemType> {
+  const diff: Partial<FismaSystemType> = {}
+  for (const key of keys) {
+    if (!extendedFieldEqual(edited[key], baseline?.[key])) {
+      ;(diff as Record<string, unknown>)[key] = edited[key] ?? null
+    }
   }
-  return options
+  return diff
 }
 
 /**
- * Splits a stored `cloud_service_model` combo into its parts. Tolerates the
- * legacy delimiters seen in the raw data (slash, comma, semicolon) so an
- * un-canonicalized value still populates the multi-select.
+ * Extra field clears that an extended-field edit forces on its dependents.
+ * A system that is not a cloud system has no service model or vendor, so
+ * setting cloud_system to No clears both to their per-type signal (array []
+ * and enum ''). Merge the result into the edited system alongside the edit.
  *
- * @param value - The stored combo (e.g. "IaaS/PaaS"), possibly null.
- * @returns The parts, or an empty array when unset.
+ * @param key - The field being changed.
+ * @param value - Its new value.
+ * @returns The dependent fields to clear (empty when no cascade applies).
  */
-export function parseCombo(value: string | null | undefined): string[] {
-  if (!value) return []
-  return value
-    .split(/[/,;]/)
-    .map((p) => p.trim())
-    .filter(Boolean)
+export function crossFieldClears(
+  key: string,
+  value: unknown
+): Partial<FismaSystemType> {
+  if (key === 'cloud_system' && value === false) {
+    return { cloud_service_model: [], cloud_vendor: '' }
+  }
+  return {}
 }
 
 /**
- * Joins multi-select parts back into the stored combo: de-duplicated and
- * sorted so the same selection always serializes to the same string (the
- * canonical storage shape on ztmf#395). Empty selection serializes to null so
- * an unset value stays unset rather than becoming "".
+ * Whether a field is hidden by a cross-field rule given the current system
+ * state. cloud_service_model and cloud_vendor only apply to cloud systems, so
+ * they are hidden (and cleared by crossFieldClears) while cloud_system is No.
  *
- * @param parts - The selected parts.
- * @returns The sorted slash-joined combo, or null when empty.
+ * @param key - The field to test.
+ * @param system - The current edited system.
+ * @returns True when the field should not be rendered.
  */
-export function serializeCombo(parts: string[]): string | null {
-  const unique = Array.from(new Set(parts.map((p) => p.trim()).filter(Boolean)))
-  if (unique.length === 0) return null
-  return unique.sort().join('/')
+export function isCrossFieldHidden(
+  key: string,
+  system: Pick<FismaSystemType, 'cloud_system'>
+): boolean {
+  return (
+    (key === 'cloud_service_model' || key === 'cloud_vendor') &&
+    system.cloud_system === false
+  )
 }
 
-/**
- * Multi-select options for `cloud_service_model`: the canonical parts plus any
- * current part not in the canon (so a legacy combo's odd part still shows and
- * is not silently dropped on save).
- *
- * @param allowed - Canonical parts.
- * @param currentParts - Parts parsed from the stored value.
- * @returns The union, canonical parts first.
- */
-export function multiSelectOptionsWithCurrent(
-  allowed: string[],
-  currentParts: string[]
-): string[] {
-  const extras = currentParts.filter((p) => !allowed.includes(p))
-  return [...allowed, ...extras]
+export function extendedFieldEqual(a: unknown, b: unknown): boolean {
+  if (Array.isArray(a) || Array.isArray(b)) {
+    const aa = Array.isArray(a) ? [...a].sort() : []
+    const bb = Array.isArray(b) ? [...b].sort() : []
+    return aa.length === bb.length && aa.every((v, i) => v === bb[i])
+  }
+  return (a ?? null) === (b ?? null)
 }

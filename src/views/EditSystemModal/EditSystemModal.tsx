@@ -47,11 +47,14 @@ import {
   type FieldConfig,
 } from '@/views/SystemDetailPage/fieldConfig'
 import {
-  useSystemMetadataVocab,
-  toSelectOptionsWithCurrent,
-  parseCombo,
-  serializeCombo,
-  multiSelectOptionsWithCurrent,
+  useSystemAttributes,
+  optionsForField,
+  BOOLEAN_OPTIONS,
+  boolToSelectValue,
+  selectValueToBool,
+  buildExtendedDiff,
+  crossFieldClears,
+  isCrossFieldHidden,
 } from '@/utils/systemMetadataVocab'
 
 /**
@@ -73,7 +76,6 @@ export default function EditSystemModal({
     system?.datacenterenvironment
   )
   const extendedFields = getFieldsBySection('extended')
-  const vocab = useSystemMetadataVocab()
 
   const [formValid, setFormValid] = React.useState<FormValidType>({
     issoemail: false,
@@ -165,17 +167,24 @@ export default function EditSystemModal({
   }
   const [editedFismaSystem, setEditedFismaSystem] =
     React.useState<FismaSystemType>(EMPTY_SYSTEM)
+  const attributes = useSystemAttributes()
+
+  const setField = (key: string, value: string | boolean | string[] | null) =>
+    setEditedFismaSystem((prev) => ({
+      ...prev,
+      [key]: value,
+      ...crossFieldClears(key, value),
+    }))
 
   // Renders an extended-metadata field per its configured type: canonical
-  // single-select, cloud_service_model multi-select, or free text. Selects
-  // preserve a legacy/unmapped current value and offer a blank to clear.
+  // enum select, tri-state boolean (Yes/No/Unknown), decomposed multi-select,
+  // or free text. Each control stores the field's typed clear signal when
+  // emptied: enum '', boolean null, array [].
   const renderExtendedControl = (field: FieldConfig) => {
-    const current = editedFismaSystem[field.key] as string | null | undefined
+    // isso_name is backend-resolved, so its control is read-only.
+    const disabled = field.readOnly
     if (field.type === 'select') {
-      const options = toSelectOptionsWithCurrent(
-        (vocab as Record<string, string[]>)[field.key] ?? [],
-        current
-      )
+      const current = editedFismaSystem[field.key] as string | null | undefined
       return (
         <TextField
           id={`${mode}-${field.key}`}
@@ -184,18 +193,40 @@ export default function EditSystemModal({
           variant="standard"
           margin="normal"
           fullWidth
+          disabled={disabled}
           value={current || ''}
           InputLabelProps={{ sx: { marginTop: 0 } }}
-          onChange={(e) =>
-            setEditedFismaSystem((prev) => ({
-              ...prev,
-              [field.key]: e.target.value || null,
-            }))
-          }
+          onChange={(e) => setField(field.key, e.target.value)}
         >
           <MenuItem value="">&mdash; None &mdash;</MenuItem>
-          {options.map((o) => (
-            <MenuItem key={o.value} value={o.value} disabled={o.disabled}>
+          {optionsForField(attributes, field.key).map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      )
+    }
+    if (field.type === 'boolean') {
+      return (
+        <TextField
+          id={`${mode}-${field.key}`}
+          select
+          label={field.label}
+          variant="standard"
+          margin="normal"
+          fullWidth
+          disabled={disabled}
+          value={boolToSelectValue(
+            editedFismaSystem[field.key] as boolean | null | undefined
+          )}
+          InputLabelProps={{ sx: { marginTop: 0 } }}
+          onChange={(e) =>
+            setField(field.key, selectValueToBool(e.target.value))
+          }
+        >
+          {BOOLEAN_OPTIONS.map((o) => (
+            <MenuItem key={o.label} value={o.value}>
               {o.label}
             </MenuItem>
           ))}
@@ -203,11 +234,8 @@ export default function EditSystemModal({
       )
     }
     if (field.type === 'multiselect') {
-      const currentParts = parseCombo(current)
-      const options = multiSelectOptionsWithCurrent(
-        (vocab as Record<string, string[]>)[field.key] ?? [],
-        currentParts
-      )
+      const current =
+        (editedFismaSystem[field.key] as string[] | null | undefined) ?? []
       return (
         <TextField
           id={`${mode}-${field.key}`}
@@ -216,23 +244,20 @@ export default function EditSystemModal({
           variant="standard"
           margin="normal"
           fullWidth
-          value={currentParts}
+          disabled={disabled}
+          value={current}
           SelectProps={{
             multiple: true,
             renderValue: (selected) => (selected as string[]).join(', '),
           }}
           InputLabelProps={{ sx: { marginTop: 0 } }}
-          onChange={(e) => {
-            const parts = e.target.value as unknown as string[]
-            setEditedFismaSystem((prev) => ({
-              ...prev,
-              [field.key]: serializeCombo(parts),
-            }))
-          }}
+          onChange={(e) =>
+            setField(field.key, e.target.value as unknown as string[])
+          }
         >
-          {options.map((opt) => (
-            <MenuItem key={opt} value={opt}>
-              {opt}
+          {optionsForField(attributes, field.key).map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
             </MenuItem>
           ))}
         </TextField>
@@ -245,15 +270,12 @@ export default function EditSystemModal({
         variant="standard"
         margin="normal"
         fullWidth
-        disabled={field.readOnly}
-        value={current ?? ''}
-        InputLabelProps={{ sx: { marginTop: 0 } }}
-        onChange={(e) =>
-          setEditedFismaSystem((prev) => ({
-            ...prev,
-            [field.key]: e.target.value || null,
-          }))
+        disabled={disabled}
+        value={
+          (editedFismaSystem[field.key] as string | null | undefined) ?? ''
         }
+        InputLabelProps={{ sx: { marginTop: 0 } }}
+        onChange={(e) => setField(field.key, e.target.value || null)}
       />
     )
   }
@@ -379,12 +401,13 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        // Extended metadata fields are editable across all OpDivs; send each,
-        // using null to leave a value unchanged (the backend writes only
-        // non-null fields, so imported data isn't clobbered).
-        for (const key of EXTENDED_METADATA_KEYS) {
-          editBody[key] = editedFismaSystem[key] ?? null
-        }
+        // Extended metadata: dirty-diff. Omitted = leave unchanged; a field's
+        // per-type clear signal (enum '', boolean null, array []) = clear. Send
+        // only the fields the user changed from the loaded system.
+        Object.assign(
+          editBody,
+          buildExtendedDiff(editedFismaSystem, system, EXTENDED_METADATA_KEYS)
+        )
         await axiosInstance.put(
           `fismasystems/${editedFismaSystem.fismasystemid}`,
           editBody
@@ -427,9 +450,16 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        for (const key of EXTENDED_METADATA_KEYS) {
-          body[key] = editedFismaSystem[key] ?? null
-        }
+        // Create: no prior system, so send only the extended fields the user
+        // actually set (diff against the empty baseline).
+        Object.assign(
+          body,
+          buildExtendedDiff(
+            editedFismaSystem,
+            EMPTY_SYSTEM as FismaSystemType,
+            EXTENDED_METADATA_KEYS
+          )
+        )
         await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
@@ -1318,11 +1348,16 @@ export default function EditSystemModal({
                         : EXTENDED_METADATA_EDIT_HINT}
                     </Typography>
                     <Grid container spacing={2}>
-                      {extendedFields.map((field) => (
-                        <Grid item xs={12} sm={6} md={4} key={field.key}>
-                          {renderExtendedControl(field)}
-                        </Grid>
-                      ))}
+                      {extendedFields
+                        .filter(
+                          (field) =>
+                            !isCrossFieldHidden(field.key, editedFismaSystem)
+                        )
+                        .map((field) => (
+                          <Grid item xs={12} sm={6} md={4} key={field.key}>
+                            {renderExtendedControl(field)}
+                          </Grid>
+                        ))}
                     </Grid>
                   </Box>
                 </Grid>
