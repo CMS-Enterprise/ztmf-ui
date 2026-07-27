@@ -36,6 +36,10 @@ import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
 import TargetMaturityCard from './TargetMaturityCard'
 import { EXTENDED_METADATA_KEYS } from './fieldConfig'
+import {
+  buildExtendedDiff,
+  crossFieldClears,
+} from '@/utils/systemMetadataVocab'
 import SystemEnrichmentCard from './SystemEnrichmentCard'
 import SystemDelegatesSection from './SystemDelegatesSection'
 
@@ -286,8 +290,13 @@ export default function SystemDetailPage() {
     }
   }
 
-  const handleFieldChange = (key: string, value: string) => {
-    setEditedSystem((prev) => (prev ? { ...prev, [key]: value } : prev))
+  const handleFieldChange = (
+    key: string,
+    value: string | boolean | string[] | null
+  ) => {
+    setEditedSystem((prev) =>
+      prev ? { ...prev, [key]: value, ...crossFieldClears(key, value) } : prev
+    )
   }
 
   const handleValidatedFieldChange = (
@@ -340,12 +349,13 @@ export default function SystemDetailPage() {
         issoemail: editedSystem.issoemail,
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
       }
-      // Extended metadata fields are editable across all OpDivs; send each,
-      // using null to leave a value unchanged (the backend writes only
-      // non-null fields, so imported data isn't clobbered).
-      for (const key of EXTENDED_METADATA_KEYS) {
-        putBody[key] = editedSystem[key] ?? null
-      }
+      // Extended metadata: send only the fields the user changed. The backend
+      // reads an omitted field as "leave unchanged" and a per-type clear signal
+      // (enum '', boolean null, array []) as "clear".
+      Object.assign(
+        putBody,
+        buildExtendedDiff(editedSystem, system, EXTENDED_METADATA_KEYS)
+      )
       await axiosInstance.put(
         `fismasystems/${editedSystem.fismasystemid}`,
         putBody
