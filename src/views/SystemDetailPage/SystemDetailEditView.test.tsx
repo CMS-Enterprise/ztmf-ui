@@ -43,14 +43,17 @@ const BASE_SYSTEM = {
  * Renders the edit view with no-op handlers, overriding just the pieces a test
  * cares about. Returns the onFieldChange spy for asserting emitted values.
  */
-function renderEditView(editedOverrides: Partial<FismaSystemType> = {}) {
+function renderEditView(
+  editedOverrides: Partial<FismaSystemType> = {},
+  formValid: Record<string, boolean> = {}
+) {
   const onFieldChange = jest.fn()
   const editedSystem = { ...BASE_SYSTEM, ...editedOverrides } as FismaSystemType
   renderWithProviders(
     <SystemDetailEditView
       system={BASE_SYSTEM}
       editedSystem={editedSystem}
-      formValid={{}}
+      formValid={formValid}
       formValidErrorText={{}}
       decommissionDate=""
       decommissionDateError=""
@@ -78,6 +81,40 @@ function renderEditView(editedOverrides: Partial<FismaSystemType> = {}) {
   )
   return { onFieldChange }
 }
+
+test('optional selects do not render in an error state on a valid form', async () => {
+  // A realistic formValid: every required field is valid and the optional
+  // extended fields simply have no entry. Optional fields never get a formValid
+  // key, so without the `field.required` guard the error check reads
+  // !undefined === true and paints them all invalid. An all-valid stand-in
+  // would hide exactly that regression.
+  mock.onGet('/systemattributes').reply(200, {
+    data: [
+      {
+        field: 'system_type',
+        value: 'Major Application',
+        description: null,
+        selectable: true,
+        ordr: 10,
+      },
+    ],
+  })
+  const requiredValid = {
+    fismaname: true,
+    fismaacronym: true,
+    fismauid: true,
+    component: true,
+    datacenterenvironment: true,
+    issoemail: true,
+    datacallcontact: true,
+  }
+  renderEditView({ system_type: 'Major Application' }, requiredValid)
+
+  // Wait for the vocabulary fetch so the select renders its chosen value.
+  await screen.findByRole('combobox', { name: 'System Type' })
+  // No field on a valid form should carry MUI's error styling.
+  expect(document.querySelectorAll('.Mui-error')).toHaveLength(0)
+})
 
 test('tri-state boolean select emits a typed boolean, not a string', async () => {
   mock.onGet('/systemattributes').reply(200, { data: [] })
