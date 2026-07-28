@@ -263,13 +263,16 @@ export function OptionInsightBadges({
           // The badge sits outside the Insights box, where the panel's
           // determination disclaimer isn't visible, so the framing rides along
           // with the badge itself.
-          title="The answer the automated evidence points to — the final maturity determination is yours"
+          // Names the ISSO rather than "you": the badge renders for whoever is
+          // viewing the questionnaire (ISSM, admin, read-only), so second person
+          // would assign the determination to the wrong role.
+          title="The answer the automated evidence points to — the final maturity determination is the ISSO's"
           placement="top"
           arrow
         >
           <Box
             component="span"
-            aria-label="ZTMF Insights — the answer the automated evidence points to; the final maturity determination is yours"
+            aria-label="ZTMF Insights — the answer the automated evidence points to; the final maturity determination is the ISSO's"
             sx={{
               px: 0.75,
               py: 0.125,

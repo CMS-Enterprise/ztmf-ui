@@ -658,10 +658,15 @@ describe('OptionInsightBadges', () => {
     // carries its own determination framing rather than relying on the panel's.
     render(<OptionInsightBadges score={1} insight={insight} />)
     const badge = screen.getByLabelText(/^ZTMF Insights —/)
-    expect(badge).toHaveAccessibleName(/final maturity determination is yours/i)
+    // Names the ISSO, not "you" — the badge renders for every role that can view
+    // the questionnaire, so second person would misattribute the determination.
+    expect(badge).toHaveAccessibleName(
+      /final maturity determination is the ISSO's/i
+    )
+    expect(badge).not.toHaveAccessibleName(/determination is yours/i)
     fireEvent.focus(badge)
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
-      /final maturity determination is yours/i
+      /final maturity determination is the ISSO's/i
     )
   })
 
