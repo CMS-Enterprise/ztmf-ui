@@ -28,7 +28,7 @@ import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import {
   useSystemAttributes,
   optionsForField,
-  BOOLEAN_OPTIONS,
+  booleanOptions,
   boolToSelectValue,
   selectValueToBool,
   isCrossFieldHidden,
@@ -142,7 +142,7 @@ function renderEditField(
         helperText={
           field.required && !formValid[field.key]
             ? formValidErrorText[field.key]
-            : ''
+            : field.helpText ?? ''
         }
         InputLabelProps={{ sx: { marginTop: 0 } }}
         sx={{ mt: 2 }}
@@ -180,6 +180,7 @@ function renderEditField(
         )}
         fullWidth
         disabled={disabled}
+        helperText={field.helpText ?? ''}
         InputLabelProps={{ sx: { marginTop: 0 } }}
         sx={{ mt: 2 }}
         // Unknown ('') maps to null - the boolean clear signal.
@@ -187,7 +188,7 @@ function renderEditField(
           onFieldChange(field.key, selectValueToBool(e.target.value))
         }
       >
-        {BOOLEAN_OPTIONS.map((o) => (
+        {booleanOptions(field.booleanLabels).map((o) => (
           <MenuItem key={o.label} value={o.value}>
             {o.label}
           </MenuItem>
@@ -214,6 +215,7 @@ function renderEditField(
           multiple: true,
           renderValue: (selected) => (selected as string[]).join(', '),
         }}
+        helperText={field.helpText ?? ''}
         InputLabelProps={{ sx: { marginTop: 0 } }}
         sx={{ mt: 2 }}
         // Deselecting all yields [] - the array clear signal.
@@ -246,7 +248,7 @@ function renderEditField(
       helperText={
         field.required && !formValid[field.key]
           ? formValidErrorText[field.key]
-          : ''
+          : field.helpText ?? ''
       }
       InputLabelProps={{ sx: { marginTop: 0 } }}
       onChange={(e) => {

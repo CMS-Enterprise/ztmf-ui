@@ -20,7 +20,7 @@ import type { SystemAttribute, FismaSystemType } from '@/types'
  *
  * @param signal - Optional AbortSignal to cancel the request.
  * @param selectableOnly - When true, asks the backend for dropdown options
- *   only (hides help rows carrying just a description).
+ *   only (hides any non-selectable rows).
  * @returns Every attribute row (empty array when none).
  */
 export async function fetchSystemAttributes(
@@ -78,14 +78,30 @@ export function optionsForField(
     .map((r) => ({ value: r.value, label: r.value }))
 }
 
-// Tri-state boolean control. The select values are strings ('' for Unknown)
-// because a MUI Select value must be a string; boolToSelectValue /
-// selectValueToBool convert to and from the wire boolean|null.
-export const BOOLEAN_OPTIONS: SelectOption[] = [
-  { value: 'true', label: 'Yes' },
-  { value: 'false', label: 'No' },
-  { value: '', label: 'Unknown' },
-]
+// Custom labels for the true/false ends of a tri-state boolean. For fields
+// whose Yes/No reads ambiguously against the label (e.g. a negatively-phrased
+// "Not Funded for Remediation", where "No" would mean "it is funded"). Unknown
+// is always Unknown.
+export type BooleanLabels = { true: string; false: string }
+
+/**
+ * Options for a tri-state boolean control. The select values are strings ('' for
+ * Unknown) because a MUI Select value must be a string; boolToSelectValue /
+ * selectValueToBool convert to and from the wire boolean|null.
+ *
+ * @param labels - Optional overrides for the true/false labels (Yes/No default).
+ * @returns The three options in Yes/No/Unknown order.
+ */
+export function booleanOptions(labels?: BooleanLabels): SelectOption[] {
+  return [
+    { value: 'true', label: labels?.true ?? 'Yes' },
+    { value: 'false', label: labels?.false ?? 'No' },
+    { value: '', label: 'Unknown' },
+  ]
+}
+
+// The default Yes/No/Unknown option set, for fields without custom labels.
+export const BOOLEAN_OPTIONS: SelectOption[] = booleanOptions()
 
 /**
  * Maps a tri-state boolean to its select value ('' = Unknown).
@@ -107,10 +123,18 @@ export function selectValueToBool(v: string): boolean | null {
 
 /**
  * Display label for a tri-state boolean (read view / table).
+ *
+ * @param v - The value to format.
+ * @param labels - Optional overrides for the true/false labels (Yes/No default),
+ *   matching the field's edit-control options.
+ * @returns The display label; Unknown when unset.
  */
-export function formatBool(v: boolean | null | undefined): string {
-  if (v === true) return 'Yes'
-  if (v === false) return 'No'
+export function formatBool(
+  v: boolean | null | undefined,
+  labels?: BooleanLabels
+): string {
+  if (v === true) return labels?.true ?? 'Yes'
+  if (v === false) return labels?.false ?? 'No'
   return 'Unknown'
 }
 

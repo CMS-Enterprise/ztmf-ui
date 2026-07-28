@@ -11,6 +11,7 @@ import axiosInstance from '@/axiosConfig'
 import {
   fetchSystemAttributes,
   optionsForField,
+  booleanOptions,
   boolToSelectValue,
   selectValueToBool,
   formatBool,
@@ -29,36 +30,31 @@ const ROWS: SystemAttribute[] = [
   {
     field: 'fips',
     value: 'High',
-    description: null,
     selectable: true,
     ordr: 30,
   },
   {
     field: 'fips',
     value: 'Low',
-    description: null,
     selectable: true,
     ordr: 10,
   },
   {
     field: 'fips',
     value: 'Moderate',
-    description: null,
     selectable: true,
     ordr: 20,
   },
   {
-    // help row: carries a description only, never offered as an option.
+    // non-selectable row: never offered as an option.
     field: 'fips',
     value: '',
-    description: 'Federal Information Processing Standard impact level.',
     selectable: false,
     ordr: 0,
   },
   {
     field: 'cloud_service_model',
     value: 'IaaS',
-    description: null,
     selectable: true,
     ordr: 10,
   },
@@ -139,12 +135,37 @@ describe('tri-state boolean conversions', () => {
   })
 })
 
+describe('booleanOptions', () => {
+  it('defaults to Yes/No/Unknown', () => {
+    expect(booleanOptions()).toEqual([
+      { value: 'true', label: 'Yes' },
+      { value: 'false', label: 'No' },
+      { value: '', label: 'Unknown' },
+    ])
+  })
+
+  it('overrides the true/false labels but keeps values and Unknown', () => {
+    expect(booleanOptions({ true: 'Not funded', false: 'Funded' })).toEqual([
+      { value: 'true', label: 'Not funded' },
+      { value: 'false', label: 'Funded' },
+      { value: '', label: 'Unknown' },
+    ])
+  })
+})
+
 describe('display formatting', () => {
   it('formats a tri-state boolean as Yes/No/Unknown', () => {
     expect(formatBool(true)).toBe('Yes')
     expect(formatBool(false)).toBe('No')
     expect(formatBool(null)).toBe('Unknown')
     expect(formatBool(undefined)).toBe('Unknown')
+  })
+
+  it('applies custom true/false labels, leaving Unknown', () => {
+    const labels = { true: 'Not funded', false: 'Funded' }
+    expect(formatBool(true, labels)).toBe('Not funded')
+    expect(formatBool(false, labels)).toBe('Funded')
+    expect(formatBool(null, labels)).toBe('Unknown')
   })
 
   it('joins a decomposed list, with a placeholder when empty', () => {

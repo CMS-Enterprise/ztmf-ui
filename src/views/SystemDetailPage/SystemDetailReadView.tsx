@@ -60,7 +60,8 @@ function FieldDisplay({
  */
 function formatFieldValue(field: FieldConfig, system: FismaSystemType): string {
   const raw = system[field.key]
-  if (field.type === 'boolean') return formatBool(raw as boolean | null)
+  if (field.type === 'boolean')
+    return formatBool(raw as boolean | null, field.booleanLabels)
   if (field.type === 'multiselect') return formatList(raw as string[] | null)
   return String(raw ?? '')
 }

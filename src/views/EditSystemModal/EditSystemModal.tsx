@@ -49,7 +49,7 @@ import {
 import {
   useSystemAttributes,
   optionsForField,
-  BOOLEAN_OPTIONS,
+  booleanOptions,
   boolToSelectValue,
   selectValueToBool,
   buildExtendedDiff,
@@ -195,6 +195,7 @@ export default function EditSystemModal({
           fullWidth
           disabled={disabled}
           value={current || ''}
+          helperText={field.helpText}
           InputLabelProps={{ sx: { marginTop: 0 } }}
           onChange={(e) => setField(field.key, e.target.value)}
         >
@@ -220,12 +221,13 @@ export default function EditSystemModal({
           value={boolToSelectValue(
             editedFismaSystem[field.key] as boolean | null | undefined
           )}
+          helperText={field.helpText}
           InputLabelProps={{ sx: { marginTop: 0 } }}
           onChange={(e) =>
             setField(field.key, selectValueToBool(e.target.value))
           }
         >
-          {BOOLEAN_OPTIONS.map((o) => (
+          {booleanOptions(field.booleanLabels).map((o) => (
             <MenuItem key={o.label} value={o.value}>
               {o.label}
             </MenuItem>
@@ -250,6 +252,7 @@ export default function EditSystemModal({
             multiple: true,
             renderValue: (selected) => (selected as string[]).join(', '),
           }}
+          helperText={field.helpText}
           InputLabelProps={{ sx: { marginTop: 0 } }}
           onChange={(e) =>
             setField(field.key, e.target.value as unknown as string[])
@@ -274,6 +277,7 @@ export default function EditSystemModal({
         value={
           (editedFismaSystem[field.key] as string | null | undefined) ?? ''
         }
+        helperText={field.helpText}
         InputLabelProps={{ sx: { marginTop: 0 } }}
         onChange={(e) => setField(field.key, e.target.value || null)}
       />

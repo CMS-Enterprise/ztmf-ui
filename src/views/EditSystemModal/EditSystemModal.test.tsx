@@ -59,14 +59,12 @@ test('clearing an enum select to None saves an empty string, not null', async ()
       {
         field: 'fips',
         value: 'Low',
-        description: null,
         selectable: true,
         ordr: 10,
       },
       {
         field: 'fips',
         value: 'High',
-        description: null,
         selectable: true,
         ordr: 20,
       },
@@ -109,7 +107,6 @@ test('an untouched extended field is omitted from the save (dirty-diff)', async 
       {
         field: 'fips',
         value: 'Low',
-        description: null,
         selectable: true,
         ordr: 10,
       },

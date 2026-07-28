@@ -96,13 +96,12 @@ export type DataCenterEnvironment = {
 
 // One allowed value for an extended-metadata field, from
 // GET /api/v1/systemattributes. `field` is the column ("fips", "system_type",
-// "cloud_service_model", ...); `value` is a canonical option or the label for
-// a boolean field. `selectable` false hides a row from the dropdown (e.g. the
-// help row carrying only a `description`). Rows arrive ordered by `ordr`.
+// "cloud_service_model", ...); `value` is a canonical option. `selectable` false
+// hides a row from the dropdown. Rows arrive ordered by `ordr`. The endpoint is
+// a plain allowed-values list; field help copy lives in the UI, not here.
 export type SystemAttribute = {
   field: string
   value: string
-  description: string | null
   selectable: boolean
   ordr: number
 }
