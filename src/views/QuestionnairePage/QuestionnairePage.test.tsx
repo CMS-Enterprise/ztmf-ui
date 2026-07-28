@@ -27,6 +27,12 @@ const axios = require('@/axiosConfig').default as {
   put: jest.Mock
 }
 
+// The questionnaire POSTs a fire-and-forget 'events/view' analytics ping on
+// every question open (time-spent tracking, #368). These assertions care about
+// score *saves* (POST 'scores'), so filter the view pings out.
+const saveScorePosts = () =>
+  axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'scores')
+
 const saveDraftMock = jest
   .fn<
     Promise<boolean>,
@@ -312,6 +318,88 @@ test('read-only session evicts the current-question draft on mount', async () =>
 })
 
 // ---------------------------------------------------------------------------
+// 2c. Time-spent view pings (#368): every session emits one 'events/view' per
+//     opened question with the DB questionid. The payload carries no readonly
+//     flag — editor-vs-viewer is decided server-side from role + deadline.
+// ---------------------------------------------------------------------------
+
+const viewPings = () =>
+  axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'events/view')
+
+test('records an events/view ping with the DB questionid when a question opens', async () => {
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // The opened function is 7006 (Imperial Identity Verification), whose DB
+  // questionid is 900 - the payload must carry the questionid, not the
+  // functionid, and the system + data call from context. No readonly flag: the
+  // server derives editor-vs-viewer.
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(viewPings()[0][1]).toEqual({
+    fismasystemid: 1002,
+    datacallid: 5,
+    questionid: 900,
+  })
+})
+
+test('records an events/view ping in a read-only session too', async () => {
+  const pastDeadline = '2001-01-01T00:00:00Z'
+  setMockCtx(
+    makeCtx({
+      userInfo: {
+        userid: 'u-1',
+        email: 'x@x',
+        fullname: 'ISSO',
+        role: 'ISSO',
+      } as userData,
+      latestDeadline: pastDeadline,
+      selectedDatacall: {
+        datacallid: 5,
+        datacall: 'FY2026 Q1',
+        datecreated: '',
+        deadline: pastDeadline,
+      },
+      datacalls: [
+        {
+          datacallid: 5,
+          datacall: 'FY2026 Q1',
+          datecreated: '',
+          deadline: pastDeadline,
+        },
+      ],
+    })
+  )
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // Read-only viewers are captured too (#368) — the ping still fires; whether
+  // it counts as viewer time is decided server-side, so the body is identical.
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(viewPings()[0][1]).toEqual({
+    fismasystemid: 1002,
+    datacallid: 5,
+    questionid: 900,
+  })
+})
+
+// ---------------------------------------------------------------------------
 // 3. Out-of-band scores refresh re-seeds the answer
 // ---------------------------------------------------------------------------
 
@@ -538,7 +626,7 @@ test('out-of-band scores refresh re-seeds the answer after save-and-back', async
   // flight (held by scoresGate) and questionId moves to Q2.
   await user.click(baseline)
   await user.click(screen.getByText(/^Next$/i))
-  await waitFor(() => expect(axios.post).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1. fetchOptions runs with an empty scores ref (the second
   // /scores call is still pending), so Q1 briefly shows unanswered.
@@ -558,7 +646,7 @@ test('out-of-band scores refresh re-seeds the answer after save-and-back', async
     expect(el.checked).toBe(true)
   })
   // No duplicate POST - re-seed picked up the existing scoreid.
-  expect(axios.post).toHaveBeenCalledTimes(1)
+  expect(saveScorePosts()).toHaveLength(1)
 })
 
 // ---------------------------------------------------------------------------
@@ -597,7 +685,7 @@ test('out-of-band scores refresh does not overwrite an unsaved in-progress edit'
   )) as HTMLInputElement
   await user.click(baseline)
   await user.click(screen.getByText(/^Next$/i))
-  await waitFor(() => expect(axios.post).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1 - fetchOptions seeds from an empty ref so Q1 shows
   // unanswered, and initQuestionChoice is now -1.
@@ -678,7 +766,231 @@ test('the questionId effect reads live scores via ref and seeds the answer at mo
 
   // No POST fired - the saved answer was seeded from GET, not written
   // back as a fresh score.
-  expect(axios.post).not.toHaveBeenCalled()
+  expect(saveScorePosts()).toHaveLength(0)
+})
+
+// ---------------------------------------------------------------------------
+// 4. ZTMF Insights justification-field wiring (#527/#529).
+//    - HHS data calls render the review-aware JustificationField but hide the
+//      CMS-internal insights layer (panel, option badges, suggestion).
+//    - CMS data calls render both the JustificationField and the insights layer.
+//    - A carried-forward prior response blocks submission until reviewed, and
+//      the initial insights lookup blocks submission until it settles.
+//    - A question with no justification context keeps the plain notes field.
+// ---------------------------------------------------------------------------
+
+const PRIOR_RESPONSE = 'MFA is enforced through Okta policies.'
+
+const JUSTIFICATION_QUESTION = {
+  questionid: 900,
+  question: 'How does the system authenticate users?',
+  notesprompt: 'Explain the authentication mechanisms.',
+  pillar: { pillar: 'Identity' },
+  function: {
+    functionid: 7006,
+    function: 'Imperial Identity Verification',
+    description: 'Authenticate users.',
+    datacenterenvironment: 'Imperial-Fleet',
+  },
+}
+
+const JUSTIFICATION_OPTIONS = [
+  { functionoptionid: 100, description: 'Baseline', score: 1 },
+  { functionoptionid: 101, description: 'Advanced', score: 2 },
+]
+
+// Carried forward from the prior data call: no edit event for the current call
+// (last_edited_at null) and its notes match the insight's last_score_notes, so
+// it is treated as context requiring an explicit review, not a submitted answer.
+const CARRY_FORWARD_SCORE = {
+  scoreid: 5001,
+  fismasystemid: 1002,
+  notes: PRIOR_RESPONSE,
+  functionoptionid: 100,
+  datacallid: 5,
+  last_edited_at: null,
+  last_edited_by: null,
+}
+
+const INSIGHT_ROW = {
+  fismasystemid: 1002,
+  questionid: 900,
+  synced_at: '2026-07-14T00:00:00Z',
+  payload: {
+    suggested_score: 1,
+    suggested_label: 'Baseline',
+    cfacts_auth_methods: 'IDM-Okta',
+    last_score: 1,
+    last_score_notes: PRIOR_RESPONSE,
+    // A prior cycle, distinct from the FY2026 Q1 / FY25 ZTM calls under test, so
+    // the carried-forward response is offered as last year's context.
+    last_datacall: 'FY2025 Q1',
+    // FIPS data is a federal-wide concept; must render for both CMS and HHS.
+    fips_impact_level: 'Low',
+    fips_ceiling: 2,
+  },
+}
+
+const HHS_ZTM = {
+  datacallid: 6,
+  datacall: 'FY25 ZTM',
+  datecreated: '',
+  deadline: '2099-12-31T23:59:59Z',
+}
+
+const HHS_DEEP_LINK =
+  '/questionnaire/ssd-ex/FY25_ZTM/identity/imperial-identity-verification'
+
+describe('QuestionnairePage justification integration', () => {
+  type InsightsResponse = { data: { data: unknown[] } }
+
+  function installMocks({
+    insightRows = [INSIGHT_ROW] as unknown[],
+    insightsResponse,
+  }: {
+    insightRows?: unknown[]
+    insightsResponse?: Promise<InsightsResponse>
+  } = {}) {
+    axios.get.mockImplementation((url: string) => {
+      if (url === 'insights') {
+        return (
+          insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
+        )
+      }
+      if (url.includes('/questions'))
+        return Promise.resolve({ data: { data: [JUSTIFICATION_QUESTION] } })
+      if (url.startsWith('scores'))
+        return Promise.resolve({ data: { data: [CARRY_FORWARD_SCORE] } })
+      if (url.includes('/options'))
+        return Promise.resolve({ data: { data: JUSTIFICATION_OPTIONS } })
+      return Promise.resolve({ data: { data: [] } })
+    })
+    axios.post.mockResolvedValue({ data: {} })
+    axios.put.mockResolvedValue({ data: {} })
+  }
+
+  it('renders the justification field but hides the insights layer for an HHS data call, and persists an accepted prior response', async () => {
+    installMocks()
+    setMockCtx(
+      makeCtx({
+        latestDataCallId: 6,
+        latestDatacall: 'FY25 ZTM',
+        selectedDatacall: HHS_ZTM,
+        datacalls: [HHS_ZTM],
+      })
+    )
+
+    renderAt(HHS_DEEP_LINK)
+
+    // The JustificationField appears (there is a prior response to review)...
+    const response = await screen.findByRole('textbox', {
+      name: 'Current response',
+    })
+    expect(await screen.findByText('Review required')).toBeInTheDocument()
+    // ...but the pending review empties the on-screen value and blocks submit.
+    expect(response).toHaveValue('')
+
+    // The FIPS baseline is a federal-wide concept and must appear for HHS too.
+    expect(await screen.findByText('Low baseline')).toBeInTheDocument()
+
+    // The CMS-internal insights layer is suppressed for HHS calls.
+    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('ZTMF Insights option badge')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Suggested justification')
+    ).not.toBeInTheDocument()
+
+    const complete = screen.getByRole('button', { name: 'Complete' })
+    expect(complete).toBeDisabled()
+
+    // Accepting the required review is a current-call action, so the answer
+    // persists even though the text equals the seeded prior response.
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+    expect(response).toHaveValue(PRIOR_RESPONSE)
+    expect(complete).toBeEnabled()
+
+    fireEvent.click(complete)
+
+    await waitFor(() =>
+      expect(axios.put).toHaveBeenCalledWith('scores/5001', {
+        fismasystemid: 1002,
+        notes: PRIOR_RESPONSE,
+        functionoptionid: 100,
+        datacallid: 6,
+        notes_is_ai_summary: false,
+      })
+    )
+  })
+
+  it('shows the insights panel, option badges, and suggestion for a CMS data call', async () => {
+    installMocks()
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
+    expect(
+      (await screen.findAllByText('ZTMF Insights option badge')).length
+    ).toBeGreaterThan(0)
+    expect(
+      await screen.findByText('Suggested justification')
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByText("Last year's response — FY2025 Q1")
+    ).toBeInTheDocument()
+  })
+
+  it('blocks submission until the initial insights lookup settles', async () => {
+    let resolveInsights: ((value: InsightsResponse) => void) | null = null
+    const insightsResponse = new Promise<InsightsResponse>((resolve) => {
+      resolveInsights = resolve
+    })
+    installMocks({ insightsResponse })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    expect(
+      await screen.findByText('Checking for prior responses…')
+    ).toBeInTheDocument()
+    expect(complete).toBeDisabled()
+
+    await act(async () => {
+      resolveInsights?.({ data: { data: [INSIGHT_ROW] } })
+    })
+
+    expect(await screen.findByText('Review required')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Checking for prior responses…')
+    ).not.toBeInTheDocument()
+    // Still blocked: the carried-forward response now requires review.
+    expect(complete).toBeDisabled()
+  })
+
+  it('keeps the plain four-row notes field when the question has no justification context', async () => {
+    installMocks({ insightRows: [] })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    expect(
+      await screen.findByText('Explain the authentication mechanisms.')
+    ).toBeInTheDocument()
+    const response = screen.getByRole('textbox', {
+      name: 'Justification notes',
+    })
+    expect(response).toHaveAttribute('rows', '4')
+    expect(
+      screen.queryByRole('textbox', { name: 'Current response' })
+    ).not.toBeInTheDocument()
+  })
 })
 
 // ---------------------------------------------------------------------------
