@@ -13,6 +13,14 @@ export interface FieldConfig {
   // Display-only: rendered but never editable and excluded from the write
   // payload. Used for values the backend resolves/owns (e.g. isso_name).
   readOnly?: boolean
+  // Short guidance shown under the control while editing. For terms of art
+  // whose label alone is ambiguous or easily misread. Rendered only when set;
+  // there is no backend dependency, the copy lives here.
+  helpText?: string
+  // Overrides the Yes/No labels on a `boolean` field's tri-state control (and
+  // its read-view text). For a negatively-phrased label where Yes/No would read
+  // as a double negative. Unknown stays Unknown.
+  booleanLabels?: { true: string; false: string }
 }
 
 export const fieldConfigs: FieldConfig[] = [
@@ -183,10 +191,15 @@ export const fieldConfigs: FieldConfig[] = [
   },
   {
     key: 'legacy',
-    label: 'Legacy',
+    label: 'Not Funded for Remediation',
     section: 'extended',
     required: false,
     type: 'boolean',
+    booleanLabels: { true: 'Not funded', false: 'Funded' },
+    helpText:
+      'HHS has not committed funding to remediate known gaps on this system. ' +
+      "This is a funding disposition, not a judgement about the system's age " +
+      'or technology.',
   },
 ]
 

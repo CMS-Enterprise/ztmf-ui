@@ -93,7 +93,6 @@ test('optional selects do not render in an error state on a valid form', async (
       {
         field: 'system_type',
         value: 'Major Application',
-        description: null,
         selectable: true,
         ordr: 10,
       },
