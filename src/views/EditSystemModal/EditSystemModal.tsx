@@ -279,7 +279,10 @@ export default function EditSystemModal({
         }
         helperText={field.helpText}
         InputLabelProps={{ sx: { marginTop: 0 } }}
-        onChange={(e) => setField(field.key, e.target.value || null)}
+        // Send the raw value, so clearing sends '' (the blankToNil clear
+        // signal) rather than null, which the backend reads as "leave
+        // unchanged". Matches the detail edit view's text branch.
+        onChange={(e) => setField(field.key, e.target.value)}
       />
     )
   }

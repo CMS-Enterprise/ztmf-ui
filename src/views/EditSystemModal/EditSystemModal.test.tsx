@@ -139,3 +139,34 @@ test('an untouched extended field is omitted from the save (dirty-diff)', async 
   expect(putBody).not.toHaveProperty('hva')
   expect(putBody).not.toHaveProperty('cloud_service_model')
 })
+
+test('clearing a free-text field saves an empty string, not null', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let putBody: Record<string, unknown> | undefined
+  mock.onPut(/fismasystems\/42$/).reply((config) => {
+    putBody = JSON.parse(config.data)
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={{ ...SYSTEM, cloud_vendor: 'AWS' }}
+      mode="edit"
+      datacenterEnvironments={[]}
+    />
+  )
+
+  // Cloud Vendor is free text (no email/select branch); clear it and save.
+  const input = await screen.findByRole('textbox', { name: 'Cloud Vendor' })
+  await user.clear(input)
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(putBody).toBeDefined())
+  // '' clears via blankToNil; null would read as "leave unchanged" and the
+  // clear would silently no-op.
+  expect(putBody).toHaveProperty('cloud_vendor', '')
+})
