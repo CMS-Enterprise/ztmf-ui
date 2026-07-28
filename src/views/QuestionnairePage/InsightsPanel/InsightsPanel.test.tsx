@@ -3,6 +3,7 @@ import InsightsPanel, {
   OptionInsightBadges,
   severityStyle,
   rollupControls,
+  ISSO_DETERMINATION_DISCLAIMER,
 } from './InsightsPanel'
 import type { InsightPayload } from '@/types'
 import CONFIG from '@/utils/config'
@@ -593,6 +594,52 @@ describe('InsightsPanel', () => {
   })
 })
 
+describe('ISSO determination disclaimer', () => {
+  it('shows the disclaimer on a minimal payload, without opening the drawer', () => {
+    // Minimal payload has no details toggle at all, so the disclaimer has to be
+    // outside the Collapse to be reachable here.
+    render(<InsightsPanel payload={{ suggested_score: 3 }} />)
+    expect(
+      screen.queryByRole('button', { name: /details/i })
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(ISSO_DETERMINATION_DISCLAIMER)).toBeInTheDocument()
+  })
+
+  it('states both that the findings are decision-support and that the determination is the ISSO’s', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    const note = screen.getByRole('note', { name: /about these findings/i })
+    expect(note).toHaveTextContent(
+      /tools for assessing their system's maturity/i
+    )
+    expect(note).toHaveTextContent(/decision-support only/i)
+    expect(note).toHaveTextContent(
+      /final maturity determination is the ISSO's responsibility/i
+    )
+  })
+
+  it('keeps the disclaimer visible while the details drawer is open', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('Aligns with ARS Controls:')).toBeInTheDocument()
+    expect(screen.getByText(ISSO_DETERMINATION_DISCLAIMER)).toBeInTheDocument()
+  })
+
+  it('does not name the note icon (the prose beside it carries the message)', () => {
+    render(<InsightsPanel payload={{ suggested_score: 3 }} />)
+    // Only the ARS alignment info icon is exposed as an img; the note's icon is
+    // decorative, so exposing it would double-read the disclaimer.
+    expect(
+      screen.queryByRole('img', { name: /about these findings/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders the disclaimer once per panel', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getAllByRole('note')).toHaveLength(1)
+  })
+})
+
 describe('OptionInsightBadges', () => {
   const insight: InsightPayload = {
     suggested_score: 1,
@@ -604,6 +651,23 @@ describe('OptionInsightBadges', () => {
     render(<OptionInsightBadges score={1} insight={insight} />)
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
     expect(screen.queryByText(/FY2024 Q1 answer/)).not.toBeInTheDocument()
+  })
+
+  it('frames the recommendation badge as pointing to an answer, not deciding it', async () => {
+    // The badge renders next to a radio option, outside the Insights box, so it
+    // carries its own determination framing rather than relying on the panel's.
+    render(<OptionInsightBadges score={1} insight={insight} />)
+    const badge = screen.getByLabelText(/^ZTMF Insights —/)
+    // Names the ISSO, not "you" — the badge renders for every role that can view
+    // the questionnaire, so second person would misattribute the determination.
+    expect(badge).toHaveAccessibleName(
+      /final maturity determination is the ISSO's/i
+    )
+    expect(badge).not.toHaveAccessibleName(/determination is yours/i)
+    fireEvent.focus(badge)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /final maturity determination is the ISSO's/i
+    )
   })
 
   it("renders the prior-answer badge on last year's option", () => {

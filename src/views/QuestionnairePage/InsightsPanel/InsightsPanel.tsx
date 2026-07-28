@@ -46,6 +46,13 @@ function maturityLabel(score?: number | null): string | null {
 const ARS_ALIGN_DISCLAIMER =
   'Alignment maps automated security evidence to ARS 5.2 controls. It is indicative only and does not constitute an assessed control satisfaction determination or a compliance attestation. CFACTS remains the system of record for control status.'
 
+// Panel-level framing for everything the panel shows. The findings are automated
+// evidence meant to sharpen an ISSO's own assessment, not a maturity
+// determination — this stays visible whether or not the details drawer is open so
+// the framing can never be missed by scrolling past a collapsed section.
+export const ISSO_DETERMINATION_DISCLAIMER =
+  "These automated findings are intended to give ISSOs better tools for assessing their system's maturity. They are decision-support only — the final maturity determination is the ISSO's responsibility."
+
 // Suggested-pill tint keyed by score. Mirrors the prototype's trad/init/adv/opt
 // palette. Unknown/blank score renders neutral.
 const SUGGESTED_TINT: Record<number, { bg: string; fg: string }> = {
@@ -253,13 +260,19 @@ export function OptionInsightBadges({
     >
       {isSuggested && (
         <Tooltip
-          title="The answer the automated evidence points to"
+          // The badge sits outside the Insights box, where the panel's
+          // determination disclaimer isn't visible, so the framing rides along
+          // with the badge itself.
+          // Names the ISSO rather than "you": the badge renders for whoever is
+          // viewing the questionnaire (ISSM, admin, read-only), so second person
+          // would assign the determination to the wrong role.
+          title="The answer the automated evidence points to — the final maturity determination is the ISSO's"
           placement="top"
           arrow
         >
           <Box
             component="span"
-            aria-label="ZTMF Insights — the answer the automated evidence points to"
+            aria-label="ZTMF Insights — the answer the automated evidence points to; the final maturity determination is the ISSO's"
             sx={{
               px: 0.75,
               py: 0.125,
@@ -711,6 +724,43 @@ function InsightsPanelInner({ payload, questionId }: Props) {
           )}
         </Box>
       </Collapse>
+
+      {/* ISSO determination disclaimer — persistent, outside the Collapse, so it
+          is shown with the findings whether or not the drawer is open. Colors are
+          an explicit fg/bg pair rather than inherited text so the note keeps its
+          contrast wherever the panel is embedded, and it carries a border (not
+          color alone) so it still reads as a callout under forced-colors /
+          high-contrast modes. */}
+      <Box
+        role="note"
+        aria-label="About these findings"
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 1,
+          mt: 1.5,
+          pt: 1.25,
+          borderTop: '1px solid #e0e4f0',
+        }}
+      >
+        <InfoOutlined
+          // Decorative: the note's text sits right beside it, so naming the icon
+          // would just double-read the same content.
+          aria-hidden
+          sx={{ fontSize: 14, color: '#5c636a', mt: '1px', flexShrink: 0 }}
+        />
+        <Typography
+          component="p"
+          sx={{
+            fontSize: 11.5,
+            lineHeight: 1.5,
+            // 6.6:1 on the panel's #f8f9fe — comfortably AA for small text.
+            color: '#4a4f5c',
+          }}
+        >
+          {ISSO_DETERMINATION_DISCLAIMER}
+        </Typography>
+      </Box>
     </Box>
   )
 }
