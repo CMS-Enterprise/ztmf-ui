@@ -76,6 +76,7 @@ function renderModal(
       opdivOptions={opdivOptions}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={jest.fn()}
       {...overrides}
     />
@@ -129,6 +130,28 @@ test('unscoped caller: PUT body preserves grants outside the assignable set', as
   expect(body.opdiv_ids).toHaveLength(3)
 })
 
+// Scoped caller whose OWN grant (99) is to an OpDiv since re-parented or
+// deactivated: 99 is in callerGrantIds (the backend still sees IsAssignedOpDiv
+// = true) but absent from opdivOptions (parent/inactive is filtered out). The
+// save must PRESERVE 99 - filtering on the narrower assignable set would strip
+// it from the PUT and the backend's toRemove gate (pure grant membership) would
+// then silently revoke the target's grant. The save boundary is the caller's
+// raw scope, not the dropdown's assignable set.
+test('scoped caller: preserves a caller-held grant that is no longer assignable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
+  mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
+
+  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 99] })
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+
+  await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  const body = JSON.parse(mock.history.put[0].data)
+  expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 99]))
+  expect(body.opdiv_ids).toHaveLength(2)
+})
+
 // A grant to a non-assignable OpDiv (99, absent from opdivOptions) still chips
 // with a readable label from opdivLabelMap - never a blank chip.
 test('labels a grant to a non-assignable OpDiv from the full label map', async () => {
@@ -169,13 +192,14 @@ test('dropdown excludes a non-assignable grant even though it chips', async () =
   expect(screen.queryByRole('option', { name: /ZZZ/ })).not.toBeInTheDocument()
 })
 
-// A scoped caller's save strips out-of-scope ids regardless, so a delete would
-// be a silent no-op. The out-of-scope chip renders WITHOUT a delete affordance,
-// while an in-scope chip keeps it.
-test('scoped caller: an out-of-scope grant chip is not deletable', async () => {
+// A grant outside the caller's own backend scope (99 here is held by the target
+// via another admin, not by this caller) is stripped on save regardless, so a
+// delete would be a silent no-op: it renders WITHOUT a delete affordance, while
+// an in-scope chip keeps it.
+test('scoped caller: a chip outside the caller scope is not deletable', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
 
-  renderModal({ enforceCallerScope: true })
+  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 2] })
 
   const inScope = (await screen.findByText('AAA - Division A')).closest(
     '.MuiChip-root'
@@ -186,6 +210,21 @@ test('scoped caller: an out-of-scope grant chip is not deletable', async () => {
 
   expect(inScope.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
   expect(outOfScope.querySelector('.MuiChip-deleteIcon')).toBeNull()
+})
+
+// A caller-held grant that is merely non-assignable now (99 in callerGrantIds
+// but absent from opdivOptions, e.g. re-parented/deactivated) stays deletable:
+// removing it is a real, permitted revocation, unlike an out-of-scope grant.
+test('scoped caller: a caller-held but non-assignable chip stays deletable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
+
+  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 99] })
+
+  const heldNonAssignable = (
+    await screen.findByText('ZZZ - Parent Division')
+  ).closest('.MuiChip-root') as HTMLElement
+
+  expect(heldNonAssignable.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
 })
 
 // An unscoped caller's removal really revokes, so their out-of-scope chip must
@@ -343,6 +382,7 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       opdivOptions={opdivOptions}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={jest.fn()}
     />
   )
@@ -355,6 +395,7 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       opdivOptions={opdivOptions}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={jest.fn()}
     />
   )
@@ -406,6 +447,7 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
       opdivOptions={opdivOptions}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={onChanged}
     />
   )

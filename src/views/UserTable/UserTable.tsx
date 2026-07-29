@@ -939,6 +939,10 @@ export default function UserTable() {
         // grants. Unscoped admins (OWNER/HHS_ADMIN) must preserve them. Same
         // predicate that narrowed opdivOptions above, so options and save agree.
         enforceCallerScope={isOpDivTier(userInfo)}
+        // The caller's RAW grants (unfiltered by parent/active) - the save-time
+        // preserve boundary. Wider than opdivOptions so a caller-held grant to a
+        // since re-parented/deactivated OpDiv is preserved, not silently revoked.
+        callerGrantIds={userInfo.assignedopdivids ?? []}
         onChanged={refreshUserRow}
       />
       <ConfirmDialog

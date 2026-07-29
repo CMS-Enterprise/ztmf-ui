@@ -37,12 +37,25 @@ type Props = {
   opdivLabelMap: Record<number, { code: string; name: string }>
   /**
    * True when the caller is scope-limited (an OPDIV_ADMIN): the save must drop
-   * grants outside the assignable set, since the backend rejects a desired set
-   * containing an ID the caller doesn't hold. False for unscoped admins
+   * grants outside the caller's own scope, since the backend rejects a desired
+   * set containing an ID the caller doesn't hold. False for unscoped admins
    * (OWNER/HHS_ADMIN), whose save must PRESERVE the target's out-of-scope
    * grants - omitting them reads as a revocation.
    */
   enforceCallerScope: boolean
+  /**
+   * The caller's RAW own-grant ids - the backend's true add/remove scope
+   * (IsAssignedOpDiv), unfiltered by parent/active. This is the save-time
+   * preserve boundary and MUST be a superset of the dropdown's assignable set:
+   * opdivOptions is additionally narrowed to !is_parent && active, so a grant
+   * the caller holds to an OpDiv that was later re-parented or deactivated is
+   * absent from opdivOptions but still in the caller's backend scope. Filtering
+   * the save on the narrower opdivOptions would strip such a grant from the PUT
+   * and the backend would then revoke it (its toRemove gate is pure grant
+   * membership) - the same silent-revocation this modal exists to prevent.
+   * Only consulted when enforceCallerScope is true.
+   */
+  callerGrantIds: number[]
   /**
    * Fired after a successful save so the caller can refresh the user's row
    * (grants + derived identity_provider) against post-mutation server state.
@@ -58,6 +71,7 @@ export default function OpDivGrantModal({
   opdivOptions,
   opdivLabelMap,
   enforceCallerScope,
+  callerGrantIds,
   onChanged,
 }: Props) {
   const [localOpDivs, setLocalOpDivs] = React.useState<number[]>([])
@@ -65,10 +79,19 @@ export default function OpDivGrantModal({
   const [loading, setLoading] = React.useState(false)
   const [fetchFailed, setFetchFailed] = React.useState(false)
 
-  // The assignable set drives the dropdown and gates a scoped caller's save.
+  // The assignable set drives the dropdown (what may be newly selected).
   const assignableIds = React.useMemo(
     () => new Set(opdivOptions.map((od) => od.opdiv_id)),
     [opdivOptions]
+  )
+
+  // The caller's raw backend scope (IsAssignedOpDiv). Superset of assignableIds
+  // - it also covers grants to OpDivs since re-parented/deactivated. Gates the
+  // scoped save and the chip lock, so both agree with what the backend will act
+  // on (see the callerGrantIds prop docs).
+  const callerScope = React.useMemo(
+    () => new Set(callerGrantIds),
+    [callerGrantIds]
   )
 
   // Label from the full map (assignable or not), with an identifiable fallback
@@ -132,14 +155,18 @@ export default function OpDivGrantModal({
 
   const handleSave = () => {
     setSaving(true)
-    // Scoped caller (OPDIV_ADMIN): drop grants outside the assignable set so the
-    // batch request never includes out-of-scope IDs the target holds from
-    // another admin - the backend rejects any desired set containing an ID the
-    // caller doesn't hold. Unscoped caller (OWNER/HHS_ADMIN): send every grant
+    // Scoped caller (OPDIV_ADMIN): keep only grants within the caller's own
+    // backend scope (callerScope), so the batch request never includes ids the
+    // target holds from another admin - the backend rejects a desired set
+    // containing an id the caller doesn't hold. callerScope (not assignableIds)
+    // is used deliberately: a caller-held grant to a now parent/inactive OpDiv
+    // is absent from assignableIds but still in the caller's backend scope, so
+    // filtering on assignableIds would drop it from the PUT and the backend
+    // would revoke it. Unscoped caller (OWNER/HHS_ADMIN): send every grant
     // as-is, since omitting the target's non-assignable grants would revoke
     // them.
     const idsToSave = enforceCallerScope
-      ? localOpDivs.filter((id) => assignableIds.has(id))
+      ? localOpDivs.filter((id) => callerScope.has(id))
       : localOpDivs
     setUserOpDivs(String(userid), idsToSave)
       .then(() => {
@@ -177,15 +204,18 @@ export default function OpDivGrantModal({
           filterOptions={(options, params) =>
             baseFilter(options, params).filter((o) => assignableIds.has(o))
           }
-          // Render chips so a scoped caller's out-of-scope grants show WITHOUT a
-          // delete button: their save strips those ids regardless, so a delete
-          // would be a silent no-op. An unscoped caller keeps delete (their
-          // removal really revokes). No limitTags collapse - surfacing every
-          // grant, including the non-assignable ones, is the point of this fix.
+          // Lock (drop the delete button on) only chips outside the caller's
+          // backend scope for a scoped caller: those are grants from another
+          // admin that the save strips regardless, so a delete would be a
+          // silent no-op. A caller-held grant (incl. one to a now
+          // parent/inactive OpDiv) stays deletable - removing it is a real,
+          // permitted revocation. Unscoped callers keep delete on everything.
+          // No limitTags collapse - surfacing every grant, including the
+          // non-assignable ones, is the point of this fix.
           renderTags={(value, getTagProps) =>
             value.map((option, index) => {
               const { key, onDelete, ...tagProps } = getTagProps({ index })
-              const locked = enforceCallerScope && !assignableIds.has(option)
+              const locked = enforceCallerScope && !callerScope.has(option)
               return (
                 <Chip
                   {...tagProps}
