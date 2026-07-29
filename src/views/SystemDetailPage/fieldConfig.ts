@@ -18,8 +18,9 @@ export interface FieldConfig {
   // there is no backend dependency, the copy lives here.
   helpText?: string
   // Overrides the Yes/No labels on a `boolean` field's tri-state control (and
-  // its read-view text). For a negatively-phrased label where Yes/No would read
-  // as a double negative. Unknown stays Unknown.
+  // its read-view text). For a field whose label reads ambiguously against a
+  // plain Yes/No (e.g. a negatively-phrased label where "No" is a double
+  // negative). Unknown stays Unknown.
   booleanLabels?: { true: string; false: string }
 }
 
@@ -191,15 +192,10 @@ export const fieldConfigs: FieldConfig[] = [
   },
   {
     key: 'legacy',
-    label: 'Not Funded for Remediation',
+    label: 'Legacy System',
     section: 'extended',
     required: false,
     type: 'boolean',
-    booleanLabels: { true: 'Not funded', false: 'Funded' },
-    helpText:
-      'HHS has not committed funding to remediate known gaps on this system. ' +
-      "This is a funding disposition, not a judgement about the system's age " +
-      'or technology.',
   },
 ]
 

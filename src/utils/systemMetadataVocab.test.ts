@@ -145,9 +145,9 @@ describe('booleanOptions', () => {
   })
 
   it('overrides the true/false labels but keeps values and Unknown', () => {
-    expect(booleanOptions({ true: 'Not funded', false: 'Funded' })).toEqual([
-      { value: 'true', label: 'Not funded' },
-      { value: 'false', label: 'Funded' },
+    expect(booleanOptions({ true: 'Active', false: 'Inactive' })).toEqual([
+      { value: 'true', label: 'Active' },
+      { value: 'false', label: 'Inactive' },
       { value: '', label: 'Unknown' },
     ])
   })
@@ -162,9 +162,9 @@ describe('display formatting', () => {
   })
 
   it('applies custom true/false labels, leaving Unknown', () => {
-    const labels = { true: 'Not funded', false: 'Funded' }
-    expect(formatBool(true, labels)).toBe('Not funded')
-    expect(formatBool(false, labels)).toBe('Funded')
+    const labels = { true: 'Active', false: 'Inactive' }
+    expect(formatBool(true, labels)).toBe('Active')
+    expect(formatBool(false, labels)).toBe('Inactive')
     expect(formatBool(null, labels)).toBe('Unknown')
   })
 
