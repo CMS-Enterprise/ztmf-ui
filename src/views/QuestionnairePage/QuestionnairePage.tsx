@@ -21,11 +21,12 @@ import {
   QuestionScores,
   Insight,
   InsightPayload,
+  ScoreAggregate,
 } from '@/types'
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
@@ -44,9 +45,10 @@ import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
+import PillarScoresModal from '@/components/PillarScoresModal/PillarScoresModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
-import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
 import InsightsPanel from './InsightsPanel/InsightsPanel'
 import QuestionRadioGroup from './QuestionRadioGroup'
@@ -130,6 +132,12 @@ export default function QuestionnarePage() {
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
+  // PillarScoresModal takes its rows as a prop rather than fetching (unlike
+  // ScoreDiffModal), so the header button fetches before opening (ui#610).
+  const [pillarScores, setPillarScores] = React.useState<{
+    open: boolean
+    scores: ScoreAggregate[]
+  }>({ open: false, scores: [] })
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
@@ -201,6 +209,20 @@ export default function QuestionnarePage() {
   // Incremented on every explicit draft clear so in-flight debounced saves
   // that fire after a clear don't resurrect the just-removed draft.
   const saveGenRef = React.useRef(0)
+  // Mirrors the payload the debounced draft save would write, so unmount can
+  // flush it. The debounce cleanup cancels its own pending timer, and a route
+  // change away from this page (System Info, the Dashboard breadcrumb, browser
+  // back) tears the component down without firing beforeunload, so an edit made
+  // inside the 1s window was dropped. Carries the generation so a flush cannot
+  // resurrect a draft clearCurrentDraft deleted after the timer was scheduled.
+  const pendingDraftRef = React.useRef<{
+    userid: string
+    system: number
+    questionId: number
+    datacallID: number
+    draft: { selectQuestionOption: number; notes: string }
+    gen: number
+  } | null>(null)
   const unsavedRef = React.useRef({
     selectQuestionOption,
     initQuestionChoice,
@@ -443,6 +465,23 @@ export default function QuestionnarePage() {
       void clearDraft(userInfo.userid, system, questionId, datacallID)
     }
     setDraftStatus('idle')
+  }
+
+  // Same aggregate call the dashboard's Pillar Scores action makes. Not cached:
+  // the dashboard memoizes across many rows, this page is one system and one
+  // click. On failure nothing opens and the user is told, rather than opening an
+  // empty modal that reads as "this system has no scores".
+  const handleOpenPillarScores = async () => {
+    try {
+      const res = await axiosInstance.get(
+        `/scores/aggregate?fismasystemid=${system}&include_pillars=true`
+      )
+      setPillarScores({ open: true, scores: res.data?.data ?? [] })
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error('Error fetching pillar scores:', error)
+      notify(ERROR_MESSAGES.tryAgain, 'error')
+    }
   }
 
   // Keep insight, review, and card state scoped to one system x data call x
@@ -983,10 +1022,12 @@ export default function QuestionnarePage() {
       datacallID <= 0 ||
       loadingQuestion
     ) {
+      pendingDraftRef.current = null
       if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
       return
     }
     if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
+      pendingDraftRef.current = null
       saveGenRef.current++
       // Skip clearDraft when a draft was just restored from storage — the draft
       // values matching the server state does not mean the user reverted manually.
@@ -1003,17 +1044,35 @@ export default function QuestionnarePage() {
       return
     }
     const currentGen = saveGenRef.current
+    const pending = {
+      userid: userInfo.userid,
+      system,
+      questionId,
+      datacallID,
+      draft: { selectQuestionOption, notes },
+      gen: currentGen,
+    }
+    pendingDraftRef.current = pending
     const timer = setTimeout(() => {
       if (saveGenRef.current !== currentGen) return
       saveDraft(
-        userInfo.userid,
-        system,
-        questionId,
-        datacallID,
-        { selectQuestionOption, notes },
+        pending.userid,
+        pending.system,
+        pending.questionId,
+        pending.datacallID,
+        pending.draft,
         () => saveGenRef.current === currentGen
       ).then((saved) => {
         if (saveGenRef.current !== currentGen) return
+        // Clear by identity, not generation: a newer edit re-runs this effect
+        // and replaces the ref with a NEW object under the SAME generation
+        // (saveGenRef only moves on explicit clears), so a generation check
+        // here would let the older save's completion discard the newer edit's
+        // payload while its own debounce is still pending — and an unmount in
+        // that window would then flush nothing (#640 review). Gated on `saved`
+        // so a failed write stays in the ref for the unmount flush to retry.
+        if (saved && pendingDraftRef.current === pending)
+          pendingDraftRef.current = null
         if (saved) {
           if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
         } else {
@@ -1034,6 +1093,32 @@ export default function QuestionnarePage() {
     loadingQuestion,
     userInfo.userid,
   ])
+
+  // Flush a pending draft on unmount. beforeunload below covers tab close and
+  // hard refresh, but it does not fire on in-app navigation, and the debounce
+  // cleanup cancels the timer that would have written the draft. Mount-once so
+  // the cleanup runs on unmount only, never on a dep change (flushing on every
+  // dep change would defeat the debounce and write on each keystroke).
+  // saveDraft takes primitives and touches no component state, so the write
+  // completes after this component is gone.
+  React.useEffect(() => {
+    return () => {
+      const pending = pendingDraftRef.current
+      // Reading the live generation is the point of this guard, not a staleness
+      // bug: it must reflect any clearCurrentDraft that ran after the timer was
+      // scheduled, so a flush cannot resurrect a just-deleted draft. Copying it
+      // into the effect body would freeze it at its mount value.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (!pending || saveGenRef.current !== pending.gen) return
+      void saveDraft(
+        pending.userid,
+        pending.system,
+        pending.questionId,
+        pending.datacallID,
+        pending.draft
+      )
+    }
+  }, [])
 
   // Warn before tab close or hard refresh when the active question has edits
   // that haven't been committed to the backend yet.
@@ -1170,10 +1255,41 @@ export default function QuestionnarePage() {
       </>
     )
   }
+  // Cross-navigation back to this system's detail page (ui#610). A real router
+  // link rather than onClick + navigate, so open-in-new-tab and copy-link work.
+  // Gated on the same hasSystemAccess check the dashboard puts on its own System
+  // Details action. Every current role passes it (delegates included), so in
+  // practice this only suppresses the link while userInfo is unloaded or carries
+  // an unrecognized role - but it is the gate that moves if system-detail access
+  // ever narrows.
+  const systemInfoLink = hasSystemAccess(userInfo) ? (
+    <Button
+      variant="outlined"
+      size="small"
+      component={RouterLink}
+      to={`/systems/${system}`}
+      sx={{ whiteSpace: 'nowrap' }}
+    >
+      System Info
+    </Button>
+  ) : null
   if (noQuestions) {
     return (
       <>
-        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+          {/* Without this the flow System Info -> Questionnaire -> "no
+              questionnaire available" is one-way, which the #609 button makes
+              reachable for any out-of-scope or decommissioned system (#640
+              review). */}
+          {systemInfoLink}
+        </Box>
         <Container maxWidth={false} disableGutters>
           <Alert severity="info" sx={{ mt: 2 }}>
             No questionnaire is available for this system. This typically
@@ -1193,6 +1309,14 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
+  // The data call both header modals present as "current". Prefer the call this
+  // questionnaire actually resolved (datacallID covers every entry path,
+  // including URL deep links where no route state exists); fall back to the
+  // route/selected/latest chain during the pre-fetch window.
+  const viewedDataCallId =
+    datacallID > 0
+      ? datacallID
+      : routeDatacallId ?? selectedDatacall?.datacallid ?? latestDataCallId
   return (
     <>
       <Box
@@ -1203,14 +1327,25 @@ export default function QuestionnarePage() {
         }}
       >
         <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={() => setDiffModalOpen(true)}
-          sx={{ whiteSpace: 'nowrap' }}
-        >
-          Compare Datacalls
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {systemInfoLink}
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleOpenPillarScores}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Pillar Scores
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setDiffModalOpen(true)}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Compare Datacalls
+          </Button>
+        </Box>
       </Box>
       {isPastDeadline && !isReadOnly && (
         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1589,23 +1724,26 @@ export default function QuestionnarePage() {
           />
         </Grid>
       </Container>
-      {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
-          questionnaire actually resolved (datacallID covers every entry path,
-          including URL deep links where no route state exists); fall back to
-          the route/selected/latest chain during the pre-fetch window. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
-        selectedDataCallId={
-          datacallID > 0
-            ? datacallID
-            : routeDatacallId ??
-              selectedDatacall?.datacallid ??
-              latestDataCallId
+        selectedDataCallId={viewedDataCallId}
+      />
+      {/* Same modal the dashboard's Pillar Scores action opens. The acronym
+          comes from the resolved system rather than the lowercased URL param so
+          the title matches the dashboard's casing. */}
+      <PillarScoresModal
+        open={pillarScores.open}
+        onClose={() => setPillarScores((prev) => ({ ...prev, open: false }))}
+        systemName={systemName}
+        systemAcronym={
+          systemInfo?.fismaacronym ?? fismaacronym?.toUpperCase() ?? ''
         }
+        scores={pillarScores.scores}
+        selectedDataCallId={viewedDataCallId}
       />
     </>
   )
