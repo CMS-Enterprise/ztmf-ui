@@ -1,5 +1,6 @@
 import React from 'react'
 import {
+  Chip,
   Dialog,
   DialogContent,
   DialogTitle,
@@ -167,7 +168,6 @@ export default function OpDivGrantModal({
         <Autocomplete
           multiple
           disableCloseOnSelect
-          limitTags={3}
           options={sortedOptionIds}
           disabled={loading || fetchFailed}
           disableClearable
@@ -176,6 +176,25 @@ export default function OpDivGrantModal({
           // also carries current non-assignable grants (for chip resolution).
           filterOptions={(options, params) =>
             baseFilter(options, params).filter((o) => assignableIds.has(o))
+          }
+          // Render chips so a scoped caller's out-of-scope grants show WITHOUT a
+          // delete button: their save strips those ids regardless, so a delete
+          // would be a silent no-op. An unscoped caller keeps delete (their
+          // removal really revokes). No limitTags collapse - surfacing every
+          // grant, including the non-assignable ones, is the point of this fix.
+          renderTags={(value, getTagProps) =>
+            value.map((option, index) => {
+              const { key, onDelete, ...tagProps } = getTagProps({ index })
+              const locked = enforceCallerScope && !assignableIds.has(option)
+              return (
+                <Chip
+                  {...tagProps}
+                  key={key}
+                  label={optionLabel(option)}
+                  onDelete={locked ? undefined : onDelete}
+                />
+              )
+            })
           }
           renderOption={(props, option, { selected }) => (
             <li {...props} key={option}>
