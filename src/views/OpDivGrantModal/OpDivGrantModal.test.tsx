@@ -150,6 +150,58 @@ test('falls back to "OpDiv #{id}" for a grant missing from the label map', async
   expect(await screen.findByText('OpDiv #77')).toBeInTheDocument()
 })
 
+// A non-assignable grant (99) resolves as a chip but must NOT be offered in the
+// dropdown - filterOptions narrows the selectable set to the assignable OpDivs
+// so it can't be re-selected.
+test('dropdown excludes a non-assignable grant even though it chips', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
+
+  renderModal()
+  // The grant chips (so the fetch has resolved and options are settled).
+  await screen.findByText('ZZZ - Parent Division')
+
+  // Open the dropdown.
+  await userEvent.click(screen.getByRole('combobox'))
+
+  // Assignable OpDivs are offered...
+  expect(await screen.findByRole('option', { name: /AAA/ })).toBeInTheDocument()
+  // ...but the non-assignable grant is filtered out of the selectable options.
+  expect(screen.queryByRole('option', { name: /ZZZ/ })).not.toBeInTheDocument()
+})
+
+// A scoped caller's save strips out-of-scope ids regardless, so a delete would
+// be a silent no-op. The out-of-scope chip renders WITHOUT a delete affordance,
+// while an in-scope chip keeps it.
+test('scoped caller: an out-of-scope grant chip is not deletable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
+
+  renderModal({ enforceCallerScope: true })
+
+  const inScope = (await screen.findByText('AAA - Division A')).closest(
+    '.MuiChip-root'
+  ) as HTMLElement
+  const outOfScope = screen
+    .getByText('ZZZ - Parent Division')
+    .closest('.MuiChip-root') as HTMLElement
+
+  expect(inScope.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
+  expect(outOfScope.querySelector('.MuiChip-deleteIcon')).toBeNull()
+})
+
+// An unscoped caller's removal really revokes, so their out-of-scope chip must
+// keep the delete affordance.
+test('unscoped caller: an out-of-scope grant chip stays deletable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
+
+  renderModal({ enforceCallerScope: false })
+
+  const outOfScope = (await screen.findByText('ZZZ - Parent Division')).closest(
+    '.MuiChip-root'
+  ) as HTMLElement
+
+  expect(outOfScope.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
+})
+
 test('success: modal closes and onChanged fires after save', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1] })
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
