@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { act, render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
@@ -276,4 +276,47 @@ it('flushes a pending draft when the page unmounts mid-debounce', async () => {
   })
   expect(questionId).toBe(7006)
   expect(draft.notes).toBe('Imperial posture note')
+})
+
+it('does not lose a newer edit made while an earlier save is in flight', async () => {
+  // Regression for the identity-clear race (#640 review): edit A's debounced
+  // save starts; edit B replaces the pending payload under the SAME generation
+  // (saveGenRef only moves on explicit clears); save A's completion must not
+  // clear B's payload, or an unmount before B's own debounce flushes nothing.
+  const { saveDraft } = require('./draftStore') as { saveDraft: jest.Mock }
+  let resolveSaveA!: (saved: boolean) => void
+  saveDraft.mockImplementationOnce(
+    () => new Promise<boolean>((resolve) => (resolveSaveA = resolve))
+  )
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  const { unmount } = renderPage()
+  const notesField = await screen.findByLabelText('Justification notes')
+
+  // Edit A; let its 1s debounce fire so saveDraft(A) is genuinely in flight.
+  await userEvent.type(notesField, 'A')
+  await waitFor(() => expect(saveDraft).toHaveBeenCalledTimes(1), {
+    timeout: 3000,
+  })
+  expect(saveDraft.mock.calls[0][4].notes).toBe('A')
+
+  // Edit B while A remains unresolved.
+  await userEvent.type(notesField, 'B')
+
+  // A resolves successfully. Identity check must leave B's payload pending.
+  await act(async () => {
+    resolveSaveA(true)
+  })
+
+  // Leave before B's own debounce fires.
+  unmount()
+
+  expect(saveDraft).toHaveBeenCalledTimes(2)
+  expect(saveDraft.mock.calls[1][4].notes).toBe('AB')
 })

@@ -1044,7 +1044,7 @@ export default function QuestionnarePage() {
       return
     }
     const currentGen = saveGenRef.current
-    pendingDraftRef.current = {
+    const pending = {
       userid: userInfo.userid,
       system,
       questionId,
@@ -1052,19 +1052,26 @@ export default function QuestionnarePage() {
       draft: { selectQuestionOption, notes },
       gen: currentGen,
     }
+    pendingDraftRef.current = pending
     const timer = setTimeout(() => {
       if (saveGenRef.current !== currentGen) return
       saveDraft(
-        userInfo.userid,
-        system,
-        questionId,
-        datacallID,
-        { selectQuestionOption, notes },
+        pending.userid,
+        pending.system,
+        pending.questionId,
+        pending.datacallID,
+        pending.draft,
         () => saveGenRef.current === currentGen
       ).then((saved) => {
         if (saveGenRef.current !== currentGen) return
-        // Written, so an unmount flush would only rewrite identical content.
-        if (pendingDraftRef.current?.gen === currentGen)
+        // Clear by identity, not generation: a newer edit re-runs this effect
+        // and replaces the ref with a NEW object under the SAME generation
+        // (saveGenRef only moves on explicit clears), so a generation check
+        // here would let the older save's completion discard the newer edit's
+        // payload while its own debounce is still pending — and an unmount in
+        // that window would then flush nothing (#640 review). Gated on `saved`
+        // so a failed write stays in the ref for the unmount flush to retry.
+        if (saved && pendingDraftRef.current === pending)
           pendingDraftRef.current = null
         if (saved) {
           if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
