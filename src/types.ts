@@ -94,6 +94,18 @@ export type DataCenterEnvironment = {
   ordr: number
 }
 
+// One allowed value for an extended-metadata field, from
+// GET /api/v1/systemattributes. `field` is the column ("fips", "system_type",
+// "cloud_service_model", ...); `value` is a canonical option. `selectable` false
+// hides a row from the dropdown. Rows arrive ordered by `ordr`. The endpoint is
+// a plain allowed-values list; field help copy lives in the UI, not here.
+export type SystemAttribute = {
+  field: string
+  value: string
+  selectable: boolean
+  ordr: number
+}
+
 export type userData = {
   userid: string
   email: string
@@ -132,19 +144,21 @@ export type FismaSystemType = {
   reactivated_date: string | null
   reactivation_notes: string | null
   opdiv_id?: number | null
-  // Extended metadata fields (migration 0044+)
+  // Extended metadata fields, typed and canonicalized by the backend.
+  // Enum strings carry a canonical value or null; the tri-state booleans are
+  // true / false / null = Unknown; cloud_service_model is a decomposed list.
   isso_name?: string | null
-  hva?: string | null
+  hva?: boolean | null
   fips?: string | null
   system_type?: string | null
-  cloud_system?: string | null
-  cloud_service_model?: string | null
+  cloud_system?: boolean | null
+  cloud_service_model?: string[] | null
   cloud_vendor?: string | null
   system_operator?: string | null
   goco_coco_gogo?: string | null
   system_owner?: string | null
   system_owner_email?: string | null
-  legacy?: string | null
+  legacy?: boolean | null
   // Risk-based target maturity (ztmf#398). null = no target asserted yet;
   // the UI presents the Advanced default.
   target_maturity_tier?: string | null

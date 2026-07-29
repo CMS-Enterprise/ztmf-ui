@@ -3,6 +3,7 @@ import InsightsPanel, {
   OptionInsightBadges,
   severityStyle,
   rollupControls,
+  ISSO_DETERMINATION_DISCLAIMER,
 } from './InsightsPanel'
 import type { InsightPayload } from '@/types'
 import CONFIG from '@/utils/config'
@@ -580,6 +581,42 @@ describe('InsightsPanel', () => {
     expect(tip).toHaveTextContent(/counted as failing/)
   })
 
+  it('names the check in plain language on a control chip hover, not just its slug', async () => {
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 1,
+            findings: {
+              kion: [
+                {
+                  id: 'iam-user-without-mfa-device-enabled',
+                  nist_controls: 'IA-2',
+                  description:
+                    'Identify IAM users without an MFA device enabled',
+                },
+              ],
+            },
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const chip = screen.getByRole('img', { name: /^IA-2: failing/ })
+    // Sighted: the sentence renders under the slug line in the hover.
+    fireEvent.focus(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('iam-user-without-mfa-device-enabled')
+    expect(tip).toHaveTextContent(
+      'Identify IAM users without an MFA device enabled'
+    )
+    // AT: same sentence rides in the accessible name, which is the only thing a
+    // screen reader gets (the tooltip node content is never announced).
+    expect(chip).toHaveAccessibleName(
+      /Identify IAM users without an MFA device enabled/
+    )
+  })
+
   it('renders a minimal payload without a details toggle', () => {
     render(
       <InsightsPanel
@@ -590,6 +627,52 @@ describe('InsightsPanel', () => {
     expect(
       screen.queryByRole('button', { name: /details/i })
     ).not.toBeInTheDocument()
+  })
+})
+
+describe('ISSO determination disclaimer', () => {
+  it('shows the disclaimer on a minimal payload, without opening the drawer', () => {
+    // Minimal payload has no details toggle at all, so the disclaimer has to be
+    // outside the Collapse to be reachable here.
+    render(<InsightsPanel payload={{ suggested_score: 3 }} />)
+    expect(
+      screen.queryByRole('button', { name: /details/i })
+    ).not.toBeInTheDocument()
+    expect(screen.getByText(ISSO_DETERMINATION_DISCLAIMER)).toBeInTheDocument()
+  })
+
+  it('states both that the findings are decision-support and that the determination is the ISSO’s', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    const note = screen.getByRole('note', { name: /about these findings/i })
+    expect(note).toHaveTextContent(
+      /tools for assessing their system's maturity/i
+    )
+    expect(note).toHaveTextContent(/decision-support only/i)
+    expect(note).toHaveTextContent(
+      /final maturity determination is the ISSO's responsibility/i
+    )
+  })
+
+  it('keeps the disclaimer visible while the details drawer is open', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getByText('Aligns with ARS Controls:')).toBeInTheDocument()
+    expect(screen.getByText(ISSO_DETERMINATION_DISCLAIMER)).toBeInTheDocument()
+  })
+
+  it('does not name the note icon (the prose beside it carries the message)', () => {
+    render(<InsightsPanel payload={{ suggested_score: 3 }} />)
+    // Only the ARS alignment info icon is exposed as an img; the note's icon is
+    // decorative, so exposing it would double-read the disclaimer.
+    expect(
+      screen.queryByRole('img', { name: /about these findings/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders the disclaimer once per panel', () => {
+    render(<InsightsPanel payload={fullPayload} />)
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(screen.getAllByRole('note')).toHaveLength(1)
   })
 })
 
@@ -604,6 +687,23 @@ describe('OptionInsightBadges', () => {
     render(<OptionInsightBadges score={1} insight={insight} />)
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
     expect(screen.queryByText(/FY2024 Q1 answer/)).not.toBeInTheDocument()
+  })
+
+  it('frames the recommendation badge as pointing to an answer, not deciding it', async () => {
+    // The badge renders next to a radio option, outside the Insights box, so it
+    // carries its own determination framing rather than relying on the panel's.
+    render(<OptionInsightBadges score={1} insight={insight} />)
+    const badge = screen.getByLabelText(/^ZTMF Insights —/)
+    // Names the ISSO, not "you" — the badge renders for every role that can view
+    // the questionnaire, so second person would misattribute the determination.
+    expect(badge).toHaveAccessibleName(
+      /final maturity determination is the ISSO's/i
+    )
+    expect(badge).not.toHaveAccessibleName(/determination is yours/i)
+    fireEvent.focus(badge)
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /final maturity determination is the ISSO's/i
+    )
   })
 
   it("renders the prior-answer badge on last year's option", () => {
@@ -776,6 +876,82 @@ describe('rollupControls (cross-source ARS control union)', () => {
     }).find((c) => c.id === 'SC-12')
     expect(sc12).toMatchObject({ state: 'failing', conflict: true })
     expect(sc12?.evidence).toHaveLength(2)
+  })
+
+  it("carries each check's sentence onto its evidence, for every finding source", () => {
+    // Kion puts the sentence in `description`, SecurityHub/Hardenize in `title`
+    // when they ship no description — the evidence has to read alike either way,
+    // since the control chip is labeled with the control id and the slug alone
+    // ("account-without-compliant-password-policy") makes the reader decode it.
+    const rolled = roll({
+      kion_passing: [
+        {
+          id: 'root-account-without-mfa-enabled',
+          nist_controls: 'AC-2',
+          description:
+            'Identify accounts without MFA enabled on root user account',
+        },
+      ],
+      findings: {
+        kion: [
+          {
+            id: 'account-without-compliant-password-policy',
+            nist_controls: 'IA-5',
+            description: 'Password Policy',
+          },
+        ],
+        sechub: [
+          {
+            id: 'IAM.10',
+            nist_controls: 'IA-2',
+            title: 'MFA should be enabled',
+          },
+        ],
+        hardenize: [
+          {
+            id: 'WWW_HSTS_MISSING',
+            nist_controls: 'SC-8',
+            description: 'HSTS not enabled',
+          },
+        ],
+      },
+    })
+    const evidenceFor = (id: string) =>
+      rolled.find((c) => c.id === id)?.evidence[0]
+    expect(evidenceFor('IA-5')?.description).toBe('Password Policy')
+    expect(evidenceFor('AC-2')?.description).toBe(
+      'Identify accounts without MFA enabled on root user account'
+    )
+    // SecurityHub ships no description, so the title stands in.
+    expect(evidenceFor('IA-2')?.description).toBe('MFA should be enabled')
+    expect(evidenceFor('SC-8')?.description).toBe('HSTS not enabled')
+  })
+
+  it('does not repeat a title-only finding as both the check and the sentence', () => {
+    // No id and no description, so both the check name and the sentence resolve
+    // to the same title — printing it twice in the hover (and announcing it twice
+    // to AT) reads as a bug.
+    const rolled = roll({
+      findings: {
+        sechub: [{ title: 'MFA should be enabled', nist_controls: 'IA-2' }],
+      },
+    })
+    expect(rolled[0].evidence[0]).toEqual({
+      source: 'SecurityHub',
+      check: 'MFA should be enabled',
+      state: 'failing',
+      description: undefined,
+    })
+  })
+
+  it('leaves CFACTS control evidence without a sentence (it has no per-check text)', () => {
+    const rolled = roll({ ars_satisfied_controls: ['IA-01'] })
+    expect(rolled[0].evidence[0]).toEqual({
+      source: 'CFACTS',
+      check: undefined,
+      state: 'satisfied',
+      description: undefined,
+    })
   })
 
   it('splits a multi-control mapping and skips malformed evidence without throwing', () => {

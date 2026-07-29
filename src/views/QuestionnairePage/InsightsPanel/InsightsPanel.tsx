@@ -46,6 +46,13 @@ function maturityLabel(score?: number | null): string | null {
 const ARS_ALIGN_DISCLAIMER =
   'Alignment maps automated security evidence to ARS 5.2 controls. It is indicative only and does not constitute an assessed control satisfaction determination or a compliance attestation. CFACTS remains the system of record for control status.'
 
+// Panel-level framing for everything the panel shows. The findings are automated
+// evidence meant to sharpen an ISSO's own assessment, not a maturity
+// determination — this stays visible whether or not the details drawer is open so
+// the framing can never be missed by scrolling past a collapsed section.
+export const ISSO_DETERMINATION_DISCLAIMER =
+  "These automated findings are intended to give ISSOs better tools for assessing their system's maturity. They are decision-support only — the final maturity determination is the ISSO's responsibility."
+
 // Suggested-pill tint keyed by score. Mirrors the prototype's trad/init/adv/opt
 // palette. Unknown/blank score renders neutral.
 const SUGGESTED_TINT: Record<number, { bg: string; fg: string }> = {
@@ -253,13 +260,19 @@ export function OptionInsightBadges({
     >
       {isSuggested && (
         <Tooltip
-          title="The answer the automated evidence points to"
+          // The badge sits outside the Insights box, where the panel's
+          // determination disclaimer isn't visible, so the framing rides along
+          // with the badge itself.
+          // Names the ISSO rather than "you": the badge renders for whoever is
+          // viewing the questionnaire (ISSM, admin, read-only), so second person
+          // would assign the determination to the wrong role.
+          title="The answer the automated evidence points to — the final maturity determination is the ISSO's"
           placement="top"
           arrow
         >
           <Box
             component="span"
-            aria-label="ZTMF Insights — the answer the automated evidence points to"
+            aria-label="ZTMF Insights — the answer the automated evidence points to; the final maturity determination is the ISSO's"
             sx={{
               px: 0.75,
               py: 0.125,
@@ -711,6 +724,43 @@ function InsightsPanelInner({ payload, questionId }: Props) {
           )}
         </Box>
       </Collapse>
+
+      {/* ISSO determination disclaimer — persistent, outside the Collapse, so it
+          is shown with the findings whether or not the drawer is open. Colors are
+          an explicit fg/bg pair rather than inherited text so the note keeps its
+          contrast wherever the panel is embedded, and it carries a border (not
+          color alone) so it still reads as a callout under forced-colors /
+          high-contrast modes. */}
+      <Box
+        role="note"
+        aria-label="About these findings"
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          gap: 1,
+          mt: 1.5,
+          pt: 1.25,
+          borderTop: '1px solid #e0e4f0',
+        }}
+      >
+        <InfoOutlined
+          // Decorative: the note's text sits right beside it, so naming the icon
+          // would just double-read the same content.
+          aria-hidden
+          sx={{ fontSize: 14, color: '#5c636a', mt: '1px', flexShrink: 0 }}
+        />
+        <Typography
+          component="p"
+          sx={{
+            fontSize: 11.5,
+            lineHeight: 1.5,
+            // 6.6:1 on the panel's #f8f9fe — comfortably AA for small text.
+            color: '#4a4f5c',
+          }}
+        >
+          {ISSO_DETERMINATION_DISCLAIMER}
+        </Typography>
+      </Box>
     </Box>
   )
 }
@@ -791,18 +841,6 @@ const CONTROL_CHIP_HELP: Record<ControlChipVariant, string> = {
   failing: 'Failing — an evidence source found this control failing.',
   conflict:
     'Sources disagree — at least one passed this control and at least one failed it. Counted as failing (weakest-link); review the failing check.',
-}
-
-// Plain-language reason behind each ARS chip's state, surfaced on hover and as the
-// chip's accessible name. The three arrays the pipeline emits ARE the reason: a
-// control lands in exactly one of satisfied / not-satisfied / failing, so the
-// variant fully determines why it's coloured the way it is — no per-control text
-// needed. Ordered passed / not-assessed / failed to match ✓ / ○ / ✗.
-const CONTROL_CHIP_HELP: Record<ControlChipVariant, string> = {
-  satisfied: 'Satisfied — assessed and met (per CFACTS/Archer).',
-  unsatisfied:
-    'Not satisfied — applies to this question but is not marked Satisfied (may be unassessed).',
-  failing: 'Other Than Satisfied — Archer flagged this control as failing.',
 }
 
 function ControlChip({
@@ -1190,6 +1228,12 @@ export type ControlEvidence = {
   source: string
   check?: string
   state: ControlRollupState
+  // The check's human sentence, carried alongside the slug. A control chip is
+  // labeled with the control id, so without this its hover would name the check
+  // only by slug (`account-without-compliant-password-policy`) and the reader
+  // would have to decode it — the check chips have shown this sentence since
+  // they were introduced.
+  description?: string
 }
 
 // A control after the cross-source rollup: its net (weakest-link) state, whether
@@ -1229,7 +1273,8 @@ export function rollupControls(
     raw: unknown,
     source: string,
     state: ControlRollupState,
-    check?: string
+    check?: string,
+    description?: string
   ) => {
     const text = asText(raw)
     if (!text) return
@@ -1238,14 +1283,27 @@ export function rollupControls(
       const id = part.trim()
       if (!id) continue
       const list = map.get(id) ?? []
-      list.push({ source, state, check })
+      list.push({
+        source,
+        state,
+        check,
+        // A title-only finding (no id, no description) resolves both the check
+        // and the sentence to that same title. Drop the duplicate rather than
+        // printing it twice in the hover and announcing it twice to AT.
+        description: description === check ? undefined : description,
+      })
       map.set(id, list)
     }
   }
   const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
   const finding = (f: unknown) =>
     f && typeof f === 'object'
-      ? (f as { nist_controls?: unknown; id?: unknown; title?: unknown })
+      ? (f as {
+          nist_controls?: unknown
+          id?: unknown
+          title?: unknown
+          description?: unknown
+        })
       : null
   // CFACTS assesses the ARS-framework controls (the ars_* fields carry CFACTS's
   // satisfied / applicable-but-not-satisfied / failing coverage). ARS is the
@@ -1284,12 +1342,21 @@ export function rollupControls(
         o?.nist_controls,
         label,
         'satisfied',
-        asText(o?.id) ?? asText(o?.title)
+        asText(o?.id) ?? asText(o?.title),
+        // Kion puts the sentence in `description`, SecurityHub in `title` —
+        // same fallback CheckTooltip uses, so both hovers read alike.
+        asText(o?.description) ?? asText(o?.title)
       )
     })
     arr(findings[src]).forEach((f) => {
       const o = finding(f)
-      add(o?.nist_controls, label, 'failing', asText(o?.id) ?? asText(o?.title))
+      add(
+        o?.nist_controls,
+        label,
+        'failing',
+        asText(o?.id) ?? asText(o?.title),
+        asText(o?.description) ?? asText(o?.title)
+      )
     })
   }
   return [...map.entries()].map(([id, evidence]) => {
@@ -1319,6 +1386,12 @@ const CONTROL_EVIDENCE_WORD: Record<ControlRollupState, string> = {
 function controlEvidenceLine(e: ControlEvidence): string {
   return `${e.source}${e.check ? ` · ${e.check}` : ''} · ${CONTROL_EVIDENCE_WORD[e.state]}`
 }
+// Spoken form folds in the check's sentence. The hover renders that sentence on
+// its own line (below), but a screen reader gets one string per evidence entry,
+// so it has to ride along here or it would be sighted-only.
+function controlEvidenceSpoken(e: ControlEvidence): string {
+  return `${controlEvidenceLine(e)}${e.description ? ` — ${e.description}` : ''}`
+}
 // Accessible name folds the net state, the conflict note, and every source line
 // into one string — the ✓/○/✗/⚠ marker and colour are otherwise the only place the
 // state and its provenance live, and neither reaches a screen reader (508).
@@ -1326,7 +1399,7 @@ function controlAriaLabel(c: ControlRollup): string {
   const head = c.conflict
     ? `${c.id}: sources disagree, counted as ${CONTROL_STATE_WORD[c.state]}`
     : `${c.id}: ${CONTROL_STATE_WORD[c.state]}`
-  return `${head}. ${c.evidence.map(controlEvidenceLine).join('; ')}.`
+  return `${head}. ${c.evidence.map(controlEvidenceSpoken).join('; ')}.`
 }
 
 // Rich hover for an ARS control chip: the control id, a conflict note stating how a
@@ -1351,6 +1424,13 @@ function ControlTooltip({ control }: { control: ControlRollup }) {
             sx={{ fontSize: 10, lineHeight: 1.5, opacity: 0.9 }}
           >
             {controlEvidenceLine(e)}
+            {/* The sentence gets its own indented line rather than being tacked
+                onto the slug line — a control with several evidence entries would
+                otherwise wrap into an unreadable block, and the slug is what a
+                reviewer scans for first. */}
+            {e.description && (
+              <Box sx={{ pl: 1, opacity: 0.85 }}>{e.description}</Box>
+            )}
           </Box>
         ))}
       </Box>
