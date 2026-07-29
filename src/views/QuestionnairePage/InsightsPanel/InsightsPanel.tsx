@@ -1228,6 +1228,12 @@ export type ControlEvidence = {
   source: string
   check?: string
   state: ControlRollupState
+  // The check's human sentence, carried alongside the slug. A control chip is
+  // labeled with the control id, so without this its hover would name the check
+  // only by slug (`account-without-compliant-password-policy`) and the reader
+  // would have to decode it — the check chips have shown this sentence since
+  // they were introduced.
+  description?: string
 }
 
 // A control after the cross-source rollup: its net (weakest-link) state, whether
@@ -1267,7 +1273,8 @@ export function rollupControls(
     raw: unknown,
     source: string,
     state: ControlRollupState,
-    check?: string
+    check?: string,
+    description?: string
   ) => {
     const text = asText(raw)
     if (!text) return
@@ -1276,14 +1283,27 @@ export function rollupControls(
       const id = part.trim()
       if (!id) continue
       const list = map.get(id) ?? []
-      list.push({ source, state, check })
+      list.push({
+        source,
+        state,
+        check,
+        // A title-only finding (no id, no description) resolves both the check
+        // and the sentence to that same title. Drop the duplicate rather than
+        // printing it twice in the hover and announcing it twice to AT.
+        description: description === check ? undefined : description,
+      })
       map.set(id, list)
     }
   }
   const arr = (v: unknown): unknown[] => (Array.isArray(v) ? v : [])
   const finding = (f: unknown) =>
     f && typeof f === 'object'
-      ? (f as { nist_controls?: unknown; id?: unknown; title?: unknown })
+      ? (f as {
+          nist_controls?: unknown
+          id?: unknown
+          title?: unknown
+          description?: unknown
+        })
       : null
   // CFACTS assesses the ARS-framework controls (the ars_* fields carry CFACTS's
   // satisfied / applicable-but-not-satisfied / failing coverage). ARS is the
@@ -1322,12 +1342,21 @@ export function rollupControls(
         o?.nist_controls,
         label,
         'satisfied',
-        asText(o?.id) ?? asText(o?.title)
+        asText(o?.id) ?? asText(o?.title),
+        // Kion puts the sentence in `description`, SecurityHub in `title` —
+        // same fallback CheckTooltip uses, so both hovers read alike.
+        asText(o?.description) ?? asText(o?.title)
       )
     })
     arr(findings[src]).forEach((f) => {
       const o = finding(f)
-      add(o?.nist_controls, label, 'failing', asText(o?.id) ?? asText(o?.title))
+      add(
+        o?.nist_controls,
+        label,
+        'failing',
+        asText(o?.id) ?? asText(o?.title),
+        asText(o?.description) ?? asText(o?.title)
+      )
     })
   }
   return [...map.entries()].map(([id, evidence]) => {
@@ -1357,6 +1386,12 @@ const CONTROL_EVIDENCE_WORD: Record<ControlRollupState, string> = {
 function controlEvidenceLine(e: ControlEvidence): string {
   return `${e.source}${e.check ? ` · ${e.check}` : ''} · ${CONTROL_EVIDENCE_WORD[e.state]}`
 }
+// Spoken form folds in the check's sentence. The hover renders that sentence on
+// its own line (below), but a screen reader gets one string per evidence entry,
+// so it has to ride along here or it would be sighted-only.
+function controlEvidenceSpoken(e: ControlEvidence): string {
+  return `${controlEvidenceLine(e)}${e.description ? ` — ${e.description}` : ''}`
+}
 // Accessible name folds the net state, the conflict note, and every source line
 // into one string — the ✓/○/✗/⚠ marker and colour are otherwise the only place the
 // state and its provenance live, and neither reaches a screen reader (508).
@@ -1364,7 +1399,7 @@ function controlAriaLabel(c: ControlRollup): string {
   const head = c.conflict
     ? `${c.id}: sources disagree, counted as ${CONTROL_STATE_WORD[c.state]}`
     : `${c.id}: ${CONTROL_STATE_WORD[c.state]}`
-  return `${head}. ${c.evidence.map(controlEvidenceLine).join('; ')}.`
+  return `${head}. ${c.evidence.map(controlEvidenceSpoken).join('; ')}.`
 }
 
 // Rich hover for an ARS control chip: the control id, a conflict note stating how a
@@ -1389,6 +1424,13 @@ function ControlTooltip({ control }: { control: ControlRollup }) {
             sx={{ fontSize: 10, lineHeight: 1.5, opacity: 0.9 }}
           >
             {controlEvidenceLine(e)}
+            {/* The sentence gets its own indented line rather than being tacked
+                onto the slug line — a control with several evidence entries would
+                otherwise wrap into an unreadable block, and the slug is what a
+                reviewer scans for first. */}
+            {e.description && (
+              <Box sx={{ pl: 1, opacity: 0.85 }}>{e.description}</Box>
+            )}
           </Box>
         ))}
       </Box>

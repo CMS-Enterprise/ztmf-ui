@@ -581,6 +581,42 @@ describe('InsightsPanel', () => {
     expect(tip).toHaveTextContent(/counted as failing/)
   })
 
+  it('names the check in plain language on a control chip hover, not just its slug', async () => {
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 1,
+            findings: {
+              kion: [
+                {
+                  id: 'iam-user-without-mfa-device-enabled',
+                  nist_controls: 'IA-2',
+                  description:
+                    'Identify IAM users without an MFA device enabled',
+                },
+              ],
+            },
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    const chip = screen.getByRole('img', { name: /^IA-2: failing/ })
+    // Sighted: the sentence renders under the slug line in the hover.
+    fireEvent.focus(chip)
+    const tip = await screen.findByRole('tooltip')
+    expect(tip).toHaveTextContent('iam-user-without-mfa-device-enabled')
+    expect(tip).toHaveTextContent(
+      'Identify IAM users without an MFA device enabled'
+    )
+    // AT: same sentence rides in the accessible name, which is the only thing a
+    // screen reader gets (the tooltip node content is never announced).
+    expect(chip).toHaveAccessibleName(
+      /Identify IAM users without an MFA device enabled/
+    )
+  })
+
   it('renders a minimal payload without a details toggle', () => {
     render(
       <InsightsPanel
@@ -840,6 +876,82 @@ describe('rollupControls (cross-source ARS control union)', () => {
     }).find((c) => c.id === 'SC-12')
     expect(sc12).toMatchObject({ state: 'failing', conflict: true })
     expect(sc12?.evidence).toHaveLength(2)
+  })
+
+  it("carries each check's sentence onto its evidence, for every finding source", () => {
+    // Kion puts the sentence in `description`, SecurityHub/Hardenize in `title`
+    // when they ship no description — the evidence has to read alike either way,
+    // since the control chip is labeled with the control id and the slug alone
+    // ("account-without-compliant-password-policy") makes the reader decode it.
+    const rolled = roll({
+      kion_passing: [
+        {
+          id: 'root-account-without-mfa-enabled',
+          nist_controls: 'AC-2',
+          description:
+            'Identify accounts without MFA enabled on root user account',
+        },
+      ],
+      findings: {
+        kion: [
+          {
+            id: 'account-without-compliant-password-policy',
+            nist_controls: 'IA-5',
+            description: 'Password Policy',
+          },
+        ],
+        sechub: [
+          {
+            id: 'IAM.10',
+            nist_controls: 'IA-2',
+            title: 'MFA should be enabled',
+          },
+        ],
+        hardenize: [
+          {
+            id: 'WWW_HSTS_MISSING',
+            nist_controls: 'SC-8',
+            description: 'HSTS not enabled',
+          },
+        ],
+      },
+    })
+    const evidenceFor = (id: string) =>
+      rolled.find((c) => c.id === id)?.evidence[0]
+    expect(evidenceFor('IA-5')?.description).toBe('Password Policy')
+    expect(evidenceFor('AC-2')?.description).toBe(
+      'Identify accounts without MFA enabled on root user account'
+    )
+    // SecurityHub ships no description, so the title stands in.
+    expect(evidenceFor('IA-2')?.description).toBe('MFA should be enabled')
+    expect(evidenceFor('SC-8')?.description).toBe('HSTS not enabled')
+  })
+
+  it('does not repeat a title-only finding as both the check and the sentence', () => {
+    // No id and no description, so both the check name and the sentence resolve
+    // to the same title — printing it twice in the hover (and announcing it twice
+    // to AT) reads as a bug.
+    const rolled = roll({
+      findings: {
+        sechub: [{ title: 'MFA should be enabled', nist_controls: 'IA-2' }],
+      },
+    })
+    expect(rolled[0].evidence[0]).toEqual({
+      source: 'SecurityHub',
+      check: 'MFA should be enabled',
+      state: 'failing',
+      description: undefined,
+    })
+  })
+
+  it('leaves CFACTS control evidence without a sentence (it has no per-check text)', () => {
+    const rolled = roll({ ars_satisfied_controls: ['IA-01'] })
+    expect(rolled[0].evidence[0]).toEqual({
+      source: 'CFACTS',
+      check: undefined,
+      state: 'satisfied',
+      description: undefined,
+    })
   })
 
   it('splits a multi-control mapping and skips malformed evidence without throwing', () => {
