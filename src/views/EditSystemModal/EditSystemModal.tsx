@@ -44,7 +44,18 @@ import type { OpDiv } from '@/types'
 import {
   getFieldsBySection,
   EXTENDED_METADATA_KEYS,
+  type FieldConfig,
 } from '@/views/SystemDetailPage/fieldConfig'
+import {
+  useSystemAttributes,
+  optionsForField,
+  booleanOptions,
+  boolToSelectValue,
+  selectValueToBool,
+  buildExtendedDiff,
+  crossFieldClears,
+  isCrossFieldHidden,
+} from '@/utils/systemMetadataVocab'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -156,6 +167,126 @@ export default function EditSystemModal({
   }
   const [editedFismaSystem, setEditedFismaSystem] =
     React.useState<FismaSystemType>(EMPTY_SYSTEM)
+  const attributes = useSystemAttributes()
+
+  const setField = (key: string, value: string | boolean | string[] | null) =>
+    setEditedFismaSystem((prev) => ({
+      ...prev,
+      [key]: value,
+      ...crossFieldClears(key, value),
+    }))
+
+  // Renders an extended-metadata field per its configured type: canonical
+  // enum select, tri-state boolean (Yes/No/Unknown), decomposed multi-select,
+  // or free text. Each control stores the field's typed clear signal when
+  // emptied: enum '', boolean null, array [].
+  const renderExtendedControl = (field: FieldConfig) => {
+    // isso_name is backend-resolved, so its control is read-only.
+    const disabled = field.readOnly
+    if (field.type === 'select') {
+      const current = editedFismaSystem[field.key] as string | null | undefined
+      return (
+        <TextField
+          id={`${mode}-${field.key}`}
+          select
+          label={field.label}
+          variant="standard"
+          margin="normal"
+          fullWidth
+          disabled={disabled}
+          value={current || ''}
+          helperText={field.helpText}
+          InputLabelProps={{ sx: { marginTop: 0 } }}
+          onChange={(e) => setField(field.key, e.target.value)}
+        >
+          <MenuItem value="">&mdash; None &mdash;</MenuItem>
+          {optionsForField(attributes, field.key).map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      )
+    }
+    if (field.type === 'boolean') {
+      return (
+        <TextField
+          id={`${mode}-${field.key}`}
+          select
+          label={field.label}
+          variant="standard"
+          margin="normal"
+          fullWidth
+          disabled={disabled}
+          value={boolToSelectValue(
+            editedFismaSystem[field.key] as boolean | null | undefined
+          )}
+          helperText={field.helpText}
+          InputLabelProps={{ sx: { marginTop: 0 } }}
+          onChange={(e) =>
+            setField(field.key, selectValueToBool(e.target.value))
+          }
+        >
+          {booleanOptions(field.booleanLabels).map((o) => (
+            <MenuItem key={o.label} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      )
+    }
+    if (field.type === 'multiselect') {
+      const current =
+        (editedFismaSystem[field.key] as string[] | null | undefined) ?? []
+      return (
+        <TextField
+          id={`${mode}-${field.key}`}
+          select
+          label={field.label}
+          variant="standard"
+          margin="normal"
+          fullWidth
+          disabled={disabled}
+          value={current}
+          SelectProps={{
+            multiple: true,
+            renderValue: (selected) => (selected as string[]).join(', '),
+          }}
+          helperText={field.helpText}
+          InputLabelProps={{ sx: { marginTop: 0 } }}
+          onChange={(e) =>
+            setField(field.key, e.target.value as unknown as string[])
+          }
+        >
+          {optionsForField(attributes, field.key).map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </TextField>
+      )
+    }
+    return (
+      <TextField
+        id={`${mode}-${field.key}`}
+        label={field.label}
+        variant="standard"
+        margin="normal"
+        fullWidth
+        disabled={disabled}
+        value={
+          (editedFismaSystem[field.key] as string | null | undefined) ?? ''
+        }
+        helperText={field.helpText}
+        InputLabelProps={{ sx: { marginTop: 0 } }}
+        // Send the raw value, so clearing sends '' (the blankToNil clear
+        // signal) rather than null, which the backend reads as "leave
+        // unchanged". Matches the detail edit view's text branch.
+        onChange={(e) => setField(field.key, e.target.value)}
+      />
+    )
+  }
+
   React.useEffect(() => {
     if (system && open) {
       setFormValid((prevState) => ({
@@ -277,12 +408,13 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        // Extended metadata fields are editable across all OpDivs; send each,
-        // using null to leave a value unchanged (the backend writes only
-        // non-null fields, so imported data isn't clobbered).
-        for (const key of EXTENDED_METADATA_KEYS) {
-          editBody[key] = editedFismaSystem[key] ?? null
-        }
+        // Extended metadata: dirty-diff. Omitted = leave unchanged; a field's
+        // per-type clear signal (enum '', boolean null, array []) = clear. Send
+        // only the fields the user changed from the loaded system.
+        Object.assign(
+          editBody,
+          buildExtendedDiff(editedFismaSystem, system, EXTENDED_METADATA_KEYS)
+        )
         await axiosInstance.put(
           `fismasystems/${editedFismaSystem.fismasystemid}`,
           editBody
@@ -325,9 +457,16 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        for (const key of EXTENDED_METADATA_KEYS) {
-          body[key] = editedFismaSystem[key] ?? null
-        }
+        // Create: no prior system, so send only the extended fields the user
+        // actually set (diff against the empty baseline).
+        Object.assign(
+          body,
+          buildExtendedDiff(
+            editedFismaSystem,
+            EMPTY_SYSTEM as FismaSystemType,
+            EXTENDED_METADATA_KEYS
+          )
+        )
         await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
@@ -1216,31 +1355,16 @@ export default function EditSystemModal({
                         : EXTENDED_METADATA_EDIT_HINT}
                     </Typography>
                     <Grid container spacing={2}>
-                      {extendedFields.map((field) => (
-                        <Grid item xs={12} sm={6} md={4} key={field.key}>
-                          <TextField
-                            id={`${mode}-${field.key}`}
-                            label={field.label}
-                            variant="standard"
-                            margin="normal"
-                            fullWidth
-                            disabled={field.readOnly}
-                            value={
-                              (editedFismaSystem[field.key] as
-                                | string
-                                | null
-                                | undefined) ?? ''
-                            }
-                            InputLabelProps={{ sx: { marginTop: 0 } }}
-                            onChange={(e) => {
-                              setEditedFismaSystem((prevState) => ({
-                                ...prevState,
-                                [field.key]: e.target.value || null,
-                              }))
-                            }}
-                          />
-                        </Grid>
-                      ))}
+                      {extendedFields
+                        .filter(
+                          (field) =>
+                            !isCrossFieldHidden(field.key, editedFismaSystem)
+                        )
+                        .map((field) => (
+                          <Grid item xs={12} sm={6} md={4} key={field.key}>
+                            {renderExtendedControl(field)}
+                          </Grid>
+                        ))}
                     </Grid>
                   </Box>
                 </Grid>
