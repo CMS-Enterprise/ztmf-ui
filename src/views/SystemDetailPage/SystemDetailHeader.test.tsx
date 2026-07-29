@@ -1,5 +1,4 @@
 import { render, screen } from '@testing-library/react'
-import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import SystemDetailHeader from './SystemDetailHeader'
 
@@ -40,42 +39,31 @@ function renderHeader(props: Partial<typeof BASE_PROPS> = {}) {
   return router
 }
 
-it('renders a Questionnaire button', () => {
+it('renders Questionnaire as a link, not a bare button', () => {
   renderHeader()
-  expect(
-    screen.getByRole('button', { name: 'Questionnaire' })
-  ).toBeInTheDocument()
+  // An anchor (CmsButton href) rather than onClick + navigate, so
+  // open-in-new-tab and copy-link work (#640 review).
+  const link = screen.getByRole('link', { name: 'Questionnaire' })
+  expect(link).toBeInTheDocument()
+  expect(link.tagName).toBe('A')
 })
 
-it('navigates to the questionnaire keyed on the lowercased acronym', async () => {
-  const router = renderHeader()
-  await userEvent.click(screen.getByRole('button', { name: 'Questionnaire' }))
+it('targets the questionnaire keyed on the lowercased acronym', () => {
+  renderHeader()
   // Lowercased to match the URL shape the dashboard's own questionnaire action
   // builds (FismaTable openQuestionnaire), so both entry points share one link.
-  expect(router.state.location.pathname).toBe('/questionnaire/ssd-ex')
-})
-
-it('carries no route state, so the questionnaire falls back to the selected/latest call', async () => {
-  const router = renderHeader()
-  await userEvent.click(screen.getByRole('button', { name: 'Questionnaire' }))
-  // Absent location.state.datacallid is what makes QuestionnairePage resolve
-  // the cycle itself; sending a call id from here would pin the wrong one.
-  expect(router.state.location.state).toBeNull()
-})
-
-it('still links a decommissioned system, leaving the explanation to the questionnaire', async () => {
-  // The header takes no decommissioned flag on purpose: rather than hiding the
-  // button, the questionnaire's own "no questionnaire is available" alert
-  // explains the outcome (ui#609 review).
-  const router = renderHeader()
-  await userEvent.click(screen.getByRole('button', { name: 'Questionnaire' }))
-  expect(router.state.location.pathname).toBe('/questionnaire/ssd-ex')
+  // Bare acronym with no trailing segments: the omitted datacall is what makes
+  // QuestionnairePage resolve the cycle itself, and pinning one from here would
+  // fix the wrong call.
+  expect(
+    screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
+  ).toBe('/questionnaire/ssd-ex')
 })
 
 it('shows Questionnaire alongside Edit for an editor', () => {
   renderHeader({ canEdit: true })
   expect(
-    screen.getByRole('button', { name: 'Questionnaire' })
+    screen.getByRole('link', { name: 'Questionnaire' })
   ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
 })
@@ -83,7 +71,7 @@ it('shows Questionnaire alongside Edit for an editor', () => {
 it('hides Questionnaire while editing so a dirty form keeps Save/Cancel only', () => {
   renderHeader({ canEdit: true, isEditing: true })
   expect(
-    screen.queryByRole('button', { name: 'Questionnaire' })
+    screen.queryByRole('link', { name: 'Questionnaire' })
   ).not.toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Save' })).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()

@@ -26,7 +26,7 @@ import {
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
@@ -209,6 +209,20 @@ export default function QuestionnarePage() {
   // Incremented on every explicit draft clear so in-flight debounced saves
   // that fire after a clear don't resurrect the just-removed draft.
   const saveGenRef = React.useRef(0)
+  // Mirrors the payload the debounced draft save would write, so unmount can
+  // flush it. The debounce cleanup cancels its own pending timer, and a route
+  // change away from this page (System Info, the Dashboard breadcrumb, browser
+  // back) tears the component down without firing beforeunload, so an edit made
+  // inside the 1s window was dropped. Carries the generation so a flush cannot
+  // resurrect a draft clearCurrentDraft deleted after the timer was scheduled.
+  const pendingDraftRef = React.useRef<{
+    userid: string
+    system: number
+    questionId: number
+    datacallID: number
+    draft: { selectQuestionOption: number; notes: string }
+    gen: number
+  } | null>(null)
   const unsavedRef = React.useRef({
     selectQuestionOption,
     initQuestionChoice,
@@ -462,7 +476,7 @@ export default function QuestionnarePage() {
       const res = await axiosInstance.get(
         `/scores/aggregate?fismasystemid=${system}&include_pillars=true`
       )
-      setPillarScores({ open: true, scores: res.data.data })
+      setPillarScores({ open: true, scores: res.data?.data ?? [] })
     } catch (error) {
       if (isAuthHandled(error)) return
       console.error('Error fetching pillar scores:', error)
@@ -1008,10 +1022,12 @@ export default function QuestionnarePage() {
       datacallID <= 0 ||
       loadingQuestion
     ) {
+      pendingDraftRef.current = null
       if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
       return
     }
     if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
+      pendingDraftRef.current = null
       saveGenRef.current++
       // Skip clearDraft when a draft was just restored from storage — the draft
       // values matching the server state does not mean the user reverted manually.
@@ -1028,6 +1044,14 @@ export default function QuestionnarePage() {
       return
     }
     const currentGen = saveGenRef.current
+    pendingDraftRef.current = {
+      userid: userInfo.userid,
+      system,
+      questionId,
+      datacallID,
+      draft: { selectQuestionOption, notes },
+      gen: currentGen,
+    }
     const timer = setTimeout(() => {
       if (saveGenRef.current !== currentGen) return
       saveDraft(
@@ -1039,6 +1063,9 @@ export default function QuestionnarePage() {
         () => saveGenRef.current === currentGen
       ).then((saved) => {
         if (saveGenRef.current !== currentGen) return
+        // Written, so an unmount flush would only rewrite identical content.
+        if (pendingDraftRef.current?.gen === currentGen)
+          pendingDraftRef.current = null
         if (saved) {
           if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
         } else {
@@ -1059,6 +1086,32 @@ export default function QuestionnarePage() {
     loadingQuestion,
     userInfo.userid,
   ])
+
+  // Flush a pending draft on unmount. beforeunload below covers tab close and
+  // hard refresh, but it does not fire on in-app navigation, and the debounce
+  // cleanup cancels the timer that would have written the draft. Mount-once so
+  // the cleanup runs on unmount only, never on a dep change (flushing on every
+  // dep change would defeat the debounce and write on each keystroke).
+  // saveDraft takes primitives and touches no component state, so the write
+  // completes after this component is gone.
+  React.useEffect(() => {
+    return () => {
+      const pending = pendingDraftRef.current
+      // Reading the live generation is the point of this guard, not a staleness
+      // bug: it must reflect any clearCurrentDraft that ran after the timer was
+      // scheduled, so a flush cannot resurrect a just-deleted draft. Copying it
+      // into the effect body would freeze it at its mount value.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (!pending || saveGenRef.current !== pending.gen) return
+      void saveDraft(
+        pending.userid,
+        pending.system,
+        pending.questionId,
+        pending.datacallID,
+        pending.draft
+      )
+    }
+  }, [])
 
   // Warn before tab close or hard refresh when the active question has edits
   // that haven't been committed to the backend yet.
@@ -1195,10 +1248,41 @@ export default function QuestionnarePage() {
       </>
     )
   }
+  // Cross-navigation back to this system's detail page (ui#610). A real router
+  // link rather than onClick + navigate, so open-in-new-tab and copy-link work.
+  // Gated on the same hasSystemAccess check the dashboard puts on its own System
+  // Details action. Every current role passes it (delegates included), so in
+  // practice this only suppresses the link while userInfo is unloaded or carries
+  // an unrecognized role - but it is the gate that moves if system-detail access
+  // ever narrows.
+  const systemInfoLink = hasSystemAccess(userInfo) ? (
+    <Button
+      variant="outlined"
+      size="small"
+      component={RouterLink}
+      to={`/systems/${system}`}
+      sx={{ whiteSpace: 'nowrap' }}
+    >
+      System Info
+    </Button>
+  ) : null
   if (noQuestions) {
     return (
       <>
-        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+          {/* Without this the flow System Info -> Questionnaire -> "no
+              questionnaire available" is one-way, which the #609 button makes
+              reachable for any out-of-scope or decommissioned system (#640
+              review). */}
+          {systemInfoLink}
+        </Box>
         <Container maxWidth={false} disableGutters>
           <Alert severity="info" sx={{ mt: 2 }}>
             No questionnaire is available for this system. This typically
@@ -1237,22 +1321,7 @@ export default function QuestionnarePage() {
       >
         <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
         <Box sx={{ display: 'flex', gap: 1 }}>
-          {/* Cross-navigation back to this system's detail page (ui#610).
-              Gated on the same hasSystemAccess check the dashboard puts on its
-              own System Details action. Every current role passes it (delegates
-              included), so in practice this only suppresses the button while
-              userInfo is unloaded or carries an unrecognized role - but it is
-              the gate that moves if system-detail access ever narrows. */}
-          {hasSystemAccess(userInfo) && (
-            <Button
-              variant="outlined"
-              size="small"
-              onClick={() => navigate(`/systems/${system}`)}
-              sx={{ whiteSpace: 'nowrap' }}
-            >
-              System Info
-            </Button>
-          )}
+          {systemInfoLink}
           <Button
             variant="outlined"
             size="small"

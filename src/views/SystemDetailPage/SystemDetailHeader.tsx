@@ -1,7 +1,7 @@
 import { Box, Typography, IconButton } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { Button as CmsButton } from '@cmsgov/design-system'
-import { useNavigate } from 'react-router-dom'
+import { useHref, useNavigate } from 'react-router-dom'
 
 interface SystemDetailHeaderProps {
   systemName: string
@@ -31,6 +31,14 @@ export default function SystemDetailHeader({
   onCancel,
 }: SystemDetailHeaderProps) {
   const navigate = useNavigate()
+  // Rendered as an <a> via CmsButton's href so open-in-new-tab and copy-link
+  // work. CmsButton has no polymorphic `component` prop, so react-router's Link
+  // cannot be composed in; useHref resolves the path the same way Link would
+  // (under the app's hash router it yields `#/questionnaire/<acronym>`) instead
+  // of hand-writing the fragment. (#640 review)
+  const questionnaireHref = useHref(
+    `/questionnaire/${fismaacronym.toLowerCase()}`
+  )
 
   return (
     <Box
@@ -66,21 +74,15 @@ export default function SystemDetailHeader({
           </>
         ) : (
           <>
-            {/* Cross-navigation to this system's questionnaire (ui#609). No
-                route state: QuestionnairePage falls back to the selected/latest
-                data call when location.state carries no datacallid, which is
-                the right default arriving from here, and it keeps the target a
-                plain shareable URL. Rendered only outside edit mode so a dirty
-                form keeps Save/Cancel as its only actions. A decommissioned
-                system links too and the questionnaire's own
+            {/* Cross-navigation to this system's questionnaire (ui#609). The
+                target carries no route state: QuestionnairePage falls back to
+                the selected/latest data call when location.state has no
+                datacallid, which is the right default arriving from here, and it
+                keeps the link plainly shareable. Rendered only outside edit mode
+                so a dirty form keeps Save/Cancel as its only actions. A
+                decommissioned system links too and the questionnaire's own
                 "no questionnaire is available" alert explains the outcome. */}
-            <CmsButton
-              onClick={() =>
-                navigate(`/questionnaire/${fismaacronym.toLowerCase()}`)
-              }
-            >
-              Questionnaire
-            </CmsButton>
+            <CmsButton href={questionnaireHref}>Questionnaire</CmsButton>
             {canEdit && (
               <CmsButton variation="solid" onClick={onEdit}>
                 Edit

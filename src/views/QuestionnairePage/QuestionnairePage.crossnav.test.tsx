@@ -59,6 +59,11 @@ const QUESTIONS = [
   },
 ]
 
+const OPTIONS_7006 = [
+  { functionoptionid: 100, description: 'Baseline', score: 1 },
+  { functionoptionid: 101, description: 'Advanced', score: 2 },
+]
+
 const AGGREGATE = [
   {
     datacallid: 5,
@@ -136,8 +141,8 @@ function renderPage() {
     ],
     { initialEntries: ['/questionnaire/ssd-ex'] }
   )
-  render(<RouterProvider router={router} />)
-  return router
+  const { unmount } = render(<RouterProvider router={router} />)
+  return { router, unmount }
 }
 
 const aggregateCalls = () =>
@@ -146,8 +151,8 @@ const aggregateCalls = () =>
     .filter((u) => typeof u === 'string' && u.includes('/scores/aggregate'))
 
 it('navigates to the system detail page keyed on fismasystemid', async () => {
-  const router = renderPage()
-  const button = await screen.findByRole('button', { name: 'System Info' })
+  const { router } = renderPage()
+  const button = await screen.findByRole('link', { name: 'System Info' })
   await userEvent.click(button)
   // The questionnaire route carries the acronym; the detail route is keyed on
   // the id, so this proves the acronym was resolved to 1002 before linking.
@@ -161,7 +166,7 @@ it('suppresses System Info when the role fails the system-access gate', async ()
   // and only the gated button is missing.
   await screen.findByRole('button', { name: 'Compare Datacalls' })
   expect(
-    screen.queryByRole('button', { name: 'System Info' })
+    screen.queryByRole('link', { name: 'System Info' })
   ).not.toBeInTheDocument()
 })
 
@@ -213,4 +218,62 @@ it('keeps the modal closed when the aggregate fetch fails', async () => {
     )
   )
   expect(screen.queryByText(/- Pillar Scores/)).not.toBeInTheDocument()
+})
+
+it('offers a way back from the no-questionnaire state', async () => {
+  // A decommissioned or out-of-scope system joins to zero functions, and the
+  // #609 button makes that state reachable from System Info. Without the link
+  // here the trip is one-way (#640 review).
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: [] } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderPage()
+  expect(
+    await screen.findByText(/No questionnaire is available for this system/i)
+  ).toBeInTheDocument()
+  expect(
+    await screen.findByRole('link', { name: 'System Info' })
+  ).toHaveAttribute('href', '/systems/1002')
+})
+
+it('flushes a pending draft when the page unmounts mid-debounce', async () => {
+  const { saveDraft } = require('./draftStore') as {
+    saveDraft: jest.Mock
+  }
+  // Real options so the answer/notes panel renders rather than staying in its
+  // loading state.
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  const { unmount } = renderPage()
+  const notesField = await screen.findByLabelText('Justification notes')
+
+  await userEvent.type(notesField, 'Imperial posture note')
+  // Nothing written yet: the save is debounced 1s and no timer has fired.
+  expect(saveDraft).not.toHaveBeenCalled()
+
+  // Leaving for System Info (or the Dashboard breadcrumb, or browser back)
+  // unmounts the page. beforeunload does not fire on in-app navigation and the
+  // debounce cleanup cancels its own timer, so without the unmount flush this
+  // edit was silently dropped.
+  unmount()
+
+  expect(saveDraft).toHaveBeenCalledTimes(1)
+  const [userid, system, questionId, datacallID, draft] =
+    saveDraft.mock.calls[0]
+  expect({ userid, system, datacallID }).toEqual({
+    userid: '1',
+    system: 1002,
+    datacallID: 5,
+  })
+  expect(questionId).toBe(7006)
+  expect(draft.notes).toBe('Imperial posture note')
 })
