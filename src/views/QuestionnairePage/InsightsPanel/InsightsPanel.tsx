@@ -1283,7 +1283,15 @@ export function rollupControls(
       const id = part.trim()
       if (!id) continue
       const list = map.get(id) ?? []
-      list.push({ source, state, check, description })
+      list.push({
+        source,
+        state,
+        check,
+        // A title-only finding (no id, no description) resolves both the check
+        // and the sentence to that same title. Drop the duplicate rather than
+        // printing it twice in the hover and announcing it twice to AT.
+        description: description === check ? undefined : description,
+      })
       map.set(id, list)
     }
   }

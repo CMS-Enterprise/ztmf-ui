@@ -927,6 +927,23 @@ describe('rollupControls (cross-source ARS control union)', () => {
     expect(evidenceFor('SC-8')?.description).toBe('HSTS not enabled')
   })
 
+  it('does not repeat a title-only finding as both the check and the sentence', () => {
+    // No id and no description, so both the check name and the sentence resolve
+    // to the same title — printing it twice in the hover (and announcing it twice
+    // to AT) reads as a bug.
+    const rolled = roll({
+      findings: {
+        sechub: [{ title: 'MFA should be enabled', nist_controls: 'IA-2' }],
+      },
+    })
+    expect(rolled[0].evidence[0]).toEqual({
+      source: 'SecurityHub',
+      check: 'MFA should be enabled',
+      state: 'failing',
+      description: undefined,
+    })
+  })
+
   it('leaves CFACTS control evidence without a sentence (it has no per-check text)', () => {
     const rolled = roll({ ars_satisfied_controls: ['IA-01'] })
     expect(rolled[0].evidence[0]).toEqual({
