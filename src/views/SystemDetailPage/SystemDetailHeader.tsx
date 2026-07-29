@@ -5,6 +5,9 @@ import { useNavigate } from 'react-router-dom'
 
 interface SystemDetailHeaderProps {
   systemName: string
+  /** Drives the Questionnaire link; the questionnaire route is keyed on the
+   * acronym, not the fismasystemid this page is routed by (ui#609). */
+  fismaacronym: string
   /** Admins edit the whole form; an assigned ISSO gets the same Edit button
    * but only the target-maturity card unlocks for them (ztmf#398). */
   canEdit: boolean
@@ -18,6 +21,7 @@ interface SystemDetailHeaderProps {
 
 export default function SystemDetailHeader({
   systemName,
+  fismaacronym,
   canEdit,
   isEditing,
   isSaving,
@@ -61,11 +65,28 @@ export default function SystemDetailHeader({
             </CmsButton>
           </>
         ) : (
-          canEdit && (
-            <CmsButton variation="solid" onClick={onEdit}>
-              Edit
+          <>
+            {/* Cross-navigation to this system's questionnaire (ui#609). No
+                route state: QuestionnairePage falls back to the selected/latest
+                data call when location.state carries no datacallid, which is
+                the right default arriving from here, and it keeps the target a
+                plain shareable URL. Rendered only outside edit mode so a dirty
+                form keeps Save/Cancel as its only actions. A decommissioned
+                system links too and the questionnaire's own
+                "no questionnaire is available" alert explains the outcome. */}
+            <CmsButton
+              onClick={() =>
+                navigate(`/questionnaire/${fismaacronym.toLowerCase()}`)
+              }
+            >
+              Questionnaire
             </CmsButton>
-          )
+            {canEdit && (
+              <CmsButton variation="solid" onClick={onEdit}>
+                Edit
+              </CmsButton>
+            )}
+          </>
         )}
       </Box>
     </Box>

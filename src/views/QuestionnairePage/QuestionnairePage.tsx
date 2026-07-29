@@ -21,6 +21,7 @@ import {
   QuestionScores,
   Insight,
   InsightPayload,
+  ScoreAggregate,
 } from '@/types'
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
@@ -44,9 +45,10 @@ import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
+import PillarScoresModal from '@/components/PillarScoresModal/PillarScoresModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
-import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
 import InsightsPanel from './InsightsPanel/InsightsPanel'
 import QuestionRadioGroup from './QuestionRadioGroup'
@@ -130,6 +132,12 @@ export default function QuestionnarePage() {
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
+  // PillarScoresModal takes its rows as a prop rather than fetching (unlike
+  // ScoreDiffModal), so the header button fetches before opening (ui#610).
+  const [pillarScores, setPillarScores] = React.useState<{
+    open: boolean
+    scores: ScoreAggregate[]
+  }>({ open: false, scores: [] })
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
@@ -443,6 +451,23 @@ export default function QuestionnarePage() {
       void clearDraft(userInfo.userid, system, questionId, datacallID)
     }
     setDraftStatus('idle')
+  }
+
+  // Same aggregate call the dashboard's Pillar Scores action makes. Not cached:
+  // the dashboard memoizes across many rows, this page is one system and one
+  // click. On failure nothing opens and the user is told, rather than opening an
+  // empty modal that reads as "this system has no scores".
+  const handleOpenPillarScores = async () => {
+    try {
+      const res = await axiosInstance.get(
+        `/scores/aggregate?fismasystemid=${system}&include_pillars=true`
+      )
+      setPillarScores({ open: true, scores: res.data.data })
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      console.error('Error fetching pillar scores:', error)
+      notify(ERROR_MESSAGES.tryAgain, 'error')
+    }
   }
 
   // Keep insight, review, and card state scoped to one system x data call x
@@ -1193,6 +1218,14 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
+  // The data call both header modals present as "current". Prefer the call this
+  // questionnaire actually resolved (datacallID covers every entry path,
+  // including URL deep links where no route state exists); fall back to the
+  // route/selected/latest chain during the pre-fetch window.
+  const viewedDataCallId =
+    datacallID > 0
+      ? datacallID
+      : routeDatacallId ?? selectedDatacall?.datacallid ?? latestDataCallId
   return (
     <>
       <Box
@@ -1203,14 +1236,40 @@ export default function QuestionnarePage() {
         }}
       >
         <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
-        <Button
-          variant="outlined"
-          size="small"
-          onClick={() => setDiffModalOpen(true)}
-          sx={{ whiteSpace: 'nowrap' }}
-        >
-          Compare Datacalls
-        </Button>
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          {/* Cross-navigation back to this system's detail page (ui#610).
+              Gated on the same hasSystemAccess check the dashboard puts on its
+              own System Details action. Every current role passes it (delegates
+              included), so in practice this only suppresses the button while
+              userInfo is unloaded or carries an unrecognized role - but it is
+              the gate that moves if system-detail access ever narrows. */}
+          {hasSystemAccess(userInfo) && (
+            <Button
+              variant="outlined"
+              size="small"
+              onClick={() => navigate(`/systems/${system}`)}
+              sx={{ whiteSpace: 'nowrap' }}
+            >
+              System Info
+            </Button>
+          )}
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={handleOpenPillarScores}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Pillar Scores
+          </Button>
+          <Button
+            variant="outlined"
+            size="small"
+            onClick={() => setDiffModalOpen(true)}
+            sx={{ whiteSpace: 'nowrap' }}
+          >
+            Compare Datacalls
+          </Button>
+        </Box>
       </Box>
       {isPastDeadline && !isReadOnly && (
         <Alert severity="warning" sx={{ mb: 2 }}>
@@ -1589,23 +1648,26 @@ export default function QuestionnarePage() {
           />
         </Grid>
       </Container>
-      {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
-          questionnaire actually resolved (datacallID covers every entry path,
-          including URL deep links where no route state exists); fall back to
-          the route/selected/latest chain during the pre-fetch window. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
-        selectedDataCallId={
-          datacallID > 0
-            ? datacallID
-            : routeDatacallId ??
-              selectedDatacall?.datacallid ??
-              latestDataCallId
+        selectedDataCallId={viewedDataCallId}
+      />
+      {/* Same modal the dashboard's Pillar Scores action opens. The acronym
+          comes from the resolved system rather than the lowercased URL param so
+          the title matches the dashboard's casing. */}
+      <PillarScoresModal
+        open={pillarScores.open}
+        onClose={() => setPillarScores((prev) => ({ ...prev, open: false }))}
+        systemName={systemName}
+        systemAcronym={
+          systemInfo?.fismaacronym ?? fismaacronym?.toUpperCase() ?? ''
         }
+        scores={pillarScores.scores}
+        selectedDataCallId={viewedDataCallId}
       />
     </>
   )
