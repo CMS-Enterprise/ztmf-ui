@@ -181,6 +181,12 @@ export default function UserTable() {
   const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
   // opdiv_id -> code, for rendering the OpDivs membership column.
   const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
+  // opdiv_id -> { code, name }, a full label source (incl. parent/inactive) so
+  // the grant modal can label grants to non-assignable OpDivs, which are absent
+  // from its scoped options list.
+  const [opdivLabelMap, setOpDivLabelMap] = useState<
+    Record<number, { code: string; name: string }>
+  >({})
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
   // holds rows refreshed since load, plus a one-time backfill against older
@@ -570,10 +576,13 @@ export default function UserTable() {
       try {
         const all = await fetchOpDivs(true)
         const codeMap: Record<number, string> = {}
+        const labelMap: Record<number, { code: string; name: string }> = {}
         all.forEach((od) => {
           codeMap[od.opdiv_id] = od.code
+          labelMap[od.opdiv_id] = { code: od.code, name: od.name }
         })
         setOpDivCodeMap(codeMap)
+        setOpDivLabelMap(labelMap)
 
         let assignable = all.filter((od) => !od.is_parent && od.active)
         if (isOpDivTier(userInfo)) {
@@ -585,6 +594,7 @@ export default function UserTable() {
         // Non-fatal: the grant modal simply shows no options if this fails.
         setOpDivOptions([])
         setOpDivCodeMap({})
+        setOpDivLabelMap({})
       }
     }
     loadOpDivs()
@@ -924,6 +934,11 @@ export default function UserTable() {
         userid={opdivModalUserId}
         userName={opdivModalUserName}
         opdivOptions={opdivOptions}
+        opdivLabelMap={opdivLabelMap}
+        // Only OpDiv-tier admins are scoped; their save must drop out-of-scope
+        // grants. Unscoped admins (OWNER/HHS_ADMIN) must preserve them. Same
+        // predicate that narrowed opdivOptions above, so options and save agree.
+        enforceCallerScope={isOpDivTier(userInfo)}
         onChanged={refreshUserRow}
       />
       <ConfirmDialog

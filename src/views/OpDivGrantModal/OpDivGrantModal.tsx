@@ -10,7 +10,7 @@ import { Button as CmsButton } from '@cmsgov/design-system'
 import { GridRowId } from '@mui/x-data-grid'
 import Checkbox from '@mui/material/Checkbox'
 import TextField from '@mui/material/TextField'
-import Autocomplete from '@mui/material/Autocomplete'
+import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete'
 import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -24,9 +24,24 @@ type Props = {
   /**
    * Assignable OpDivs, already scoped by the caller (children only, active,
    * and - for an OPDIV_ADMIN actor - limited to their own OpDivs). The modal
-   * does not re-scope; it renders exactly what it is given.
+   * does not re-scope; it renders exactly what it is given. Drives the dropdown.
    */
   opdivOptions: OpDiv[]
+  /**
+   * Full label source (all OpDivs, incl. parent/inactive), keyed by opdiv_id.
+   * Separate from opdivOptions so a grant to a non-assignable OpDiv still
+   * resolves to a readable chip instead of a blank one. Ids missing here fall
+   * back to "OpDiv #{id}".
+   */
+  opdivLabelMap: Record<number, { code: string; name: string }>
+  /**
+   * True when the caller is scope-limited (an OPDIV_ADMIN): the save must drop
+   * grants outside the assignable set, since the backend rejects a desired set
+   * containing an ID the caller doesn't hold. False for unscoped admins
+   * (OWNER/HHS_ADMIN), whose save must PRESERVE the target's out-of-scope
+   * grants - omitting them reads as a revocation.
+   */
+  enforceCallerScope: boolean
   /**
    * Fired after a successful save so the caller can refresh the user's row
    * (grants + derived identity_provider) against post-mutation server state.
@@ -40,6 +55,8 @@ export default function OpDivGrantModal({
   userid,
   userName,
   opdivOptions,
+  opdivLabelMap,
+  enforceCallerScope,
   onChanged,
 }: Props) {
   const [localOpDivs, setLocalOpDivs] = React.useState<number[]>([])
@@ -47,23 +64,35 @@ export default function OpDivGrantModal({
   const [loading, setLoading] = React.useState(false)
   const [fetchFailed, setFetchFailed] = React.useState(false)
 
-  const opdivMap = React.useMemo(() => {
-    const map: Record<number, { code: string; name: string }> = {}
-    for (const od of opdivOptions) {
-      map[od.opdiv_id] = { code: od.code, name: od.name }
-    }
-    return map
-  }, [opdivOptions])
-
-  const sortedOptionIds = React.useMemo(
-    () =>
-      opdivOptions
-        .map((od) => od.opdiv_id)
-        .sort((a, b) =>
-          (opdivMap[a]?.code || '').localeCompare(opdivMap[b]?.code || '')
-        ),
-    [opdivOptions, opdivMap]
+  // The assignable set drives the dropdown and gates a scoped caller's save.
+  const assignableIds = React.useMemo(
+    () => new Set(opdivOptions.map((od) => od.opdiv_id)),
+    [opdivOptions]
   )
+
+  // Label from the full map (assignable or not), with an identifiable fallback
+  // so a grant to an OpDiv missing from the map never chips blank.
+  const optionLabel = React.useCallback(
+    (opdivId: number) => {
+      const od = opdivLabelMap[opdivId]
+      return od ? `${od.code} - ${od.name}` : `OpDiv #${opdivId}`
+    },
+    [opdivLabelMap]
+  )
+
+  // Options = assignable + currently-granted, so a chip for a grant to a
+  // non-assignable OpDiv still resolves against the options (no MUI "value not
+  // in options" warning, no blank chip). filterOptions below narrows the
+  // DROPDOWN back to the assignable set so those grants are not re-selectable.
+  const sortedOptionIds = React.useMemo(() => {
+    const ids = new Set<number>(assignableIds)
+    for (const id of localOpDivs) ids.add(id)
+    return Array.from(ids).sort((a, b) =>
+      optionLabel(a).localeCompare(optionLabel(b))
+    )
+  }, [assignableIds, localOpDivs, optionLabel])
+
+  const baseFilter = React.useMemo(() => createFilterOptions<number>(), [])
 
   const handleError = React.useCallback((error: unknown) => {
     if (isAuthHandled(error)) return
@@ -100,20 +129,18 @@ export default function OpDivGrantModal({
     }
   }, [open, userid, handleError])
 
-  const optionLabel = (opdivId: number) => {
-    const od = opdivMap[opdivId]
-    return od ? `${od.code} - ${od.name}` : ''
-  }
-
   const handleSave = () => {
     setSaving(true)
-    // An OPDIV_ADMIN's scope is already encoded in sortedOptionIds (only their
-    // own OpDivs appear as options). Filter localOpDivs to that set so the
-    // batch request never includes out-of-scope IDs the target user holds from
-    // another admin — the backend scope gate rejects any desired set that
-    // contains an ID the caller doesn't hold, even if they didn't add it.
-    const scopedIds = localOpDivs.filter((id) => sortedOptionIds.includes(id))
-    setUserOpDivs(String(userid), scopedIds)
+    // Scoped caller (OPDIV_ADMIN): drop grants outside the assignable set so the
+    // batch request never includes out-of-scope IDs the target holds from
+    // another admin - the backend rejects any desired set containing an ID the
+    // caller doesn't hold. Unscoped caller (OWNER/HHS_ADMIN): send every grant
+    // as-is, since omitting the target's non-assignable grants would revoke
+    // them.
+    const idsToSave = enforceCallerScope
+      ? localOpDivs.filter((id) => assignableIds.has(id))
+      : localOpDivs
+    setUserOpDivs(String(userid), idsToSave)
       .then(() => {
         notify('Saved', 'success')
         onChanged?.(String(userid))
@@ -145,6 +172,11 @@ export default function OpDivGrantModal({
           disabled={loading || fetchFailed}
           disableClearable
           getOptionLabel={optionLabel}
+          // Keep the dropdown scoped to the assignable set even though options
+          // also carries current non-assignable grants (for chip resolution).
+          filterOptions={(options, params) =>
+            baseFilter(options, params).filter((o) => assignableIds.has(o))
+          }
           renderOption={(props, option, { selected }) => (
             <li {...props} key={option}>
               <Checkbox style={{ marginRight: 8 }} checked={selected} />

@@ -54,6 +54,16 @@ const opdivOptions: OpDiv[] = [
   },
 ]
 
+// Full label source (incl. the non-assignable OpDiv 99, e.g. a parent/inactive
+// division), so the modal can label a grant to it even though it is absent from
+// opdivOptions. Id 77 is intentionally absent to exercise the "OpDiv #{id}"
+// fallback.
+const opdivLabelMap: Record<number, { code: string; name: string }> = {
+  1: { code: 'AAA', name: 'Division A' },
+  2: { code: 'BBB', name: 'Division B' },
+  99: { code: 'ZZZ', name: 'Parent Division' },
+}
+
 function renderModal(
   overrides: Partial<React.ComponentProps<typeof OpDivGrantModal>> = {}
 ) {
@@ -64,6 +74,8 @@ function renderModal(
       userid={USER_ID}
       userName="Test User"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
       onChanged={jest.fn()}
       {...overrides}
     />
@@ -75,9 +87,9 @@ beforeEach(() => {
   mockedNavigate.mockReset()
 })
 
-// The most important test: verifies the scopedIds filter strips out-of-scope
-// grants before the PUT so an OPDIV_ADMIN never triggers a backend 403.
-test('PUT body excludes grants the target user holds outside the caller scope', async () => {
+// Scoped caller (OPDIV_ADMIN, enforceCallerScope=true): the save strips
+// out-of-scope grants before the PUT so the backend scope gate never 403s.
+test('scoped caller: PUT body excludes grants the target holds outside caller scope', async () => {
   // Target user holds [1, 2, 99]. OpDiv 99 is absent from opdivOptions
   // (out of caller scope), so only [1, 2] must reach the batch endpoint.
   mock
@@ -85,7 +97,7 @@ test('PUT body excludes grants the target user holds outside the caller scope', 
     .reply(200, { data: [1, 2, 99] })
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
 
-  renderModal()
+  renderModal({ enforceCallerScope: true })
   await waitFor(() => expect(mock.history.get).toHaveLength(1))
 
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -95,6 +107,47 @@ test('PUT body excludes grants the target user holds outside the caller scope', 
   expect(body.opdiv_ids).toHaveLength(2)
   expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 2]))
   expect(body.opdiv_ids).not.toContain(99)
+})
+
+// Unscoped caller (OWNER/HHS_ADMIN, enforceCallerScope=false): the save must
+// PRESERVE the target's non-assignable grants. Omitting 99 would read as a
+// revocation to the backend and silently drop the grant.
+test('unscoped caller: PUT body preserves grants outside the assignable set', async () => {
+  mock
+    .onGet(`/users/${USER_ID}/assignedopdivs`)
+    .reply(200, { data: [1, 2, 99] })
+  mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
+
+  renderModal({ enforceCallerScope: false })
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+
+  await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  const body = JSON.parse(mock.history.put[0].data)
+  expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 2, 99]))
+  expect(body.opdiv_ids).toHaveLength(3)
+})
+
+// A grant to a non-assignable OpDiv (99, absent from opdivOptions) still chips
+// with a readable label from opdivLabelMap - never a blank chip.
+test('labels a grant to a non-assignable OpDiv from the full label map', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
+
+  renderModal()
+
+  // The chip renders the label map entry, not a blank chip or a raw id.
+  expect(await screen.findByText('ZZZ - Parent Division')).toBeInTheDocument()
+})
+
+// A grant to an OpDiv missing from the label map falls back to "OpDiv #{id}"
+// rather than an empty chip.
+test('falls back to "OpDiv #{id}" for a grant missing from the label map', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [77] })
+
+  renderModal()
+
+  expect(await screen.findByText('OpDiv #77')).toBeInTheDocument()
 })
 
 test('success: modal closes and onChanged fires after save', async () => {
@@ -236,6 +289,8 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       userid={USER_ID}
       userName="Test User"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
       onChanged={jest.fn()}
     />
   )
@@ -246,6 +301,8 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       userid={USER_ID}
       userName="Test User"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
       onChanged={jest.fn()}
     />
   )
@@ -295,6 +352,8 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
       userid={USER_ID_B}
       userName="Test User B"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
       onChanged={onChanged}
     />
   )
