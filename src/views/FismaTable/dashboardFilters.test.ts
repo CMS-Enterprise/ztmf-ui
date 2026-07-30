@@ -135,6 +135,47 @@ test('facets combine with AND', () => {
   expect(out.map((r) => r.fismasystemid)).toEqual([1])
 })
 
+test('open-call-only filter keeps only current-call rows', () => {
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ openCallOnly: true }),
+    (id) => id !== 1 && id !== 4 // sys1 and sys4 display a past call
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([2, 3])
+})
+
+test('open-call-only filter is a no-op without call context', () => {
+  // Callers without a predicate treat every row as current (the documented
+  // default), so the facet passes everything through.
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ openCallOnly: true })
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([1, 2, 3, 4])
+})
+
+test('open-call-only defaults off and counts as an active filter when on', () => {
+  // Default-off is deliberate (ui#639): default-on would hide closed-call
+  // rows silently and desync the export and stat tiles from the table.
+  expect(EMPTY_DASHBOARD_FILTERS.openCallOnly).toBe(false)
+  expect(hasNoActiveFilters(filters({ openCallOnly: true }))).toBe(false)
+})
+
+test('open-call-only composes with not-updated: current-call laggards only', () => {
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ openCallOnly: true, notUpdatedOnly: true }),
+    () => true
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([1])
+})
+
 test('a row whose environment is not in the category map is excluded when env filter is active', () => {
   const rows = [
     { fismasystemid: 9, datacenterenvironment: 'unknown-env', opdiv_id: 10 },

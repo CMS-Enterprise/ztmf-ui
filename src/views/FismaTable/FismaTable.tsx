@@ -27,6 +27,7 @@ import {
   ListSubheader,
   Menu,
   Button,
+  Typography,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { useState, useEffect, useMemo, useCallback } from 'react'
@@ -52,6 +53,7 @@ import { hasSystemAccess } from '@/utils/userRoles'
 import { TIERS } from '@/utils/tierStyles'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
+import { resolveRowCallId } from './rowCall'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { parseDatacallName } from '@/utils/datacallGrouping'
@@ -218,6 +220,8 @@ export function QuickSearchToolbar(props: {
   opdivOptions?: OpDivOption[]
   showEnvFilter?: boolean
   showOpDivFilter?: boolean
+  hasOpenCall?: boolean
+  openCallInView?: boolean
 }) {
   const { showDecommissioned, setShowDecommissioned } = useContextProp()
   // The free-text quick-filter lives in the grid's own filter model, not in
@@ -235,6 +239,16 @@ export function QuickSearchToolbar(props: {
   const opdivOptions = props.opdivOptions ?? []
   const showEnvFilter = props.showEnvFilter ?? false
   const showOpDivFilter = props.showOpDivFilter ?? false
+  const hasOpenCall = props.hasOpenCall ?? true
+  const openCallInView = props.openCallInView ?? true
+  // Why the call-scoped toggles are grayed out, when they are: no call open
+  // at all vs an open call outside the selected year. Empty while they apply
+  // (an empty title suppresses the Tooltip).
+  const callScopeHint = openCallInView
+    ? ''
+    : hasOpenCall
+      ? 'The open data call is not in the selected view'
+      : 'No data call is currently open'
 
   const switchSx = {
     '& .MuiSwitch-switchBase.Mui-checked': { color: '#004297' },
@@ -364,22 +378,60 @@ export function QuickSearchToolbar(props: {
             </Select>
           </FormControl>
         )}
-        <FormControlLabel
-          control={
-            <Switch
-              checked={filters.notUpdatedOnly}
-              onChange={(e) =>
-                onFiltersChange({
-                  ...filters,
-                  notUpdatedOnly: e.target.checked,
-                })
+        {!openCallInView && (
+          <Typography variant="caption" sx={{ color: '#6b6b6b' }}>
+            {hasOpenCall
+              ? 'The open data call is not in the selected view'
+              : "No open data call; showing each system's latest completed call"}
+          </Typography>
+        )}
+        {/* Both call-scoped toggles gray out when the open call is not in
+            view (ui#639): "Not updated only" is a current-cycle laggard
+            signal with nothing to match, and "Open data call only" would
+            empty the grid. The span wrappers keep the tooltips firing on the
+            disabled controls. */}
+        <Tooltip title={callScopeHint}>
+          <span>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={filters.openCallOnly}
+                  onChange={(e) =>
+                    onFiltersChange({
+                      ...filters,
+                      openCallOnly: e.target.checked,
+                    })
+                  }
+                  disabled={!openCallInView}
+                  sx={switchSx}
+                />
               }
-              sx={switchSx}
+              label="Open data call only"
+              sx={{ m: 0 }}
             />
-          }
-          label="Not updated only"
-          sx={{ m: 0 }}
-        />
+          </span>
+        </Tooltip>
+        <Tooltip title={callScopeHint}>
+          <span>
+            <FormControlLabel
+              control={
+                <Switch
+                  checked={filters.notUpdatedOnly}
+                  onChange={(e) =>
+                    onFiltersChange({
+                      ...filters,
+                      notUpdatedOnly: e.target.checked,
+                    })
+                  }
+                  disabled={!openCallInView}
+                  sx={switchSx}
+                />
+              }
+              label="Not updated only"
+              sx={{ m: 0 }}
+            />
+          </span>
+        </Tooltip>
         <FormControlLabel
           control={
             <Switch
@@ -440,6 +492,7 @@ export default function FismaTable({
     latestDataCallId,
     selectedDatacall,
     datacalls,
+    activeDatacallIds,
     userInfo,
     datacenterEnvironments,
   } = useContextProp()
@@ -470,6 +523,29 @@ export default function FismaTable({
       return chosen === latestDataCallId && !latestDeadlinePassed
     },
     [chosenCallMap, latestDataCallId, latestDeadlinePassed]
+  )
+  // Whether any data call is open at all, and whether that open call is part
+  // of what the table is showing. The year picker can select a historical
+  // group while a newer call is open; in that view no row is current, so the
+  // call-scoped toggles ("Not updated only", "Open data call only") and the
+  // past-call graying key on the viewed calls, not the calendar (ui#639).
+  // Without the in-view check the first toggle silently empties the grid (the
+  // reported bug) and the second keeps only rows with no call data.
+  const hasOpenCall = Boolean(latestDataCallId) && !latestDeadlinePassed
+  const openCallInView =
+    hasOpenCall && activeDatacallIds.includes(latestDataCallId)
+  const callById = useMemo(
+    () => new Map(datacalls.map((d) => [d.datacallid, d])),
+    [datacalls]
+  )
+  // Sort key for the Data Call column: call names do not sort chronologically
+  // ("FY2025 Q3" vs "FY25 ZTM"), so the column orders by deadline instead.
+  const deadlineByCallName = useMemo(
+    () =>
+      new Map(
+        datacalls.map((d) => [d.datacall, new Date(d.deadline).getTime()])
+      ),
+    [datacalls]
   )
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
@@ -586,6 +662,19 @@ export default function FismaTable({
     })
   }, [envOptions, opdivOptions, showEnvFilter, showOpDivFilter])
 
+  // The call-scoped facets only mean something while the open call is in
+  // view (their switches gray out otherwise). Drop any stored true when it is
+  // not, so a deadline passing mid-session or a switch to a historical year
+  // cannot leave an invisible filter emptying the grid (ui#639).
+  useEffect(() => {
+    if (openCallInView) return
+    setFilters((prev) =>
+      prev.notUpdatedOnly || prev.openCallOnly
+        ? { ...prev, notUpdatedOnly: false, openCallOnly: false }
+        : prev
+    )
+  }, [openCallInView])
+
   const filteredRows = useMemo(
     () =>
       applyDashboardFilters(
@@ -618,19 +707,15 @@ export default function FismaTable({
   }
 
   const handleOpenPillarScores = async (row: FismaSystemType) => {
-    // Use the same call the dashboard row is displaying (chosen by most-recently-updated
-    // in buildDashboardMaps) so the modal's "current" always matches the table cell.
-    // Falls back to newest-by-deadline if chosenCallMap has no entry (e.g. single-call
-    // system or map not yet populated), then to activeDataCallId as a last resort.
-    const chosenId = chosenCallMap[row.fismasystemid]
-    const rowDataCallId =
-      chosenId ??
-      sortDatacallsByDeadline(
-        (systemCallMap[row.fismasystemid] ?? [])
-          .map((id) => datacalls.find((d) => d.datacallid === id))
-          .filter((d): d is datacall => Boolean(d))
-      )[0]?.datacallid ??
+    // Same resolution as the Data Call column, so the modal's "current"
+    // always matches the call the row displays.
+    const rowDataCallId = resolveRowCallId(
+      row.fismasystemid,
+      chosenCallMap,
+      systemCallMap,
+      datacalls,
       activeDataCallId
+    )
 
     try {
       // Check cache first
@@ -758,6 +843,29 @@ export default function FismaTable({
           </Box>
         )
       },
+    },
+    {
+      // Which call the row is displaying (ui#639), named plainly so a
+      // past-call row is identifiable and quick-searchable without relying
+      // on the grayed styling.
+      field: 'rowdatacall',
+      headerName: 'Data Call',
+      width: 130,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value) =>
+        callById.get(
+          resolveRowCallId(
+            value.row.fismasystemid,
+            chosenCallMap,
+            systemCallMap,
+            datacalls,
+            activeDataCallId
+          )
+        )?.datacall ?? '',
+      sortComparator: (a, b) =>
+        (deadlineByCallName.get(a as string) ?? 0) -
+        (deadlineByCallName.get(b as string) ?? 0),
     },
     {
       // Questionnaire progress for the active data call (ztmf#299). The
@@ -892,6 +1000,16 @@ export default function FismaTable({
         isRowSelectable={(params: GridRowParams) =>
           params.row.fismasystemid in scores
         }
+        // De-emphasize rows displaying a closed call while the open call is
+        // in view (ui#639). Only in that mixed view: between calls, or on a
+        // historical year, every row is past-call and graying the whole grid
+        // distinguishes nothing. The Data Call column carries the same state
+        // as text.
+        getRowClassName={(params) =>
+          openCallInView && !isRowCurrentCall(params.row.fismasystemid)
+            ? 'past-call-row'
+            : ''
+        }
         columns={columns}
         checkboxSelection
         apiRef={apiRef}
@@ -915,6 +1033,8 @@ export default function FismaTable({
             opdivOptions,
             showEnvFilter,
             showOpDivFilter,
+            hasOpenCall,
+            openCallInView,
           },
           filterPanel: {
             sx: {
@@ -956,6 +1076,9 @@ export default function FismaTable({
           },
           '& .MuiDataGrid-columnHeaders .MuiSvgIcon-root': {
             color: 'white',
+          },
+          '& .past-call-row': {
+            opacity: 0.55,
           },
         }}
       />
