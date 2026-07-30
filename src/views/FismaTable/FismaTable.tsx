@@ -931,7 +931,6 @@ export default function FismaTable({
         <ProgressCell
           entry={progress?.[params.row.fismasystemid]}
           isCurrentCall={isRowCurrentCall(params.row.fismasystemid)}
-          hasScore={Boolean(scores[params.row.fismasystemid])}
         />
       ),
     },
