@@ -399,6 +399,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
       ...s,
       passing: asFindingArray(raw),
       hasPassing: Array.isArray(raw),
+      inferredPass: INFERRED_PASS_SOURCES.has(s.key),
     }
   })
   const anyFeedBlock = feedSources.some((s) => s.hasPassing)
@@ -610,6 +611,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
                   passing={s.passing}
                   failing={s.failing}
                   hasPassing={s.hasPassing}
+                  inferredPass={s.inferredPass}
                   resetKey={questionId}
                 />
               ) : null
@@ -925,9 +927,13 @@ function ControlChip({
 function CheckTooltip({
   finding,
   pass,
+  inferredPass = false,
 }: {
   finding: InsightFinding
   pass: boolean
+  // See INFERRED_PASS_SOURCES: this source reports only failures, so a "pass" is
+  // the absence of a finding and must not be worded as an observed pass.
+  inferredPass?: boolean
 }) {
   const slug = asText(finding?.id) ?? asText(finding?.title)
   // The chip label now carries the check name (its code/slug), so the hover leads
@@ -955,7 +961,7 @@ function CheckTooltip({
     nist ? `Control: ${nist}` : undefined,
     level != null ? `Level ${level}` : undefined,
     severity ? severity.toUpperCase() : undefined,
-    pass ? 'Passed' : 'Failed',
+    pass ? (inferredPass ? 'No finding reported' : 'Passed') : 'Failed',
   ]
     .filter(Boolean)
     .join(' · ')
@@ -1030,12 +1036,17 @@ function FeedCheckBlock({
   passing,
   failing,
   hasPassing,
+  inferredPass = false,
   resetKey,
 }: {
   label: string
   passing: InsightFinding[]
   failing: InsightFinding[]
   hasPassing: boolean
+  // See INFERRED_PASS_SOURCES: this source's passing entries mean "no finding
+  // reported", which the summary and each chip's hover must say rather than
+  // claiming the checks were observed to pass.
+  inferredPass?: boolean
   resetKey?: string | number
 }) {
   const [showAllPassing, setShowAllPassing] = React.useState(false)
@@ -1062,9 +1073,11 @@ function FeedCheckBlock({
   }
   const passed = passing.length
   const total = passing.length + failing.length
-  const summary = hasPassing
-    ? `${passed} of ${total} check${total === 1 ? '' : 's'} passed`
-    : `${failing.length} finding${failing.length === 1 ? '' : 's'}`
+  const summary = !hasPassing
+    ? `${failing.length} finding${failing.length === 1 ? '' : 's'}`
+    : inferredPass
+      ? `${passed} of ${total} check${total === 1 ? '' : 's'} reported no findings`
+      : `${passed} of ${total} check${total === 1 ? '' : 's'} passed`
   // Collapse the passing bulk once it spills past a couple of rows (mainly
   // Hardenize, which can carry 30+ passing checks). Failing chips (findings) are
   // always shown AND rendered first, so problems stay at the top and visible even
@@ -1090,7 +1103,7 @@ function FeedCheckBlock({
     const ariaLabel = [
       slug,
       desc,
-      pass ? 'Passed' : 'Failed',
+      pass ? (inferredPass ? 'No finding reported' : 'Passed') : 'Failed',
       remediation ? `How to fix: ${remediation}` : undefined,
     ]
       .filter(Boolean)
@@ -1100,7 +1113,9 @@ function FeedCheckBlock({
         key={key}
         id={slug ?? nist ?? '—'}
         variant={pass ? 'satisfied' : 'failing'}
-        tooltip={<CheckTooltip finding={f} pass={pass} />}
+        tooltip={
+          <CheckTooltip finding={f} pass={pass} inferredPass={inferredPass} />
+        }
         ariaLabel={ariaLabel || undefined}
       />
     )
@@ -1143,7 +1158,11 @@ function FeedCheckBlock({
         >
           {showAllPassing
             ? 'Show fewer'
-            : `Show all ${passing.length} passing checks`}
+            : // Matches the summary wording: for an inferred-pass source these
+              // are checks with no finding reported, not checks observed to pass.
+              `Show all ${passing.length} ${
+                inferredPass ? 'checks with no findings' : 'passing checks'
+              }`}
         </Link>
       )}
     </Box>
@@ -1265,6 +1284,20 @@ const CONTROL_RANK: Record<ControlRollupState, number> = {
 // appears here even though CFACTS never assessed it, and why a conflicted control
 // can net to failing. The payload is opaque, so every value is coerced and
 // guarded; a malformed element is skipped, never thrown.
+// Sources whose "passing" entries are inferred from the absence of a finding
+// rather than observed as a pass. SecurityHub's vendor feed carries only FAILED
+// records — it never emits a PASSED one — so `sechub_passing` is derived upstream
+// as "mapped control with no active failure". That cannot distinguish "evaluated
+// and passed" from "never scanned", so on a partially scanned system it would
+// otherwise assert controls are met on the strength of checks that never ran.
+// Consequently these entries still render as ✓ chips (the check is not failing)
+// but are read as an absence of findings, and are withheld from the control
+// rollup rather than counted as affirmative `satisfied` evidence.
+//
+// Remove a source from this set once its feed emits real passes; nothing else
+// needs to change. Used by both the feed blocks and rollupControls below.
+const INFERRED_PASS_SOURCES: ReadonlySet<string> = new Set(['sechub'])
+
 export function rollupControls(
   payload: Partial<InsightPayload>
 ): ControlRollup[] {
@@ -1336,18 +1369,25 @@ export function rollupControls(
   }
   for (const src of ['kion', 'sechub', 'hardenize'] as const) {
     const label = SRC_LABEL[src]
-    arr((payload as Record<string, unknown>)[`${src}_passing`]).forEach((f) => {
-      const o = finding(f)
-      add(
-        o?.nist_controls,
-        label,
-        'satisfied',
-        asText(o?.id) ?? asText(o?.title),
-        // Kion puts the sentence in `description`, SecurityHub in `title` —
-        // same fallback CheckTooltip uses, so both hovers read alike.
-        asText(o?.description) ?? asText(o?.title)
+    // An inferred pass is the absence of a finding, not evidence the control is
+    // met — counting it as `satisfied` would flip a control from "not assessed"
+    // to green on the strength of a check that may never have run.
+    if (!INFERRED_PASS_SOURCES.has(src)) {
+      arr((payload as Record<string, unknown>)[`${src}_passing`]).forEach(
+        (f) => {
+          const o = finding(f)
+          add(
+            o?.nist_controls,
+            label,
+            'satisfied',
+            asText(o?.id) ?? asText(o?.title),
+            // Kion puts the sentence in `description`, SecurityHub in `title` —
+            // same fallback CheckTooltip uses, so both hovers read alike.
+            asText(o?.description) ?? asText(o?.title)
+          )
+        }
       )
-    })
+    }
     arr(findings[src]).forEach((f) => {
       const o = finding(f)
       add(

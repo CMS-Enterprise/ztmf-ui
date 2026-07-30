@@ -1296,10 +1296,50 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
       />
     )
     expand()
-    expect(screen.getByText(/1 of 2 checks passed/)).toBeInTheDocument()
+    // SecurityHub's feed is failure-only, so a "pass" is the absence of a
+    // finding, not an observed pass — the summary must not claim otherwise.
+    expect(
+      screen.getByText(/1 of 2 checks reported no findings/)
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/1 of 2 checks passed/)).not.toBeInTheDocument()
     // Feed chips are labeled by the SecurityHub finding code.
     expect(screen.getByText('IAM.1').textContent).toContain('✓')
     expect(screen.getByText('IAM.10').textContent).toContain('✗')
+    // The chip still reads ✓, but neither its accessible name nor its hover may
+    // say "Passed".
+    expect(
+      screen.getByRole('img', { name: /^IAM\.1 — .* — No finding reported$/ })
+    ).toBeInTheDocument()
+  })
+
+  it('withholds an inferred SecurityHub pass from the control rollup', () => {
+    // A control whose only evidence is an inferred SecurityHub pass must not
+    // read as satisfied — that would assert the control is met on the strength
+    // of a check that may never have run on a partially scanned system.
+    const sechubOnly = rollupControls({
+      sechub_passing: [
+        { id: 'IAM.1', nist_controls: 'AC-3', description: 'x', level: 1 },
+      ],
+    })
+    expect(sechubOnly).toHaveLength(0)
+
+    // Kion and Hardenize report real passes, so theirs still count.
+    const kion = rollupControls({
+      kion_passing: [
+        { id: 'iam-user-inactive', nist_controls: 'AC-3', description: 'x' },
+      ],
+    })
+    expect(kion).toHaveLength(1)
+    expect(kion[0].state).toBe('satisfied')
+
+    // A SecurityHub *failure* is still real evidence and must survive.
+    const sechubFailing = rollupControls({
+      findings: {
+        sechub: [{ id: 'IAM.10', nist_controls: 'IA-2', description: 'y' }],
+      },
+    })
+    expect(sechubFailing).toHaveLength(1)
+    expect(sechubFailing[0].state).toBe('failing')
   })
 
   it('renders SecurityHub as a chip block even with only failing findings', () => {
@@ -1328,6 +1368,38 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
     expect(screen.getByText('IAM.10').textContent).toContain('✗')
     // Title lives in the hover now, not as body text.
     expect(screen.queryByText('MFA should be enabled')).not.toBeInTheDocument()
+  })
+
+  it('words the collapse toggle as "no findings" for an inferred-pass source', () => {
+    // The summary and the chips avoid claiming a pass, but the collapse toggle is
+    // its own label — with 1,493 SecurityHub rows upstream, blocks routinely spill
+    // past the collapse threshold, so this is where the unsupported claim would
+    // survive.
+    const passing = Array.from({ length: 9 }, (_, i) => ({
+      id: `SEC.${i}`,
+      nist_controls: 'SC-7',
+      level: 1,
+    }))
+    render(
+      <InsightsPanel
+        payload={
+          {
+            suggested_score: 2,
+            has_sechub_data: true,
+            sechub_passing: passing,
+          } as unknown as InsightPayload
+        }
+      />
+    )
+    fireEvent.click(screen.getByRole('button', { name: /details/i }))
+    expect(
+      screen.getByRole('button', {
+        name: /Show all 9 checks with no findings/i,
+      })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /Show all 9 passing checks/i })
+    ).not.toBeInTheDocument()
   })
 
   it('collapses the passing bulk behind a toggle, keeps failing chips at the top, and expands on click', () => {

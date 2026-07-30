@@ -80,8 +80,7 @@ export function optionsForField(
 
 // Custom labels for the true/false ends of a tri-state boolean. For fields
 // whose Yes/No reads ambiguously against the label (e.g. a negatively-phrased
-// "Not Funded for Remediation", where "No" would mean "it is funded"). Unknown
-// is always Unknown.
+// label where "No" would be a double negative). Unknown is always Unknown.
 export type BooleanLabels = { true: string; false: string }
 
 /**
