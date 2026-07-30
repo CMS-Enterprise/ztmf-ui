@@ -53,7 +53,7 @@ import { hasSystemAccess } from '@/utils/userRoles'
 import { TIERS } from '@/utils/tierStyles'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
-import { resolveRowCallId } from './rowCall'
+import { resolveRowCallId, datacallNameComparator } from './rowCall'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { parseDatacallName } from '@/utils/datacallGrouping'
@@ -62,6 +62,7 @@ import type { OpDiv } from '@/types'
 import {
   applyDashboardFilters,
   hasNoActiveFilters,
+  isOpenCallInView,
   EMPTY_DASHBOARD_FILTERS,
   type DashboardFilterState,
 } from './dashboardFilters'
@@ -475,11 +476,15 @@ export function QuickSearchToolbar(props: {
       {/* Toolbar-row captions crowd the filter cluster and wrap it (ui#639),
           so the call-scope notice renders as its own slim banner between the
           filters and the column headers. */}
+      {/* role="status": this is a standing contextual notice, not an alert —
+          MUI's default role="alert" would interrupt screen readers at mount
+          and on every year switch. It is also the keyboard/SR-reachable
+          counterpart of the disabled switches' hover tooltips. */}
       {!openCallInView && (
-        <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>
+        <Alert severity="info" role="status" sx={{ borderRadius: 0, py: 0 }}>
           {hasOpenCall
             ? 'The open data call is not in the selected view'
-            : "No open data call; showing each system's latest completed call"}
+            : "No open data call; showing each system's most recently updated call"}
         </Alert>
       )}
     </>
@@ -528,6 +533,10 @@ export default function FismaTable({
   // not-updated filter) only makes sense then; a past/closed call shows a
   // neutral Complete/Incomplete chip instead (ztmf#537). Rows without a chosen
   // call, or before latestDataCallId has loaded, keep the current rendering.
+  // Agrees with resolveRowCallId (the Data Call column) by construction:
+  // buildDashboardMaps fills chosenCallMap and systemCallMap for the same key
+  // set, so a row is grayed iff its column names a non-open call. Keep the
+  // two in step if either resolution changes.
   const isRowCurrentCall = useCallback(
     (fismasystemid: number): boolean => {
       const chosen = chosenCallMap[fismasystemid]
@@ -544,8 +553,11 @@ export default function FismaTable({
   // Without the in-view check the first toggle silently empties the grid (the
   // reported bug) and the second keeps only rows with no call data.
   const hasOpenCall = Boolean(latestDataCallId) && !latestDeadlinePassed
-  const openCallInView =
-    hasOpenCall && activeDatacallIds.includes(latestDataCallId)
+  const openCallInView = isOpenCallInView(
+    latestDataCallId,
+    latestDeadlinePassed,
+    activeDatacallIds
+  )
   const callById = useMemo(
     () => new Map(datacalls.map((d) => [d.datacallid, d])),
     [datacalls]
@@ -676,8 +688,11 @@ export default function FismaTable({
 
   // The call-scoped facets only mean something while the open call is in
   // view (their switches gray out otherwise). Drop any stored true when it is
-  // not, so a deadline passing mid-session or a switch to a historical year
-  // cannot leave an invisible filter emptying the grid (ui#639).
+  // not, so a year-picker move to a historical group, or a /datacalls refetch
+  // that flips the newest call closed, cannot leave an invisible filter
+  // emptying the grid (ui#639). (openness is evaluated when datacalls load,
+  // not continuously, so a deadline passing while the page sits open takes
+  // effect on the next fetch or reload.)
   useEffect(() => {
     if (openCallInView) return
     setFilters((prev) =>
@@ -865,7 +880,7 @@ export default function FismaTable({
       // Renders as the column-header tooltip: the resolution is not obvious
       // from the name (it is not simply "last completed call").
       description:
-        "The data call this row's score and progress are shown from; a system with no data in the selected calls shows the open call it is expected to answer.",
+        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the dashboard's active call for a system with no data in them.",
       width: 130,
       align: 'center',
       headerAlign: 'center',
@@ -879,9 +894,7 @@ export default function FismaTable({
             activeDataCallId
           )
         )?.datacall ?? '',
-      sortComparator: (a, b) =>
-        (deadlineByCallName.get(a as string) ?? 0) -
-        (deadlineByCallName.get(b as string) ?? 0),
+      sortComparator: datacallNameComparator(deadlineByCallName),
     },
     {
       // Questionnaire progress for the active data call (ztmf#299). The
@@ -1093,8 +1106,16 @@ export default function FismaTable({
           '& .MuiDataGrid-columnHeaders .MuiSvgIcon-root': {
             color: 'white',
           },
+          // De-emphasis must not dim interactive elements: whole-row opacity
+          // drops the name link, checkbox, and action icons below WCAG
+          // contrast minima while they stay clickable. Tint the row and mute
+          // only the cell text (rgba .6 on white holds AA); links, controls,
+          // and chips keep their own full-contrast colors.
           '& .past-call-row': {
-            opacity: 0.55,
+            backgroundColor: '#f5f5f5',
+          },
+          '& .past-call-row .MuiDataGrid-cell': {
+            color: 'rgba(0, 0, 0, 0.6)',
           },
         }}
       />

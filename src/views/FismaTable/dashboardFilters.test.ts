@@ -3,6 +3,7 @@ import {
   applyDashboardFilters,
   isNotUpdated,
   hasNoActiveFilters,
+  isOpenCallInView,
   EMPTY_DASHBOARD_FILTERS,
 } from './dashboardFilters'
 
@@ -174,6 +175,21 @@ test('open-call-only composes with not-updated: current-call laggards only', () 
     () => true
   )
   expect(out.map((r) => r.fismasystemid)).toEqual([1])
+})
+
+test('isOpenCallInView requires the open call to be among the viewed calls', () => {
+  // The whole point of the gate (ui#639): a call being open is not enough,
+  // it must be in the year-picker selection or no viewed row can be current.
+  expect(isOpenCallInView(5, false, [5, 4])).toBe(true)
+  expect(isOpenCallInView(5, false, [103, 4])).toBe(false) // open, out of view
+  expect(isOpenCallInView(5, true, [5, 4])).toBe(false) // in view, closed
+})
+
+test('isOpenCallInView is false before the datacall list loads', () => {
+  // latestDataCallId initializes to 0 in context; the gate must not treat
+  // that as an open call.
+  expect(isOpenCallInView(0, false, [0])).toBe(false)
+  expect(isOpenCallInView(0, false, [])).toBe(false)
 })
 
 test('a row whose environment is not in the category map is excluded when env filter is active', () => {

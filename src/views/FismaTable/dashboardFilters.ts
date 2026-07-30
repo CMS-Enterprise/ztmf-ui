@@ -44,6 +44,31 @@ export function hasNoActiveFilters(filters: DashboardFilterState): boolean {
 }
 
 /**
+ * True when the open data call is part of what the dashboard is showing:
+ * a newest-by-deadline call exists, is still open, and is among the calls
+ * selected in the year picker. Every call-scoped affordance (the "Not
+ * updated only" and "Open data call only" switches, past-call row graying)
+ * keys on this, not merely on a call being open: the year picker can select
+ * a historical group while a newer call is open, and in that view no row is
+ * current, so a live call-scoped filter would empty the grid (ui#639).
+ * @param {number} latestDataCallId - Newest-by-deadline call id (0 before load).
+ * @param {boolean} latestDeadlinePassed - Whether that call's deadline passed.
+ * @param {number[]} activeDatacallIds - Call ids selected in the year picker.
+ * @returns {boolean} True when the open call is in the selected view.
+ */
+export function isOpenCallInView(
+  latestDataCallId: number,
+  latestDeadlinePassed: boolean,
+  activeDatacallIds: number[]
+): boolean {
+  return (
+    latestDataCallId > 0 &&
+    !latestDeadlinePassed &&
+    activeDatacallIds.includes(latestDataCallId)
+  )
+}
+
+/**
  * True when a system is a genuine "Not updated" laggard for the active data
  * call: it has a questionnaire but zero functions updated. Reuses the column's
  * own classifier (`progressSortValue === -1`) so the filter and the Data Call
