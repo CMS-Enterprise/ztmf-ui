@@ -850,6 +850,10 @@ export default function FismaTable({
       // on the grayed styling.
       field: 'rowdatacall',
       headerName: 'Data Call',
+      // Renders as the column-header tooltip: the resolution is not obvious
+      // from the name (it is not simply "last completed call").
+      description:
+        "The data call this row's score and progress are shown from; a system with no data in the selected calls shows the open call it is expected to answer.",
       width: 130,
       align: 'center',
       headerAlign: 'center',
