@@ -35,6 +35,7 @@ import {
   hasAdminRead,
   hasUnscopedRead,
   isOpDivTier,
+  isUnscopedWriteAdmin,
   selectableRoles,
 } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
@@ -935,10 +936,12 @@ export default function UserTable() {
         userName={opdivModalUserName}
         opdivOptions={opdivOptions}
         opdivLabelMap={opdivLabelMap}
-        // Only OpDiv-tier admins are scoped; their save must drop out-of-scope
-        // grants. Unscoped admins (OWNER/HHS_ADMIN) must preserve them. Same
-        // predicate that narrowed opdivOptions above, so options and save agree.
-        enforceCallerScope={isOpDivTier(userInfo)}
+        // Scoped callers (every admin except an unscoped write admin) must not
+        // silently revoke the target's out-of-scope grants on save, so gate the
+        // save-time filter for them. Unscoped write admins (OWNER/HHS_ADMIN)
+        // send the grant set as-is. This is the inverse of the backend's
+        // unscoped-write branch, the predicate it actually decides on.
+        enforceCallerScope={!isUnscopedWriteAdmin(userInfo)}
         // The caller's RAW grants (unfiltered by parent/active) - the save-time
         // preserve boundary. Wider than opdivOptions so a caller-held grant to a
         // since re-parented/deactivated OpDiv is preserved, not silently revoked.
