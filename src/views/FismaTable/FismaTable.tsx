@@ -27,7 +27,7 @@ import {
   ListSubheader,
   Menu,
   Button,
-  Typography,
+  Alert,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { useState, useEffect, useMemo, useCallback } from 'react'
@@ -82,6 +82,8 @@ declare module '@mui/x-data-grid' {
     opdivOptions: OpDivOption[]
     showEnvFilter: boolean
     showOpDivFilter: boolean
+    hasOpenCall: boolean
+    openCallInView: boolean
   }
 }
 
@@ -267,210 +269,220 @@ export function QuickSearchToolbar(props: {
   }
 
   return (
-    <Box
-      sx={{
-        py: 1,
-        px: 1,
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 1.5,
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}
-    >
-      <GridToolbarQuickFilter
-        debounceMs={250}
-        sx={{
-          '& .MuiInputBase-input::placeholder': {
-            color: '#404040',
-            opacity: 0.8,
-          },
-          '& .MuiInputBase-root:after': {
-            borderBottomColor: '#5666b8',
-          },
-          '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: '#5666b8',
-          },
-        }}
-      />
-      {/* All facet filters live in one right-aligned cluster next to the
-          Show Decommissioned toggle. */}
+    <>
       <Box
         sx={{
+          py: 1,
+          px: 1,
           display: 'flex',
           flexWrap: 'wrap',
           gap: 1.5,
+          justifyContent: 'space-between',
           alignItems: 'center',
-          justifyContent: 'flex-end',
         }}
       >
-        {showEnvFilter && (
-          <FormControl size="small" sx={{ width: 200 }}>
-            <Select
-              multiple
-              displayEmpty
-              value={filters.environments}
-              onChange={(e) =>
-                onFiltersChange({
-                  ...filters,
-                  environments: e.target.value as string[],
-                })
-              }
-              inputProps={{ 'aria-label': 'Filter by environment' }}
-              renderValue={(selected) => {
-                const vals = selected as string[]
-                if (vals.length === 0)
-                  return <span style={{ color: '#6b6b6b' }}>Environment</span>
-                if (vals.length === 1) return vals[0]
-                return `${vals.length} environments`
-              }}
-              sx={selectValueSx}
-            >
-              {envOptions.map((opt) => (
-                <MenuItem key={opt} value={opt}>
-                  <Checkbox
-                    checked={filters.environments.includes(opt)}
-                    readOnly
-                    size="small"
-                  />
-                  <ListItemText primary={opt} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
-        {showOpDivFilter && (
-          <FormControl size="small" sx={{ width: 200 }}>
-            <Select
-              multiple
-              displayEmpty
-              value={filters.opdivIds}
-              onChange={(e) =>
-                onFiltersChange({
-                  ...filters,
-                  opdivIds: e.target.value as number[],
-                })
-              }
-              inputProps={{ 'aria-label': 'Filter by OpDiv' }}
-              renderValue={(selected) => {
-                const ids = selected as number[]
-                if (ids.length === 0)
-                  return <span style={{ color: '#6b6b6b' }}>OpDiv</span>
-                if (ids.length === 1)
-                  return (
-                    opdivOptions.find((o) => o.id === ids[0])?.label ??
-                    String(ids[0])
-                  )
-                return `${ids.length} OpDivs`
-              }}
-              sx={selectValueSx}
-            >
-              {opdivOptions.map((o) => (
-                <MenuItem key={o.id} value={o.id}>
-                  <Checkbox
-                    checked={filters.opdivIds.includes(o.id)}
-                    readOnly
-                    size="small"
-                  />
-                  <ListItemText primary={o.label} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
-        {!openCallInView && (
-          <Typography variant="caption" sx={{ color: '#6b6b6b' }}>
-            {hasOpenCall
-              ? 'The open data call is not in the selected view'
-              : "No open data call; showing each system's latest completed call"}
-          </Typography>
-        )}
-        {/* Both call-scoped toggles gray out when the open call is not in
+        <GridToolbarQuickFilter
+          debounceMs={250}
+          sx={{
+            '& .MuiInputBase-input::placeholder': {
+              color: '#404040',
+              opacity: 0.8,
+            },
+            '& .MuiInputBase-root:after': {
+              borderBottomColor: '#5666b8',
+            },
+            '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
+              borderBottomColor: '#5666b8',
+            },
+          }}
+        />
+        {/* All facet filters live in one right-aligned cluster next to the
+          Show Decommissioned toggle. */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+          }}
+        >
+          {showEnvFilter && (
+            <FormControl size="small" sx={{ width: 200 }}>
+              <Select
+                multiple
+                displayEmpty
+                value={filters.environments}
+                onChange={(e) =>
+                  onFiltersChange({
+                    ...filters,
+                    environments: e.target.value as string[],
+                  })
+                }
+                inputProps={{ 'aria-label': 'Filter by environment' }}
+                renderValue={(selected) => {
+                  const vals = selected as string[]
+                  if (vals.length === 0)
+                    return <span style={{ color: '#6b6b6b' }}>Environment</span>
+                  if (vals.length === 1) return vals[0]
+                  return `${vals.length} environments`
+                }}
+                sx={selectValueSx}
+              >
+                {envOptions.map((opt) => (
+                  <MenuItem key={opt} value={opt}>
+                    <Checkbox
+                      checked={filters.environments.includes(opt)}
+                      readOnly
+                      size="small"
+                    />
+                    <ListItemText primary={opt} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          {showOpDivFilter && (
+            <FormControl size="small" sx={{ width: 200 }}>
+              <Select
+                multiple
+                displayEmpty
+                value={filters.opdivIds}
+                onChange={(e) =>
+                  onFiltersChange({
+                    ...filters,
+                    opdivIds: e.target.value as number[],
+                  })
+                }
+                inputProps={{ 'aria-label': 'Filter by OpDiv' }}
+                renderValue={(selected) => {
+                  const ids = selected as number[]
+                  if (ids.length === 0)
+                    return <span style={{ color: '#6b6b6b' }}>OpDiv</span>
+                  if (ids.length === 1)
+                    return (
+                      opdivOptions.find((o) => o.id === ids[0])?.label ??
+                      String(ids[0])
+                    )
+                  return `${ids.length} OpDivs`
+                }}
+                sx={selectValueSx}
+              >
+                {opdivOptions.map((o) => (
+                  <MenuItem key={o.id} value={o.id}>
+                    <Checkbox
+                      checked={filters.opdivIds.includes(o.id)}
+                      readOnly
+                      size="small"
+                    />
+                    <ListItemText primary={o.label} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          {/* Both call-scoped toggles gray out when the open call is not in
             view (ui#639): "Not updated only" is a current-cycle laggard
             signal with nothing to match, and "Open data call only" would
             empty the grid. The span wrappers keep the tooltips firing on the
             disabled controls. */}
-        <Tooltip title={callScopeHint}>
-          <span>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={filters.openCallOnly}
-                  onChange={(e) =>
-                    onFiltersChange({
-                      ...filters,
-                      openCallOnly: e.target.checked,
-                    })
-                  }
-                  disabled={!openCallInView}
-                  sx={switchSx}
-                />
-              }
-              label="Open data call only"
-              sx={{ m: 0 }}
-            />
-          </span>
-        </Tooltip>
-        <Tooltip title={callScopeHint}>
-          <span>
-            <FormControlLabel
-              control={
-                <Switch
-                  checked={filters.notUpdatedOnly}
-                  onChange={(e) =>
-                    onFiltersChange({
-                      ...filters,
-                      notUpdatedOnly: e.target.checked,
-                    })
-                  }
-                  disabled={!openCallInView}
-                  sx={switchSx}
-                />
-              }
-              label="Not updated only"
-              sx={{ m: 0 }}
-            />
-          </span>
-        </Tooltip>
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showDecommissioned}
-              onChange={(e) => setShowDecommissioned(e.target.checked)}
-              sx={switchSx}
-            />
-          }
-          label="Show Decommissioned"
-          sx={{ m: 0 }}
-        />
-        <Button
-          size="small"
-          startIcon={<CloseIcon />}
-          onClick={() => {
-            onFiltersChange(EMPTY_DASHBOARD_FILTERS)
-            // Show Decommissioned lives in Title context (it gates a refetch),
-            // not in the client-side filter model — so clear it separately or it
-            // would survive "Clear filters".
-            setShowDecommissioned(false)
-            // The DataGrid quick-filter is grid state, not DashboardFilterState,
-            // so reset it via the grid API or the typed term survives (#573).
-            apiRef.current.setQuickFilterValues([])
-          }}
-          // ...and both Show Decommissioned and the quick-filter are active
-          // filters for the button's own enabled state: without this, toggling
-          // only Show Decommissioned left Clear filters greyed out (#566), and
-          // typing only a search term would leave it greyed out too (#573).
-          disabled={
-            hasNoActiveFilters(filters) &&
-            !showDecommissioned &&
-            !hasQuickFilter
-          }
-          sx={{ color: '#004297', textTransform: 'none', mr: 2, flexShrink: 0 }}
-        >
-          Clear filters
-        </Button>
+          <Tooltip title={callScopeHint}>
+            <span>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={filters.openCallOnly}
+                    onChange={(e) =>
+                      onFiltersChange({
+                        ...filters,
+                        openCallOnly: e.target.checked,
+                      })
+                    }
+                    disabled={!openCallInView}
+                    sx={switchSx}
+                  />
+                }
+                label="Open data call only"
+                sx={{ m: 0 }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={callScopeHint}>
+            <span>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={filters.notUpdatedOnly}
+                    onChange={(e) =>
+                      onFiltersChange({
+                        ...filters,
+                        notUpdatedOnly: e.target.checked,
+                      })
+                    }
+                    disabled={!openCallInView}
+                    sx={switchSx}
+                  />
+                }
+                label="Not updated only"
+                sx={{ m: 0 }}
+              />
+            </span>
+          </Tooltip>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showDecommissioned}
+                onChange={(e) => setShowDecommissioned(e.target.checked)}
+                sx={switchSx}
+              />
+            }
+            label="Show Decommissioned"
+            sx={{ m: 0 }}
+          />
+          <Button
+            size="small"
+            startIcon={<CloseIcon />}
+            onClick={() => {
+              onFiltersChange(EMPTY_DASHBOARD_FILTERS)
+              // Show Decommissioned lives in Title context (it gates a refetch),
+              // not in the client-side filter model — so clear it separately or it
+              // would survive "Clear filters".
+              setShowDecommissioned(false)
+              // The DataGrid quick-filter is grid state, not DashboardFilterState,
+              // so reset it via the grid API or the typed term survives (#573).
+              apiRef.current.setQuickFilterValues([])
+            }}
+            // ...and both Show Decommissioned and the quick-filter are active
+            // filters for the button's own enabled state: without this, toggling
+            // only Show Decommissioned left Clear filters greyed out (#566), and
+            // typing only a search term would leave it greyed out too (#573).
+            disabled={
+              hasNoActiveFilters(filters) &&
+              !showDecommissioned &&
+              !hasQuickFilter
+            }
+            sx={{
+              color: '#004297',
+              textTransform: 'none',
+              mr: 2,
+              flexShrink: 0,
+            }}
+          >
+            Clear filters
+          </Button>
+        </Box>
       </Box>
-    </Box>
+      {/* Toolbar-row captions crowd the filter cluster and wrap it (ui#639),
+          so the call-scope notice renders as its own slim banner between the
+          filters and the column headers. */}
+      {!openCallInView && (
+        <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>
+          {hasOpenCall
+            ? 'The open data call is not in the selected view'
+            : "No open data call; showing each system's latest completed call"}
+        </Alert>
+      )}
+    </>
   )
 }
 // Cache for pillar scores to avoid repeated API calls
