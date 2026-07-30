@@ -18,6 +18,29 @@ import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
  * @param {number} activeDataCallId - The dashboard's active call id.
  * @returns {number} The resolved data call id.
  */
+/**
+ * Sort comparator for the Data Call column. Cell values are call NAMES (so
+ * the quick filter can match them), but names do not sort chronologically
+ * ("FY2025 Q3" string-sorts near "FY25 ZTM" by accident only), so ordering
+ * goes through each call's deadline. A name with no known deadline sinks to
+ * the oldest end rather than interleaving (mirrors sortDatacallsByDeadline's
+ * bad-value handling). Duplicate call names collapse to one deadline
+ * (last-write-wins in the map); the admin call-name grammar keeps names
+ * unique in practice.
+ * @param {Map<string, number>} deadlineByName - Call name -> deadline epoch ms.
+ * @returns {(a: string, b: string) => number} Ascending-by-deadline comparator.
+ */
+export function datacallNameComparator(
+  deadlineByName: Map<string, number>
+): (a: string, b: string) => number {
+  return (a, b) => {
+    const av = deadlineByName.get(a) ?? -Infinity
+    const bv = deadlineByName.get(b) ?? -Infinity
+    if (av === bv) return 0
+    return av - bv
+  }
+}
+
 export function resolveRowCallId(
   fismasystemid: number,
   chosenCallMap: Record<number, number>,
