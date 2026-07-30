@@ -20,10 +20,6 @@ class FakeBroadcastChannel {
   addEventListener(type: string, fn: (e: MessageEvent) => void): void {
     if (type === 'message') this.listeners.push(fn)
   }
-  removeEventListener(type: string, fn: (e: MessageEvent) => void): void {
-    if (type === 'message')
-      this.listeners = this.listeners.filter((l) => l !== fn)
-  }
   /** Deliver a message the way the browser would: onmessage AND every listener. */
   dispatch(data: unknown): void {
     const event = { data } as MessageEvent

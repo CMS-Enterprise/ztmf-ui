@@ -246,7 +246,7 @@ test('NO_ACCOUNT still overrides an EXPIRED redirect already committed', async (
   sessionAlive = false
 
   await handleAuthError(authError(401, AuthCodes.UNAUTHORIZED)).catch(() => {})
-  await waitForIdle(router)
+  await waitForIdle(router, true)
   expect(router.state.location.state).toMatchObject({
     reason: SignInReasons.EXPIRED,
   })
@@ -255,7 +255,7 @@ test('NO_ACCOUNT still overrides an EXPIRED redirect already committed', async (
   await handleAuthError(
     authError(403, AuthCodes.ACCOUNT_NOT_PROVISIONED)
   ).catch(() => {})
-  await waitForIdle(router)
+  await waitForIdle(router, true)
 
   expect(router.state.location.state).toMatchObject({
     reason: SignInReasons.NO_ACCOUNT,
