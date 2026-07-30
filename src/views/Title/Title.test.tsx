@@ -209,7 +209,7 @@ describe('Title logout affordance', () => {
     // Toast fires immediately (before the await), covering the click-to-
     // reload gap with visible feedback.
     expect(mockedNotify).toHaveBeenCalledWith('Signing out...', 'info')
-    // Every other open tab is signalled to tear down too (#606).
+    // Every other open tab is signalled to tear down too.
     expect(mockedBroadcastLogout).toHaveBeenCalled()
   })
 

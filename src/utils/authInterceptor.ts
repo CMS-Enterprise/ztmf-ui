@@ -47,43 +47,49 @@ export async function handleAuthError(
   const code = error.response?.data?.code
   const backendMessage = error.response?.data?.error
 
-  // #606: an auth failure here usually means the session died out from under
-  // a still-rendered dashboard (logout in another tab, cookie expiry). Two
-  // pieces of router state need correcting, and a plain navigate('/signin')
-  // fixes only one of them:
-  //
-  // 1. The root authLoader's data. The root route stays matched on a child
-  //    navigation, so react-router does NOT re-run its loader and loaderData
-  //    keeps claiming status===200. LoginPage trusts that and <Navigate>s
-  //    straight back to the dashboard, whose mount fetches 401 again - the
-  //    reported "stuttering loop." router.revalidate() forces the authLoader
-  //    to re-run; once it reports no session the bounce stops. Called before
-  //    navigate() so the /signin navigation picks the revalidation up and
-  //    commits with fresh loader data, and only when the data is actually
-  //    stale so 401s while already signed out don't fire a redundant probe.
-  //
-  // 2. The location. Redirect to /signin carrying the reason so LoginPage
-  //    renders the right copy. For a 401 this is skipped when the tab is
-  //    already on (or already navigating to) the sign-in route - one redirect
-  //    per burst of concurrent rejections is enough, and a late 401 must not
-  //    clobber a NO_ACCOUNT terminal state already showing. NO_ACCOUNT itself
-  //    always navigates: it is the more specific diagnosis and must win over
-  //    a plain EXPIRED redirect from the same burst.
-  //
-  // Path normalization mirrors Title.tsx (lowercase + strip trailing slash).
+  // Navigating to /signin leaves the root route matched, so react-router does
+  // not re-run its loader: loaderData keeps reporting status 200, LoginPage
+  // trusts it and <Navigate>s back to the dashboard, whose mount 401s again
+  // (#606). revalidate() is what breaks that cycle, so it must stay OUTSIDE
+  // the redirect guards below - a suppressed redirect still needs fresh data.
+  // Path normalization mirrors Title.tsx.
   const normalizePath = (pathname: string | undefined) =>
     (pathname ?? '').toLowerCase().replace(/\/$/, '')
   const signInPath = Routes.SIGNIN.toLowerCase()
+  const onSignIn = (loc?: { pathname?: string }) =>
+    normalizePath(loc?.pathname) === signInPath
   const alreadyOnSignIn =
-    normalizePath(router.state?.location?.pathname) === signInPath ||
-    normalizePath(router.state?.navigation?.location?.pathname) === signInPath
+    onSignIn(router.state?.location) ||
+    onSignIn(router.state?.navigation?.location)
+  const backendMessageOrPermission =
+    typeof backendMessage === 'string' && backendMessage.length > 0
+      ? backendMessage
+      : ERROR_MESSAGES.permission
+  // NO_ACCOUNT cannot reuse alreadyOnSignIn: an EXPIRED redirect landing first
+  // in a burst would suppress the more specific diagnosis. Keying on reason
+  // dedupes it against itself instead. The message is part of the key because
+  // LoginPage prefers location.state.message, so a body-less 403 that fell back
+  // to generic copy would otherwise freeze out a later one carrying the real
+  // text.
+  const showingNoAccount = (loc?: { pathname?: string; state?: unknown }) => {
+    if (!onSignIn(loc)) return false
+    const locState = loc?.state as
+      | { reason?: string; message?: string }
+      | null
+      | undefined
+    return (
+      locState?.reason === SignInReasons.NO_ACCOUNT &&
+      locState?.message === backendMessageOrPermission
+    )
+  }
+  const alreadyShowingNoAccount =
+    showingNoAccount(router.state?.location) ||
+    showingNoAccount(router.state?.navigation?.location)
   const rootLoaderData = router.state?.loaderData?.[RouteIds.ROOT] as
     | { status?: number }
     | undefined
-  // Skip when a revalidation is already in flight: loaderData stays stale
-  // until it completes, so each straggler in a 401 burst would otherwise
-  // re-fire revalidate() and restart the pending /signin navigation's
-  // loader run. One forced re-run is enough.
+  // loaderData stays stale until a revalidation lands, so without the in-flight
+  // check every straggler in a burst would restart the pending navigation.
   const needsRevalidation =
     rootLoaderData?.status === 200 && router.state?.revalidation !== 'loading'
 
@@ -103,16 +109,15 @@ export async function handleAuthError(
   if (status === 403) {
     if (code === AuthCodes.ACCOUNT_NOT_PROVISIONED) {
       if (needsRevalidation) void router.revalidate()
-      router.navigate(Routes.SIGNIN, {
-        replace: true,
-        state: {
-          message:
-            typeof backendMessage === 'string' && backendMessage.length > 0
-              ? backendMessage
-              : ERROR_MESSAGES.permission,
-          reason: SignInReasons.NO_ACCOUNT,
-        },
-      })
+      if (!alreadyShowingNoAccount) {
+        router.navigate(Routes.SIGNIN, {
+          replace: true,
+          state: {
+            message: backendMessageOrPermission,
+            reason: SignInReasons.NO_ACCOUNT,
+          },
+        })
+      }
       throw markAuthHandled(error)
     }
     if (code === AuthCodes.FORBIDDEN_ORIGIN) {
@@ -120,12 +125,7 @@ export async function handleAuthError(
       notify(ERROR_MESSAGES.permission, 'error')
       throw markAuthHandled(error)
     }
-    notify(
-      typeof backendMessage === 'string' && backendMessage.length > 0
-        ? backendMessage
-        : ERROR_MESSAGES.permission,
-      'error'
-    )
+    notify(backendMessageOrPermission, 'error')
     throw markAuthHandled(error)
   }
   throw error

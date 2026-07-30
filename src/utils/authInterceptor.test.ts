@@ -13,7 +13,7 @@ jest.mock('@/router/router', () => ({
       navigation: { location: undefined },
       revalidation: 'idle',
       // Keyed by route id; 'root' is RouteIds.ROOT (factory can't reference
-      // the enum). status 200 = the stale-active-session shape #606 fixes.
+      // the enum). status 200 = the stale-active-session shape the fix targets.
       loaderData: { root: { status: 200 } },
     },
   },
@@ -35,8 +35,16 @@ const mockedRevalidate = (router as unknown as { revalidate: jest.Mock })
 const mockedNotify = notify as jest.Mock
 const mockedRouter = router as unknown as {
   state: {
-    location: { pathname: string }
-    navigation: { location?: { pathname: string } }
+    location: {
+      pathname: string
+      state?: { reason?: string; message?: string }
+    }
+    navigation: {
+      location?: {
+        pathname: string
+        state?: { reason?: string; message?: string }
+      }
+    }
     revalidation: 'idle' | 'loading'
     loaderData: Record<string, { status?: number; ok?: boolean }>
   }
@@ -46,8 +54,19 @@ function setCurrentPath(pathname: string): void {
   mockedRouter.state.location.pathname = pathname
 }
 
-function setPendingPath(pathname: string | undefined): void {
-  mockedRouter.state.navigation.location = pathname ? { pathname } : undefined
+function setPendingPath(
+  pathname: string | undefined,
+  state?: { reason?: string; message?: string }
+): void {
+  mockedRouter.state.navigation.location = pathname
+    ? { pathname, state }
+    : undefined
+}
+
+function setCurrentState(
+  state: { reason?: string; message?: string } | undefined
+): void {
+  mockedRouter.state.location.state = state
 }
 
 function setRootLoaderStatus(status: number | undefined): void {
@@ -80,6 +99,7 @@ beforeEach(() => {
   // flight, and loader data still claiming an active session (the stale
   // shape a surprise 401 arrives against).
   setCurrentPath('/')
+  setCurrentState(undefined)
   setPendingPath(undefined)
   setRootLoaderStatus(200)
   mockedRouter.state.revalidation = 'idle'
@@ -200,7 +220,7 @@ test('network errors with no response pass through untouched', async () => {
   expect(mockedNotify).not.toHaveBeenCalled()
 })
 
-test('401 does not re-navigate when already on the sign-in route (#606 loop-guard)', async () => {
+test('401 does not re-navigate when already on the sign-in route (loop-guard)', async () => {
   setCurrentPath(Routes.SIGNIN)
   const error = makeError(401, { code: AuthCodes.UNAUTHORIZED })
 
@@ -222,11 +242,9 @@ test('the sign-in route guard tolerates a trailing slash and casing', async () =
   expect(mockedNavigate).not.toHaveBeenCalled()
 })
 
-test('403 ACCOUNT_NOT_PROVISIONED still navigates when already on sign-in so the terminal state wins', async () => {
-  // A NO_ACCOUNT diagnosis must not be swallowed just because an EXPIRED
-  // redirect from the same burst got there first: the terminal "contact your
-  // administrator" copy (no retry CTA) is the correct surface.
+test('403 ACCOUNT_NOT_PROVISIONED still navigates over a committed EXPIRED redirect so the terminal state wins', async () => {
   setCurrentPath(Routes.SIGNIN)
+  setCurrentState({ reason: SignInReasons.EXPIRED })
   const error = makeError(403, { code: AuthCodes.ACCOUNT_NOT_PROVISIONED })
 
   await expect(handleAuthError(error)).rejects.toMatchObject({
@@ -241,11 +259,125 @@ test('403 ACCOUNT_NOT_PROVISIONED still navigates when already on sign-in so the
   })
 })
 
-test('401 does not re-navigate while a navigation to sign-in is already pending (#606 burst)', async () => {
-  // A burst of concurrent 401s: the first already started the /signin
-  // navigation, whose loader has not committed yet, so state.location still
-  // shows the old route. The rest of the burst must not interrupt and
-  // restart it.
+test('403 ACCOUNT_NOT_PROVISIONED overrides a PENDING EXPIRED redirect too (either arrival order)', async () => {
+  setCurrentPath('/')
+  setPendingPath(Routes.SIGNIN, { reason: SignInReasons.EXPIRED })
+  const error = makeError(403, { code: AuthCodes.ACCOUNT_NOT_PROVISIONED })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).toHaveBeenCalledWith(
+    Routes.SIGNIN,
+    expect.objectContaining({
+      state: expect.objectContaining({ reason: SignInReasons.NO_ACCOUNT }),
+    })
+  )
+})
+
+test('403 ACCOUNT_NOT_PROVISIONED does not re-navigate over an already-showing NO_ACCOUNT state', async () => {
+  setCurrentPath(Routes.SIGNIN)
+  // Same message the body-less 403 resolves to, so this is a true duplicate.
+  setCurrentState({
+    reason: SignInReasons.NO_ACCOUNT,
+    message: ERROR_MESSAGES.permission,
+  })
+  const error = makeError(403, { code: AuthCodes.ACCOUNT_NOT_PROVISIONED })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).not.toHaveBeenCalled()
+})
+
+test('403 ACCOUNT_NOT_PROVISIONED does not re-navigate while a NO_ACCOUNT navigation is pending', async () => {
+  setCurrentPath('/')
+  setPendingPath(Routes.SIGNIN, {
+    reason: SignInReasons.NO_ACCOUNT,
+    message: ERROR_MESSAGES.permission,
+  })
+  const error = makeError(403, { code: AuthCodes.ACCOUNT_NOT_PROVISIONED })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).not.toHaveBeenCalled()
+})
+
+test('403 ACCOUNT_NOT_PROVISIONED suppressed by its own guard still revalidates stale loader data', async () => {
+  // revalidate() must sit OUTSIDE the navigate guard: a suppressed redirect
+  // still needs fresh loaderData, or the tab keeps bouncing.
+  setCurrentPath(Routes.SIGNIN)
+  setCurrentState({
+    reason: SignInReasons.NO_ACCOUNT,
+    message: ERROR_MESSAGES.permission,
+  })
+  setRootLoaderStatus(200)
+  const error = makeError(403, { code: AuthCodes.ACCOUNT_NOT_PROVISIONED })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).not.toHaveBeenCalled()
+  expect(mockedRevalidate).toHaveBeenCalled()
+})
+
+test('403 ACCOUNT_NOT_PROVISIONED with a different message navigates so the terminal copy corrects itself', async () => {
+  // A body-less first 403 falls back to generic copy; a later one carrying the
+  // real text must not be deduped away.
+  setCurrentPath(Routes.SIGNIN)
+  setCurrentState({
+    reason: SignInReasons.NO_ACCOUNT,
+    message: ERROR_MESSAGES.permission,
+  })
+  const error = makeError(403, {
+    code: AuthCodes.ACCOUNT_NOT_PROVISIONED,
+    error: 'Your ZTMF account is not set up.',
+  })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).toHaveBeenCalledWith(Routes.SIGNIN, {
+    replace: true,
+    state: {
+      message: 'Your ZTMF account is not set up.',
+      reason: SignInReasons.NO_ACCOUNT,
+    },
+  })
+})
+
+test('403 ACCOUNT_NOT_PROVISIONED with the SAME message is still deduped', async () => {
+  setCurrentPath(Routes.SIGNIN)
+  setCurrentState({
+    reason: SignInReasons.NO_ACCOUNT,
+    message: 'Your ZTMF account is not set up.',
+  })
+  const error = makeError(403, {
+    code: AuthCodes.ACCOUNT_NOT_PROVISIONED,
+    error: 'Your ZTMF account is not set up.',
+  })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).not.toHaveBeenCalled()
+})
+
+test('a 401 does not clobber an already-showing NO_ACCOUNT terminal state', async () => {
+  setCurrentPath(Routes.SIGNIN)
+  setCurrentState({ reason: SignInReasons.NO_ACCOUNT })
+  const error = makeError(401, { code: AuthCodes.UNAUTHORIZED })
+
+  await expect(handleAuthError(error)).rejects.toMatchObject({
+    __authHandled: true,
+  })
+  expect(mockedNavigate).not.toHaveBeenCalled()
+})
+
+test('401 does not re-navigate while a navigation to sign-in is already pending (burst)', async () => {
+  // The first 401 started the /signin navigation but it has not committed, so
+  // location still shows the old route. Stragglers must not restart it.
   setCurrentPath('/')
   setPendingPath(Routes.SIGNIN)
   const error = makeError(401, { code: AuthCodes.UNAUTHORIZED })
@@ -273,10 +405,8 @@ test('a pending navigation to a non-sign-in route does not suppress the redirect
   })
 })
 
-test('401 with stale active-session loader data revalidates the root loader before navigating (#606)', async () => {
-  // The actual loop-breaker: navigate('/signin') alone does not re-run the
-  // still-matched root authLoader, so LoginPage would see stale status===200
-  // and bounce back to the dashboard forever.
+test('401 with stale active-session loader data revalidates the root loader before navigating', async () => {
+  // The loop-breaker: navigate() alone leaves the root loader un-run.
   const error = makeError(401, { code: AuthCodes.UNAUTHORIZED })
 
   await expect(handleAuthError(error)).rejects.toMatchObject({
@@ -300,8 +430,7 @@ test('401 while loader data already reports no session does not fire a redundant
 })
 
 test('401 suppressed by the sign-in guard still revalidates stale loader data', async () => {
-  // Being on /signin with loader data claiming an active session is exactly
-  // the mid-bounce state - skipping the redirect must not skip the fix.
+  // The mid-bounce state: skipping the redirect must not skip the fix.
   setCurrentPath(Routes.SIGNIN)
   const error = makeError(401, { code: AuthCodes.UNAUTHORIZED })
 
@@ -322,10 +451,8 @@ test('403 ACCOUNT_NOT_PROVISIONED with stale loader data also revalidates', asyn
 })
 
 test('401 while a revalidation is already in flight does not re-fire revalidate', async () => {
-  // Stragglers in a 401 burst arrive while the first rejection's forced
-  // loader re-run is still pending (loaderData is stale until it lands);
-  // re-firing revalidate() would restart the /signin navigation's loader
-  // run for no benefit.
+  // loaderData is stale until the re-run lands; re-firing revalidate() would
+  // restart the pending navigation for no benefit.
   mockedRouter.state.revalidation = 'loading'
   const error = makeError(401, { code: AuthCodes.UNAUTHORIZED })
 

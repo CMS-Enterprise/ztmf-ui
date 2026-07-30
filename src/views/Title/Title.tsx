@@ -275,9 +275,8 @@ export default function Title() {
     } catch (error) {
       console.error('Error logging out:', error)
     }
-    // Notify every other open tab so they tear down too (#606). Best-effort
-    // and independent of the POST result, matching the "even if the request
-    // fails we still drop to sign-in" contract above.
+    // Best-effort and independent of the POST result, matching the "even if
+    // the request fails we still drop to sign-in" contract above.
     broadcastLogout()
     window.location.hash = Routes.SIGNIN
     window.location.reload()

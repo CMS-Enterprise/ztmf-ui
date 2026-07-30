@@ -14,8 +14,7 @@ import { initLogoutListener } from '@/utils/sessionSync'
 import { SnackbarProvider } from 'notistack'
 // IIFE that initializes the root node and renders the application.
 ;(async function () {
-  // Cross-tab logout sync (#606): register once for this tab's lifetime so a
-  // logout in any other tab drops this one cleanly onto the sign-in page.
+  // Once per tab lifetime, outside React so StrictMode cannot double-invoke it.
   initLogoutListener()
 
   // create the root element in the DOM
