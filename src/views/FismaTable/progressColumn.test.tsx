@@ -6,6 +6,7 @@ import { progressSortValue, progressTooltip } from './progressHelpers'
 const updatedEntry: ScoreProgress = {
   fismasystemid: 1,
   questionsexpected: 41,
+  questionsanswered: 12,
   questionsupdated: 12,
   lastupdatedat: '2026-07-01T15:30:00Z',
   updatedsincestart: true,
@@ -14,6 +15,7 @@ const updatedEntry: ScoreProgress = {
 const untouchedEntry: ScoreProgress = {
   fismasystemid: 2,
   questionsexpected: 41,
+  questionsanswered: 0,
   questionsupdated: 0,
   lastupdatedat: null,
   updatedsincestart: false,
@@ -52,6 +54,7 @@ describe('progressSortValue', () => {
     const empty: ScoreProgress = {
       fismasystemid: 3,
       questionsexpected: 0,
+      questionsanswered: 0,
       questionsupdated: 0,
       updatedsincestart: false,
     }
@@ -69,6 +72,7 @@ describe('progressSortValue', () => {
     const empty: ScoreProgress = {
       fismasystemid: 3,
       questionsexpected: 0,
+      questionsanswered: 0,
       questionsupdated: 0,
       updatedsincestart: false,
     }
@@ -127,6 +131,7 @@ describe('progressTooltip', () => {
     const empty: ScoreProgress = {
       fismasystemid: 3,
       questionsexpected: 0,
+      questionsanswered: 0,
       questionsupdated: 0,
       updatedsincestart: false,
     }
@@ -157,12 +162,14 @@ describe('ProgressCell', () => {
     expect(screen.getByText('Updated')).toBeInTheDocument()
   })
 
-  it('renders the fraction and a Not updated chip for a carried-over system', () => {
-    // A pre-populated questionnaire has answers but no edits this cycle -
-    // the whole point of ztmf#299 is that this renders as NOT updated.
+  it('renders the fraction and a laggard chip for an unstarted system', () => {
+    // No answers and no edits this cycle, so the cell shows the honest
+    // fraction alongside the warning chip. The fixture carries zero answers,
+    // which is the "Not started" half of the wording split; the carried-answers
+    // half is covered below.
     render(<ProgressCell entry={untouchedEntry} />)
     expect(screen.getByText('0/41')).toBeInTheDocument()
-    expect(screen.getByText('Not updated')).toBeInTheDocument()
+    expect(screen.getByText('Not started')).toBeInTheDocument()
   })
 
   it('renders an em-dash when progress data is missing', () => {
@@ -176,6 +183,7 @@ describe('ProgressCell', () => {
     const empty: ScoreProgress = {
       fismasystemid: 3,
       questionsexpected: 0,
+      questionsanswered: 0,
       questionsupdated: 0,
       updatedsincestart: false,
     }
@@ -185,49 +193,25 @@ describe('ProgressCell', () => {
     expect(screen.queryByText('0/0')).not.toBeInTheDocument()
   })
 
-  it('renders a neutral Complete chip for a scored past-call system', () => {
-    // ztmf#537: a past call reads 0 updates this cycle for everyone. A system
-    // with a score for that call was completed - show a neutral Complete chip,
-    // never the orange "0/40 Not updated" laggard chip.
-    render(
-      <ProgressCell
-        entry={untouchedEntry}
-        isCurrentCall={false}
-        hasScore={true}
-      />
-    )
-    expect(screen.getByText('Complete')).toBeInTheDocument()
+  it('renders 0/total + Incomplete for a fully-unanswered past call', () => {
+    // ztmf#537 kept a past call off the orange laggard chip; ztmf-ui#578
+    // retires the score-presence proxy, so a past call nobody answered reads
+    // an honest 0/41 with the neutral-warning Incomplete chip instead.
+    render(<ProgressCell entry={untouchedEntry} isCurrentCall={false} />)
+    expect(screen.getByText('0/41')).toBeInTheDocument()
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
     expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
-    expect(screen.queryByText('0/41')).not.toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
   })
 
   it('keeps the current-cycle chip for the same entry on the active call', () => {
-    // Same untouched entry, but on the current call it is a genuine laggard.
-    render(
-      <ProgressCell
-        entry={untouchedEntry}
-        isCurrentCall={true}
-        hasScore={true}
-      />
-    )
+    // Same untouched entry, but on the current call it is a genuine laggard,
+    // so it wears the warning chip rather than the past-call Incomplete one.
+    render(<ProgressCell entry={untouchedEntry} isCurrentCall={true} />)
     expect(screen.getByText('0/41')).toBeInTheDocument()
-    expect(screen.getByText('Not updated')).toBeInTheDocument()
+    expect(screen.getByText('Not started')).toBeInTheDocument()
     expect(screen.queryByText('Complete')).not.toBeInTheDocument()
-  })
-
-  it('renders an em-dash for a past-call system with no score', () => {
-    // Defensive: a past-call row must never show the orange laggard chip even
-    // without a score to prove completion.
-    render(
-      <ProgressCell
-        entry={untouchedEntry}
-        isCurrentCall={false}
-        hasScore={false}
-      />
-    )
-    expect(screen.getByLabelText('No progress data')).toBeInTheDocument()
-    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
-    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+    expect(screen.queryByText('Incomplete')).not.toBeInTheDocument()
   })
 
   it('renders Complete for a fully-answered past call even with zero updates', () => {
@@ -238,7 +222,6 @@ describe('ProgressCell', () => {
       <ProgressCell
         entry={{ ...untouchedEntry, questionsanswered: 41 }}
         isCurrentCall={false}
-        hasScore={true}
       />
     )
     expect(screen.getByText('Complete')).toBeInTheDocument()
@@ -253,7 +236,6 @@ describe('ProgressCell', () => {
       <ProgressCell
         entry={{ ...untouchedEntry, questionsanswered: 10 }}
         isCurrentCall={false}
-        hasScore={true}
       />
     )
     expect(screen.getByText('10/41')).toBeInTheDocument()
@@ -291,9 +273,16 @@ describe('ProgressCell', () => {
   })
 
   it('keeps the legacy Not updated wording when questionsanswered is absent', () => {
-    // ztmf#437 may not be deployed everywhere; without the field the split
-    // would be a guess, so the cell keeps saying what it always said.
-    render(<ProgressCell entry={untouchedEntry} isCurrentCall={true} />)
+    // The field is now required on ScoreProgress, so absence can no longer be
+    // expressed through the type. It remains reachable at runtime against a
+    // backend that predates the field, which is exactly what the cell's
+    // fallback guards, so the cast is deliberate: it exercises the runtime
+    // path the type alone can no longer describe.
+    const withoutAnswered = {
+      ...untouchedEntry,
+      questionsanswered: undefined,
+    } as unknown as ScoreProgress
+    render(<ProgressCell entry={withoutAnswered} isCurrentCall={true} />)
     expect(screen.getByText('Not updated')).toBeInTheDocument()
   })
 

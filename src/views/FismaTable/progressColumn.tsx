@@ -19,9 +19,9 @@ import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
  * fraction and Updated/Not-updated chip.
  *
  * States:
- *   - past call (isCurrentCall false) with a score: neutral "Complete" chip -
- *     the score is the completion signal (ScoreProgress has no "total answered"
- *     field); the orange laggard chip never appears off the active call;
+ *   - past call (isCurrentCall false), fully answered: neutral "Complete" chip;
+ *     partially answered: answered/total fraction with an "Incomplete" chip.
+ *     The orange laggard chip never appears off the active call;
  *   - a system with no applicable questionnaire (0/0) renders a neutral
  *     "N/A" chip, not an orange "Not updated" one - it is not a laggard,
  *     there is nothing to nudge;
@@ -35,19 +35,14 @@ import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
  * @param {boolean} [props.isCurrentCall=true] - Whether the row's displayed call
  *   is the current/active one. Defaults true so callers without call context
  *   keep the original current-cycle rendering.
- * @param {boolean} [props.hasScore=false] - Whether the system has a score for
- *   the displayed call. Used only for a past call, where a score means the call
- *   was completed.
  * @returns {JSX.Element} The progress cell.
  */
 export function ProgressCell({
   entry,
   isCurrentCall = true,
-  hasScore = false,
 }: {
   entry: ScoreProgress | undefined
   isCurrentCall?: boolean
-  hasScore?: boolean
 }) {
   if (!entry) {
     return <span aria-label="No progress data">—</span>
@@ -62,24 +57,12 @@ export function ProgressCell({
   // A past data call is closed: "updated this cycle" is meaningless, so never
   // show the orange laggard chip here. But completion is answered/total, NOT
   // updated/total - imported and carried-over answers are answered yet never
-  // "updated this cycle", so gating on updates (or on mere score presence)
-  // would either drop them or, worse, mask a partially-answered historical
-  // call as done. Prefer QuestionsAnswered (ztmf#437): a fully-answered past
-  // call is a neutral "Complete"; a partially-answered one shows an honest
-  // answered/total with an "Incomplete" chip. Until the backend field ships,
-  // fall back to the prior score-presence proxy.
+  // "updated this cycle", so gating on updates would either drop them or,
+  // worse, mask a partially-answered historical call as done (ztmf#437): a
+  // fully-answered past call is a neutral "Complete"; a partially-answered
+  // one shows an honest answered/total with an "Incomplete" chip.
   if (!isCurrentCall) {
     const answered = entry.questionsanswered
-    if (answered == null) {
-      if (!hasScore) {
-        return <span aria-label="No progress data">—</span>
-      }
-      return (
-        <Tooltip title={progressTooltip(entry, { completed: true })}>
-          <Chip size="small" label="Complete" variant="outlined" />
-        </Tooltip>
-      )
-    }
     if (answered >= entry.questionsexpected) {
       return (
         <Tooltip title={progressTooltip(entry, { completed: true })}>
