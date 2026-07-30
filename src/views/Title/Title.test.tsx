@@ -43,6 +43,13 @@ jest.mock('@/utils/notify', () => ({
   isAuthHandled: jest.fn(),
 }))
 
+// Cross-tab logout signal (#606); mock so the test can assert it fires on
+// sign-out without constructing a real BroadcastChannel.
+jest.mock('@/utils/sessionSync', () => ({
+  __esModule: true,
+  broadcastLogout: jest.fn(),
+}))
+
 // Heavy children the logout affordance does not depend on. Stubbing them keeps
 // the test focused on the header menu and avoids their own asset/network deps.
 jest.mock('@/components/EmailModal/EmailModal', () => ({
@@ -86,6 +93,7 @@ import axiosInstance from '@/axiosConfig'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
 import { notify } from '@/utils/notify'
+import { broadcastLogout } from '@/utils/sessionSync'
 import Title from './Title'
 
 const mockedUseLoaderData = useLoaderData as jest.Mock
@@ -95,6 +103,7 @@ const mockedPost = axiosInstance.post as jest.Mock
 const mockedFetchEnvs = fetchDataCenterEnvironments as jest.Mock
 const mockedClearDrafts = clearOtherUserDrafts as jest.Mock
 const mockedNotify = notify as jest.Mock
+const mockedBroadcastLogout = broadcastLogout as jest.Mock
 
 function makeUser(role: UserRole): userData {
   return {
@@ -200,6 +209,8 @@ describe('Title logout affordance', () => {
     // Toast fires immediately (before the await), covering the click-to-
     // reload gap with visible feedback.
     expect(mockedNotify).toHaveBeenCalledWith('Signing out...', 'info')
+    // Every other open tab is signalled to tear down too (#606).
+    expect(mockedBroadcastLogout).toHaveBeenCalled()
   })
 
   it('still redirects to sign-in when the logout request fails', async () => {
@@ -218,6 +229,8 @@ describe('Title logout affordance', () => {
       expect(window.location.reload as jest.Mock).toHaveBeenCalled()
     )
     expect(window.location.hash).toBe(Routes.SIGNIN)
+    // Broadcast is independent of the POST result (best-effort).
+    expect(mockedBroadcastLogout).toHaveBeenCalled()
     errSpy.mockRestore()
   })
 })

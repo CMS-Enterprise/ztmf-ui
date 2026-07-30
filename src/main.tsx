@@ -10,9 +10,14 @@ import router from '@/router/router'
 import { SIGN_IN_GREETING } from '@/locales/en'
 import '@/sass/style.scss'
 import onPerfEntry from './utils/onPerfEntry'
+import { initLogoutListener } from '@/utils/sessionSync'
 import { SnackbarProvider } from 'notistack'
 // IIFE that initializes the root node and renders the application.
 ;(async function () {
+  // Cross-tab logout sync (#606): register once for this tab's lifetime so a
+  // logout in any other tab drops this one cleanly onto the sign-in page.
+  initLogoutListener()
+
   // create the root element in the DOM
   const rootElement = document.getElementById('root') as HTMLElement
 

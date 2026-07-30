@@ -34,6 +34,7 @@ import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import { notify } from '@/utils/notify'
+import { broadcastLogout } from '@/utils/sessionSync'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
@@ -274,6 +275,10 @@ export default function Title() {
     } catch (error) {
       console.error('Error logging out:', error)
     }
+    // Notify every other open tab so they tear down too (#606). Best-effort
+    // and independent of the POST result, matching the "even if the request
+    // fails we still drop to sign-in" contract above.
+    broadcastLogout()
     window.location.hash = Routes.SIGNIN
     window.location.reload()
   }

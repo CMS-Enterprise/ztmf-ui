@@ -4,7 +4,7 @@
 // node throws "Cannot use 'import.meta' outside a module" at load time).
 import type { AxiosError } from 'axios'
 import router from '@/router/router'
-import { Routes } from '@/router/constants'
+import { RouteIds, Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
 import { markAuthHandled, notify } from '@/utils/notify'
 import { AuthCodes, SignInReasons } from '@/utils/authCodes'
@@ -47,18 +47,62 @@ export async function handleAuthError(
   const code = error.response?.data?.code
   const backendMessage = error.response?.data?.error
 
+  // #606: an auth failure here usually means the session died out from under
+  // a still-rendered dashboard (logout in another tab, cookie expiry). Two
+  // pieces of router state need correcting, and a plain navigate('/signin')
+  // fixes only one of them:
+  //
+  // 1. The root authLoader's data. The root route stays matched on a child
+  //    navigation, so react-router does NOT re-run its loader and loaderData
+  //    keeps claiming status===200. LoginPage trusts that and <Navigate>s
+  //    straight back to the dashboard, whose mount fetches 401 again - the
+  //    reported "stuttering loop." router.revalidate() forces the authLoader
+  //    to re-run; once it reports no session the bounce stops. Called before
+  //    navigate() so the /signin navigation picks the revalidation up and
+  //    commits with fresh loader data, and only when the data is actually
+  //    stale so 401s while already signed out don't fire a redundant probe.
+  //
+  // 2. The location. Redirect to /signin carrying the reason so LoginPage
+  //    renders the right copy. For a 401 this is skipped when the tab is
+  //    already on (or already navigating to) the sign-in route - one redirect
+  //    per burst of concurrent rejections is enough, and a late 401 must not
+  //    clobber a NO_ACCOUNT terminal state already showing. NO_ACCOUNT itself
+  //    always navigates: it is the more specific diagnosis and must win over
+  //    a plain EXPIRED redirect from the same burst.
+  //
+  // Path normalization mirrors Title.tsx (lowercase + strip trailing slash).
+  const normalizePath = (pathname: string | undefined) =>
+    (pathname ?? '').toLowerCase().replace(/\/$/, '')
+  const signInPath = Routes.SIGNIN.toLowerCase()
+  const alreadyOnSignIn =
+    normalizePath(router.state?.location?.pathname) === signInPath ||
+    normalizePath(router.state?.navigation?.location?.pathname) === signInPath
+  const rootLoaderData = router.state?.loaderData?.[RouteIds.ROOT] as
+    | { status?: number }
+    | undefined
+  // Skip when a revalidation is already in flight: loaderData stays stale
+  // until it completes, so each straggler in a 401 burst would otherwise
+  // re-fire revalidate() and restart the pending /signin navigation's
+  // loader run. One forced re-run is enough.
+  const needsRevalidation =
+    rootLoaderData?.status === 200 && router.state?.revalidation !== 'loading'
+
   if (status === 401) {
-    router.navigate(Routes.SIGNIN, {
-      replace: true,
-      state: {
-        message: ERROR_MESSAGES.expired,
-        reason: SignInReasons.EXPIRED,
-      },
-    })
+    if (needsRevalidation) void router.revalidate()
+    if (!alreadyOnSignIn) {
+      router.navigate(Routes.SIGNIN, {
+        replace: true,
+        state: {
+          message: ERROR_MESSAGES.expired,
+          reason: SignInReasons.EXPIRED,
+        },
+      })
+    }
     throw markAuthHandled(error)
   }
   if (status === 403) {
     if (code === AuthCodes.ACCOUNT_NOT_PROVISIONED) {
+      if (needsRevalidation) void router.revalidate()
       router.navigate(Routes.SIGNIN, {
         replace: true,
         state: {
