@@ -43,10 +43,16 @@ jest.mock('@/views/Title/Context', () => ({
 
 function renderToolbar(
   filters: DashboardFilterState = EMPTY_DASHBOARD_FILTERS,
-  onFiltersChange = jest.fn()
+  onFiltersChange = jest.fn(),
+  { hasOpenCall = true, openCallInView = true } = {}
 ) {
   return render(
-    <QuickSearchToolbar filters={filters} onFiltersChange={onFiltersChange} />
+    <QuickSearchToolbar
+      filters={filters}
+      onFiltersChange={onFiltersChange}
+      hasOpenCall={hasOpenCall}
+      openCallInView={openCallInView}
+    />
   )
 }
 
@@ -96,6 +102,74 @@ describe('QuickSearchToolbar — Clear filters vs Show Decommissioned (#566)', (
     })
     fireEvent.click(toggle)
     expect(mockSetShowDecommissioned).toHaveBeenCalledWith(true)
+  })
+})
+
+describe('QuickSearchToolbar — call-scoped toggles (#639)', () => {
+  const openCallToggle = () =>
+    screen.getByRole('checkbox', { name: /open data call only/i })
+  const notUpdatedToggle = () =>
+    screen.getByRole('checkbox', { name: /not updated only/i })
+
+  it('flipping Open data call only drives the filter model', () => {
+    const onFiltersChange = jest.fn()
+    renderToolbar(EMPTY_DASHBOARD_FILTERS, onFiltersChange)
+    fireEvent.click(openCallToggle())
+    expect(onFiltersChange).toHaveBeenCalledWith({
+      ...EMPTY_DASHBOARD_FILTERS,
+      openCallOnly: true,
+    })
+  })
+
+  it('enables Clear filters when only Open data call only is on', () => {
+    renderToolbar({ ...EMPTY_DASHBOARD_FILTERS, openCallOnly: true })
+    expect(clearBtn()).toBeEnabled()
+  })
+
+  it('disables both call-scoped toggles when no call is open', () => {
+    // The bug: "Not updated only" stayed live on a closed call and silently
+    // emptied the grid. Both call-scoped toggles gray out instead;
+    // Show Decommissioned is not call-scoped and stays live.
+    renderToolbar(EMPTY_DASHBOARD_FILTERS, jest.fn(), {
+      hasOpenCall: false,
+      openCallInView: false,
+    })
+    expect(openCallToggle()).toBeDisabled()
+    expect(notUpdatedToggle()).toBeDisabled()
+    expect(
+      screen.getByRole('checkbox', { name: /show decommissioned/i })
+    ).toBeEnabled()
+  })
+
+  it('shows the no-open-call caption only when no call is open', () => {
+    renderToolbar(EMPTY_DASHBOARD_FILTERS, jest.fn(), {
+      hasOpenCall: false,
+      openCallInView: false,
+    })
+    expect(screen.getByText(/no open data call/i)).toBeInTheDocument()
+  })
+
+  it('disables the toggles with the out-of-view caption on a historical year', () => {
+    // A call can be open while the year picker shows a historical group; no
+    // viewed row is current, so the toggles gray out with wording that does
+    // not falsely claim nothing is open.
+    renderToolbar(EMPTY_DASHBOARD_FILTERS, jest.fn(), {
+      hasOpenCall: true,
+      openCallInView: false,
+    })
+    expect(openCallToggle()).toBeDisabled()
+    expect(notUpdatedToggle()).toBeDisabled()
+    expect(
+      screen.getByText(/open data call is not in the selected view/i)
+    ).toBeInTheDocument()
+    expect(screen.queryByText(/no open data call/i)).not.toBeInTheDocument()
+  })
+
+  it('keeps the toggles live and the caption hidden while a call is open', () => {
+    renderToolbar()
+    expect(screen.queryByText(/no open data call/i)).not.toBeInTheDocument()
+    expect(openCallToggle()).toBeEnabled()
+    expect(notUpdatedToggle()).toBeEnabled()
   })
 })
 
