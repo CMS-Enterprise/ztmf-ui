@@ -476,17 +476,26 @@ export function QuickSearchToolbar(props: {
       {/* Toolbar-row captions crowd the filter cluster and wrap it (ui#639),
           so the call-scope notice renders as its own slim banner between the
           filters and the column headers. */}
-      {/* role="status": this is a standing contextual notice, not an alert —
-          MUI's default role="alert" would interrupt screen readers at mount
-          and on every year switch. It is also the keyboard/SR-reachable
-          counterpart of the disabled switches' hover tooltips. */}
-      {!openCallInView && (
-        <Alert severity="info" role="status" sx={{ borderRadius: 0, py: 0 }}>
-          {hasOpenCall
-            ? 'The open data call is not in the selected view'
-            : "No open data call; showing each system's most recently updated call"}
-        </Alert>
-      )}
+      {/* role="status" rather than MUI's default role="alert": this is a
+          standing contextual notice, and an assertive role would interrupt
+          screen readers at mount and on every year switch.
+
+          The live region is the keyboard- and screen-reader-reachable
+          counterpart of the disabled switches' hover tooltips, so it has to
+          actually announce. That is why the wrapper stays mounted and only its
+          contents change: a live region inserted into the DOM at the same
+          moment as its text is generally not announced, so gating the region
+          itself on the condition would have made it silent in exactly the
+          cases it exists to cover. */}
+      <Box role="status" aria-live="polite">
+        {!openCallInView && (
+          <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>
+            {hasOpenCall
+              ? 'The open data call is not in the selected view'
+              : "No open data call; showing each system's most recently updated call"}
+          </Alert>
+        )}
+      </Box>
     </>
   )
 }
@@ -741,7 +750,8 @@ export default function FismaTable({
       chosenCallMap,
       systemCallMap,
       datacalls,
-      activeDataCallId
+      activeDataCallId,
+      activeDatacallIds
     )
 
     try {
@@ -880,7 +890,7 @@ export default function FismaTable({
       // Renders as the column-header tooltip: the resolution is not obvious
       // from the name (it is not simply "last completed call").
       description:
-        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the dashboard's active call for a system with no data in them.",
+        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the newest selected call for a system with no data in them.",
       width: 130,
       align: 'center',
       headerAlign: 'center',
@@ -891,7 +901,8 @@ export default function FismaTable({
             chosenCallMap,
             systemCallMap,
             datacalls,
-            activeDataCallId
+            activeDataCallId,
+            activeDatacallIds
           )
         )?.datacall ?? '',
       sortComparator: datacallNameComparator(deadlineByCallName),

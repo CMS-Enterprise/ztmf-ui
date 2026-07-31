@@ -32,6 +32,35 @@ test('ignores score-call ids that resolve to no known call', () => {
   expect(resolveRowCallId(7, {}, { 7: [99] }, DATACALLS, 3)).toBe(3)
 })
 
+describe('last-resort call for a system with no data in the view', () => {
+  // Call 2 has the newest deadline, so it stands in for the open call; calls 1
+  // and 3 stand in for a historical year the picker has selected.
+  it('prefers the newest selected call when the active call is out of view', () => {
+    // The reported shape: selecting a year toggles all of its calls on, which
+    // collapses activeDataCallId to the open call even though the user is
+    // looking at a historical group. Labelling the row with call 2 there would
+    // name a call that is not on screen.
+    expect(resolveRowCallId(7, {}, {}, DATACALLS, 2, [1, 3])).toBe(3)
+  })
+
+  it('keeps the active call when it is one of the selected calls', () => {
+    expect(resolveRowCallId(7, {}, {}, DATACALLS, 1, [1, 3])).toBe(1)
+  })
+
+  it('falls back to the active call when no calls are selected', () => {
+    expect(resolveRowCallId(7, {}, {}, DATACALLS, 2, [])).toBe(2)
+  })
+
+  it('falls back to the active call when the selection resolves to no known call', () => {
+    expect(resolveRowCallId(7, {}, {}, DATACALLS, 2, [99])).toBe(2)
+  })
+
+  it('still prefers real row data over the view', () => {
+    expect(resolveRowCallId(7, { 7: 1 }, {}, DATACALLS, 2, [2, 3])).toBe(1)
+    expect(resolveRowCallId(7, {}, { 7: [1] }, DATACALLS, 2, [2, 3])).toBe(1)
+  })
+})
+
 describe('datacallNameComparator', () => {
   // Names chosen so string order CONTRADICTS deadline order: "FY2025 Q3"
   // string-sorts before "FY25 ZTM" but has the newer deadline here, so a
@@ -55,5 +84,34 @@ describe('datacallNameComparator', () => {
   it('sinks an unknown or blank name to the oldest end', () => {
     expect(cmp('', 'FY25 ZTM')).toBeLessThan(0)
     expect(cmp('FY2025 Q3', '')).toBeGreaterThan(0)
+  })
+
+  describe('unparseable deadlines', () => {
+    // A record whose deadline is present but malformed maps to NaN, which is
+    // not the same as being absent from the map. Returning NaN from a
+    // comparator is outside Array.prototype.sort's contract and leaves the
+    // row's position up to the engine, so NaN has to reach the same sentinel
+    // an unknown name does.
+    const withBad = new Map([
+      ['bad-deadline', Number.NaN],
+      ['also-bad', Number.NaN],
+      ['FY25 ZTM', Date.parse('2025-09-30T00:00:00Z')],
+    ])
+    const cmpBad = datacallNameComparator(withBad)
+
+    it('never returns NaN', () => {
+      expect(cmpBad('bad-deadline', 'FY25 ZTM')).not.toBeNaN()
+      expect(cmpBad('FY25 ZTM', 'bad-deadline')).not.toBeNaN()
+      expect(cmpBad('bad-deadline', 'also-bad')).not.toBeNaN()
+    })
+
+    it('sinks a malformed deadline to the oldest end', () => {
+      expect(cmpBad('bad-deadline', 'FY25 ZTM')).toBeLessThan(0)
+      expect(cmpBad('FY25 ZTM', 'bad-deadline')).toBeGreaterThan(0)
+    })
+
+    it('treats two malformed deadlines as equal', () => {
+      expect(cmpBad('bad-deadline', 'also-bad')).toBe(0)
+    })
   })
 })
