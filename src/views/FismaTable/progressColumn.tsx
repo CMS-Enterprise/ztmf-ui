@@ -14,9 +14,10 @@ import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
  * "Updated this cycle" only has meaning for the current/active data call. For a
  * past call nobody has touched anything this cycle, so questionsupdated is 0 for
  * every system - showing "0/40 Not updated" wrongly reads a completed historical
- * call as missing (ztmf#537). A past call with a score for that system was
- * completed, so it gets a neutral "Complete" chip instead of the current-cycle
- * fraction and Updated/Not-updated chip.
+ * call as missing (ztmf#537). A past call is judged on how much of it was
+ * answered instead: fully answered reads as a neutral "Complete" chip, and
+ * partially answered keeps the answered/total fraction with an "Incomplete"
+ * chip, rather than the current-cycle Updated/Not-updated framing.
  *
  * States:
  *   - past call (isCurrentCall false), fully answered: neutral "Complete" chip;
