@@ -10,9 +10,13 @@ import router from '@/router/router'
 import { SIGN_IN_GREETING } from '@/locales/en'
 import '@/sass/style.scss'
 import onPerfEntry from './utils/onPerfEntry'
+import { initLogoutListener } from '@/utils/sessionSync'
 import { SnackbarProvider } from 'notistack'
 // IIFE that initializes the root node and renders the application.
 ;(async function () {
+  // Once per tab lifetime, outside React so StrictMode cannot double-invoke it.
+  initLogoutListener()
+
   // create the root element in the DOM
   const rootElement = document.getElementById('root') as HTMLElement
 
