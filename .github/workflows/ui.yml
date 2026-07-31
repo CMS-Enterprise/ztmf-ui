@@ -56,8 +56,11 @@ jobs:
         # VITE_* vars are baked into the bundle at build time, so they must
         # be set on the build step itself, not on the deployed container.
         # Default off; flip per environment as IdP rollout progresses.
+        # Prod joins dev now that its backend has dual-IdP enabled. Impl stays
+        # off until its own backend flag is, or its lookup call would fall
+        # through to the OIDC-gated /api/* rule and break sign-in.
         env:
-          VITE_IDP_ENABLED: ${{ inputs.environment == 'dev' && 'true' || 'false' }}
+          VITE_IDP_ENABLED: ${{ (inputs.environment == 'dev' || inputs.environment == 'prod') && 'true' || 'false' }}
           # Insights "How to fix" remediation — trialed in impl only; off in dev/prod.
           VITE_INSIGHTS_SUGGEST_FIX_ENABLED: ${{ inputs.environment == 'impl' && 'true' || 'false' }}
           # Dev-only banner overrides. Sourced from secrets so the feedback form
