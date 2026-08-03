@@ -150,6 +150,7 @@ const SSD_EX = {
   fismaacronym: 'SSD-EX',
   fismaname: 'Super Star Destroyer Executor Command Systems',
   datacenterenvironment: 'Imperial-Fleet',
+  opdiv_id: 9,
 }
 
 function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
@@ -771,9 +772,11 @@ test('the questionId effect reads live scores via ref and seeds the answer at mo
 
 // ---------------------------------------------------------------------------
 // 4. ZTMF Insights justification-field wiring (#527/#529).
-//    - HHS data calls render the review-aware JustificationField but hide the
-//      CMS-internal insights layer (panel, option badges, suggestion).
-//    - CMS data calls render both the JustificationField and the insights layer.
+//    - The insights layer (panel, option badges, suggestion) is gated on the
+//      SYSTEM's OpDiv (opdivs.insights_enabled), not the viewed call's name:
+//      an enabled OpDiv keeps its insights inside the unified HHS-named cycle
+//      (the FY2026 regression), and a disabled OpDiv never sees the layer.
+//    - The review-aware JustificationField renders regardless of OpDiv.
 //    - A carried-forward prior response blocks submission until reviewed, and
 //      the initial insights lookup blocks submission until it settles.
 //    - A question with no justification context keeps the plain notes field.
@@ -841,17 +844,44 @@ const HHS_ZTM = {
 const HHS_DEEP_LINK =
   '/questionnaire/ssd-ex/FY25_ZTM/identity/imperial-identity-verification'
 
+// SSD-EX (opdiv_id 9) belongs to the insights-enabled OpDiv; 2 is a disabled
+// OpDiv for the negative case.
+const OPDIV_ROWS = [
+  {
+    opdiv_id: 9,
+    code: 'CMS',
+    name: 'Centers for Medicare & Medicaid Services',
+    is_parent: false,
+    active: true,
+    system_delegate_enabled: false,
+    insights_enabled: true,
+  },
+  {
+    opdiv_id: 2,
+    code: 'ACF',
+    name: 'Administration for Children and Families',
+    is_parent: false,
+    active: true,
+    system_delegate_enabled: false,
+    insights_enabled: false,
+  },
+]
+
 describe('QuestionnairePage justification integration', () => {
   type InsightsResponse = { data: { data: unknown[] } }
 
   function installMocks({
     insightRows = [INSIGHT_ROW] as unknown[],
     insightsResponse,
+    opdivRows = OPDIV_ROWS as unknown[],
   }: {
     insightRows?: unknown[]
     insightsResponse?: Promise<InsightsResponse>
+    opdivRows?: unknown[]
   } = {}) {
     axios.get.mockImplementation((url: string) => {
+      if (url === '/opdivs')
+        return Promise.resolve({ data: { data: opdivRows } })
       if (url === 'insights') {
         return (
           insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
@@ -869,7 +899,7 @@ describe('QuestionnairePage justification integration', () => {
     axios.put.mockResolvedValue({ data: {} })
   }
 
-  it('renders the justification field but hides the insights layer for an HHS data call, and persists an accepted prior response', async () => {
+  it('keeps the insights layer on an HHS-named call for an insights-enabled OpDiv, and persists an accepted prior response', async () => {
     installMocks()
     setMockCtx(
       makeCtx({
@@ -893,14 +923,16 @@ describe('QuestionnairePage justification integration', () => {
     // The FIPS baseline is a federal-wide concept and must appear for HHS too.
     expect(await screen.findByText('Low baseline')).toBeInTheDocument()
 
-    // The CMS-internal insights layer is suppressed for HHS calls.
-    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+    // The insights layer follows the system's OpDiv, not the call name: an
+    // insights-enabled OpDiv keeps its panel inside the HHS-named cycle (the
+    // FY2026 single-call regression this gate change fixes).
+    expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
     expect(
-      screen.queryByText('ZTMF Insights option badge')
-    ).not.toBeInTheDocument()
+      (await screen.findAllByText('ZTMF Insights option badge')).length
+    ).toBeGreaterThan(0)
     expect(
-      screen.queryByText('Suggested justification')
-    ).not.toBeInTheDocument()
+      await screen.findByText('Suggested justification')
+    ).toBeInTheDocument()
 
     const complete = screen.getByRole('button', { name: 'Complete' })
     expect(complete).toBeDisabled()
@@ -944,6 +976,28 @@ describe('QuestionnairePage justification integration', () => {
     expect(
       await screen.findByText("Last year's response — FY2025 Q1")
     ).toBeInTheDocument()
+  })
+
+  it('hides the insights layer when the system belongs to an insights-disabled OpDiv', async () => {
+    installMocks({
+      opdivRows: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
+    })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    // The justification review context still renders...
+    expect(await screen.findByText('Review required')).toBeInTheDocument()
+    // ...and the federal-wide FIPS baseline treatment stays.
+    expect(await screen.findByText('Low baseline')).toBeInTheDocument()
+    // ...but every insights surface is suppressed, regardless of call name.
+    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('ZTMF Insights option badge')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Suggested justification')
+    ).not.toBeInTheDocument()
   })
 
   it('blocks submission until the initial insights lookup settles', async () => {
