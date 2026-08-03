@@ -39,8 +39,8 @@ export function datacallNameComparator(
  * a row is on.
  *
  * Resolution order: the call chosen by most-recently-updated in
- * buildDashboardMaps; else the newest-by-deadline call the system has scores
- * in; else a call that is actually in the current view.
+ * buildDashboardMaps; else the newest-by-deadline call the system appears in;
+ * else a call that is actually in the current view.
  *
  * That last rung matters. activeDataCallId collapses to the newest call
  * whenever more than one call is toggled on, and selecting a year toggles all
@@ -52,7 +52,8 @@ export function datacallNameComparator(
  * the label inside what the user is looking at.
  * @param {number} fismasystemid - The row's system id.
  * @param {Record<number, number>} chosenCallMap - System id -> displayed call id.
- * @param {Record<number, number[]>} systemCallMap - System id -> call ids with scores.
+ * @param {Record<number, number[]>} systemCallMap - System id -> call ids the
+ *   system appears in (score or progress rows).
  * @param {datacall[]} datacalls - All known data calls.
  * @param {number} activeDataCallId - The dashboard's active call id.
  * @param {number[]} [activeDatacallIds] - Call ids selected in the year picker.

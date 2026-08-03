@@ -3,7 +3,7 @@ import type { ScoreAggregate, ScoreProgress, SystemScoreEntry } from '@/types'
 export type DashboardMaps = {
   scoreMap: Record<number, SystemScoreEntry>
   progressMap: Record<number, ScoreProgress>
-  /** Which active data call(s) each system has scores in, for per-row actions. */
+  /** Which active data call(s) each system appears in (score or progress row). */
   systemCallMap: Record<number, number[]>
   /** The single call chosen for each system's dashboard row (most-recently-updated). */
   chosenCallMap: Record<number, number>
@@ -50,16 +50,20 @@ export function buildDashboardMaps(
     return m
   })
 
-  // The call indices each system appears in (scores drive the table), newest
-  // first since callIds is newest first.
+  // Call indices each system appears in, newest first. Union of scores AND
+  // progress per call: a never-started system has a progress row but no score,
+  // and keying off scores alone dropped it. Per call index keeps idxs deduped.
   const systemIdxs = new Map<number, number[]>()
-  scoreByCall.forEach((m, idx) => {
-    for (const sys of m.keys()) {
+  for (let idx = 0; idx < callIds.length; idx++) {
+    const sysIds = new Set<number>()
+    for (const sys of scoreByCall[idx]?.keys() ?? []) sysIds.add(sys)
+    for (const sys of progressByCall[idx]?.keys() ?? []) sysIds.add(sys)
+    for (const sys of sysIds) {
       const arr = systemIdxs.get(sys)
       if (arr) arr.push(idx)
       else systemIdxs.set(sys, [idx])
     }
-  })
+  }
 
   const scoreMap: Record<number, SystemScoreEntry> = {}
   const progressMap: Record<number, ScoreProgress> = {}
@@ -67,10 +71,12 @@ export function buildDashboardMaps(
   const chosenCallMap: Record<number, number> = {}
 
   for (const [sys, idxs] of systemIdxs) {
-    // Choose the call this system most recently updated; ties and
-    // never-updated systems keep the newest call (idxs[0]).
+    // Choose the call this system most recently updated; ties/never-updated keep
+    // the newest (idxs[0]). Safe under the score+progress union: a scoreless
+    // (progress-only) call always has null lastupdatedat (edits create scores),
+    // so it scores -1 and never wins `chosen` - a real score is never blanked.
     let chosen = idxs[0]
-    let bestT = lastUpdatedMs(progressByCall[chosen]?.get(sys))
+    let bestT = -Infinity
     for (const idx of idxs) {
       const t = lastUpdatedMs(progressByCall[idx]?.get(sys))
       if (t > bestT) {
