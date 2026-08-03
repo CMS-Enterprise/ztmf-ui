@@ -103,6 +103,19 @@ export function ProgressCell({
     )
   }
   const updated = entry.questionsupdated > 0
+  // Zero updates splits two materially different states: carried-forward
+  // answers awaiting confirmation vs no answers at all — a blanket "Not
+  // updated" read as data loss to ISSOs who had just reviewed everything.
+  // questionsanswered may be absent until ztmf#437 is deployed everywhere;
+  // keep the legacy wording then rather than guessing.
+  const answered = entry.questionsanswered
+  const label = updated
+    ? 'Updated'
+    : answered == null
+      ? 'Not updated'
+      : answered > 0
+        ? 'Awaiting confirmation'
+        : 'Not started'
   return (
     <Tooltip title={progressTooltip(entry)}>
       <Box
@@ -117,7 +130,7 @@ export function ProgressCell({
         </span>
         <Chip
           size="small"
-          label={updated ? 'Updated' : 'Not updated'}
+          label={label}
           color={updated ? 'success' : 'warning'}
           variant="outlined"
         />
