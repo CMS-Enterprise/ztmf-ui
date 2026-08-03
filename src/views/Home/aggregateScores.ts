@@ -3,7 +3,7 @@ import type { ScoreAggregate, ScoreProgress, SystemScoreEntry } from '@/types'
 export type DashboardMaps = {
   scoreMap: Record<number, SystemScoreEntry>
   progressMap: Record<number, ScoreProgress>
-  /** Which active data call(s) each system appears in (score or progress row). */
+  /** Which active data call(s) each system has scores in, for per-row actions. */
   systemCallMap: Record<number, number[]>
   /** The single call chosen for each system's dashboard row (most-recently-updated). */
   chosenCallMap: Record<number, number>
@@ -50,13 +50,25 @@ export function buildDashboardMaps(
     return m
   })
 
-  // Call indices each system appears in, newest first. Union of scores AND
-  // progress per call: a never-started system has a progress row but no score,
-  // and keying off scores alone dropped it. Per call index keeps idxs deduped.
+  // Two per-call, newest-first index lists (callIds is newest first):
+  //   systemIdxs - union of score AND progress rows. Drives row membership,
+  //     progressMap, and the rank, so a never-started system (progress row, no
+  //     score) is included instead of dropped.
+  //   scoreIdxs  - score rows only. Drives systemCallMap, whose consumers
+  //     (export provenance, the #467 call picker in FismaTable) mean "calls this
+  //     system has a real score in". Feeding them the union would list
+  //     progress-only calls, disabling export and firing the picker spuriously.
+  // Per call index keeps both deduped.
   const systemIdxs = new Map<number, number[]>()
+  const scoreIdxs = new Map<number, number[]>()
   for (let idx = 0; idx < callIds.length; idx++) {
     const sysIds = new Set<number>()
-    for (const sys of scoreByCall[idx]?.keys() ?? []) sysIds.add(sys)
+    for (const sys of scoreByCall[idx]?.keys() ?? []) {
+      sysIds.add(sys)
+      const arr = scoreIdxs.get(sys)
+      if (arr) arr.push(idx)
+      else scoreIdxs.set(sys, [idx])
+    }
     for (const sys of progressByCall[idx]?.keys() ?? []) sysIds.add(sys)
     for (const sys of sysIds) {
       const arr = systemIdxs.get(sys)
@@ -72,16 +84,22 @@ export function buildDashboardMaps(
 
   for (const [sys, idxs] of systemIdxs) {
     // Choose the call this system most recently updated; ties/never-updated keep
-    // the newest (idxs[0]). Safe under the score+progress union: a scoreless
-    // (progress-only) call always has null lastupdatedat (edits create scores),
-    // so it scores -1 and never wins `chosen` - a real score is never blanked.
+    // the newest (idxs[0]). Break ties toward a call the system actually has a
+    // score in: lastUpdatedMs returns -1 for a null OR missing progress row (a
+    // failed /scores/progress fetch, or an imported call with no edit events),
+    // so a scored call can tie at -1 with a never-started one. Without the
+    // score-preference the newer (progress-only) call would win and the real
+    // score would never land in scoreMap - the system would read as unscored.
     let chosen = idxs[0]
     let bestT = -Infinity
+    let bestHasScore = false
     for (const idx of idxs) {
       const t = lastUpdatedMs(progressByCall[idx]?.get(sys))
-      if (t > bestT) {
+      const hasScore = scoreByCall[idx]?.has(sys) ?? false
+      if (t > bestT || (t === bestT && hasScore && !bestHasScore)) {
         bestT = t
         chosen = idx
+        bestHasScore = hasScore
       }
     }
 
@@ -91,7 +109,8 @@ export function buildDashboardMaps(
     }
     const progress = progressByCall[chosen]?.get(sys)
     if (progress) progressMap[sys] = progress
-    systemCallMap[sys] = idxs.map((idx) => callIds[idx])
+    // Score-derived (see scoreIdxs): a never-started system lists no calls here.
+    systemCallMap[sys] = (scoreIdxs.get(sys) ?? []).map((idx) => callIds[idx])
     chosenCallMap[sys] = callIds[chosen]
   }
 

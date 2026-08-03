@@ -50,22 +50,69 @@ describe('buildDashboardMaps', () => {
     expect(scoreMap[7]).toBeUndefined() // no fake score
     expect(progressMap[7].questionsexpected).toBe(40)
     expect(progressMap[7].questionsupdated).toBe(0)
-    expect(systemCallMap[7]).toEqual([38])
+    // systemCallMap is score-derived: a never-started system lists no calls, so
+    // export provenance and the call picker don't treat it as having real data.
+    expect(systemCallMap[7]).toEqual([])
     expect(chosenCallMap[7]).toBe(38)
+  })
+
+  it('keeps the newest call for a never-started system present in multiple calls', () => {
+    // System 7 is never-started in BOTH calls with no score anywhere, so every
+    // idx ties at -1. With no scored call to prefer, the tie-break leaves the
+    // newest-first fallback intact (idxs[0] = 38) and systemCallMap stays empty.
+    const { scoreMap, progressMap, systemCallMap, chosenCallMap } =
+      buildDashboardMaps(
+        CALL_IDS,
+        [[], []],
+        [[prog(7, 0, null)], [prog(7, 0, null)]]
+      )
+    expect(scoreMap[7]).toBeUndefined()
+    expect(progressMap[7].questionsupdated).toBe(0)
+    expect(chosenCallMap[7]).toBe(38) // newest-first fallback
+    expect(systemCallMap[7]).toEqual([])
   })
 
   it('keeps a scored call as chosen when a never-started progress row exists in another call', () => {
     // System 1 is scored + completed in the newer call 38, and has a
     // never-started progress row (0 updated, null lastupdated) in the older call
-    // 3. The union now adds call 3 to its idxs, but that never-started row must
-    // not win `chosen` (its lastupdated is null -> -1) and blank the real score.
-    const { scoreMap, chosenCallMap } = buildDashboardMaps(
+    // 3. The union adds call 3 to its idxs, but that never-started row must not
+    // win `chosen` and blank the real score, and systemCallMap must stay
+    // score-derived ([38], not the union [38, 3]).
+    const { scoreMap, chosenCallMap, systemCallMap } = buildDashboardMaps(
       CALL_IDS,
       [[agg(1, 88)], []], // score only in call 38
       [[prog(1, 40, '2025-09-01')], [prog(1, 0, null)]]
     )
     expect(scoreMap[1].score).toBe(88) // scored call kept
     expect(chosenCallMap[1]).toBe(38)
+    expect(systemCallMap[1]).toEqual([38])
+  })
+
+  it('keeps the score when the older scored call has no progress rows', () => {
+    // Score only in the older call 3, but its /scores/progress fetch failed, so
+    // call 3 has no progress row -> lastUpdatedMs -1, tying with call 38's
+    // never-started row. Without the score-preference tie-break, chosen lands on
+    // 38 and the real score is lost.
+    const { scoreMap, chosenCallMap } = buildDashboardMaps(
+      [38, 3],
+      [[], [agg(1, 88)]],
+      [[prog(1, 0, null)], []]
+    )
+    expect(chosenCallMap[1]).toBe(3)
+    expect(scoreMap[1]?.score).toBe(88)
+  })
+
+  it('keeps the score when the scored call row has a null lastupdatedat', () => {
+    // Score in the older call 3, whose progress row has a null lastupdatedat (an
+    // imported call carries no edit events) -> -1, tying with call 38's
+    // never-started row. The tie-break must still keep the scored call.
+    const { scoreMap, chosenCallMap } = buildDashboardMaps(
+      [38, 3],
+      [[], [agg(1, 88)]],
+      [[prog(1, 0, null)], [prog(1, 12, null)]]
+    )
+    expect(chosenCallMap[1]).toBe(3)
+    expect(scoreMap[1]?.score).toBe(88)
   })
 
   it('lists a call once for a system in both its scores and progress', () => {
