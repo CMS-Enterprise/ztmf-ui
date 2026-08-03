@@ -662,8 +662,8 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
       </Grid>
 
       {/* Extended Metadata — full width, 3-col grid. Standard system
-          attributes editable across all OpDivs. isso_name is display-only
-          (backend-resolved), so it renders disabled. */}
+          attributes editable across all OpDivs. A field marked read-only in
+          fieldConfig renders disabled. */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
