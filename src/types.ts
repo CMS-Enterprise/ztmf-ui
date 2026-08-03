@@ -233,13 +233,7 @@ export type QuestionScores = {
   status?: ScoreStatus
   // Present when fetched with ?include=functionoption; functionid maps the
   // row back to its question.
-  functionoption?: {
-    functionoptionid: number
-    functionid: number
-    score: number
-    optionname: string
-    description: string
-  }
+  functionoption?: QuestionOption
   last_edited_at?: string | null
   last_edited_by?: LastEditedBy | null
   notes_is_ai_summary?: boolean

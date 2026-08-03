@@ -697,6 +697,20 @@ export default function QuestionnarePage() {
       await saveResponse()
     }
     const fresh = await fetchQuestionScores(system, setQuestionScores)
+    if (fresh) {
+      // Re-seed the current question's saved state from the fresh map. The
+      // old Complete re-seeded implicitly by navigating to question 1; this
+      // one stays put, and without a re-seed a just-POSTed answer would
+      // still read as unsaved (scoreid 0) — a second Complete would POST a
+      // duplicate row and double-weight the question in the pillar average.
+      const sel = deriveScoreSelection(
+        optionsRef.current.map((o) => Number(o.value)),
+        fresh
+      )
+      setInitQuestionChoice(sel.choice)
+      setInitNotes(sel.notes)
+      setScoreId(sel.scoreid)
+    }
     setConfirmSummary(
       buildConfirmSummary(
         categories,
@@ -710,6 +724,10 @@ export default function QuestionnarePage() {
   // path the sidebar uses, so the datacall context rides along (#501).
   const jumpToSummaryEntry = (entry: ConfirmSummaryEntry) => {
     setConfirmSummary(null)
+    // Already on this question (e.g. the last question is itself unanswered):
+    // just close the dialog. handleListItemClick would set loading for a
+    // questionId change that never fires, stranding the spinner.
+    if (entry.functionid === questionId) return
     const q = questions[entry.functionid]
     if (q) {
       navigate(
