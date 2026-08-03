@@ -61,7 +61,7 @@ const ConfirmSummaryDialog = ({ summary, onClose, onJump }: Props) => {
       maxWidth="sm"
       fullWidth
       aria-labelledby={titleId}
-      aria-describedby={descId}
+      aria-describedby={summary.hasStatusData ? descId : undefined}
     >
       <DialogTitle id={titleId}>
         {complete ? 'Questionnaire complete' : 'Before you finish'}
@@ -111,7 +111,7 @@ const ConfirmSummaryDialog = ({ summary, onClose, onJump }: Props) => {
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>
                   These questions have no answer yet. Open each question, select
-                  an answer, and continue with Next to save it.
+                  an answer, and continue with Next or Complete to save it.
                 </Typography>
                 {entryList(summary.unanswered)}
               </Box>

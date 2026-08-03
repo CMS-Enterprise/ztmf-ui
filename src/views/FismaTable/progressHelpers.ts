@@ -66,7 +66,7 @@ export function progressSortValue(
  */
 export function progressTooltip(
   entry: ScoreProgress | undefined,
-  opts: { completed?: boolean } = {}
+  opts: { completed?: boolean; pastCall?: boolean } = {}
 ): string {
   if (!entry) return 'No progress data for this data call'
   if (entry.lastupdatedat) {
@@ -79,8 +79,9 @@ export function progressTooltip(
     return 'No questionnaire applies to this system'
   if (entry.questionsupdated > 0) return 'Updated (time unavailable)'
   // Mirrors the chip's carried-forward split: answers exist but none count
-  // as updated yet — awaiting confirmation, not missing.
-  if ((entry.questionsanswered ?? 0) > 0)
+  // as updated yet — awaiting confirmation, not missing. Current call only:
+  // a closed call has nothing left to confirm.
+  if (!opts.pastCall && (entry.questionsanswered ?? 0) > 0)
     return 'Answers carried forward from a previous data call — not yet confirmed'
   return 'No updates this data call'
 }
