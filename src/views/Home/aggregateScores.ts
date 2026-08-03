@@ -90,6 +90,11 @@ export function buildDashboardMaps(
     // so a scored call can tie at -1 with a never-started one. Without the
     // score-preference the newer (progress-only) call would win and the real
     // score would never land in scoreMap - the system would read as unscored.
+    // The tie-break only covers the -1 tie; a scoreless call winning outright
+    // (strict >) is prevented only by the backend invariant "scoreless => null
+    // lastupdatedat" (edits create scores). If that ever changes - e.g. a
+    // non-answer event bumps lastupdatedat - a scoreless call could out-`>` a
+    // scored one and this is where the score would be blanked.
     let chosen = idxs[0]
     let bestT = -Infinity
     let bestHasScore = false
