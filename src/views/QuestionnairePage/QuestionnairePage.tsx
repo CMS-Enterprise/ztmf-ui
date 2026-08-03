@@ -37,7 +37,7 @@ import {
   NOTES_UPDATE_REQUIRED_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { parseDatacallName } from '@/utils/datacallGrouping'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
@@ -273,13 +273,14 @@ export default function QuestionnarePage() {
     // (per-option warn styling, divider, above-baseline badge/notice) that a flat
     // ChoiceList can't express.
     //
-    // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights layer.
-    // Always pass insight so the FIPS baseline markers (a federal-wide concept)
-    // render for all systems including HHS. showInsightBadges suppresses the
-    // CMS-specific option chips (suggested + prior-answer) for HHS calls while
-    // leaving the baseline treatment intact. The Insights panel, suggestion,
-    // and per-option insight badges are each separately gated (showInsights /
-    // showInsightSuggestion / showInsightBadges) — all derive from showCmsInsights.
+    // Systems whose OpDiv has insights disabled do not surface the internal
+    // ZTMF Insights layer. Always pass insight so the FIPS baseline markers (a
+    // federal-wide concept) render for every system regardless of OpDiv.
+    // showInsightBadges suppresses the insights option chips (suggested +
+    // prior-answer) for disabled OpDivs while leaving the baseline treatment
+    // intact. The Insights panel, suggestion, and per-option insight badges are
+    // each separately gated (showInsights / showInsightSuggestion /
+    // showInsightBadges) — all derive from showCmsInsights.
     return (
       <QuestionRadioGroup
         options={options}
@@ -322,6 +323,38 @@ export default function QuestionnarePage() {
   const [decommissionedSystems, setDecommissionedSystems] = React.useState<
     FismaSystemType[] | null
   >(null)
+  // OpDivs whose systems surface the internal ZTMF Insights layer
+  // (opdivs.insights_enabled - CMS today). Fetched once per page mount. The
+  // insights gate keys on the SYSTEM's OpDiv, not the viewed data call's
+  // name: the FY23-25 era used call tenant (CMS-named vs ZTM-named calls) as
+  // a proxy, which broke when FY2026 unified every OpDiv into one HHS-named
+  // call and silently hid the insights layer for every insights-enabled
+  // system. null = not loaded yet; the gate stays closed until it resolves,
+  // so the panel can appear late but never flashes for a disabled OpDiv.
+  const [insightsOpdivIds, setInsightsOpdivIds] =
+    React.useState<Set<number> | null>(null)
+  React.useEffect(() => {
+    const controller = new AbortController()
+    // includeInactive: the backend serves insights rows for any
+    // insights-enabled OpDiv regardless of its active flag, so the UI gate
+    // must see inactive rows too or the two would diverge.
+    fetchOpDivs(true, controller.signal)
+      .then((rows) =>
+        setInsightsOpdivIds(
+          new Set(
+            rows
+              .filter((o) => o.insights_enabled === true)
+              .map((o) => o.opdiv_id)
+          )
+        )
+      )
+      .catch(() => {
+        // Insights are additive and optional; a failed lookup leaves the
+        // gate closed rather than surfacing an error.
+        if (!controller.signal.aborted) setInsightsOpdivIds(new Set())
+      })
+    return () => controller.abort()
+  }, [])
   const resolvedDecommissioned = React.useMemo(
     () => resolveSystemIdByAcronym(decommissionedSystems ?? [], fismaacronym),
     [decommissionedSystems, fismaacronym]
@@ -494,20 +527,29 @@ export default function QuestionnarePage() {
   // rendered and the page is unchanged.
   const currentDatabaseQuestionId =
     questionId != null ? questions[questionId]?.questionid : undefined
+  // Pending until BOTH lookups settle: the per-system insights rows and the
+  // per-OpDiv capability list the gate below keys on. Without the second
+  // condition a fast /insights response could enable Next/Complete before
+  // /opdivs resolves, letting the panel pop in after the user advanced.
   const insightsPending =
     !!system &&
-    (insightsLoadState.system !== system || !insightsLoadState.settled)
+    (insightsLoadState.system !== system ||
+      !insightsLoadState.settled ||
+      insightsOpdivIds === null)
   const currentInsight =
     insightsLoadState.system === system && currentDatabaseQuestionId != null
       ? insightsByQuestion.get(currentDatabaseQuestionId)
       : undefined
-  // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights UI
-  // (panel, suggestion). The carried-forward prior-response review still
-  // applies so a copied answer is affirmatively reviewed.
-  const isHhsDatacall =
-    parseDatacallName(datacall.replaceAll('_', ' ')).tenant === 'HHS'
-  // Single source of truth for all CMS-internal insight UI gates.
-  const showCmsInsights = !isHhsDatacall
+  // ZTMF Insights are a per-OpDiv capability (opdivs.insights_enabled), so
+  // the gate keys on the SYSTEM's OpDiv. Gating on the viewed call's tenant
+  // (the FY23-25 behavior) hid the layer for every system once FY2026 merged
+  // all OpDivs into a single HHS-named call. The carried-forward
+  // prior-response review is deliberately NOT gated here, so a copied answer
+  // is affirmatively reviewed for every system regardless of OpDiv.
+  const systemOpdivId = systemInfo?.opdiv_id
+  // Single source of truth for all internal insight UI gates.
+  const showCmsInsights =
+    systemOpdivId != null && (insightsOpdivIds?.has(systemOpdivId) ?? false)
   const showInsights = Boolean(currentInsight) && showCmsInsights
   const currentSuggestion = showCmsInsights
     ? buildInsightJustification(currentInsight)

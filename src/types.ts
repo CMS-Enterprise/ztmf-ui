@@ -54,6 +54,12 @@ export type OpDiv = {
   // (defaults false), so every OpDiv resolves to a real boolean. Gates the
   // ISSO delegate self-service surface for systems in this OpDiv.
   system_delegate_enabled: boolean
+  // Per-OpDiv ZTMF Insights capability. When true, systems in this OpDiv
+  // surface the internal insights layer (panel, option badges, suggested
+  // justification) in the questionnaire. Backed by opdivs.insights_enabled;
+  // the backend serializes it from a nullable column, so treat a missing
+  // value as disabled.
+  insights_enabled?: boolean | null
 }
 
 // A system delegate as returned by GET /fismasystems/:id/delegates (the
