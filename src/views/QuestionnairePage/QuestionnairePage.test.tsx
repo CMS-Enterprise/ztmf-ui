@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor, act } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  act,
+  configure as rtlConfigure,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
@@ -1088,6 +1095,20 @@ describe('QuestionnairePage justification integration', () => {
 // ---------------------------------------------------------------------------
 
 describe('carried-forward confirmation', () => {
+  // CI runners execute this suite ~3x slower than a dev machine, and these
+  // tests each begin by awaiting a full page load — RTL's default 1s
+  // findBy/waitFor timeout flaked there while the question was still
+  // loading. Raise the async ceiling for this block only; passing tests are
+  // unaffected (they resolve as soon as the DOM settles).
+  beforeAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 4000 })
+    jest.setTimeout(15000)
+  })
+  afterAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 1000 })
+    jest.setTimeout(5000)
+  })
+
   const OPTIONS_7001 = [
     { functionoptionid: 200, description: 'Baseline', score: 1 },
     { functionoptionid: 201, description: 'Advanced', score: 2 },
