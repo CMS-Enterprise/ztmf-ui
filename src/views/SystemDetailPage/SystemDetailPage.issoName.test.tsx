@@ -113,6 +113,10 @@ function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
       role,
     } as userData,
     datacenterEnvironments: [],
+    // The page refetches after a save instead of echoing its draft, so both of
+    // these have to be present or the save path throws.
+    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
+    showDecommissioned: false,
   }
   return renderWithProviders(
     <Routes>
@@ -204,6 +208,48 @@ test('clearing ISSO Name sends the empty-string clear signal', async () => {
   // '' clears the stored override via blankToNil so the name derived from the
   // ISSO user record applies again; null would read as "leave unchanged".
   expect(captured.body).toHaveProperty('isso_name', '')
+})
+
+// The saved value of isso_name is resolved by the backend, so the draft the
+// page sent is not the truth once the field was cleared. Echoing the draft into
+// shared state would render the cleared field as empty instead of the derived
+// name, so the page has to refetch and must not write the draft.
+test('clearing ISSO Name refetches instead of echoing the draft', async () => {
+  const captured = captureSave()
+  const user = userEvent.setup()
+  renderPage('OPDIV_ADMIN')
+
+  await screen.findByText('System Identity')
+  await user.click(pageEditButtons()[0])
+  await user.clear(await screen.findByRole('textbox', { name: 'ISSO Name' }))
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(captured.body).toBeDefined())
+  await waitFor(() =>
+    expect(mockCtx.fetchFismaSystems).toHaveBeenCalledWith(false)
+  )
+  expect(mockCtx.setFismaSystems).not.toHaveBeenCalled()
+})
+
+// A save must not silently change which systems the dashboard lists, so the
+// refetch carries the caller's current decommissioned view mode.
+test('the post-save refetch preserves the decommissioned view mode', async () => {
+  const captured = captureSave()
+  const user = userEvent.setup()
+  renderPage('OPDIV_ADMIN')
+  mockCtx.showDecommissioned = true
+
+  await screen.findByText('System Identity')
+  await user.click(pageEditButtons()[0])
+  const input = await screen.findByRole('textbox', { name: 'ISSO Name' })
+  await user.clear(input)
+  await user.type(input, 'Firmus Piett')
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(captured.body).toBeDefined())
+  await waitFor(() =>
+    expect(mockCtx.fetchFismaSystems).toHaveBeenCalledWith(true)
+  )
 })
 
 test('an untouched ISSO Name is omitted from the save payload', async () => {

@@ -109,10 +109,12 @@ export const fieldConfigs: FieldConfig[] = [
     type: 'email',
   },
 
-  // Extended Metadata section. Standard system attributes editable by any
-  // write admin across all OpDivs. A stored isso_name overrides the name the
-  // backend derives from the ISSO user record, and the empty string clears the
-  // stored value so the derived name applies again.
+  // Extended Metadata section. The system attributes below are writable only by
+  // an unscoped admin; the backend restores the stored values over anything an
+  // OpDiv-scoped admin sends for them. isso_name is the exception, writable by
+  // any write admin: a stored value overrides the name the backend derives from
+  // the ISSO user record, and the empty string clears it so the derived name
+  // applies again.
   {
     key: 'isso_name',
     label: 'ISSO Name',
