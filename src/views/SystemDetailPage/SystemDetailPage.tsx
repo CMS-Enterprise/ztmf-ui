@@ -337,6 +337,16 @@ export default function SystemDetailPage() {
 
   const handleSave = async () => {
     if (!editedSystem) return
+    // The extended-metadata payload is a diff against the loaded system, and
+    // buildExtendedDiff treats a missing baseline as "every field is unset",
+    // which sends all of them. editedSystem outlives the system it was seeded
+    // from, so saving without a baseline would persist values the user never
+    // touched, including an ISSO name the backend derived rather than stored.
+    // Refuse the save rather than writing a payload built from no baseline.
+    if (!system) {
+      notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
+      return
+    }
     setIsSaving(true)
     try {
       // Full-system PUT. The page-level Edit button is gated on isAdmin,
