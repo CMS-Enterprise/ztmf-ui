@@ -335,7 +335,10 @@ export default function QuestionnarePage() {
     React.useState<Set<number> | null>(null)
   React.useEffect(() => {
     const controller = new AbortController()
-    fetchOpDivs(false, controller.signal)
+    // includeInactive: the backend serves insights rows for any
+    // insights-enabled OpDiv regardless of its active flag, so the UI gate
+    // must see inactive rows too or the two would diverge.
+    fetchOpDivs(true, controller.signal)
       .then((rows) =>
         setInsightsOpdivIds(
           new Set(
@@ -524,23 +527,26 @@ export default function QuestionnarePage() {
   // rendered and the page is unchanged.
   const currentDatabaseQuestionId =
     questionId != null ? questions[questionId]?.questionid : undefined
+  // Pending until BOTH lookups settle: the per-system insights rows and the
+  // per-OpDiv capability list the gate below keys on. Without the second
+  // condition a fast /insights response could enable Next/Complete before
+  // /opdivs resolves, letting the panel pop in after the user advanced.
   const insightsPending =
     !!system &&
-    (insightsLoadState.system !== system || !insightsLoadState.settled)
+    (insightsLoadState.system !== system ||
+      !insightsLoadState.settled ||
+      insightsOpdivIds === null)
   const currentInsight =
     insightsLoadState.system === system && currentDatabaseQuestionId != null
       ? insightsByQuestion.get(currentDatabaseQuestionId)
       : undefined
-  // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights UI
-  // (panel, suggestion). The carried-forward prior-response review still
-  // applies so a copied answer is affirmatively reviewed.
   // ZTMF Insights are a per-OpDiv capability (opdivs.insights_enabled), so
   // the gate keys on the SYSTEM's OpDiv. Gating on the viewed call's tenant
   // (the FY23-25 behavior) hid the layer for every system once FY2026 merged
-  // all OpDivs into a single HHS-named call.
-  const systemOpdivId =
-    fismaSystems.find((s) => s.fismasystemid === system)?.opdiv_id ??
-    decommissionedSystems?.find((s) => s.fismasystemid === system)?.opdiv_id
+  // all OpDivs into a single HHS-named call. The carried-forward
+  // prior-response review is deliberately NOT gated here, so a copied answer
+  // is affirmatively reviewed for every system regardless of OpDiv.
+  const systemOpdivId = systemInfo?.opdiv_id
   // Single source of truth for all internal insight UI gates.
   const showCmsInsights =
     systemOpdivId != null && (insightsOpdivIds?.has(systemOpdivId) ?? false)

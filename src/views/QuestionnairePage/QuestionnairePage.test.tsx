@@ -874,14 +874,16 @@ describe('QuestionnairePage justification integration', () => {
     insightRows = [INSIGHT_ROW] as unknown[],
     insightsResponse,
     opdivRows = OPDIV_ROWS as unknown[],
+    opdivsResponse,
   }: {
     insightRows?: unknown[]
     insightsResponse?: Promise<InsightsResponse>
     opdivRows?: unknown[]
+    opdivsResponse?: Promise<InsightsResponse>
   } = {}) {
     axios.get.mockImplementation((url: string) => {
       if (url === '/opdivs')
-        return Promise.resolve({ data: { data: opdivRows } })
+        return opdivsResponse ?? Promise.resolve({ data: { data: opdivRows } })
       if (url === 'insights') {
         return (
           insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
@@ -997,6 +999,36 @@ describe('QuestionnairePage justification integration', () => {
     ).not.toBeInTheDocument()
     expect(
       screen.queryByText('Suggested justification')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the gate closed and submission blocked until the OpDiv lookup settles', async () => {
+    let resolveOpdivs: ((value: InsightsResponse) => void) | null = null
+    const opdivsResponse = new Promise<InsightsResponse>((resolve) => {
+      resolveOpdivs = resolve
+    })
+    installMocks({ opdivsResponse })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    // Insights rows resolved instantly, but the OpDiv capability list has
+    // not - the gate stays closed and the page still reads as pending, so
+    // the panel cannot pop in after the user has already advanced.
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    expect(
+      await screen.findByText('Checking for prior responses…')
+    ).toBeInTheDocument()
+    expect(complete).toBeDisabled()
+    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveOpdivs?.({ data: { data: OPDIV_ROWS } })
+    })
+
+    expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Checking for prior responses…')
     ).not.toBeInTheDocument()
   })
 
