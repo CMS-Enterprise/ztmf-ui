@@ -45,8 +45,14 @@ import SystemDelegatesSection from './SystemDelegatesSection'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const { fismaSystems, setFismaSystems, userInfo, datacenterEnvironments } =
-    useContextProp()
+  const {
+    fismaSystems,
+    setFismaSystems,
+    userInfo,
+    datacenterEnvironments,
+    fetchFismaSystems,
+    showDecommissioned,
+  } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
@@ -362,11 +368,18 @@ export default function SystemDetailPage() {
       )
 
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-      setFismaSystems((prev) =>
-        prev.map((s) =>
-          s.fismasystemid !== editedSystem.fismasystemid ? s : editedSystem
-        )
-      )
+      // Refetch rather than echoing the local draft into state. The PUT returns
+      // no body, and the saved value of a field the backend resolves is not the
+      // value that was sent: clearing isso_name stores NULL, and the list read
+      // then resolves the name from the ISSO's user record. Echoing the draft
+      // would show the cleared field as empty until the next fetch.
+      //
+      // The caller's decommissioned view mode is preserved so saving does not
+      // change which systems the dashboard lists. That mode can exclude the
+      // system just saved, so clearing triedFetch lets the single-system
+      // fallback re-add it.
+      triedFetch.current = false
+      await fetchFismaSystems(showDecommissioned)
     } catch (error) {
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
