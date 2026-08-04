@@ -19,9 +19,13 @@ import '@fontsource/jetbrains-mono/400.css'
 import '@fontsource/jetbrains-mono/500.css'
 import '@/sass/style.scss'
 import onPerfEntry from './utils/onPerfEntry'
+import { initLogoutListener } from '@/utils/sessionSync'
 import { SnackbarProvider } from 'notistack'
 // IIFE that initializes the root node and renders the application.
 ;(async function () {
+  // Once per tab lifetime, outside React so StrictMode cannot double-invoke it.
+  initLogoutListener()
+
   // create the root element in the DOM
   const rootElement = document.getElementById('root') as HTMLElement
 

@@ -7,6 +7,7 @@ import {
 } from '@mui/x-data-grid'
 import Tooltip from '@mui/material/Tooltip'
 import {
+  Alert,
   Box,
   InputBase,
   ListItemText,
@@ -34,7 +35,8 @@ import { parseDatacallName } from '@/utils/datacallGrouping'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
-import { isNotUpdated } from './dashboardFilters'
+import { isNotUpdated, isOpenCallInView } from './dashboardFilters'
+import { resolveRowCallId, datacallNameComparator } from './rowCall'
 import ScoreDisplay from '@/components/ui/ScoreDisplay'
 import { CodeBadge, StatusChip } from '@/components/ui/StatusChip'
 import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
@@ -74,6 +76,10 @@ function TableToolbar({
   setEnvFilter,
   notUpdatedOnly,
   setNotUpdatedOnly,
+  openCallOnly,
+  setOpenCallOnly,
+  hasOpenCall,
+  openCallInView,
   showDecommissioned,
   setShowDecommissioned,
 }: {
@@ -88,9 +94,21 @@ function TableToolbar({
   setEnvFilter: (value: string | 'all') => void
   notUpdatedOnly: boolean
   setNotUpdatedOnly: (value: boolean) => void
+  openCallOnly: boolean
+  setOpenCallOnly: (value: boolean) => void
+  hasOpenCall: boolean
+  openCallInView: boolean
   showDecommissioned: boolean
   setShowDecommissioned: (value: boolean) => void
 }) {
+  // Why the call-scoped toggles are grayed out, when they are: no call open
+  // at all vs an open call outside the selected year. Empty while they apply
+  // (an empty title suppresses the Tooltip).
+  const callScopeHint = openCallInView
+    ? ''
+    : hasOpenCall
+      ? 'The open data call is not in the selected view'
+      : 'No data call is currently open'
   const compactAutocompleteSx = {
     '& .MuiInputBase-root': {
       height: 30,
@@ -100,132 +118,177 @@ function TableToolbar({
     '& .MuiAutocomplete-input': { py: '0 !important' },
   }
   return (
-    <Box
-      sx={{
-        display: 'flex',
-        alignItems: 'center',
-        gap: 1.5,
-        px: 2.25,
-        py: 1.5,
-        borderBottom: `1px solid ${colors.neutral200}`,
-      }}
-    >
-      <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
-        FISMA systems
-      </Typography>
-      <Typography
-        sx={{ fontSize: 12, fontWeight: 500, color: colors.neutral500 }}
-      >
-        {count} {count === 1 ? 'system' : 'systems'}
-      </Typography>
+    <>
       <Box
         sx={{
-          marginLeft: 'auto',
           display: 'flex',
           alignItems: 'center',
-          flexWrap: 'wrap',
-          gap: 1,
+          gap: 1.5,
+          px: 2.25,
+          py: 1.5,
+          borderBottom: `1px solid ${colors.neutral200}`,
         }}
       >
+        <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
+          FISMA systems
+        </Typography>
+        <Typography
+          sx={{ fontSize: 12, fontWeight: 500, color: colors.neutral500 }}
+        >
+          {count} {count === 1 ? 'system' : 'systems'}
+        </Typography>
         <Box
           sx={{
+            marginLeft: 'auto',
             display: 'flex',
             alignItems: 'center',
+            flexWrap: 'wrap',
             gap: 1,
-            px: 1.5,
-            height: 30,
-            border: `1px solid ${colors.neutral200}`,
-            borderRadius: `${radius.md}px`,
           }}
         >
-          <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
-          <InputBase
-            placeholder="Search systems"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            sx={{ fontSize: 13, width: 150 }}
-            inputProps={{ 'aria-label': 'Search systems' }}
-          />
-        </Box>
-        {/* Environment facet only renders when the rows span more than one
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              gap: 1,
+              px: 1.5,
+              height: 30,
+              border: `1px solid ${colors.neutral200}`,
+              borderRadius: `${radius.md}px`,
+            }}
+          >
+            <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
+            <InputBase
+              placeholder="Search systems"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              sx={{ fontSize: 13, width: 150 }}
+              inputProps={{ 'aria-label': 'Search systems' }}
+            />
+          </Box>
+          {/* Environment facet only renders when the rows span more than one
             category - a single-value filter costs toolbar width for nothing. */}
-        {envOptions.length > 1 && (
+          {envOptions.length > 1 && (
+            <Autocomplete
+              size="small"
+              options={envOptions}
+              value={envFilter === 'all' ? null : envFilter}
+              onChange={(_event, env) => setEnvFilter(env ?? 'all')}
+              sx={{ width: 170, ...compactAutocompleteSx }}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="All environments"
+                  inputProps={{
+                    ...params.inputProps,
+                    'aria-label': 'Filter by environment',
+                  }}
+                />
+              )}
+            />
+          )}
           <Autocomplete
             size="small"
-            options={envOptions}
-            value={envFilter === 'all' ? null : envFilter}
-            onChange={(_event, env) => setEnvFilter(env ?? 'all')}
-            sx={{ width: 170, ...compactAutocompleteSx }}
+            options={opdivs}
+            getOptionLabel={(od) => od.code}
+            isOptionEqualToValue={(option, value) =>
+              option.opdiv_id === value.opdiv_id
+            }
+            value={
+              opdivFilter === 'all'
+                ? null
+                : opdivs.find((od) => od.opdiv_id === opdivFilter) ?? null
+            }
+            onChange={(_event, od) => setOpDivFilter(od ? od.opdiv_id : 'all')}
+            renderOption={(props, option) => {
+              const { key, ...rest } = props
+              return (
+                <li key={key} {...rest}>
+                  <Box
+                    sx={{
+                      display: 'flex',
+                      flexDirection: 'column',
+                      width: '100%',
+                    }}
+                  >
+                    <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                      {option.code}
+                    </Typography>
+                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                      {option.name}
+                    </Typography>
+                  </Box>
+                </li>
+              )
+            }}
+            sx={{ width: 180, ...compactAutocompleteSx }}
             renderInput={(params) => (
               <TextField
                 {...params}
-                placeholder="All environments"
+                placeholder="All OpDivs"
                 inputProps={{
                   ...params.inputProps,
-                  'aria-label': 'Filter by environment',
+                  'aria-label': 'Filter by OpDiv',
                 }}
               />
             )}
           />
-        )}
-        <Autocomplete
-          size="small"
-          options={opdivs}
-          getOptionLabel={(od) => od.code}
-          isOptionEqualToValue={(option, value) =>
-            option.opdiv_id === value.opdiv_id
-          }
-          value={
-            opdivFilter === 'all'
-              ? null
-              : opdivs.find((od) => od.opdiv_id === opdivFilter) ?? null
-          }
-          onChange={(_event, od) => setOpDivFilter(od ? od.opdiv_id : 'all')}
-          renderOption={(props, option) => {
-            const { key, ...rest } = props
-            return (
-              <li key={key} {...rest}>
-                <Box
-                  sx={{
-                    display: 'flex',
-                    flexDirection: 'column',
-                    width: '100%',
-                  }}
-                >
-                  <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
-                    {option.code}
-                  </Typography>
-                  <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                    {option.name}
-                  </Typography>
-                </Box>
-              </li>
-            )
-          }}
-          sx={{ width: 180, ...compactAutocompleteSx }}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              placeholder="All OpDivs"
-              inputProps={{
-                ...params.inputProps,
-                'aria-label': 'Filter by OpDiv',
-              }}
-            />
-          )}
-        />
-        <CompactSwitchLabel
-          checked={notUpdatedOnly}
-          onChange={setNotUpdatedOnly}
-          label="Not updated only"
-        />
-        <CompactSwitchLabel
-          checked={showDecommissioned}
-          onChange={setShowDecommissioned}
-          label="Show decommissioned"
-        />
+          {/* Both call-scoped toggles gray out when the open call is not in
+            view (ui#639): "Not updated only" is a current-cycle laggard
+            signal with nothing to match, and "Open data call only" would
+            empty the grid. The span wrappers keep the tooltips firing on the
+            disabled controls. */}
+          <Tooltip title={callScopeHint}>
+            <span>
+              <CompactSwitchLabel
+                checked={openCallOnly}
+                onChange={setOpenCallOnly}
+                label="Open data call only"
+                disabled={!openCallInView}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={callScopeHint}>
+            <span>
+              <CompactSwitchLabel
+                checked={notUpdatedOnly}
+                onChange={setNotUpdatedOnly}
+                label="Not updated only"
+                disabled={!openCallInView}
+              />
+            </span>
+          </Tooltip>
+          <CompactSwitchLabel
+            checked={showDecommissioned}
+            onChange={setShowDecommissioned}
+            label="Show decommissioned"
+          />
+        </Box>
       </Box>
-    </Box>
+      {/* Toolbar-row captions crowd the filter cluster and wrap it (ui#639),
+          so the call-scope notice renders as its own slim banner between the
+          filters and the column headers. */}
+      {/* role="status" rather than MUI's default role="alert": this is a
+          standing contextual notice, and an assertive role would interrupt
+          screen readers at mount and on every year switch.
+
+          The live region is the keyboard- and screen-reader-reachable
+          counterpart of the disabled switches' hover tooltips, so it has to
+          actually announce. That is why the wrapper stays mounted and only its
+          contents change: a live region inserted into the DOM at the same
+          moment as its text is generally not announced, so gating the region
+          itself on the condition would have made it silent in exactly the
+          cases it exists to cover. */}
+      <Box role="status" aria-live="polite">
+        {!openCallInView && (
+          <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>
+            {hasOpenCall
+              ? 'The open data call is not in the selected view'
+              : "No open data call; showing each system's most recently updated call"}
+          </Alert>
+        )}
+      </Box>
+    </>
   )
 }
 
@@ -254,6 +317,7 @@ export default function FismaTable({
     fismaSystems,
     latestDataCallId,
     selectedDatacall,
+    activeDatacallIds,
     datacalls,
     userInfo,
     datacenterEnvironments,
@@ -269,6 +333,7 @@ export default function FismaTable({
   const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
   const [envFilter, setEnvFilter] = useState<string | 'all'>('all')
   const [notUpdatedOnly, setNotUpdatedOnly] = useState(false)
+  const [openCallOnly, setOpenCallOnly] = useState(false)
 
   // "Latest by deadline" is not the same as "still open". Once the newest
   // call's deadline has passed there is no active cycle at all, so nothing is
@@ -281,10 +346,16 @@ export default function FismaTable({
   }, [datacalls, latestDataCallId])
 
   // Whether the call a given row is displaying (chosen by most-recently-updated
-  // in buildDashboardMaps) is the current/active one. The Data Call Progress
-  // column's current-cycle framing (the "0/40 Not updated" laggard chip and
-  // the not-updated filter) only makes sense then; a past/closed call shows a
-  // neutral Complete/Incomplete chip instead (ztmf#537).
+  // in buildDashboardMaps) is the current/active one: the latest-by-deadline
+  // call AND that call is still open. The Data Call Progress column's
+  // current-cycle framing (the "0/40 Not updated" laggard chip and the
+  // not-updated filter) only makes sense then; a past/closed call shows a
+  // neutral Complete/Incomplete chip instead (ztmf#537). Rows without a chosen
+  // call, or before latestDataCallId has loaded, keep the current rendering.
+  // Agrees with resolveRowCallId (the Data Call column) by construction:
+  // buildDashboardMaps fills chosenCallMap and systemCallMap for the same key
+  // set, so a row is grayed iff its column names a non-open call. Keep the
+  // two in step if either resolution changes.
   const isRowCurrentCall = useCallback(
     (fismasystemid: number): boolean => {
       const chosen = chosenCallMap[fismasystemid]
@@ -293,6 +364,46 @@ export default function FismaTable({
     },
     [chosenCallMap, latestDataCallId, latestDeadlinePassed]
   )
+
+  // Whether any data call is open at all, and whether that open call is part
+  // of what the table is showing. The year picker can select a historical
+  // group while a newer call is open; in that view no row is current, so the
+  // call-scoped toggles ("Not updated only", "Open data call only") and the
+  // past-call graying key on the viewed calls, not the calendar (ui#639).
+  // Without the in-view check the first toggle silently empties the grid (the
+  // reported bug) and the second keeps only rows with no call data.
+  const hasOpenCall = Boolean(latestDataCallId) && !latestDeadlinePassed
+  const openCallInView = isOpenCallInView(
+    latestDataCallId,
+    latestDeadlinePassed,
+    activeDatacallIds
+  )
+  const callById = useMemo(
+    () => new Map(datacalls.map((d) => [d.datacallid, d])),
+    [datacalls]
+  )
+  // Sort key for the Data Call column: call names do not sort chronologically
+  // ("FY2025 Q3" vs "FY25 ZTM"), so the column orders by deadline instead.
+  const deadlineByCallName = useMemo(
+    () =>
+      new Map(
+        datacalls.map((d) => [d.datacall, new Date(d.deadline).getTime()])
+      ),
+    [datacalls]
+  )
+
+  // The call-scoped facets only mean something while the open call is in
+  // view (their switches gray out otherwise). Drop any stored true when it is
+  // not, so a year-picker move to a historical group, or a /datacalls refetch
+  // that flips the newest call closed, cannot leave an invisible filter
+  // emptying the grid (ui#639). (openness is evaluated when datacalls load,
+  // not continuously, so a deadline passing while the page sits open takes
+  // effect on the next fetch or reload.)
+  useEffect(() => {
+    if (openCallInView) return
+    setNotUpdatedOnly(false)
+    setOpenCallOnly(false)
+  }, [openCallInView])
 
   // When a system has scores in more than one active call, the questionnaire
   // button opens a small picker (#467) instead of guessing which call to open.
@@ -393,6 +504,7 @@ export default function FismaTable({
   const rows = useMemo(
     () =>
       fismaSystems.filter((s) => {
+        if (openCallOnly && !isRowCurrentCall(s.fismasystemid)) return false
         if (opdivFilter !== 'all' && s.opdiv_id !== opdivFilter) return false
         if (
           envFilter !== 'all' &&
@@ -415,6 +527,7 @@ export default function FismaTable({
       envFilter,
       envLabel,
       notUpdatedOnly,
+      openCallOnly,
       progress,
       isRowCurrentCall,
     ]
@@ -542,6 +655,37 @@ export default function FismaTable({
         const entry = scores[params.row.fismasystemid]
         return <ScoreDisplay score={entry?.score} tier={entry?.tier} />
       },
+    },
+    {
+      // Which call the row is displaying (ui#639), named plainly so a
+      // past-call row is identifiable and quick-searchable without relying
+      // on the grayed styling.
+      field: 'rowdatacall',
+      headerName: 'Data Call',
+      // Renders as the column-header tooltip: the resolution is not obvious
+      // from the name (it is not simply "last completed call").
+      description:
+        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the newest selected call for a system with no data in them.",
+      width: 130,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value) =>
+        callById.get(
+          resolveRowCallId(
+            value.row.fismasystemid,
+            chosenCallMap,
+            systemCallMap,
+            datacalls,
+            activeDataCallId,
+            activeDatacallIds
+          )
+        )?.datacall ?? '',
+      renderCell: (params) => (
+        <Typography sx={{ fontSize: 13, color: colors.neutral700 }}>
+          {params.value || '-'}
+        </Typography>
+      ),
+      sortComparator: datacallNameComparator(deadlineByCallName),
     },
     {
       // Questionnaire progress for the row's data call (ztmf#299). The
@@ -718,6 +862,10 @@ export default function FismaTable({
         setEnvFilter={setEnvFilter}
         notUpdatedOnly={notUpdatedOnly}
         setNotUpdatedOnly={setNotUpdatedOnly}
+        openCallOnly={openCallOnly}
+        setOpenCallOnly={setOpenCallOnly}
+        hasOpenCall={hasOpenCall}
+        openCallInView={openCallInView}
         showDecommissioned={showDecommissioned}
         setShowDecommissioned={setShowDecommissioned}
       />
@@ -726,6 +874,16 @@ export default function FismaTable({
           rows={rows}
           columns={columns}
           getRowId={(row) => row.fismasystemid}
+          // De-emphasize rows displaying a closed call while the open call is
+          // in view (ui#639). Only in that mixed view: between calls, or on a
+          // historical year, every row is past-call and graying the whole grid
+          // distinguishes nothing. The Data Call column carries the same state
+          // as text.
+          getRowClassName={(params) =>
+            openCallInView && !isRowCurrentCall(params.row.fismasystemid)
+              ? 'past-call-row'
+              : ''
+          }
           rowHeight={60}
           // Clicks on the row body navigate (handled by the System link in
           // the first column); only the checkbox toggles selection.
@@ -774,6 +932,18 @@ export default function FismaTable({
               {
                 backgroundColor: colors.neutral100,
               },
+            // De-emphasis must not dim interactive elements: whole-row
+            // opacity would drop the name link, checkbox, and action icons
+            // below WCAG contrast minima while they stay clickable. Tint the
+            // row background only; cells that set their own text color (the
+            // link, chips, score) keep full contrast, and the Data Call
+            // column names the older call outright.
+            '& .past-call-row': {
+              backgroundColor: colors.neutral50,
+            },
+            '& .past-call-row .MuiDataGrid-cell': {
+              color: colors.neutral500,
+            },
           }}
         />
       </Box>

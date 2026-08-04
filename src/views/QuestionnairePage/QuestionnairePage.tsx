@@ -1,5 +1,7 @@
 import * as React from 'react'
 import Box from '@mui/material/Box'
+import Chip from '@mui/material/Chip'
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import Typography from '@mui/material/Typography'
 import { useParams } from 'react-router-dom'
 import { Spinner } from '@cmsgov/design-system'
@@ -22,7 +24,7 @@ import {
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
-import { useNavigate, useLocation } from 'react-router-dom'
+import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
 import {
   ERROR_MESSAGES,
@@ -32,7 +34,7 @@ import {
   NOTES_UPDATE_REQUIRED_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { parseDatacallName } from '@/utils/datacallGrouping'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
@@ -42,7 +44,16 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
-import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
+import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
+import {
+  carryForwardState,
+  canConfirmCarryForward,
+  buildScoreByFunction,
+  buildConfirmSummary,
+  type ConfirmSummary,
+  type ConfirmSummaryEntry,
+} from './confirmState'
+import ConfirmSummaryDialog from './ConfirmSummaryDialog'
 import InsightsPanel from './InsightsPanel/InsightsPanel'
 import QuestionRadioGroup from './QuestionRadioGroup'
 import JustificationField, {
@@ -193,6 +204,20 @@ export default function QuestionnarePage() {
   // Incremented on every explicit draft clear so in-flight debounced saves
   // that fire after a clear don't resurrect the just-removed draft.
   const saveGenRef = React.useRef(0)
+  // Mirrors the payload the debounced draft save would write, so unmount can
+  // flush it. The debounce cleanup cancels its own pending timer, and a route
+  // change away from this page (System Info, the Dashboard breadcrumb, browser
+  // back) tears the component down without firing beforeunload, so an edit made
+  // inside the 1s window was dropped. Carries the generation so a flush cannot
+  // resurrect a draft clearCurrentDraft deleted after the timer was scheduled.
+  const pendingDraftRef = React.useRef<{
+    userid: string
+    system: number
+    questionId: number
+    datacallID: number
+    draft: { selectQuestionOption: number; notes: string }
+    gen: number
+  } | null>(null)
   const unsavedRef = React.useRef({
     selectQuestionOption,
     initQuestionChoice,
@@ -213,10 +238,14 @@ export default function QuestionnarePage() {
   // strictly required for the selection to update, but it is retained as a clean
   // reset of the subtree when a re-seed changes the answer out of band.
   const [radioKey, setRadioKey] = React.useState(0)
+  // Returns the fresh map alongside committing it to state, so a caller that
+  // must reason over the authoritative data in the same tick (the Complete
+  // summary) does not have to read a not-yet-rendered state value. undefined
+  // on failure — callers fall back to the state they already had.
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
-  ) => {
+  ): Promise<questionScoreMap | undefined> => {
     try {
       const response = await axiosInstance.get(
         `scores?datacallid=${datacallID}&fismasystemid=${systemId}&include=functionoption`
@@ -239,9 +268,11 @@ export default function QuestionnarePage() {
         if (Number.isFinite(t) && t > maxAt) maxAt = t
       }
       if (maxAt > 0) setLastSavedAt(new Date(maxAt))
+      return hashTable
     } catch (error) {
-      if (isAuthHandled(error)) return
+      if (isAuthHandled(error)) return undefined
       console.error('Error fetching question scores:', error)
+      return undefined
     }
   }
   const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -254,13 +285,14 @@ export default function QuestionnarePage() {
     // (per-option warn styling, divider, above-baseline badge/notice) that a flat
     // ChoiceList can't express.
     //
-    // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights layer.
-    // Always pass insight so the FIPS baseline markers (a federal-wide concept)
-    // render for all systems including HHS. showInsightBadges suppresses the
-    // CMS-specific option chips (suggested + prior-answer) for HHS calls while
-    // leaving the baseline treatment intact. The Insights panel, suggestion,
-    // and per-option insight badges are each separately gated (showInsights /
-    // showInsightSuggestion / showInsightBadges) — all derive from showCmsInsights.
+    // Systems whose OpDiv has insights disabled do not surface the internal
+    // ZTMF Insights layer. Always pass insight so the FIPS baseline markers (a
+    // federal-wide concept) render for every system regardless of OpDiv.
+    // showInsightBadges suppresses the insights option chips (suggested +
+    // prior-answer) for disabled OpDivs while leaving the baseline treatment
+    // intact. The Insights panel, suggestion, and per-option insight badges are
+    // each separately gated (showInsights / showInsightSuggestion /
+    // showInsightBadges) — all derive from showCmsInsights.
     return (
       <QuestionRadioGroup
         options={options}
@@ -303,6 +335,38 @@ export default function QuestionnarePage() {
   const [decommissionedSystems, setDecommissionedSystems] = React.useState<
     FismaSystemType[] | null
   >(null)
+  // OpDivs whose systems surface the internal ZTMF Insights layer
+  // (opdivs.insights_enabled - CMS today). Fetched once per page mount. The
+  // insights gate keys on the SYSTEM's OpDiv, not the viewed data call's
+  // name: the FY23-25 era used call tenant (CMS-named vs ZTM-named calls) as
+  // a proxy, which broke when FY2026 unified every OpDiv into one HHS-named
+  // call and silently hid the insights layer for every insights-enabled
+  // system. null = not loaded yet; the gate stays closed until it resolves,
+  // so the panel can appear late but never flashes for a disabled OpDiv.
+  const [insightsOpdivIds, setInsightsOpdivIds] =
+    React.useState<Set<number> | null>(null)
+  React.useEffect(() => {
+    const controller = new AbortController()
+    // includeInactive: the backend serves insights rows for any
+    // insights-enabled OpDiv regardless of its active flag, so the UI gate
+    // must see inactive rows too or the two would diverge.
+    fetchOpDivs(true, controller.signal)
+      .then((rows) =>
+        setInsightsOpdivIds(
+          new Set(
+            rows
+              .filter((o) => o.insights_enabled === true)
+              .map((o) => o.opdiv_id)
+          )
+        )
+      )
+      .catch(() => {
+        // Insights are additive and optional; a failed lookup leaves the
+        // gate closed rather than surfacing an error.
+        if (!controller.signal.aborted) setInsightsOpdivIds(new Set())
+      })
+    return () => controller.abort()
+  }, [])
   const resolvedDecommissioned = React.useMemo(
     () => resolveSystemIdByAcronym(decommissionedSystems ?? [], fismaacronym),
     [decommissionedSystems, fismaacronym]
@@ -458,20 +522,29 @@ export default function QuestionnarePage() {
   // rendered and the page is unchanged.
   const currentDatabaseQuestionId =
     questionId != null ? questions[questionId]?.questionid : undefined
+  // Pending until BOTH lookups settle: the per-system insights rows and the
+  // per-OpDiv capability list the gate below keys on. Without the second
+  // condition a fast /insights response could enable Next/Complete before
+  // /opdivs resolves, letting the panel pop in after the user advanced.
   const insightsPending =
     !!system &&
-    (insightsLoadState.system !== system || !insightsLoadState.settled)
+    (insightsLoadState.system !== system ||
+      !insightsLoadState.settled ||
+      insightsOpdivIds === null)
   const currentInsight =
     insightsLoadState.system === system && currentDatabaseQuestionId != null
       ? insightsByQuestion.get(currentDatabaseQuestionId)
       : undefined
-  // HHS OpDiv data calls do not surface the CMS-internal ZTMF Insights UI
-  // (panel, suggestion). The carried-forward prior-response review still
-  // applies so a copied answer is affirmatively reviewed.
-  const isHhsDatacall =
-    parseDatacallName(datacall.replaceAll('_', ' ')).tenant === 'HHS'
-  // Single source of truth for all CMS-internal insight UI gates.
-  const showCmsInsights = !isHhsDatacall
+  // ZTMF Insights are a per-OpDiv capability (opdivs.insights_enabled), so
+  // the gate keys on the SYSTEM's OpDiv. Gating on the viewed call's tenant
+  // (the FY23-25 behavior) hid the layer for every system once FY2026 merged
+  // all OpDivs into a single HHS-named call. The carried-forward
+  // prior-response review is deliberately NOT gated here, so a copied answer
+  // is affirmatively reviewed for every system regardless of OpDiv.
+  const systemOpdivId = systemInfo?.opdiv_id
+  // Single source of truth for all internal insight UI gates.
+  const showCmsInsights =
+    systemOpdivId != null && (insightsOpdivIds?.has(systemOpdivId) ?? false)
   const showInsights = Boolean(currentInsight) && showCmsInsights
   const currentSuggestion = showCmsInsights
     ? buildInsightJustification(currentInsight)
@@ -521,6 +594,131 @@ export default function QuestionnarePage() {
     priorReviewNeedsSave,
   }
 
+  // Carried-forward confirmation state, read from scores.status — the same
+  // persisted fact the Data Call Progress fraction counts. Open call only:
+  // historical rows are legitimately not_started forever. Read-only sessions
+  // see the badges but never the Confirm button.
+  const isOpenCall = !isPastDeadline
+  const scoreByFunction = React.useMemo(
+    () => buildScoreByFunction(questionScores),
+    [questionScores]
+  )
+  // The saved row backing the current question. Keyed by initQuestionChoice
+  // (the seeded answer), not selectQuestionOption, so flipping the radio does
+  // not detach the badge from the row it describes.
+  const currentSavedScore =
+    initQuestionChoice !== -1 ? questionScores[initQuestionChoice] : undefined
+  const currentCarryState = carryForwardState(currentSavedScore, isOpenCall)
+  const showConfirmButton = canConfirmCarryForward({
+    state: currentCarryState,
+    // Any deviation from the seeded answer/notes: the edit is the explicit
+    // act, and Next saves it (flipping status server-side), so the button
+    // yields to avoid two visible paths to the same write.
+    dirty: selectQuestionOption !== initQuestionChoice || notes !== initNotes,
+    isReadOnly,
+    priorReviewBlocked:
+      priorReviewState === 'pending' || priorReviewState === 'initializing',
+  })
+  const [confirming, setConfirming] = React.useState(false)
+  // The Complete-time summary dialog. null = closed.
+  const [confirmSummary, setConfirmSummary] =
+    React.useState<ConfirmSummary | null>(null)
+
+  // The explicit act behind "Confirm this answer is still accurate": flips
+  // the row's status to done via the confirm endpoint — the ordinary PUT
+  // cannot express agreement, its no-op guard (correctly) drops an unchanged
+  // body (#412/#413). Shared with saveResponse's resolved-review path.
+  const confirmScoreById = async (id: number): Promise<boolean> => {
+    try {
+      await axiosInstance.put(`scores/${id}/confirm`)
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      clearCurrentDraft()
+      setPriorReview((current) =>
+        current.contextId === priorReviewContextId
+          ? { ...current, needsSave: false }
+          : current
+      )
+      // Flip the badge immediately (role="status" announces the change);
+      // the refetch then brings the authoritative row, audit fields included.
+      setQuestionScores((prev) => {
+        const entry = Object.entries(prev).find(([, s]) => s.scoreid === id)
+        if (!entry) return prev
+        return { ...prev, [entry[0]]: { ...entry[1], status: 'done' } }
+      })
+      fetchQuestionScores(system, setQuestionScores)
+      return true
+    } catch (error) {
+      if (isAuthHandled(error)) return false
+      console.error('Error confirming score:', error)
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+      return false
+    }
+  }
+
+  const handleConfirmClick = async () => {
+    if (!currentSavedScore || confirming) return
+    setConfirming(true)
+    try {
+      await confirmScoreById(currentSavedScore.scoreid)
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  // Complete on the open call: save the current question as Next always has,
+  // then show one end-of-questionnaire summary instead of silently looping
+  // back to question 1. Built from a freshly-awaited scores fetch so the
+  // just-saved answer counts; falls back to the on-screen map on failure.
+  const handleCompleteClick = async () => {
+    saveGenRef.current++
+    if (!isReadOnly) {
+      await saveResponse()
+    }
+    const fresh = await fetchQuestionScores(system, setQuestionScores)
+    if (fresh) {
+      // Re-seed the current question's saved state from the fresh map. The
+      // old Complete re-seeded implicitly by navigating to question 1; this
+      // one stays put, and without a re-seed a just-POSTed answer would
+      // still read as unsaved (scoreid 0) — a second Complete would POST a
+      // duplicate row and double-weight the question in the pillar average.
+      const sel = deriveScoreSelection(
+        optionsRef.current.map((o) => Number(o.value)),
+        fresh
+      )
+      setInitQuestionChoice(sel.choice)
+      setInitNotes(sel.notes)
+      setScoreId(sel.scoreid)
+    }
+    setConfirmSummary(
+      buildConfirmSummary(
+        categories,
+        fresh ? buildScoreByFunction(fresh) : scoreByFunction,
+        isOpenCall
+      )
+    )
+  }
+
+  // Jump link from the Complete summary: same slug navigation + list-click
+  // path the sidebar uses, so the datacall context rides along (#501).
+  const jumpToSummaryEntry = (entry: ConfirmSummaryEntry) => {
+    setConfirmSummary(null)
+    // Already on this question (e.g. the last question is itself unanswered):
+    // just close the dialog. handleListItemClick would set loading for a
+    // questionId change that never fires, stranding the spinner.
+    if (entry.functionid === questionId) return
+    const q = questions[entry.functionid]
+    if (q) {
+      navigate(
+        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+        {
+          state: { fismasystemid: system, ...datacallStateRef.current },
+          replace: true,
+        }
+      )
+    }
+    handleListItemClick(entry.functionid)
+  }
+
   const saveResponse = async () => {
     // Resolving a required carried-forward review is itself a current-call
     // action, even when the final text is byte-for-byte identical to the
@@ -529,7 +727,6 @@ export default function QuestionnarePage() {
     const resolvedPriorReview =
       priorReviewNeedsSave && selectQuestionOption >= 0
     if (
-      !resolvedPriorReview &&
       !shouldPersistResponse({
         selectQuestionOption,
         initQuestionChoice,
@@ -537,6 +734,14 @@ export default function QuestionnarePage() {
         initNotes,
       })
     ) {
+      // Nothing changed on the answer fields. A resolved required review is
+      // still an affirmative act that must land — the ordinary PUT's no-op
+      // guard would silently drop an identical body, so route it through the
+      // confirm endpoint.
+      if (resolvedPriorReview && scoreid) {
+        await confirmScoreById(scoreid)
+        return
+      }
       clearCurrentDraft()
       return
     }
@@ -970,6 +1175,31 @@ export default function QuestionnarePage() {
     }
   }, [questionId, questions, isReadOnly, datacallID, userInfo.userid])
 
+  // Record that the user opened this question, so time-spent analytics can
+  // bound how long it was worked on before the next question is opened (only
+  // views bound a view; saves are not boundaries). Fire-and-forget for all
+  // sessions (viewers are captured too); a failed ping must never disrupt
+  // answering. Editor-vs-viewer is decided server-side from role + deadline, so
+  // the client sends no such flag.
+  // Keyed on the system x data call x question context so it fires exactly once
+  // per question open (initial load, Next/Back, or sidebar). questionId holds
+  // the functionid; the recorded questionid is the DB question it maps to.
+  const viewedQuestionId = questionId ? questions[questionId]?.questionid : null
+  React.useEffect(() => {
+    if (!system || datacallID <= 0 || !viewedQuestionId) return
+    void (async () => {
+      try {
+        await axiosInstance.post('events/view', {
+          fismasystemid: system,
+          datacallid: datacallID,
+          questionid: viewedQuestionId,
+        })
+      } catch {
+        // Analytics only — swallow errors (including auth-handled ones).
+      }
+    })()
+  }, [system, datacallID, viewedQuestionId])
+
   // Debounced draft save: 1 second after the user pauses editing, persist
   // the current answer and notes to localStorage so a reload can recover them.
   // Only fires when the user has actually changed something from the server-side
@@ -983,10 +1213,12 @@ export default function QuestionnarePage() {
       datacallID <= 0 ||
       loadingQuestion
     ) {
+      pendingDraftRef.current = null
       if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
       return
     }
     if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
+      pendingDraftRef.current = null
       saveGenRef.current++
       // Skip clearDraft when a draft was just restored from storage — the draft
       // values matching the server state does not mean the user reverted manually.
@@ -1003,17 +1235,35 @@ export default function QuestionnarePage() {
       return
     }
     const currentGen = saveGenRef.current
+    const pending = {
+      userid: userInfo.userid,
+      system,
+      questionId,
+      datacallID,
+      draft: { selectQuestionOption, notes },
+      gen: currentGen,
+    }
+    pendingDraftRef.current = pending
     const timer = setTimeout(() => {
       if (saveGenRef.current !== currentGen) return
       saveDraft(
-        userInfo.userid,
-        system,
-        questionId,
-        datacallID,
-        { selectQuestionOption, notes },
+        pending.userid,
+        pending.system,
+        pending.questionId,
+        pending.datacallID,
+        pending.draft,
         () => saveGenRef.current === currentGen
       ).then((saved) => {
         if (saveGenRef.current !== currentGen) return
+        // Clear by identity, not generation: a newer edit re-runs this effect
+        // and replaces the ref with a NEW object under the SAME generation
+        // (saveGenRef only moves on explicit clears), so a generation check
+        // here would let the older save's completion discard the newer edit's
+        // payload while its own debounce is still pending — and an unmount in
+        // that window would then flush nothing (#640 review). Gated on `saved`
+        // so a failed write stays in the ref for the unmount flush to retry.
+        if (saved && pendingDraftRef.current === pending)
+          pendingDraftRef.current = null
         if (saved) {
           if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
         } else {
@@ -1034,6 +1284,32 @@ export default function QuestionnarePage() {
     loadingQuestion,
     userInfo.userid,
   ])
+
+  // Flush a pending draft on unmount. beforeunload below covers tab close and
+  // hard refresh, but it does not fire on in-app navigation, and the debounce
+  // cleanup cancels the timer that would have written the draft. Mount-once so
+  // the cleanup runs on unmount only, never on a dep change (flushing on every
+  // dep change would defeat the debounce and write on each keystroke).
+  // saveDraft takes primitives and touches no component state, so the write
+  // completes after this component is gone.
+  React.useEffect(() => {
+    return () => {
+      const pending = pendingDraftRef.current
+      // Reading the live generation is the point of this guard, not a staleness
+      // bug: it must reflect any clearCurrentDraft that ran after the timer was
+      // scheduled, so a flush cannot resurrect a just-deleted draft. Copying it
+      // into the effect body would freeze it at its mount value.
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+      if (!pending || saveGenRef.current !== pending.gen) return
+      void saveDraft(
+        pending.userid,
+        pending.system,
+        pending.questionId,
+        pending.datacallID,
+        pending.draft
+      )
+    }
+  }, [])
 
   // Warn before tab close or hard refresh when the active question has edits
   // that haven't been committed to the backend yet.
@@ -1111,11 +1387,17 @@ export default function QuestionnarePage() {
         : undefined
     if (priorReview.contextId === priorReviewContextId) return
 
+    // "Untouched this cycle": prefer the persisted scores.status so this gate
+    // and the progress count cannot diverge; fall back to the older
+    // no-edit-event proxy for a backend that does not serve status yet.
+    const untouchedThisCycle = currentScore?.status
+      ? currentScore.status === 'not_started'
+      : !currentScore?.last_edited_at
     const isUnreviewedCarryForward =
       !isReadOnly &&
       !!currentPriorResponse &&
       !!currentScore &&
-      !currentScore.last_edited_at &&
+      untouchedThisCycle &&
       draftStatus !== 'restored' &&
       notes.trim() === currentPriorResponse.text.trim()
     setPriorReview({
@@ -1170,10 +1452,41 @@ export default function QuestionnarePage() {
       </>
     )
   }
+  // Cross-navigation back to this system's detail page (ui#610). A real router
+  // link rather than onClick + navigate, so open-in-new-tab and copy-link work.
+  // Gated on the same hasSystemAccess check the dashboard puts on its own System
+  // Details action. Every current role passes it (delegates included), so in
+  // practice this only suppresses the link while userInfo is unloaded or carries
+  // an unrecognized role - but it is the gate that moves if system-detail access
+  // ever narrows.
+  const systemInfoLink = hasSystemAccess(userInfo) ? (
+    <Button
+      variant="outlined"
+      size="small"
+      component={RouterLink}
+      to={`/systems/${system}`}
+      sx={{ whiteSpace: 'nowrap' }}
+    >
+      System Info
+    </Button>
+  ) : null
   if (noQuestions) {
     return (
       <>
-        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <Box
+          sx={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+          }}
+        >
+          <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+          {/* Without this the flow System Info -> Questionnaire -> "no
+              questionnaire available" is one-way, which the #609 button makes
+              reachable for any out-of-scope or decommissioned system (#640
+              review). */}
+          {systemInfoLink}
+        </Box>
         <Container maxWidth={false} disableGutters>
           <Alert severity="info" sx={{ mt: 2 }}>
             No questionnaire is available for this system. This typically
@@ -1265,6 +1578,15 @@ export default function QuestionnarePage() {
   const viewedDatacall =
     datacalls.find((dc) => dc.datacallid === datacallID) ?? null
 
+  // The data call the Compare-datacalls modal presents as "current". Prefer
+  // the call this questionnaire actually resolved (datacallID covers every
+  // entry path, including URL deep links where no route state exists); fall
+  // back to the route/selected/latest chain during the pre-fetch window.
+  const viewedDataCallId =
+    datacallID > 0
+      ? datacallID
+      : routeDatacallId ?? selectedDatacall?.datacallid ?? latestDataCallId
+
   // Picking a call in the card re-opens the questionnaire on it: same system,
   // same pillar/function, new datacall segment + route state (the resolution
   // effect keys on the route state and re-runs).
@@ -1328,6 +1650,19 @@ export default function QuestionnarePage() {
         }
         actions={
           <>
+            {/* Cross-navigation back to the system detail page (ui#610);
+                systemInfoLink is a real router link so open-in-new-tab and
+                copy-link work. */}
+            {systemInfoLink}
+            <Button
+              variant="outlined"
+              color="primary"
+              // Same destination as the dashboard's Pillar Scores action
+              // (a route in this app, not a modal) (ui#610).
+              onClick={() => navigate(`/systems/${system}/pillar-scores`)}
+            >
+              Pillar scores
+            </Button>
             <Button
               variant="outlined"
               color="primary"
@@ -1429,7 +1764,10 @@ export default function QuestionnarePage() {
             </Typography>
           )}
           {showInsights && currentInsight && (
-            <InsightsPanel payload={currentInsight} />
+            <InsightsPanel
+              payload={currentInsight}
+              questionId={currentDatabaseQuestionId}
+            />
           )}
           {loadingQuestion ? (
             <Box
@@ -1567,6 +1905,54 @@ export default function QuestionnarePage() {
                   </Typography>
                 )}
               </Box>
+              {/* Carried-forward confirmation strip, in the same zone where
+                  the prior-response flow surfaces its "review before
+                  continuing" message, so every system shares one review area.
+                  The chip is a role="status" live region, so confirming -
+                  which swaps its label in place - is announced (508). The
+                  button yields the moment the question is dirty (the edit is
+                  the explicit act; Next saves it), and Next itself never
+                  writes on an untouched question (#413). */}
+              {currentCarryState !== 'none' && (
+                <Box
+                  sx={{
+                    display: 'flex',
+                    alignItems: 'center',
+                    flexWrap: 'wrap',
+                    gap: 1,
+                    mt: 1.5,
+                  }}
+                >
+                  <Chip
+                    role="status"
+                    size="small"
+                    variant="outlined"
+                    color={
+                      currentCarryState === 'unconfirmed'
+                        ? 'warning'
+                        : 'success'
+                    }
+                    label={
+                      currentCarryState === 'unconfirmed'
+                        ? 'Carried forward - not yet confirmed'
+                        : 'Updated this data call'
+                    }
+                  />
+                  {showConfirmButton && (
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      size="small"
+                      startIcon={<CheckCircleOutlineIcon />}
+                      onClick={handleConfirmClick}
+                      disabled={confirming}
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Confirm this answer is still accurate
+                    </Button>
+                  )}
+                </Box>
+              )}
               {draftStatus !== 'idle' && !isReadOnly && (
                 <Alert
                   severity={
@@ -1661,12 +2047,21 @@ export default function QuestionnarePage() {
                     priorReviewState === 'initializing'
                   }
                   onClick={() => {
-                    saveGenRef.current++
-                    const id =
+                    const isLastQuestion =
                       selectedIndex ===
                       stepFunctionId[stepFunctionId.length - 1]
-                        ? stepFunctionId[0]
-                        : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                    // Complete on the open call summarizes instead of
+                    // silently wrapping to question 1. A closed call keeps
+                    // the wrap-around - harmless paging for a historical
+                    // viewer.
+                    if (isLastQuestion && isOpenCall) {
+                      void handleCompleteClick()
+                      return
+                    }
+                    saveGenRef.current++
+                    const id = isLastQuestion
+                      ? stepFunctionId[0]
+                      : stepFunctionId[functionIdIdx[selectedIndex] + 1]
                     if (questions[id]) {
                       const q = questions[id]
                       navigate(
@@ -1699,6 +2094,11 @@ export default function QuestionnarePage() {
           category={currentCategory}
           selectedIndex={selectedIndex}
           answeredFunctionIds={answeredFunctionIds}
+          // Sidebar confirmation marker: same classification the question
+          // view's chip reads.
+          carryStateFor={(functionid) =>
+            carryForwardState(scoreByFunction[functionid], isOpenCall)
+          }
           onFunctionClick={(fn) => {
             if (currentCategory) navigateToFunction(currentCategory.name, fn)
           }}
@@ -1710,6 +2110,11 @@ export default function QuestionnarePage() {
         onClose={() => setOpenAlert(false)}
         confirmClick={handleConfirmReturn}
       />
+      <ConfirmSummaryDialog
+        summary={confirmSummary}
+        onClose={() => setConfirmSummary(null)}
+        onJump={jumpToSummaryEntry}
+      />
       {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
           questionnaire actually resolved (datacallID covers every entry path,
           including URL deep links where no route state exists); fall back to
@@ -1720,13 +2125,7 @@ export default function QuestionnarePage() {
         fismasystemid={system ?? 0}
         systemName={systemName}
         systemAcronym={fismaacronym ?? ''}
-        selectedDataCallId={
-          datacallID > 0
-            ? datacallID
-            : routeDatacallId ??
-              selectedDatacall?.datacallid ??
-              latestDataCallId
-        }
+        selectedDataCallId={viewedDataCallId}
       />
     </Box>
   )

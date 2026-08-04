@@ -437,7 +437,11 @@ export default function JustificationField({
 
   return (
     <Box>
-      <Typography component="h3" variant="h6" sx={{ mb: 1 }}>
+      {/* h2 under the question's h1: this prompt sits directly beneath the
+          question heading, so it must be h2 (not h3) to keep the heading order
+          sequential (508 / WCAG 1.3.1). Mirrors the non-justification note
+          prompt in QuestionnairePage, which is already h2. */}
+      <Typography component="h2" variant="h6" sx={{ mb: 1 }}>
         {label}
       </Typography>
       <Box

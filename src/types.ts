@@ -40,6 +40,7 @@ export type UserRole =
   | 'OPDIV_READONLY_ADMIN'
   | 'ISSO'
   | 'ISSM'
+  | 'SYSTEM_DELEGATE'
   | 'ADMIN'
   | 'READONLY_ADMIN'
 
@@ -49,6 +50,41 @@ export type OpDiv = {
   name: string
   is_parent: boolean
   active: boolean
+  // Per-OpDiv "Add System Delegate Role" capability. NOT NULL on the backend
+  // (defaults false), so every OpDiv resolves to a real boolean. Gates the
+  // ISSO delegate self-service surface for systems in this OpDiv.
+  system_delegate_enabled: boolean
+  // Per-OpDiv ZTMF Insights capability. When true, systems in this OpDiv
+  // surface the internal insights layer (panel, option badges, suggested
+  // justification) in the questionnaire. Backed by opdivs.insights_enabled;
+  // the backend serializes it from a nullable column, so treat a missing
+  // value as disabled.
+  insights_enabled?: boolean | null
+}
+
+// A system delegate as returned by GET /fismasystems/:id/delegates (the
+// roster). access_expires_at is RFC3339; null means never expires (only
+// non-delegate users are null, so a delegate row always carries a date).
+export type DelegateRow = {
+  userid: string
+  fullname: string
+  email: string
+  access_expires_at: string | null
+}
+
+// An attachable delegate candidate from
+// GET /fismasystems/:id/delegate-candidates. The backend returns only
+// eligible users (already a delegate, in the system's OpDiv, not deleted,
+// not already attached), so the picker trusts the list as-is.
+export type DelegateCandidate = {
+  userid: string
+  fullname: string
+  email: string
+  // The candidate query returns the full user row, so this always arrives
+  // (null only for a non-expiring account). Optional here so fixtures can
+  // omit it. An expired candidate can still be attached, but stays denied at
+  // auth until renewed, so the picker flags it.
+  access_expires_at?: string | null
 }
 
 // One known datacenter environment from GET /api/v1/datacenterenvironments.
@@ -60,6 +96,18 @@ export type DataCenterEnvironment = {
   datacenterenvironment: string
   category: string
   scoring_key: string | null
+  selectable: boolean
+  ordr: number
+}
+
+// One allowed value for an extended-metadata field, from
+// GET /api/v1/systemattributes. `field` is the column ("fips", "system_type",
+// "cloud_service_model", ...); `value` is a canonical option. `selectable` false
+// hides a row from the dropdown. Rows arrive ordered by `ordr`. The endpoint is
+// a plain allowed-values list; field help copy lives in the UI, not here.
+export type SystemAttribute = {
+  field: string
+  value: string
   selectable: boolean
   ordr: number
 }
@@ -102,19 +150,21 @@ export type FismaSystemType = {
   reactivated_date: string | null
   reactivation_notes: string | null
   opdiv_id?: number | null
-  // Extended metadata fields (migration 0044+)
+  // Extended metadata fields, typed and canonicalized by the backend.
+  // Enum strings carry a canonical value or null; the tri-state booleans are
+  // true / false / null = Unknown; cloud_service_model is a decomposed list.
   isso_name?: string | null
-  hva?: string | null
+  hva?: boolean | null
   fips?: string | null
   system_type?: string | null
-  cloud_system?: string | null
-  cloud_service_model?: string | null
+  cloud_system?: boolean | null
+  cloud_service_model?: string[] | null
   cloud_vendor?: string | null
   system_operator?: string | null
   goco_coco_gogo?: string | null
   system_owner?: string | null
   system_owner_email?: string | null
-  legacy?: string | null
+  legacy?: boolean | null
   // Risk-based target maturity (ztmf#398). null = no target asserted yet;
   // the UI presents the Advanced default.
   target_maturity_tier?: string | null
@@ -163,6 +213,14 @@ export type LastEditedBy = {
   role?: UserRole
 }
 
+/**
+ * The answer's review state for its data call (scores.status): 'not_started'
+ * = carried forward and untouched this cycle; 'done' = saved or confirmed
+ * this cycle. The same persisted fact the Data Call Progress count reads, so
+ * badges derived from it cannot disagree with the fraction.
+ */
+export type ScoreStatus = 'not_started' | 'done'
+
 export type QuestionScores = {
   scoreid: number
   fismasystemid: number
@@ -170,6 +228,12 @@ export type QuestionScores = {
   notes: string
   functionoptionid: number
   datacallid: number
+  // Optional: a backend that does not serve it degrades to no carried-forward
+  // badges rather than badging everything.
+  status?: ScoreStatus
+  // Present when fetched with ?include=functionoption; functionid maps the
+  // row back to its question.
+  functionoption?: QuestionOption
   last_edited_at?: string | null
   last_edited_by?: LastEditedBy | null
   notes_is_ai_summary?: boolean
@@ -213,9 +277,6 @@ export type editSystemModalProps = {
   // Optional so tests can omit it; production callers always pass it or
   // the environment dropdown renders empty.
   datacenterEnvironments?: DataCenterEnvironment[]
-  // True for organization-wide admins: Extended Metadata fields render
-  // editable and are included in the save body. Scoped tiers see them locked.
-  extendedEditable?: boolean
 }
 
 export type datacallModalProps = {
@@ -354,6 +415,9 @@ export type SystemEnrichmentType = {
   fisma_uuid: string
   fisma_acronym: string
   authorization_package_name: string | null
+  // CFACTS-reported data center environment (ztmf#239). Provisional payload
+  // key: absent until the ztmf-insights pipeline ships the field.
+  data_center_environment?: string | null
   primary_isso_name: string | null
   primary_isso_email: string | null
   is_active: boolean | null
@@ -480,7 +544,7 @@ export type InsightPayload = {
   // or []. `ars_satisfied_controls` length == `ars_controls_satisfied`.
   ars_satisfied_controls?: string[] | null
   // Applicable-but-not-satisfied controls (applicable − satisfied). Informational,
-  // rendered greyed — distinct from `ars_failing_controls` (Archer-explicit fails).
+  // rendered greyed — distinct from `ars_failing_controls` (explicit fails).
   // satisfied + not_satisfied == ars_controls_total when the pipeline emits them.
   ars_not_satisfied_controls?: string[] | null
   ars_failing_controls?: string[] | null

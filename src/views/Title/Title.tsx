@@ -8,7 +8,6 @@ import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
   isUnscopedWriteAdmin,
-  hasUnscopedRead,
 } from '@/utils/userRoles'
 import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
@@ -22,6 +21,7 @@ import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import { notify } from '@/utils/notify'
+import { broadcastLogout } from '@/utils/sessionSync'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
@@ -260,6 +260,9 @@ export default function Title() {
     } catch (error) {
       console.error('Error logging out:', error)
     }
+    // Best-effort and independent of the POST result, matching the "even if
+    // the request fails we still drop to sign-in" contract above.
+    broadcastLogout()
     window.location.hash = Routes.SIGNIN
     window.location.reload()
   }
@@ -311,7 +314,9 @@ export default function Title() {
       label: 'OpDivs',
       to: Routes.ADMIN_OPDIVS,
       active: location.pathname.startsWith('/admin/opdivs'),
-      show: userInfo.role === 'OWNER',
+      // OWNER manages OpDivs fully; an HHS admin reaches the page only to
+      // flip the per-OpDiv System Delegate toggle.
+      show: isUnscopedWriteAdmin(userInfo),
     },
   ].filter((item) => item.show)
   // Every logged-in user gets the account menu (the logout affordance must
@@ -653,7 +658,6 @@ export default function Title() {
         system={EMPTY_SYSTEM}
         mode={'create'}
         datacenterEnvironments={datacenterEnvironments}
-        extendedEditable={hasUnscopedRead(userInfo)}
       />
       <EmailModal
         openModal={openEmailModal}

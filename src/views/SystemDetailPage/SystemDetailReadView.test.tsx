@@ -1,3 +1,11 @@
+// systemMetadataVocab (imported transitively for formatBool/formatList) loads
+// axiosConfig, which reads import.meta.env at module load and throws under
+// @swc/jest. Swap in a bare axios instance.
+jest.mock('@/axiosConfig', () => {
+  const axios = require('axios').default
+  return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
+})
+
 import { screen } from '@testing-library/react'
 
 // axiosConfig reads import.meta, which Jest's CJS transform cannot parse -
@@ -56,4 +64,63 @@ test('OpDiv label appears before Group acronym in the Organization card', () => 
     opdivLabel.compareDocumentPosition(groupLabel) &
       Node.DOCUMENT_POSITION_FOLLOWING
   ).toBeTruthy()
+})
+
+function renderWithExtended(extra: Partial<FismaSystemType>) {
+  return renderWithProviders(
+    <SystemDetailReadView
+      system={{ ...BASE_SYSTEM, ...extra } as FismaSystemType}
+      decommissionedByName=""
+      opdivName="CMS"
+    />
+  )
+}
+
+describe('extended metadata formatting', () => {
+  test('renders tri-state booleans as Yes/No/Unknown, not raw values', () => {
+    renderWithExtended({ hva: true, cloud_system: false, legacy: null })
+    expect(screen.getByText('HVA')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+    expect(screen.getByText('No')).toBeInTheDocument()
+    // The raw boolean shape must never reach the page.
+    expect(screen.queryByText('true')).not.toBeInTheDocument()
+    expect(screen.queryByText('false')).not.toBeInTheDocument()
+  })
+
+  test('renders a decomposed multi-select as a comma list', () => {
+    renderWithExtended({ cloud_service_model: ['IaaS', 'PaaS'] })
+    expect(screen.getByText('Cloud Service Model')).toBeInTheDocument()
+    expect(screen.getByText('IaaS, PaaS')).toBeInTheDocument()
+  })
+
+  test('renders the legacy field with default Yes/No labels', () => {
+    // legacy is a plain legacy-system flag labeled "Legacy System", so true
+    // reads as the default "Yes".
+    renderWithExtended({ legacy: true })
+    expect(screen.getByText('Legacy System')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
+  })
+
+  test('hides the extended card when only an empty array is present', () => {
+    renderWithExtended({ cloud_service_model: [] })
+    expect(screen.queryByText('Cloud Service Model')).not.toBeInTheDocument()
+  })
+
+  test('shows the extended card when a boolean is explicitly No', () => {
+    renderWithExtended({ cloud_system: false })
+    expect(screen.getByText('Cloud System')).toBeInTheDocument()
+  })
+
+  test('hides the cloud dependents when cloud_system is No', () => {
+    // Cloud service model and vendor do not apply to a non-cloud system, so the
+    // read view omits them just as the edit view does.
+    renderWithExtended({
+      cloud_system: false,
+      cloud_vendor: 'AWS',
+      cloud_service_model: ['IaaS'],
+    })
+    expect(screen.getByText('Cloud System')).toBeInTheDocument()
+    expect(screen.queryByText('Cloud Vendor')).not.toBeInTheDocument()
+    expect(screen.queryByText('Cloud Service Model')).not.toBeInTheDocument()
+  })
 })

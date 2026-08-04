@@ -55,6 +55,16 @@ describe('justification context helpers', () => {
     )
   })
 
+  it('renders the prompt as an h2 so the heading order stays sequential under the question h1 (508)', () => {
+    render(<Harness />)
+    expect(
+      screen.getByRole('heading', {
+        level: 2,
+        name: 'Explain the available authentication options',
+      })
+    ).toBeInTheDocument()
+  })
+
   it('prefers a pipeline-authored suggested justification', () => {
     expect(
       buildInsightJustification({

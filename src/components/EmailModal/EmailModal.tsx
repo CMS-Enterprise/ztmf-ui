@@ -21,6 +21,7 @@ const GROUP_OPTIONS = [
   { label: 'ISSM', value: 'ISSM' },
   { label: 'ADMIN', value: 'ADMIN' },
   { label: 'READONLY_ADMIN', value: 'READONLY_ADMIN' },
+  { label: 'System Delegate', value: 'SYSTEM_DELEGATE' },
   { label: 'DCC', value: 'DCC' },
   { label: 'ALL', value: 'ALL' },
 ]

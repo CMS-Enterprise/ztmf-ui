@@ -2,7 +2,7 @@ import { FismaSystemType } from '@/types'
 
 export type FieldSection = 'identity' | 'organization' | 'contacts' | 'extended'
 
-export type FieldType = 'text' | 'email' | 'select'
+export type FieldType = 'text' | 'email' | 'select' | 'multiselect' | 'boolean'
 
 export interface FieldConfig {
   key: keyof FismaSystemType
@@ -11,8 +11,18 @@ export interface FieldConfig {
   required: boolean
   type: FieldType
   // Display-only: rendered but never editable and excluded from the write
-  // payload. Used for values the backend resolves/owns (e.g. isso_name).
+  // payload. For a value whose only writer is the backend.
   readOnly?: boolean
+  // Short guidance shown under the control while editing. For a label that is
+  // ambiguous or easily misread on its own, or a value whose write semantics
+  // need saying at the point of edit. Rendered only when set; there is no
+  // backend dependency, the copy lives here.
+  helpText?: string
+  // Overrides the Yes/No labels on a `boolean` field's tri-state control (and
+  // its read-view text). For a field whose label reads ambiguously against a
+  // plain Yes/No (e.g. a negatively-phrased label where "No" is a double
+  // negative). Unknown stays Unknown.
+  booleanLabels?: { true: string; false: string }
 }
 
 export const fieldConfigs: FieldConfig[] = [
@@ -99,52 +109,55 @@ export const fieldConfigs: FieldConfig[] = [
     type: 'email',
   },
 
-  // Extended Metadata section. Standard system attributes editable by any
-  // write admin across all OpDivs. isso_name is the exception: the backend
-  // resolves it (from the ISSO user record for CMS, from the import for HHS),
-  // so it is display-only here and the edit form still edits issoemail.
+  // Extended Metadata section. The system attributes below are writable only by
+  // an unscoped admin; the backend restores the stored values over anything an
+  // OpDiv-scoped admin sends for them. isso_name is the exception, writable by
+  // any write admin: a stored value overrides the name the backend derives from
+  // the ISSO user record, and the empty string clears it so the derived name
+  // applies again.
   {
     key: 'isso_name',
     label: 'ISSO Name',
     section: 'extended',
     required: false,
     type: 'text',
-    readOnly: true,
+    helpText:
+      "A name entered here overrides the name from the ISSO's user account. Clear the field to show that name again.",
   },
   {
     key: 'hva',
     label: 'HVA',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'boolean',
   },
   {
     key: 'fips',
     label: 'FIPS Impact Level',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'system_type',
     label: 'System Type',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'cloud_system',
     label: 'Cloud System',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'boolean',
   },
   {
     key: 'cloud_service_model',
     label: 'Cloud Service Model',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'multiselect',
   },
   {
     key: 'cloud_vendor',
@@ -158,14 +171,14 @@ export const fieldConfigs: FieldConfig[] = [
     label: 'System Operator',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'goco_coco_gogo',
     label: 'GOCO/COCO/GOGO',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'select',
   },
   {
     key: 'system_owner',
@@ -183,10 +196,10 @@ export const fieldConfigs: FieldConfig[] = [
   },
   {
     key: 'legacy',
-    label: 'Legacy',
+    label: 'Legacy System',
     section: 'extended',
     required: false,
-    type: 'text',
+    type: 'boolean',
   },
 ]
 
@@ -195,10 +208,9 @@ export function getFieldsBySection(section: FieldSection): FieldConfig[] {
 }
 
 // Single source of truth for the extended metadata write list. Derived from the
-// `extended` section above (excluding read-only fields like isso_name) so a
-// field added to fieldConfig can't silently render-but-not-save, and a
-// display-only field can't silently be written (the modal/detail PUT loops
-// consume this).
+// `extended` section above (excluding read-only fields) so a field added to
+// fieldConfig can't silently render-but-not-save, and a display-only field
+// can't silently be written (the modal/detail PUT loops consume this).
 export const EXTENDED_METADATA_KEYS: (keyof FismaSystemType)[] = fieldConfigs
   .filter((f) => f.section === 'extended' && !f.readOnly)
   .map((f) => f.key)

@@ -1,3 +1,8 @@
+// Coverage for the Add/Edit modal shell plus its extended-metadata clearing.
+// The key regression: picking "None" on an enum select must persist as an
+// empty string (the backend's blankToNil clears on '' and treats null as
+// "leave unchanged"), and the save must send a dirty-diff of only the changed
+// fields.
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
@@ -7,6 +12,8 @@ jest.mock('@/router/router', () => ({
   __esModule: true,
   default: { navigate: jest.fn() },
 }))
+// axiosConfig reads import.meta.env at module load and throws under @swc/jest.
+// Swap in a bare axios instance the MockAdapter can drive.
 jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
@@ -64,10 +71,14 @@ const decommissionedSystem: FismaSystemType = {
 beforeEach(() => {
   mock.reset()
   notifyMock.mockClear()
+  // The modal fetches the OpDiv reference list on open and the extended
+  // section fetches the attribute vocabulary; bare responses keep both quiet.
+  mock.onGet('/opdivs').reply(200, { data: [{ opdiv_id: 1, name: 'CMS' }] })
+  mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
 describe('EditSystemModal', () => {
-  test('extendedEditable renders the Extended Metadata section on create', async () => {
+  test('renders the Extended Metadata section on create', async () => {
     renderWithProviders(
       <EditSystemModal
         title="Add"
@@ -75,26 +86,11 @@ describe('EditSystemModal', () => {
         onClose={jest.fn()}
         system={completeSystem}
         mode="create"
-        extendedEditable
       />
     )
     expect(await screen.findByText('Extended Metadata')).toBeInTheDocument()
     expect(screen.getByText('ISSO Name')).toBeInTheDocument()
     expect(screen.getByText('GOCO/COCO/GOGO')).toBeInTheDocument()
-  })
-
-  test('scoped tiers (extendedEditable=false) see no Extended Metadata section', async () => {
-    renderWithProviders(
-      <EditSystemModal
-        title="Add"
-        open
-        onClose={jest.fn()}
-        system={completeSystem}
-        mode="create"
-      />
-    )
-    await screen.findByText('Add FISMA system')
-    expect(screen.queryByText('Extended Metadata')).not.toBeInTheDocument()
   })
 
   test('renders nothing while loading=true (open w/o system)', () => {
@@ -232,5 +228,179 @@ describe('EditSystemModal', () => {
     expect(
       screen.getByRole('button', { name: /^decommission$/i })
     ).toBeInTheDocument()
+  })
+})
+
+describe('EditSystemModal extended-metadata clearing', () => {
+  const SYSTEM = {
+    fismasystemid: 42,
+    fismaname: 'Executor',
+    fismaacronym: 'EXEC',
+    fismauid: 'UID-42',
+    component: 'CMS',
+    datacenterenvironment: 'CMS-Cloud-AWS',
+    issoemail: 'admiral.piett@executor.empire',
+    datacallcontact: 'captain.needa@executor.empire',
+    opdiv_id: 1,
+    sdl_sync_enabled: false,
+    fips: 'Low',
+    hva: null,
+    cloud_system: null,
+    cloud_service_model: null,
+    cloud_vendor: null,
+    system_operator: null,
+    goco_coco_gogo: null,
+    system_owner: null,
+    system_owner_email: null,
+    legacy: null,
+  } as unknown as FismaSystemType
+
+  /**
+   * Captures the JSON body of the next PUT /fismasystems/42.
+   * @returns {{ body?: Record<string, unknown> }} Holder filled on PUT.
+   */
+  const capturePut = () => {
+    const captured: { body?: Record<string, unknown> } = {}
+    mock.onPut(/fismasystems\/42$/).reply((config) => {
+      captured.body = JSON.parse(config.data)
+      return [200, {}]
+    })
+    return captured
+  }
+
+  test('clearing an enum select to None saves an empty string, not null', async () => {
+    mock.onGet('/systemattributes').reply(200, {
+      data: [
+        { field: 'fips', value: 'Low', selectable: true, ordr: 10 },
+        { field: 'fips', value: 'High', selectable: true, ordr: 20 },
+      ],
+    })
+    const captured = capturePut()
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <EditSystemModal
+        title="Edit"
+        open
+        onClose={jest.fn()}
+        system={SYSTEM}
+        mode="edit"
+        datacenterEnvironments={[]}
+      />
+    )
+
+    // Clear FIPS: open the select and choose the None option.
+    await user.click(
+      await screen.findByRole('combobox', { name: 'FIPS Impact Level' })
+    )
+    await user.click(await screen.findByRole('option', { name: /None/ }))
+
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(captured.body).toBeDefined())
+    // Empty string is the clear signal; null would read as "leave unchanged".
+    expect(captured.body).toHaveProperty('fips', '')
+  })
+
+  test('an untouched extended field is omitted from the save (dirty-diff)', async () => {
+    mock.onGet('/systemattributes').reply(200, {
+      data: [{ field: 'fips', value: 'Low', selectable: true, ordr: 10 }],
+    })
+    const captured = capturePut()
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <EditSystemModal
+        title="Edit"
+        open
+        onClose={jest.fn()}
+        system={SYSTEM}
+        mode="edit"
+        datacenterEnvironments={[]}
+      />
+    )
+
+    await screen.findByRole('combobox', { name: 'FIPS Impact Level' })
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(captured.body).toBeDefined())
+    // Nothing was changed, so no extended field should be in the payload.
+    expect(captured.body).not.toHaveProperty('fips')
+    expect(captured.body).not.toHaveProperty('hva')
+    expect(captured.body).not.toHaveProperty('cloud_service_model')
+  })
+
+  test('an edited ISSO Name is sent in the save payload', async () => {
+    const captured = capturePut()
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <EditSystemModal
+        title="Edit"
+        open
+        onClose={jest.fn()}
+        system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
+        mode="edit"
+        datacenterEnvironments={[]}
+      />
+    )
+
+    const input = await screen.findByRole('textbox', { name: 'ISSO Name' })
+    await user.clear(input)
+    await user.type(input, 'Firmus Piett')
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(captured.body).toBeDefined())
+    expect(captured.body).toHaveProperty('isso_name', 'Firmus Piett')
+  })
+
+  test('clearing ISSO Name saves an empty string, which restores the derived name', async () => {
+    const captured = capturePut()
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <EditSystemModal
+        title="Edit"
+        open
+        onClose={jest.fn()}
+        system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
+        mode="edit"
+        datacenterEnvironments={[]}
+      />
+    )
+
+    await user.clear(await screen.findByRole('textbox', { name: 'ISSO Name' }))
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(captured.body).toBeDefined())
+    // '' clears the stored override so the name derived from the ISSO user
+    // record applies again; null would read as "leave unchanged".
+    expect(captured.body).toHaveProperty('isso_name', '')
+  })
+
+  test('clearing a free-text field saves an empty string, not null', async () => {
+    const captured = capturePut()
+    const user = userEvent.setup()
+
+    renderWithProviders(
+      <EditSystemModal
+        title="Edit"
+        open
+        onClose={jest.fn()}
+        system={{ ...SYSTEM, cloud_vendor: 'AWS' }}
+        mode="edit"
+        datacenterEnvironments={[]}
+      />
+    )
+
+    // Cloud Vendor is free text (no email/select branch); clear it and save.
+    const input = await screen.findByRole('textbox', { name: 'Cloud Vendor' })
+    await user.clear(input)
+    await user.click(screen.getByRole('button', { name: /save changes/i }))
+
+    await waitFor(() => expect(captured.body).toBeDefined())
+    // '' clears via blankToNil; null would read as "leave unchanged" and the
+    // clear would silently no-op.
+    expect(captured.body).toHaveProperty('cloud_vendor', '')
   })
 })

@@ -24,6 +24,7 @@ import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
   hasUnscopedRead,
+  isUnscopedWriteAdmin,
   selectableRoles,
   roleLabel,
 } from '@/utils/userRoles'
@@ -63,11 +64,12 @@ import { useOpDivCatalog } from './hooks/useOpDivCatalog'
 import { useUsersSnackbar } from './hooks/useUsersSnackbar'
 import { useUsersModals } from './hooks/useUsersModals'
 import { useLoadUsers } from './hooks/useLoadUsers'
+import { useSystemCatalog } from './hooks/useSystemCatalog'
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
-  const { userInfo, fismaSystems } = useContextProp()
+  const { userInfo } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
   // admins may view the table but every mutating control is withheld. The
   // backend is the security boundary - this only governs which controls render.
@@ -102,9 +104,17 @@ export default function UserTable() {
     setShowDeleted,
     quickFilterValues,
   } = useUserFilters()
-  const { opdivOptions, opdivCodeMap } = useOpDivCatalog(isAdmin, userInfo)
-  const { rows, setRows, fismaSystemsMap, userOpDivMap, setUserOpDivMap } =
-    useLoadUsers({ canRead, fismaSystems, showDeleted })
+  const { opdivOptions, opdivCodeMap, opdivLabelMap } = useOpDivCatalog(
+    isAdmin,
+    userInfo
+  )
+  // Global fisma-system metadata for the Assign Systems modal - fetched once
+  // per mount so opening the modal only costs its two per-user reads.
+  const { allSystems, decommSystems } = useSystemCatalog(isAdmin)
+  const { rows, setRows, userOpDivMap, setUserOpDivMap } = useLoadUsers({
+    canRead,
+    showDeleted,
+  })
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -930,11 +940,12 @@ export default function UserTable() {
         text={snackbar.text}
       />
       <AssignSystemModal
-        fismaSystemMap={fismaSystemsMap}
         open={modals.assign.open}
         handleClose={modals.closeAssign}
         userid={modals.assign.userid}
         userName={modals.assign.userName}
+        allSystems={allSystems}
+        decommSystems={decommSystems}
       />
       <OpDivGrantModal
         open={modals.opdiv.open}
@@ -942,6 +953,17 @@ export default function UserTable() {
         userid={modals.opdiv.userid}
         userName={modals.opdiv.userName}
         opdivOptions={opdivOptions}
+        opdivLabelMap={opdivLabelMap}
+        // Scoped callers (every admin except an unscoped write admin) must not
+        // silently revoke the target's out-of-scope grants on save, so gate the
+        // save-time filter for them. Unscoped write admins (OWNER/HHS_ADMIN)
+        // send the grant set as-is. This is the inverse of the backend's
+        // unscoped-write branch, the predicate it actually decides on.
+        enforceCallerScope={!isUnscopedWriteAdmin(userInfo)}
+        // The caller's RAW grants (unfiltered by parent/active) - the save-time
+        // preserve boundary. Wider than opdivOptions so a caller-held grant to a
+        // since re-parented/deactivated OpDiv is preserved, not silently revoked.
+        callerGrantIds={userInfo.assignedopdivids ?? []}
         onChanged={refreshUserRow}
       />
       <ConfirmDialog

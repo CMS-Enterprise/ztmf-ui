@@ -13,7 +13,12 @@ import { PILLAR_ORDER } from '@/constants'
 import { CodeBadge } from '@/components/ui/StatusChip'
 import SystemEnrichmentCard from './SystemEnrichmentCard'
 import InsightsEmptyState from './InsightsEmptyState'
-import { getFieldsBySection } from './fieldConfig'
+import { getFieldsBySection, type FieldConfig } from './fieldConfig'
+import {
+  formatBool,
+  formatList,
+  isCrossFieldHidden,
+} from '@/utils/systemMetadataVocab'
 
 /**
  * Highest possible zero trust score on the user-facing scale, used to
@@ -49,6 +54,23 @@ interface SystemDetailReadViewProps {
 }
 
 /**
+ * Read-view display string for a field, keyed off its configured type:
+ * tri-state booleans read as Yes/No/Unknown and decomposed multi-selects as a
+ * comma list, so the raw "true"/array shapes never leak to the page. Text,
+ * email, and single selects fall through to their stored string.
+ * @param {FieldConfig} field - The field being rendered.
+ * @param {FismaSystemType} system - The system whose value to format.
+ * @returns {string} The display string (empty when unset; the card shows '-').
+ */
+function formatFieldValue(field: FieldConfig, system: FismaSystemType): string {
+  const raw = system[field.key]
+  if (field.type === 'boolean')
+    return formatBool(raw as boolean | null, field.booleanLabels)
+  if (field.type === 'multiselect') return formatList(raw as string[] | null)
+  return String(raw ?? '')
+}
+
+/**
  * Read-mode view for the System detail page. Renders the score hero (overall
  * + pillar snapshot), the System identity and Organization detail cards, and
  * the ZTMF Insights section (SystemEnrichmentCard when sdl_sync is on, the new
@@ -67,15 +89,23 @@ export default function SystemDetailReadView({
   opdivName,
 }: SystemDetailReadViewProps) {
   const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
-  const extendedFields = getFieldsBySection('extended')
+  // cloud_service_model and cloud_vendor do not apply to a non-cloud system,
+  // so they are hidden here just as the edit view hides them when cloud_system
+  // is No (they are empty in that case anyway).
+  const extendedFields = getFieldsBySection('extended').filter(
+    (field) => !isCrossFieldHidden(field.key, system)
+  )
   // Only show the Extended Metadata card when at least one field is
   // populated. Systems without extended metadata have every field null and
   // would otherwise render an empty card. (Read view is not role-gated; the
   // values are the system's own metadata, visible to anyone who can view
   // the system.)
-  const hasAnyExtendedData = extendedFields.some(
-    (field) => system[field.key] != null && system[field.key] !== ''
-  )
+  const hasAnyExtendedData = extendedFields.some((field) => {
+    const raw = system[field.key]
+    if (raw == null || raw === '') return false
+    if (Array.isArray(raw)) return raw.length > 0
+    return true
+  })
 
   return (
     <Box>
@@ -183,7 +213,7 @@ export default function SystemDetailReadView({
             title="Extended metadata"
             rows={extendedFields.map((field) => ({
               label: field.label,
-              value: String(system[field.key] ?? '') || '-',
+              value: formatFieldValue(field, system) || '-',
             }))}
           />
         </Box>
@@ -515,7 +545,13 @@ function DetailCard({
 function InsightsSection({ system }: { system: FismaSystemType }) {
   const body =
     system.fismauid && system.sdl_sync_enabled ? (
-      <SystemEnrichmentCard fismaUid={system.fismauid} />
+      <SystemEnrichmentCard
+        fismaUid={system.fismauid}
+        // Lets the card flag a CFACTS-reported data center environment that
+        // disagrees with the ZTMF value (ztmf#239); without it the mismatch
+        // chip can never render.
+        systemDataCenterEnvironment={system.datacenterenvironment}
+      />
     ) : (
       <InsightsEmptyState />
     )
