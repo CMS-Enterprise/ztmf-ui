@@ -1,4 +1,11 @@
-import { fireEvent, render, screen, waitFor, act } from '@testing-library/react'
+import {
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+  act,
+  configure as rtlConfigure,
+} from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
@@ -150,6 +157,7 @@ const SSD_EX = {
   fismaacronym: 'SSD-EX',
   fismaname: 'Super Star Destroyer Executor Command Systems',
   datacenterenvironment: 'Imperial-Fleet',
+  opdiv_id: 9,
 }
 
 function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
@@ -771,9 +779,11 @@ test('the questionId effect reads live scores via ref and seeds the answer at mo
 
 // ---------------------------------------------------------------------------
 // 4. ZTMF Insights justification-field wiring (#527/#529).
-//    - HHS data calls render the review-aware JustificationField but hide the
-//      CMS-internal insights layer (panel, option badges, suggestion).
-//    - CMS data calls render both the JustificationField and the insights layer.
+//    - The insights layer (panel, option badges, suggestion) is gated on the
+//      SYSTEM's OpDiv (opdivs.insights_enabled), not the viewed call's name:
+//      an enabled OpDiv keeps its insights inside the unified HHS-named cycle
+//      (the FY2026 regression), and a disabled OpDiv never sees the layer.
+//    - The review-aware JustificationField renders regardless of OpDiv.
 //    - A carried-forward prior response blocks submission until reviewed, and
 //      the initial insights lookup blocks submission until it settles.
 //    - A question with no justification context keeps the plain notes field.
@@ -841,17 +851,46 @@ const HHS_ZTM = {
 const HHS_DEEP_LINK =
   '/questionnaire/ssd-ex/FY25_ZTM/identity/imperial-identity-verification'
 
+// SSD-EX (opdiv_id 9) belongs to the insights-enabled OpDiv; 2 is a disabled
+// OpDiv for the negative case.
+const OPDIV_ROWS = [
+  {
+    opdiv_id: 9,
+    code: 'CMS',
+    name: 'Centers for Medicare & Medicaid Services',
+    is_parent: false,
+    active: true,
+    system_delegate_enabled: false,
+    insights_enabled: true,
+  },
+  {
+    opdiv_id: 2,
+    code: 'ACF',
+    name: 'Administration for Children and Families',
+    is_parent: false,
+    active: true,
+    system_delegate_enabled: false,
+    insights_enabled: false,
+  },
+]
+
 describe('QuestionnairePage justification integration', () => {
   type InsightsResponse = { data: { data: unknown[] } }
 
   function installMocks({
     insightRows = [INSIGHT_ROW] as unknown[],
     insightsResponse,
+    opdivRows = OPDIV_ROWS as unknown[],
+    opdivsResponse,
   }: {
     insightRows?: unknown[]
     insightsResponse?: Promise<InsightsResponse>
+    opdivRows?: unknown[]
+    opdivsResponse?: Promise<InsightsResponse>
   } = {}) {
     axios.get.mockImplementation((url: string) => {
+      if (url === '/opdivs')
+        return opdivsResponse ?? Promise.resolve({ data: { data: opdivRows } })
       if (url === 'insights') {
         return (
           insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
@@ -869,7 +908,7 @@ describe('QuestionnairePage justification integration', () => {
     axios.put.mockResolvedValue({ data: {} })
   }
 
-  it('renders the justification field but hides the insights layer for an HHS data call, and persists an accepted prior response', async () => {
+  it('keeps the insights layer on an HHS-named call for an insights-enabled OpDiv, and persists an accepted prior response', async () => {
     installMocks()
     setMockCtx(
       makeCtx({
@@ -893,20 +932,26 @@ describe('QuestionnairePage justification integration', () => {
     // The FIPS baseline is a federal-wide concept and must appear for HHS too.
     expect(await screen.findByText('Low baseline')).toBeInTheDocument()
 
-    // The CMS-internal insights layer is suppressed for HHS calls.
-    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+    // The insights layer follows the system's OpDiv, not the call name: an
+    // insights-enabled OpDiv keeps its panel inside the HHS-named cycle (the
+    // FY2026 single-call regression this gate change fixes).
+    expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
     expect(
-      screen.queryByText('ZTMF Insights option badge')
-    ).not.toBeInTheDocument()
+      (await screen.findAllByText('ZTMF Insights option badge')).length
+    ).toBeGreaterThan(0)
     expect(
-      screen.queryByText('Suggested justification')
-    ).not.toBeInTheDocument()
+      await screen.findByText('Suggested justification')
+    ).toBeInTheDocument()
 
     const complete = screen.getByRole('button', { name: 'Complete' })
     expect(complete).toBeDisabled()
 
-    // Accepting the required review is a current-call action, so the answer
-    // persists even though the text equals the seeded prior response.
+    // Accepting the required review must land even though the text equals
+    // the seeded prior response — via the confirm endpoint, since the old
+    // identical-body answer PUT was silently discarded by the backend's
+    // no-op guard. Insert alone performs no write (like the
+    // insights-suggestion card's Insert); the resolved review lands on the
+    // next navigation, so the two adjacent Insert buttons behave alike.
     fireEvent.click(
       screen.getByRole('button', {
         name: 'Insert previous ISSO response into current response',
@@ -914,18 +959,17 @@ describe('QuestionnairePage justification integration', () => {
     )
     expect(response).toHaveValue(PRIOR_RESPONSE)
     expect(complete).toBeEnabled()
+    expect(axios.put).not.toHaveBeenCalled()
 
     fireEvent.click(complete)
 
     await waitFor(() =>
-      expect(axios.put).toHaveBeenCalledWith('scores/5001', {
-        fismasystemid: 1002,
-        notes: PRIOR_RESPONSE,
-        functionoptionid: 100,
-        datacallid: 6,
-        notes_is_ai_summary: false,
-      })
+      expect(axios.put).toHaveBeenCalledWith('scores/5001/confirm')
     )
+    // The unchanged answer body must NOT be re-PUT — that path re-stamps
+    // nothing server-side and would clear notes_is_ai_summary on a real
+    // change-detection miss.
+    expect(axios.put).not.toHaveBeenCalledWith('scores/5001', expect.anything())
   })
 
   it('shows the insights panel, option badges, and suggestion for a CMS data call', async () => {
@@ -944,6 +988,58 @@ describe('QuestionnairePage justification integration', () => {
     expect(
       await screen.findByText("Last year's response — FY2025 Q1")
     ).toBeInTheDocument()
+  })
+
+  it('hides the insights layer when the system belongs to an insights-disabled OpDiv', async () => {
+    installMocks({
+      opdivRows: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
+    })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    // The justification review context still renders...
+    expect(await screen.findByText('Review required')).toBeInTheDocument()
+    // ...and the federal-wide FIPS baseline treatment stays.
+    expect(await screen.findByText('Low baseline')).toBeInTheDocument()
+    // ...but every insights surface is suppressed, regardless of call name.
+    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('ZTMF Insights option badge')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByText('Suggested justification')
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the gate closed and submission blocked until the OpDiv lookup settles', async () => {
+    let resolveOpdivs: ((value: InsightsResponse) => void) | null = null
+    const opdivsResponse = new Promise<InsightsResponse>((resolve) => {
+      resolveOpdivs = resolve
+    })
+    installMocks({ opdivsResponse })
+    setMockCtx(makeCtx())
+
+    renderAt(DEEP_LINK)
+
+    // Insights rows resolved instantly, but the OpDiv capability list has
+    // not - the gate stays closed and the page still reads as pending, so
+    // the panel cannot pop in after the user has already advanced.
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    expect(
+      await screen.findByText('Checking for prior responses…')
+    ).toBeInTheDocument()
+    expect(complete).toBeDisabled()
+    expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveOpdivs?.({ data: { data: OPDIV_ROWS } })
+    })
+
+    expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Checking for prior responses…')
+    ).not.toBeInTheDocument()
   })
 
   it('blocks submission until the initial insights lookup settles', async () => {
@@ -990,5 +1086,319 @@ describe('QuestionnairePage justification integration', () => {
     expect(
       screen.queryByRole('textbox', { name: 'Current response' })
     ).not.toBeInTheDocument()
+  })
+})
+
+// ---------------------------------------------------------------------------
+// Carried-forward confirmation: badge, inline Confirm, the #413
+// browse-is-write-free guard, and the Complete summary.
+// ---------------------------------------------------------------------------
+
+describe('carried-forward confirmation', () => {
+  // CI runners execute this suite ~3x slower than a dev machine, and these
+  // tests each begin by awaiting a full page load — RTL's default 1s
+  // findBy/waitFor timeout flaked there while the question was still
+  // loading. Raise the async ceiling for this block only; passing tests are
+  // unaffected (they resolve as soon as the DOM settles).
+  beforeAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 4000 })
+    jest.setTimeout(15000)
+  })
+  afterAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 1000 })
+    jest.setTimeout(5000)
+  })
+
+  const OPTIONS_7001 = [
+    { functionoptionid: 200, description: 'Baseline', score: 1 },
+    { functionoptionid: 201, description: 'Advanced', score: 2 },
+  ]
+
+  // A row copied by the FY2026 rollover: status not_started, no edit event.
+  const carried7006 = (status: 'not_started' | 'done' = 'not_started') => ({
+    scoreid: 6001,
+    fismasystemid: 1002,
+    notes: 'carried justification',
+    functionoptionid: 100,
+    datacallid: 5,
+    status,
+    functionoption: {
+      functionoptionid: 100,
+      functionid: 7006,
+      score: 1,
+      optionname: 'Baseline',
+      description: 'Baseline',
+    },
+    last_edited_at: null,
+    last_edited_by: null,
+  })
+
+  const done7001 = () => ({
+    scoreid: 6002,
+    fismasystemid: 1002,
+    notes: 'answered this cycle',
+    functionoptionid: 200,
+    datacallid: 5,
+    status: 'done',
+    functionoption: {
+      functionoptionid: 200,
+      functionid: 7001,
+      score: 1,
+      optionname: 'Baseline',
+      description: 'Baseline',
+    },
+  })
+
+  const DEVICES_LINK =
+    '/questionnaire/ssd-ex/FY2026_Q1/devices/imperial-device-management'
+
+  // Serves a mutable scores list and, like the real backend, flips the
+  // targeted row to done when the confirm endpoint is hit — so the refetch
+  // after a confirm returns the confirmed row instead of resurrecting the
+  // original fixture.
+  function installScoreMocks(scores: Array<{ scoreid: number }>) {
+    let rows = scores
+    axios.get.mockImplementation((url: string) => {
+      if (url.includes('/questions'))
+        return Promise.resolve({ data: { data: QUESTIONS } })
+      if (url.startsWith('scores'))
+        return Promise.resolve({ data: { data: rows } })
+      if (url.includes('functions/7006/options'))
+        return Promise.resolve({ data: { data: OPTIONS_7006 } })
+      if (url.includes('functions/7001/options'))
+        return Promise.resolve({ data: { data: OPTIONS_7001 } })
+      return Promise.resolve({ data: { data: [] } })
+    })
+    axios.post.mockResolvedValue({ data: {} })
+    axios.put.mockImplementation((url: string) => {
+      const confirm = /^scores\/(\d+)\/confirm$/.exec(url)
+      if (confirm) {
+        rows = rows.map((row) =>
+          row.scoreid === Number(confirm[1]) ? { ...row, status: 'done' } : row
+        )
+      }
+      return Promise.resolve({ data: { data: {} } })
+    })
+  }
+
+  it('badges an unconfirmed carried-forward answer in the question view and sidebar, and confirms it with one dedicated PUT', async () => {
+    installScoreMocks([carried7006()])
+
+    renderAt(DEEP_LINK)
+
+    // Question-view badge (role="status" so the flip below is announced).
+    const badge = await screen.findByText('Carried forward — not yet confirmed')
+    expect(badge).toBeInTheDocument()
+    // Sidebar marker for the same fact, on the carried question only.
+    expect(screen.getAllByText('Not yet confirmed')).toHaveLength(1)
+
+    // The explicit act: exactly one confirm PUT, no answer PUT/POST.
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    )
+    await waitFor(() =>
+      expect(axios.put).toHaveBeenCalledWith('scores/6001/confirm')
+    )
+    expect(axios.put).toHaveBeenCalledTimes(1)
+    expect(saveScorePosts()).toHaveLength(0)
+
+    // Feedback is the badge swapping to its confirmed state.
+    expect(
+      await screen.findByText('Updated this data call')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByText('Carried forward — not yet confirmed')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps Next write-free on an untouched carried-forward question (#413)', async () => {
+    installScoreMocks([carried7006()])
+
+    renderAt(DEEP_LINK)
+
+    await screen.findByText('Carried forward — not yet confirmed')
+    fireEvent.click(screen.getByRole('button', { name: /Next/ }))
+
+    // Navigation happened (the next question's options load)...
+    await waitFor(() =>
+      expect(
+        axios.get.mock.calls.some(
+          (c: unknown[]) =>
+            typeof c[0] === 'string' &&
+            (c[0] as string).includes('functions/7001/options')
+        )
+      ).toBe(true)
+    )
+    // ...and no write of any kind was issued.
+    expect(axios.put).not.toHaveBeenCalled()
+    expect(saveScorePosts()).toHaveLength(0)
+  })
+
+  it('yields the Confirm button to the edit path the moment the question is dirty', async () => {
+    installScoreMocks([carried7006()])
+
+    renderAt(DEEP_LINK)
+
+    await screen.findByRole('button', {
+      name: 'Confirm this answer is still accurate',
+    })
+    fireEvent.click(screen.getByRole('radio', { name: /Advanced/ }))
+    expect(
+      screen.queryByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).not.toBeInTheDocument()
+    // The badge still shows — the row is still unconfirmed until saved.
+    expect(
+      screen.getByText('Carried forward — not yet confirmed')
+    ).toBeInTheDocument()
+  })
+
+  it('shows the badge but no Confirm button to a read-only admin', async () => {
+    installScoreMocks([carried7006()])
+    setMockCtx(
+      makeCtx({
+        userInfo: {
+          userid: 'u-2',
+          email: 'auditor@hhs.gov',
+          fullname: 'Read Only',
+          role: 'HHS_READONLY_ADMIN',
+        } as userData,
+      })
+    )
+
+    renderAt(DEEP_LINK)
+
+    expect(
+      await screen.findByText('Carried forward — not yet confirmed')
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  it('renders no carried-forward treatment on a closed data call', async () => {
+    installScoreMocks([carried7006()])
+    const pastDeadline = '2001-01-01T00:00:00Z'
+    // OWNER stays writable past the deadline (isReadOnly false), isolating
+    // the open-call gate as the only thing hiding the treatment.
+    setMockCtx(
+      makeCtx({
+        latestDeadline: pastDeadline,
+        selectedDatacall: {
+          datacallid: 5,
+          datacall: 'FY2026 Q1',
+          datecreated: '',
+          deadline: pastDeadline,
+        },
+        datacalls: [
+          {
+            datacallid: 5,
+            datacall: 'FY2026 Q1',
+            datecreated: '',
+            deadline: pastDeadline,
+          },
+        ],
+      })
+    )
+
+    renderAt(DEEP_LINK)
+
+    await waitFor(() =>
+      expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
+    )
+    expect(
+      screen.queryByText('Carried forward — not yet confirmed')
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  it('Complete summarizes unconfirmed and unanswered questions with working jump links', async () => {
+    // Devices (7001) is the last question; it has no row at all. Identity
+    // (7006) carries an unconfirmed answer.
+    installScoreMocks([carried7006()])
+
+    renderAt(DEVICES_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    fireEvent.click(complete)
+
+    // The summary reads a freshly-awaited scores fetch, then opens.
+    expect(await screen.findByText('Before you finish')).toBeInTheDocument()
+    expect(
+      screen.getByText('0 of 2 answers counted as updated for this data call.')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('Carried forward — needs confirmation (1)')
+    ).toBeInTheDocument()
+    expect(screen.getByText('Unanswered (1)')).toBeInTheDocument()
+
+    // No loop back to question 1: Complete opened the summary instead of
+    // silently navigating.
+    expect(
+      axios.get.mock.calls.some(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' &&
+          (c[0] as string).includes('functions/7006/options')
+      )
+    ).toBe(false)
+
+    // The jump link navigates to the listed question.
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Identity — Imperial Identity Verification',
+      })
+    )
+    await waitFor(() =>
+      expect(
+        axios.get.mock.calls.some(
+          (c: unknown[]) =>
+            typeof c[0] === 'string' &&
+            (c[0] as string).includes('functions/7006/options')
+        )
+      ).toBe(true)
+    )
+    expect(screen.queryByText('Before you finish')).not.toBeInTheDocument()
+  })
+
+  it('Complete shows the success state and stops looping when everything is updated', async () => {
+    installScoreMocks([carried7006('done'), done7001()])
+
+    renderAt(DEVICES_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    fireEvent.click(complete)
+
+    expect(
+      await screen.findByText('Questionnaire complete')
+    ).toBeInTheDocument()
+    expect(
+      screen.getByText('2 of 2 answers counted as updated for this data call.')
+    ).toBeInTheDocument()
+    // No writes fired: everything was already done, and Complete must not
+    // manufacture one.
+    expect(axios.put).not.toHaveBeenCalled()
+    expect(saveScorePosts()).toHaveLength(0)
+    // And no silent wrap-around to the first question.
+    expect(
+      axios.get.mock.calls.some(
+        (c: unknown[]) =>
+          typeof c[0] === 'string' &&
+          (c[0] as string).includes('functions/7006/options')
+      )
+    ).toBe(false)
   })
 })
