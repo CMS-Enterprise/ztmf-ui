@@ -23,14 +23,16 @@ type Props = {
   userid: GridRowId
   userName: string
   /**
-   * Assignable OpDivs, already scoped by the caller (children only, active,
-   * and - for an OPDIV_ADMIN actor - limited to their own OpDivs). The modal
-   * does not re-scope; it renders exactly what it is given. Drives the dropdown.
+   * All assignable OpDivs (active, non-parent) - the full universe BEFORE any
+   * caller-scope narrowing. For a scoped caller the modal narrows this to the
+   * caller's own current grants itself, fetched fresh on open, so the dropdown
+   * reflects a mid-session change to the caller's grants rather than the
+   * session-old userInfo. Drives the dropdown.
    */
-  opdivOptions: OpDiv[]
+  assignableOpDivs: OpDiv[]
   /**
    * Full label source (all OpDivs, incl. parent/inactive), keyed by opdiv_id.
-   * Separate from opdivOptions so a grant to a non-assignable OpDiv still
+   * Separate from assignableOpDivs so a grant to a non-assignable OpDiv still
    * resolves to a readable chip instead of a blank one. Ids missing here fall
    * back to "OpDiv #{id}".
    */
@@ -44,18 +46,16 @@ type Props = {
    */
   enforceCallerScope: boolean
   /**
-   * The caller's RAW own-grant ids - the backend's true add/remove scope
-   * (IsAssignedOpDiv), unfiltered by parent/active. This is the save-time
-   * preserve boundary and MUST be a superset of the dropdown's assignable set:
-   * opdivOptions is additionally narrowed to !is_parent && active, so a grant
-   * the caller holds to an OpDiv that was later re-parented or deactivated is
-   * absent from opdivOptions but still in the caller's backend scope. Filtering
-   * the save on the narrower opdivOptions would strip such a grant from the PUT
-   * and the backend would then revoke it (its toRemove gate is pure grant
-   * membership) - the same silent-revocation this modal exists to prevent.
-   * Only consulted when enforceCallerScope is true.
+   * The acting admin's own user id. When enforceCallerScope is true the modal
+   * fetches this user's CURRENT OpDiv grants on open - the backend's true
+   * add/remove scope (IsAssignedOpDiv) - and uses that fresh set as BOTH the
+   * dropdown's assignable narrowing and the save-time preserve boundary. Read
+   * from a fresh fetch rather than the session userInfo, whose assignedopdivids
+   * is loaded once and never refreshed, so a mid-session grant change to the
+   * caller can't silently revoke a target's grant on save. Only fetched when
+   * enforceCallerScope is true.
    */
-  callerGrantIds: number[]
+  callerUserId: string
   /**
    * Fired after a successful save so the caller can refresh the user's row
    * (grants + derived identity_provider) against post-mutation server state.
@@ -68,31 +68,46 @@ export default function OpDivGrantModal({
   handleClose,
   userid,
   userName,
-  opdivOptions,
+  assignableOpDivs,
   opdivLabelMap,
   enforceCallerScope,
-  callerGrantIds,
+  callerUserId,
   onChanged,
 }: Props) {
   const [localOpDivs, setLocalOpDivs] = React.useState<number[]>([])
+  // The caller's own current grants, fetched fresh on open (scoped callers
+  // only). The backend's true add/remove scope (IsAssignedOpDiv), used for both
+  // the dropdown narrowing and the save-time preserve boundary.
+  const [callerGrantIds, setCallerGrantIds] = React.useState<number[]>([])
   const [saving, setSaving] = React.useState(false)
   const [loading, setLoading] = React.useState(false)
   const [fetchFailed, setFetchFailed] = React.useState(false)
 
-  // The assignable set drives the dropdown (what may be newly selected).
-  const assignableIds = React.useMemo(
-    () => new Set(opdivOptions.map((od) => od.opdiv_id)),
-    [opdivOptions]
-  )
-
   // The caller's raw backend scope (IsAssignedOpDiv). Superset of assignableIds
   // - it also covers grants to OpDivs since re-parented/deactivated. Gates the
-  // scoped save and the chip lock, so both agree with what the backend will act
-  // on (see the callerGrantIds prop docs).
+  // scoped save and the chip lock, so both agree with what the backend acts on.
   const callerScope = React.useMemo(
     () => new Set(callerGrantIds),
     [callerGrantIds]
   )
+
+  // A scoped caller with no grants of their own has nothing they may grant, and
+  // a save would PUT an empty desired set. That is a no-op under the backend's
+  // grant-membership toRemove gate (nothing the caller doesn't hold is removed),
+  // but block it anyway: it avoids a pointless request and keeps the frontend
+  // safe if that gate ever changes. (During loading callerScope is empty too,
+  // but Save is already disabled by `loading`, so this only bites post-fetch.)
+  const callerHasNoScope = enforceCallerScope && callerScope.size === 0
+
+  // The dropdown's assignable set: all active/non-parent OpDivs, narrowed to the
+  // caller's own fresh scope for a scoped caller so it never offers an OpDiv the
+  // backend would 403 on. Kept a subset of callerScope, which is what keeps the
+  // save from stripping a legitimately-held grant.
+  const assignableIds = React.useMemo(() => {
+    const full = assignableOpDivs.map((od) => od.opdiv_id)
+    if (!enforceCallerScope) return new Set(full)
+    return new Set(full.filter((id) => callerScope.has(id)))
+  }, [assignableOpDivs, enforceCallerScope, callerScope])
 
   // Label from the full map (assignable or not), with an identifiable fallback
   // so a grant to an OpDiv missing from the map never chips blank.
@@ -130,13 +145,44 @@ export default function OpDivGrantModal({
       setLoading(true)
       setFetchFailed(false)
       setLocalOpDivs([])
-      fetchUserOpDivs(String(userid))
-        .then((grants) => {
-          if (!cancelled) setLocalOpDivs(grants)
-        })
-        .catch((error) => {
-          if (!cancelled) {
-            handleError(error)
+      setCallerGrantIds([])
+      // Fetch the target's grants and, for a scoped caller, the caller's own
+      // current grants. Fetching the caller's scope fresh (rather than reading
+      // the session-old userInfo) is what closes the staleness gap: an admin
+      // whose own grants changed mid-session gets the current scope on open.
+      // A seconds-wide open-to-save TOCTOU remains by design - a concurrent
+      // change to the caller's OWN grants during an active edit isn't caught
+      // until the next open. That's unclosable client-side (a save-time refetch
+      // only narrows it) and the backend's grant-membership gate is the final
+      // authority; don't move this to save-time to chase it.
+      // When the caller opens the modal on their OWN row the two are the same
+      // request, so reuse the one promise instead of an identical second GET.
+      const targetPromise = fetchUserOpDivs(String(userid))
+      const callerScopePromise = !enforceCallerScope
+        ? Promise.resolve<number[]>([])
+        : callerUserId === String(userid)
+          ? targetPromise
+          : fetchUserOpDivs(callerUserId)
+      Promise.allSettled([targetPromise, callerScopePromise])
+        .then(([targetRes, callerRes]) => {
+          if (cancelled) return
+          if (targetRes.status === 'fulfilled') setLocalOpDivs(targetRes.value)
+          if (callerRes.status === 'fulfilled')
+            setCallerGrantIds(callerRes.value)
+          // Either fetch failing blocks the save: a missing target list, or
+          // (worse) a missing caller scope, could revoke grants - fetchFailed
+          // disables the picker and Save so the empty fallback scope is never
+          // acted on. Surface a single error; a second identical toast when both
+          // fail adds nothing, and any 401 redirect is handled by the axios
+          // interceptor regardless of which reason we pass here.
+          const failure =
+            targetRes.status === 'rejected'
+              ? targetRes.reason
+              : callerRes.status === 'rejected'
+                ? callerRes.reason
+                : null
+          if (failure) {
+            handleError(failure)
             setFetchFailed(true)
           }
         })
@@ -150,8 +196,9 @@ export default function OpDivGrantModal({
       setFetchFailed(false)
       setLoading(false)
       setLocalOpDivs([])
+      setCallerGrantIds([])
     }
-  }, [open, userid, handleError])
+  }, [open, userid, callerUserId, enforceCallerScope, handleError])
 
   const handleSave = () => {
     setSaving(true)
@@ -251,7 +298,7 @@ export default function OpDivGrantModal({
         </CmsButton>
         <CmsButton
           onClick={handleSave}
-          disabled={saving || loading || fetchFailed}
+          disabled={saving || loading || fetchFailed || callerHasNoScope}
         >
           Save
         </CmsButton>
