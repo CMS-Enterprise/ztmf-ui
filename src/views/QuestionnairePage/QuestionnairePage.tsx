@@ -116,6 +116,10 @@ const CssTextField = styled(TextField)({
     },
   },
 })
+// Ties the carried-forward guidance line to the Confirm button it explains, so
+// a screen reader hears the reason with the action.
+const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
+
 const addSpace = (str: string) => {
   for (let i = 0; i < str.length; i++) {
     if (
@@ -641,6 +645,11 @@ export default function QuestionnarePage() {
     priorReviewBlocked:
       priorReviewState === 'pending' || priorReviewState === 'initializing',
   })
+  // Guidance under the review strip, for the variant that has no
+  // prior-response card of its own: that card carries its own review message,
+  // and two guidance lines on one question is worse than none.
+  const showCarryForwardHelper =
+    currentCarryState === 'unconfirmed' && !currentPriorResponse && !isReadOnly
   const [confirming, setConfirming] = React.useState(false)
   // The Complete-time summary dialog. null = closed.
   const [confirmSummary, setConfirmSummary] =
@@ -1769,6 +1778,26 @@ export default function QuestionnarePage() {
                       />
                     </>
                   )}
+                  {/* Directly under the field, styled to match the
+                      prior-response flow's own review message, so both variants
+                      put their instruction in the same place and voice. The
+                      verb differs — "confirm" rather than "insert", since there
+                      is no card to insert from here; the answer is pre-filled.
+                      So does the ending: "before continuing" is advisory on
+                      purpose, because Next is NOT blocked on this variant (only
+                      the prior-response review gates it), so wording that
+                      implied a hard gate would teach the wrong model. Plain
+                      text, not a live region: the chip below owns the
+                      announcement. */}
+                  {showCarryForwardHelper && (
+                    <Typography
+                      id={CARRY_FORWARD_HELPER_ID}
+                      sx={{ mt: 0.5, fontSize: 12, color: '#8a4b00' }}
+                    >
+                      Review the carried-forward answer and confirm it, or write
+                      a new justification, before continuing.
+                    </Typography>
+                  )}
                   <Box
                     sx={{
                       display: 'flex',
@@ -1843,6 +1872,11 @@ export default function QuestionnarePage() {
                           startIcon={<CheckCircleOutlineIcon />}
                           onClick={handleConfirmClick}
                           disabled={confirming}
+                          aria-describedby={
+                            showCarryForwardHelper
+                              ? CARRY_FORWARD_HELPER_ID
+                              : undefined
+                          }
                           sx={{ textTransform: 'none' }}
                         >
                           Confirm this answer is still accurate

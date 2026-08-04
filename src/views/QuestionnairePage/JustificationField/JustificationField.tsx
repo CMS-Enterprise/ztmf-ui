@@ -610,7 +610,7 @@ export default function JustificationField({
         >
           {priorInitializing
             ? 'Checking the previous response…'
-            : 'Review the previous response before continuing.'}
+            : 'Review the previous response and insert it, or dismiss it and write a new justification, to continue.'}
         </Typography>
       )}
     </Box>
