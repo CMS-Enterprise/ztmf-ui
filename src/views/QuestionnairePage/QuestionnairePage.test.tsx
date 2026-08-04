@@ -1152,13 +1152,29 @@ describe('carried-forward confirmation', () => {
   const DEVICES_LINK =
     '/questionnaire/ssd-ex/FY2026_Q1/devices/imperial-device-management'
 
+  // The guidance sentence, asserted by exact text so a copy change has to be
+  // deliberate.
+  const HELPER_COPY =
+    'Review the carried-forward answer and confirm it, or write a new justification, before continuing.'
+
   // Serves a mutable scores list and, like the real backend, flips the
   // targeted row to done when the confirm endpoint is hit — so the refetch
   // after a confirm returns the confirmed row instead of resurrecting the
-  // original fixture.
-  function installScoreMocks(scores: Array<{ scoreid: number }>) {
+  // original fixture. Insights/OpDiv rows default to empty (the non-CMS
+  // variant); pass them to exercise the prior-response card.
+  function installScoreMocks(
+    scores: Array<{ scoreid: number }>,
+    {
+      insightRows = [] as unknown[],
+      opdivRows = [] as unknown[],
+    }: { insightRows?: unknown[]; opdivRows?: unknown[] } = {}
+  ) {
     let rows = scores
     axios.get.mockImplementation((url: string) => {
+      if (url === '/opdivs')
+        return Promise.resolve({ data: { data: opdivRows } })
+      if (url === 'insights')
+        return Promise.resolve({ data: { data: insightRows } })
       if (url.includes('/questions'))
         return Promise.resolve({ data: { data: QUESTIONS } })
       if (url.startsWith('scores'))
@@ -1284,6 +1300,62 @@ describe('carried-forward confirmation', () => {
         name: 'Confirm this answer is still accurate',
       })
     ).not.toBeInTheDocument()
+    // No action to take, so no instruction to take it.
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
+  })
+
+  it('states what makes the carried answer count, and describes the Confirm button with it', async () => {
+    installScoreMocks([carried7006()])
+
+    renderAt(DEEP_LINK)
+
+    expect(await screen.findByText(HELPER_COPY)).toBeInTheDocument()
+    // The reason is announced with the action, not as a second live region.
+    expect(
+      screen.getByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).toHaveAccessibleDescription(HELPER_COPY)
+
+    fireEvent.click(
+      screen.getByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    )
+
+    // Confirmed: the instruction retires with the button.
+    expect(
+      await screen.findByText('Updated this data call')
+    ).toBeInTheDocument()
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
+  })
+
+  it('leaves the guidance to the prior-response card when one is shown', async () => {
+    // The insights variant blanks the field and explains itself through the
+    // card's own review message; a second sentence here would duplicate it.
+    installScoreMocks([carried7006()], {
+      insightRows: [
+        {
+          fismasystemid: 1002,
+          questionid: 900,
+          synced_at: '2026-07-14T00:00:00Z',
+          payload: {
+            last_score_notes: 'carried justification',
+            last_datacall: 'FY2025 Q1',
+          },
+        },
+      ],
+      opdivRows: [{ opdiv_id: 9, code: 'CMS', insights_enabled: true }],
+    })
+
+    renderAt(DEEP_LINK)
+
+    expect(
+      await screen.findByText(
+        'Review the previous response and insert it, or dismiss it and write a new justification, to continue.'
+      )
+    ).toBeInTheDocument()
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
   })
 
   it('renders no carried-forward treatment on a closed data call', async () => {
