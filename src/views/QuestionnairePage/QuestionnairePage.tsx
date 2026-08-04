@@ -645,11 +645,11 @@ export default function QuestionnarePage() {
     priorReviewBlocked:
       priorReviewState === 'pending' || priorReviewState === 'initializing',
   })
-  // Guidance under the review strip, for the variant that has no
-  // prior-response card of its own: that card carries its own review message,
-  // and two guidance lines on one question is worse than none.
-  const showCarryForwardHelper =
-    currentCarryState === 'unconfirmed' && !currentPriorResponse && !isReadOnly
+  // Derived from the button so the sentence and the action it describes cannot
+  // drift apart. !currentPriorResponse suppresses it on insights questions,
+  // where the card owns the explanation — a resolved review unblocks the
+  // button, so nothing else would.
+  const showCarryForwardHelper = showConfirmButton && !currentPriorResponse
   const [confirming, setConfirming] = React.useState(false)
   // The Complete-time summary dialog. null = closed.
   const [confirmSummary, setConfirmSummary] =
@@ -1778,17 +1778,11 @@ export default function QuestionnarePage() {
                       />
                     </>
                   )}
-                  {/* Directly under the field, styled to match the
-                      prior-response flow's own review message, so both variants
-                      put their instruction in the same place and voice. The
-                      verb differs — "confirm" rather than "insert", since there
-                      is no card to insert from here; the answer is pre-filled.
-                      So does the ending: "before continuing" is advisory on
-                      purpose, because Next is NOT blocked on this variant (only
-                      the prior-response review gates it), so wording that
-                      implied a hard gate would teach the wrong model. Plain
-                      text, not a live region: the chip below owns the
-                      announcement. */}
+                  {/* Sits where the prior-response flow puts its own review
+                      message, so both variants instruct in the same place.
+                      "before continuing" is advisory on purpose: Next is not
+                      blocked on this variant. Plain text, not a live region —
+                      the chip below owns the announcement. */}
                   {showCarryForwardHelper && (
                     <Typography
                       id={CARRY_FORWARD_HELPER_ID}
