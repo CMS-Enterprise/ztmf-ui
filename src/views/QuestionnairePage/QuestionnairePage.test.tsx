@@ -1257,7 +1257,7 @@ describe('carried-forward confirmation', () => {
     expect(saveScorePosts()).toHaveLength(0)
   })
 
-  it('yields the Confirm button to the edit path the moment the question is dirty', async () => {
+  it('yields the Confirm button and its guidance to the edit path the moment the question is dirty', async () => {
     installScoreMocks([carried7006()])
 
     renderAt(DEEP_LINK)
@@ -1265,16 +1265,59 @@ describe('carried-forward confirmation', () => {
     await screen.findByRole('button', {
       name: 'Confirm this answer is still accurate',
     })
+    expect(screen.getByText(HELPER_COPY)).toBeInTheDocument()
+
     fireEvent.click(screen.getByRole('radio', { name: /Advanced/ }))
+
     expect(
       screen.queryByRole('button', {
         name: 'Confirm this answer is still accurate',
       })
     ).not.toBeInTheDocument()
+    // The guidance retires with the button: once the user is editing, telling
+    // them to write a new justification describes what they are already doing.
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
     // The badge still shows — the row is still unconfirmed until saved.
     expect(
       screen.getByText('Carried forward — not yet confirmed')
     ).toBeInTheDocument()
+  })
+
+  it('keeps the guidance off a resolved prior-response card, where the button returns', async () => {
+    // Pins !currentPriorResponse: a resolved review unblocks the button, so
+    // that term is the only thing keeping the strip quiet on insights
+    // questions, where the card owns the explanation.
+    installScoreMocks([carried7006()], {
+      insightRows: [
+        {
+          fismasystemid: 1002,
+          questionid: 900,
+          synced_at: '2026-07-14T00:00:00Z',
+          payload: {
+            last_score_notes: 'carried justification',
+            last_datacall: 'FY2025 Q1',
+          },
+        },
+      ],
+      opdivRows: [{ opdiv_id: 9, code: 'CMS', insights_enabled: true }],
+    })
+
+    renderAt(DEEP_LINK)
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+
+    // The review is resolved, so the Confirm button is offered...
+    expect(
+      await screen.findByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).toBeInTheDocument()
+    // ...but the card owns the explanation on this variant.
+    expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
   })
 
   it('shows the badge but no Confirm button to a read-only admin', async () => {
