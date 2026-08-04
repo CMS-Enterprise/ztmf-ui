@@ -307,18 +307,40 @@ describe('ProgressCell', () => {
     expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
   })
 
-  it('keeps the legacy Not updated wording when questionsanswered is absent', () => {
-    // The field is now required on ScoreProgress, so absence can no longer be
-    // expressed through the type. It remains reachable at runtime against a
-    // backend that predates the field, which is exactly what the cell's
-    // fallback guards, so the cast is deliberate: it exercises the runtime
-    // path the type alone can no longer describe.
+  it('reads Not started on the current call when the answered count is absent', () => {
+    // The field is required on ScoreProgress, so absence is reachable only at
+    // runtime against a response that omits it, and the cast is how the test
+    // expresses that. Both branches now coalesce, so this reads as nothing
+    // answered rather than falling back to the retired "Not updated" wording.
     const withoutAnswered = {
       ...untouchedEntry,
       questionsanswered: undefined,
     } as unknown as ScoreProgress
     render(<ProgressCell entry={withoutAnswered} isCurrentCall={true} />)
-    expect(screen.getByText('Not updated')).toBeInTheDocument()
+    expect(screen.getByText('Not started')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+  })
+
+  it('no longer renders the retired Not updated wording in any state', () => {
+    // The label had one emit site, so this is the guard against it coming back
+    // through a future conditional rather than a restatement of the cases above.
+    for (const entry of [
+      updatedEntry,
+      untouchedEntry,
+      { ...untouchedEntry, questionsanswered: 41 },
+      {
+        ...untouchedEntry,
+        questionsanswered: undefined,
+      } as unknown as ScoreProgress,
+    ]) {
+      for (const isCurrentCall of [true, false]) {
+        const { unmount } = render(
+          <ProgressCell entry={entry} isCurrentCall={isCurrentCall} />
+        )
+        expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+        unmount()
+      }
+    }
   })
 
   it('describes the carried-forward state in the tooltip', () => {

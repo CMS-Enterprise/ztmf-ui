@@ -28,8 +28,9 @@ import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
  *     there is nothing to nudge;
  *   - current call, any genuine edit: "Updated" (green);
  *   - current call, zero updates: "Awaiting confirmation" (carried answers
- *     exist) or "Not started" (none do), both warning-colored laggards;
- *     legacy "Not updated" when questionsanswered is not served.
+ *     exist) or "Not started" (none do), both warning-colored laggards. A
+ *     response omitting the answered count reads as "Not started", the same
+ *     way the past-call branch treats it as zero.
  * @param {object} props - Component props.
  * @param {ScoreProgress | undefined} props.entry - The system's progress row;
  *   undefined renders an em-dash (progress fetch failed or not covered).
@@ -96,16 +97,16 @@ export function ProgressCell({
   // Zero updates splits two materially different states: carried-forward
   // answers awaiting confirmation vs no answers at all — a blanket "Not
   // updated" read as data loss to ISSOs who had just reviewed everything.
-  // questionsanswered may be absent until ztmf#437 is deployed everywhere;
-  // keep the legacy wording then rather than guessing.
-  const answered = entry.questionsanswered
+  // Coalesce as the past-call branch does, so both branches read the count the
+  // same way rather than one trusting the type and the other guarding against
+  // it. A response that omits the count describes a system with nothing
+  // recorded as answered, which is what "Not started" already says.
+  const answered = entry.questionsanswered ?? 0
   const label = updated
     ? 'Updated'
-    : answered == null
-      ? 'Not updated'
-      : answered > 0
-        ? 'Awaiting confirmation'
-        : 'Not started'
+    : answered > 0
+      ? 'Awaiting confirmation'
+      : 'Not started'
   return (
     <Tooltip title={progressTooltip(entry)}>
       <Box
