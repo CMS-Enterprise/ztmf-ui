@@ -1,5 +1,7 @@
 import * as React from 'react'
 import Box from '@mui/material/Box'
+import Chip from '@mui/material/Chip'
+import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import Typography from '@mui/material/Typography'
 import List from '@mui/material/List'
 import ListItem from '@mui/material/ListItem'
@@ -63,6 +65,15 @@ import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
+import {
+  carryForwardState,
+  canConfirmCarryForward,
+  buildScoreByFunction,
+  buildConfirmSummary,
+  type ConfirmSummary,
+  type ConfirmSummaryEntry,
+} from './confirmState'
+import ConfirmSummaryDialog from './ConfirmSummaryDialog'
 import { saveDraft, loadDraft, clearDraft } from './draftStore'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
@@ -243,10 +254,14 @@ export default function QuestionnarePage() {
   // strictly required for the selection to update, but it is retained as a clean
   // reset of the subtree when a re-seed changes the answer out of band.
   const [radioKey, setRadioKey] = React.useState(0)
+  // Returns the fresh map alongside committing it to state, so a caller that
+  // must reason over the authoritative data in the same tick (the Complete
+  // summary) does not have to read a not-yet-rendered state value. undefined
+  // on failure — callers fall back to the state they already had.
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
-  ) => {
+  ): Promise<questionScoreMap | undefined> => {
     try {
       const response = await axiosInstance.get(
         `scores?datacallid=${datacallID}&fismasystemid=${systemId}&include=functionoption`
@@ -258,9 +273,11 @@ export default function QuestionnarePage() {
         }))
       )
       setQuestionScores(hashTable)
+      return hashTable
     } catch (error) {
-      if (isAuthHandled(error)) return
+      if (isAuthHandled(error)) return undefined
       console.error('Error fetching question scores:', error)
+      return undefined
     }
   }
   const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
@@ -599,6 +616,131 @@ export default function QuestionnarePage() {
     priorReviewNeedsSave,
   }
 
+  // Carried-forward confirmation state, read from scores.status — the same
+  // persisted fact the Data Call Progress fraction counts. Open call only:
+  // historical rows are legitimately not_started forever. Read-only sessions
+  // see the badges but never the Confirm button.
+  const isOpenCall = !isPastDeadline
+  const scoreByFunction = React.useMemo(
+    () => buildScoreByFunction(questionScores),
+    [questionScores]
+  )
+  // The saved row backing the current question. Keyed by initQuestionChoice
+  // (the seeded answer), not selectQuestionOption, so flipping the radio does
+  // not detach the badge from the row it describes.
+  const currentSavedScore =
+    initQuestionChoice !== -1 ? questionScores[initQuestionChoice] : undefined
+  const currentCarryState = carryForwardState(currentSavedScore, isOpenCall)
+  const showConfirmButton = canConfirmCarryForward({
+    state: currentCarryState,
+    // Any deviation from the seeded answer/notes: the edit is the explicit
+    // act, and Next saves it (flipping status server-side), so the button
+    // yields to avoid two visible paths to the same write.
+    dirty: selectQuestionOption !== initQuestionChoice || notes !== initNotes,
+    isReadOnly,
+    priorReviewBlocked:
+      priorReviewState === 'pending' || priorReviewState === 'initializing',
+  })
+  const [confirming, setConfirming] = React.useState(false)
+  // The Complete-time summary dialog. null = closed.
+  const [confirmSummary, setConfirmSummary] =
+    React.useState<ConfirmSummary | null>(null)
+
+  // The explicit act behind "Confirm this answer is still accurate": flips
+  // the row's status to done via the confirm endpoint — the ordinary PUT
+  // cannot express agreement, its no-op guard (correctly) drops an unchanged
+  // body (#412/#413). Shared with saveResponse's resolved-review path.
+  const confirmScoreById = async (id: number): Promise<boolean> => {
+    try {
+      await axiosInstance.put(`scores/${id}/confirm`)
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      clearCurrentDraft()
+      setPriorReview((current) =>
+        current.contextId === priorReviewContextId
+          ? { ...current, needsSave: false }
+          : current
+      )
+      // Flip the badge immediately (role="status" announces the change);
+      // the refetch then brings the authoritative row, audit fields included.
+      setQuestionScores((prev) => {
+        const entry = Object.entries(prev).find(([, s]) => s.scoreid === id)
+        if (!entry) return prev
+        return { ...prev, [entry[0]]: { ...entry[1], status: 'done' } }
+      })
+      fetchQuestionScores(system, setQuestionScores)
+      return true
+    } catch (error) {
+      if (isAuthHandled(error)) return false
+      console.error('Error confirming score:', error)
+      notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+      return false
+    }
+  }
+
+  const handleConfirmClick = async () => {
+    if (!currentSavedScore || confirming) return
+    setConfirming(true)
+    try {
+      await confirmScoreById(currentSavedScore.scoreid)
+    } finally {
+      setConfirming(false)
+    }
+  }
+
+  // Complete on the open call: save the current question as Next always has,
+  // then show one end-of-questionnaire summary instead of silently looping
+  // back to question 1. Built from a freshly-awaited scores fetch so the
+  // just-saved answer counts; falls back to the on-screen map on failure.
+  const handleCompleteClick = async () => {
+    saveGenRef.current++
+    if (!isReadOnly) {
+      await saveResponse()
+    }
+    const fresh = await fetchQuestionScores(system, setQuestionScores)
+    if (fresh) {
+      // Re-seed the current question's saved state from the fresh map. The
+      // old Complete re-seeded implicitly by navigating to question 1; this
+      // one stays put, and without a re-seed a just-POSTed answer would
+      // still read as unsaved (scoreid 0) — a second Complete would POST a
+      // duplicate row and double-weight the question in the pillar average.
+      const sel = deriveScoreSelection(
+        optionsRef.current.map((o) => Number(o.value)),
+        fresh
+      )
+      setInitQuestionChoice(sel.choice)
+      setInitNotes(sel.notes)
+      setScoreId(sel.scoreid)
+    }
+    setConfirmSummary(
+      buildConfirmSummary(
+        categories,
+        fresh ? buildScoreByFunction(fresh) : scoreByFunction,
+        isOpenCall
+      )
+    )
+  }
+
+  // Jump link from the Complete summary: same slug navigation + list-click
+  // path the sidebar uses, so the datacall context rides along (#501).
+  const jumpToSummaryEntry = (entry: ConfirmSummaryEntry) => {
+    setConfirmSummary(null)
+    // Already on this question (e.g. the last question is itself unanswered):
+    // just close the dialog. handleListItemClick would set loading for a
+    // questionId change that never fires, stranding the spinner.
+    if (entry.functionid === questionId) return
+    const q = questions[entry.functionid]
+    if (q) {
+      navigate(
+        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+        {
+          state: { fismasystemid: system, ...datacallStateRef.current },
+          replace: true,
+        }
+      )
+    }
+    handleListItemClick(entry.functionid)
+  }
+
   const saveResponse = async () => {
     // Resolving a required carried-forward review is itself a current-call
     // action, even when the final text is byte-for-byte identical to the
@@ -607,7 +749,6 @@ export default function QuestionnarePage() {
     const resolvedPriorReview =
       priorReviewNeedsSave && selectQuestionOption >= 0
     if (
-      !resolvedPriorReview &&
       !shouldPersistResponse({
         selectQuestionOption,
         initQuestionChoice,
@@ -615,6 +756,14 @@ export default function QuestionnarePage() {
         initNotes,
       })
     ) {
+      // Nothing changed on the answer fields. A resolved required review is
+      // still an affirmative act that must land — the ordinary PUT's no-op
+      // guard would silently drop an identical body, so route it through the
+      // confirm endpoint.
+      if (resolvedPriorReview && scoreid) {
+        await confirmScoreById(scoreid)
+        return
+      }
       clearCurrentDraft()
       return
     }
@@ -1238,11 +1387,17 @@ export default function QuestionnarePage() {
         : undefined
     if (priorReview.contextId === priorReviewContextId) return
 
+    // "Untouched this cycle": prefer the persisted scores.status so this gate
+    // and the progress count cannot diverge; fall back to the older
+    // no-edit-event proxy for a backend that does not serve status yet.
+    const untouchedThisCycle = currentScore?.status
+      ? currentScore.status === 'not_started'
+      : !currentScore?.last_edited_at
     const isUnreviewedCarryForward =
       !isReadOnly &&
       !!currentPriorResponse &&
       !!currentScore &&
-      !currentScore.last_edited_at &&
+      untouchedThisCycle &&
       draftStatus !== 'restored' &&
       notes.trim() === currentPriorResponse.text.trim()
     setPriorReview({
@@ -1434,6 +1589,14 @@ export default function QuestionnarePage() {
                       const text = addSpace(func.function.function)
                       const customFontSize =
                         text.length > 33 ? '0.9rem' : '1rem'
+                      // Sidebar confirmation marker: same classification the
+                      // question view's badge reads. Text-bearing, not
+                      // color-only (508); rendered as ListItemText secondary
+                      // so it is part of the button's accessible name.
+                      const sidebarCarryState = carryForwardState(
+                        scoreByFunction[func.function.functionid],
+                        isOpenCall
+                      )
                       // TODO: refactor this code such that it's going to be a single component instead of being rerendered everytime
                       return (
                         <ListItem
@@ -1475,6 +1638,20 @@ export default function QuestionnarePage() {
                           >
                             <ListItemText
                               primary={`${text}`}
+                              secondary={
+                                sidebarCarryState === 'unconfirmed'
+                                  ? 'Not yet confirmed'
+                                  : sidebarCarryState === 'updated'
+                                    ? 'Updated'
+                                    : undefined
+                              }
+                              secondaryTypographyProps={{
+                                fontSize: '0.75rem',
+                                color:
+                                  sidebarCarryState === 'unconfirmed'
+                                    ? 'warning.dark'
+                                    : 'success.dark',
+                              }}
                               sx={{ fontSize: customFontSize }}
                             />
                           </ListItemButton>
@@ -1624,6 +1801,55 @@ export default function QuestionnarePage() {
                       </Typography>
                     )}
                   </Box>
+                  {/* Carried-forward confirmation strip, in the same zone
+                      where the prior-response flow surfaces its "review
+                      before continuing" message, so every system shares one
+                      review area. The chip is a role="status" live region, so
+                      confirming — which swaps its label in place — is
+                      announced (508). The button yields the moment the
+                      question is dirty (the edit is the explicit act; Next
+                      saves it), and Next itself never writes on an untouched
+                      question (#413). */}
+                  {currentCarryState !== 'none' && (
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        flexWrap: 'wrap',
+                        gap: 1,
+                        mt: 1.5,
+                      }}
+                    >
+                      <Chip
+                        role="status"
+                        size="small"
+                        variant="outlined"
+                        color={
+                          currentCarryState === 'unconfirmed'
+                            ? 'warning'
+                            : 'success'
+                        }
+                        label={
+                          currentCarryState === 'unconfirmed'
+                            ? 'Carried forward — not yet confirmed'
+                            : 'Updated this data call'
+                        }
+                      />
+                      {showConfirmButton && (
+                        <Button
+                          variant="outlined"
+                          color="success"
+                          size="small"
+                          startIcon={<CheckCircleOutlineIcon />}
+                          onClick={handleConfirmClick}
+                          disabled={confirming}
+                          sx={{ textTransform: 'none' }}
+                        >
+                          Confirm this answer is still accurate
+                        </Button>
+                      )}
+                    </Box>
+                  )}
                   <Box
                     position="relative"
                     display="flex"
@@ -1675,12 +1901,21 @@ export default function QuestionnarePage() {
                     </CmsButton>
                     <CmsButton
                       onClick={() => {
-                        saveGenRef.current++
-                        const id =
+                        const isLastQuestion =
                           selectedIndex ===
                           stepFunctionId[stepFunctionId.length - 1]
-                            ? stepFunctionId[0]
-                            : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                        // Complete on the open call summarizes instead of
+                        // silently wrapping to question 1. A closed call
+                        // keeps the wrap-around — harmless paging for a
+                        // historical viewer.
+                        if (isLastQuestion && isOpenCall) {
+                          void handleCompleteClick()
+                          return
+                        }
+                        saveGenRef.current++
+                        const id = isLastQuestion
+                          ? stepFunctionId[0]
+                          : stepFunctionId[functionIdIdx[selectedIndex] + 1]
 
                         if (questions[id]) {
                           const q = questions[id]
@@ -1763,6 +1998,11 @@ export default function QuestionnarePage() {
             open={openAlert}
             onClose={() => setOpenAlert(false)}
             confirmClick={handleConfirmReturn}
+          />
+          <ConfirmSummaryDialog
+            summary={confirmSummary}
+            onClose={() => setConfirmSummary(null)}
+            onJump={jumpToSummaryEntry}
           />
         </Grid>
       </Container>

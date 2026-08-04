@@ -213,6 +213,14 @@ export type LastEditedBy = {
   role?: UserRole
 }
 
+/**
+ * The answer's review state for its data call (scores.status): 'not_started'
+ * = carried forward and untouched this cycle; 'done' = saved or confirmed
+ * this cycle. The same persisted fact the Data Call Progress count reads, so
+ * badges derived from it cannot disagree with the fraction.
+ */
+export type ScoreStatus = 'not_started' | 'done'
+
 export type QuestionScores = {
   scoreid: number
   fismasystemid: number
@@ -220,6 +228,12 @@ export type QuestionScores = {
   notes: string
   functionoptionid: number
   datacallid: number
+  // Optional: a backend that does not serve it degrades to no carried-forward
+  // badges rather than badging everything.
+  status?: ScoreStatus
+  // Present when fetched with ?include=functionoption; functionid maps the
+  // row back to its question.
+  functionoption?: QuestionOption
   last_edited_at?: string | null
   last_edited_by?: LastEditedBy | null
   notes_is_ai_summary?: boolean

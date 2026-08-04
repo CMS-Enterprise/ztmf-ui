@@ -167,6 +167,13 @@ export function formatList(v: string[] | null | undefined): string {
  * array []) passes through as the user's clear. On create, pass an empty
  * baseline so only the fields the user set are sent.
  *
+ * Omission is what protects a field the backend resolves rather than stores:
+ * the System Details form is seeded from a read that returns a resolved
+ * isso_name, so an untouched field must stay out of the payload or saving an
+ * unrelated edit would persist the resolved name as a stored override. A
+ * missing baseline defeats that, since every field then counts as changed;
+ * pass an empty system on create and a real one on update, never null.
+ *
  * @param edited - The edited system.
  * @param baseline - The system to diff against (the loaded system, or an empty
  *   one when creating); a missing baseline treats every field as unset.

@@ -140,6 +140,64 @@ test('an untouched extended field is omitted from the save (dirty-diff)', async 
   expect(putBody).not.toHaveProperty('cloud_service_model')
 })
 
+test('an edited ISSO Name is sent in the save payload', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let putBody: Record<string, unknown> | undefined
+  mock.onPut(/fismasystems\/42$/).reply((config) => {
+    putBody = JSON.parse(config.data)
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
+      mode="edit"
+      datacenterEnvironments={[]}
+    />
+  )
+
+  const input = await screen.findByRole('textbox', { name: 'ISSO Name' })
+  await user.clear(input)
+  await user.type(input, 'Firmus Piett')
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(putBody).toBeDefined())
+  expect(putBody).toHaveProperty('isso_name', 'Firmus Piett')
+})
+
+test('clearing ISSO Name saves an empty string, which restores the derived name', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let putBody: Record<string, unknown> | undefined
+  mock.onPut(/fismasystems\/42$/).reply((config) => {
+    putBody = JSON.parse(config.data)
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
+      mode="edit"
+      datacenterEnvironments={[]}
+    />
+  )
+
+  await user.clear(await screen.findByRole('textbox', { name: 'ISSO Name' }))
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(putBody).toBeDefined())
+  // '' clears the stored override so the name derived from the ISSO user
+  // record applies again; null would read as "leave unchanged".
+  expect(putBody).toHaveProperty('isso_name', '')
+})
+
 test('clearing a free-text field saves an empty string, not null', async () => {
   mock.onGet('/systemattributes').reply(200, { data: [] })
   let putBody: Record<string, unknown> | undefined

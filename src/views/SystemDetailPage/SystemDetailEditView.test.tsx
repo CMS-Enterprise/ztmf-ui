@@ -137,6 +137,30 @@ test('setting the boolean to Unknown emits null (the clear signal)', async () =>
   expect(onFieldChange).toHaveBeenCalledWith('hva', null)
 })
 
+test('ISSO Name renders as an editable control with its override guidance', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  renderEditView({ isso_name: 'Conan Antonio Motti' })
+
+  expect(screen.getByRole('textbox', { name: 'ISSO Name' })).toBeEnabled()
+  // The guidance is what tells an admin that a typed name is a permanent
+  // override and that clearing returns the derived name.
+  expect(
+    screen.getByText(/overrides the name from the ISSO's user account/i)
+  ).toBeInTheDocument()
+})
+
+test('clearing ISSO Name emits the empty-string clear signal', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  const user = userEvent.setup()
+  const { onFieldChange } = renderEditView({ isso_name: 'Conan Antonio Motti' })
+
+  await user.clear(screen.getByRole('textbox', { name: 'ISSO Name' }))
+
+  // '' clears the stored override via blankToNil, restoring the name the
+  // backend derives from the ISSO user record; null would leave it unchanged.
+  expect(onFieldChange).toHaveBeenCalledWith('isso_name', '')
+})
+
 test('cloud dependents are hidden while cloud_system is No', () => {
   mock.onGet('/systemattributes').reply(200, { data: [] })
   renderEditView({ cloud_system: false })

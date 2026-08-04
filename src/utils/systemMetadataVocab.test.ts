@@ -223,6 +223,24 @@ describe('buildExtendedDiff', () => {
     expect(buildExtendedDiff(base, base, KEYS)).toEqual({})
   })
 
+  // isso_name is the one extended field whose displayed value can be resolved
+  // by the backend rather than stored, so the form is seeded with a name that
+  // is not in the column. Omitting it while untouched is what stops an
+  // unrelated edit from persisting the resolved name as a stored override.
+  it('omits an untouched isso_name that was resolved rather than stored', () => {
+    const keys = [...KEYS, 'isso_name'] as (keyof FismaSystemType)[]
+    const loaded = {
+      ...base,
+      isso_name: 'Resolved From User Record',
+    } as unknown as FismaSystemType
+    const edited = { ...loaded, fips: 'High' } as FismaSystemType
+
+    const diff = buildExtendedDiff(edited, loaded, keys)
+
+    expect(diff).toEqual({ fips: 'High' })
+    expect(diff).not.toHaveProperty('isso_name')
+  })
+
   it('includes only changed fields, at their typed value', () => {
     const edited = { ...base, fips: 'High', hva: false } as FismaSystemType
     expect(buildExtendedDiff(edited, base, KEYS)).toEqual({
