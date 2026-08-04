@@ -181,7 +181,8 @@ export default function EditSystemModal({
   // or free text. Each control stores the field's typed clear signal when
   // emptied: enum '', boolean null, array [].
   const renderExtendedControl = (field: FieldConfig) => {
-    // isso_name is backend-resolved, so its control is read-only.
+    // A field marked read-only in fieldConfig renders disabled; the same flag
+    // keeps it out of the write payload.
     const disabled = field.readOnly
     if (field.type === 'select') {
       const current = editedFismaSystem[field.key] as string | null | undefined

@@ -4,7 +4,7 @@
 // node throws "Cannot use 'import.meta' outside a module" at load time).
 import type { AxiosError } from 'axios'
 import router from '@/router/router'
-import { Routes } from '@/router/constants'
+import { RouteIds, Routes } from '@/router/constants'
 import { ERROR_MESSAGES } from '@/constants'
 import { markAuthHandled, notify } from '@/utils/notify'
 import { AuthCodes, SignInReasons } from '@/utils/authCodes'
@@ -47,28 +47,77 @@ export async function handleAuthError(
   const code = error.response?.data?.code
   const backendMessage = error.response?.data?.error
 
+  // Navigating to /signin leaves the root route matched, so react-router does
+  // not re-run its loader: loaderData keeps reporting status 200, LoginPage
+  // trusts it and <Navigate>s back to the dashboard, whose mount 401s again
+  // (#606). revalidate() is what breaks that cycle, so it must stay OUTSIDE
+  // the redirect guards below - a suppressed redirect still needs fresh data.
+  // Path normalization mirrors Title.tsx.
+  const normalizePath = (pathname: string | undefined) =>
+    (pathname ?? '').toLowerCase().replace(/\/$/, '')
+  const signInPath = Routes.SIGNIN.toLowerCase()
+  const onSignIn = (loc?: { pathname?: string }) =>
+    normalizePath(loc?.pathname) === signInPath
+  const alreadyOnSignIn =
+    onSignIn(router.state?.location) ||
+    onSignIn(router.state?.navigation?.location)
+  const backendMessageOrPermission =
+    typeof backendMessage === 'string' && backendMessage.length > 0
+      ? backendMessage
+      : ERROR_MESSAGES.permission
+  // NO_ACCOUNT cannot reuse alreadyOnSignIn: an EXPIRED redirect landing first
+  // in a burst would suppress the more specific diagnosis. Keying on reason
+  // dedupes it against itself instead. The message is part of the key because
+  // LoginPage prefers location.state.message, so a body-less 403 that fell back
+  // to generic copy would otherwise freeze out a later one carrying the real
+  // text.
+  const showingNoAccount = (loc?: { pathname?: string; state?: unknown }) => {
+    if (!onSignIn(loc)) return false
+    const locState = loc?.state as
+      | { reason?: string; message?: string }
+      | null
+      | undefined
+    return (
+      locState?.reason === SignInReasons.NO_ACCOUNT &&
+      locState?.message === backendMessageOrPermission
+    )
+  }
+  const alreadyShowingNoAccount =
+    showingNoAccount(router.state?.location) ||
+    showingNoAccount(router.state?.navigation?.location)
+  const rootLoaderData = router.state?.loaderData?.[RouteIds.ROOT] as
+    | { status?: number }
+    | undefined
+  // loaderData stays stale until a revalidation lands, so without the in-flight
+  // check every straggler in a burst would restart the pending navigation.
+  const needsRevalidation =
+    rootLoaderData?.status === 200 && router.state?.revalidation !== 'loading'
+
   if (status === 401) {
-    router.navigate(Routes.SIGNIN, {
-      replace: true,
-      state: {
-        message: ERROR_MESSAGES.expired,
-        reason: SignInReasons.EXPIRED,
-      },
-    })
+    if (needsRevalidation) void router.revalidate()
+    if (!alreadyOnSignIn) {
+      router.navigate(Routes.SIGNIN, {
+        replace: true,
+        state: {
+          message: ERROR_MESSAGES.expired,
+          reason: SignInReasons.EXPIRED,
+        },
+      })
+    }
     throw markAuthHandled(error)
   }
   if (status === 403) {
     if (code === AuthCodes.ACCOUNT_NOT_PROVISIONED) {
-      router.navigate(Routes.SIGNIN, {
-        replace: true,
-        state: {
-          message:
-            typeof backendMessage === 'string' && backendMessage.length > 0
-              ? backendMessage
-              : ERROR_MESSAGES.permission,
-          reason: SignInReasons.NO_ACCOUNT,
-        },
-      })
+      if (needsRevalidation) void router.revalidate()
+      if (!alreadyShowingNoAccount) {
+        router.navigate(Routes.SIGNIN, {
+          replace: true,
+          state: {
+            message: backendMessageOrPermission,
+            reason: SignInReasons.NO_ACCOUNT,
+          },
+        })
+      }
       throw markAuthHandled(error)
     }
     if (code === AuthCodes.FORBIDDEN_ORIGIN) {
@@ -76,12 +125,7 @@ export async function handleAuthError(
       notify(ERROR_MESSAGES.permission, 'error')
       throw markAuthHandled(error)
     }
-    notify(
-      typeof backendMessage === 'string' && backendMessage.length > 0
-        ? backendMessage
-        : ERROR_MESSAGES.permission,
-      'error'
-    )
+    notify(backendMessageOrPermission, 'error')
     throw markAuthHandled(error)
   }
   throw error

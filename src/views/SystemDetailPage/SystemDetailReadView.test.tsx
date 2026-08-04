@@ -83,14 +83,12 @@ describe('extended metadata formatting', () => {
     expect(screen.getByText('IaaS, PaaS')).toBeInTheDocument()
   })
 
-  test('applies the legacy field custom boolean labels', () => {
-    // legacy is a funding disposition; its label is "Not Funded for
-    // Remediation", so true reads "Not funded" rather than a double-negative
-    // "Yes".
+  test('renders the legacy field with default Yes/No labels', () => {
+    // legacy is a plain legacy-system flag labeled "Legacy System", so true
+    // reads as the default "Yes".
     renderWithExtended({ legacy: true })
-    expect(screen.getByText('Not Funded for Remediation')).toBeInTheDocument()
-    expect(screen.getByText('Not funded')).toBeInTheDocument()
-    expect(screen.queryByText('Yes')).not.toBeInTheDocument()
+    expect(screen.getByText('Legacy System')).toBeInTheDocument()
+    expect(screen.getByText('Yes')).toBeInTheDocument()
   })
 
   test('hides the extended card when only an empty array is present', () => {

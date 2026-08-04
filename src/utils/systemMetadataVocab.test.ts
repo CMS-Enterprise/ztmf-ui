@@ -145,9 +145,9 @@ describe('booleanOptions', () => {
   })
 
   it('overrides the true/false labels but keeps values and Unknown', () => {
-    expect(booleanOptions({ true: 'Not funded', false: 'Funded' })).toEqual([
-      { value: 'true', label: 'Not funded' },
-      { value: 'false', label: 'Funded' },
+    expect(booleanOptions({ true: 'Active', false: 'Inactive' })).toEqual([
+      { value: 'true', label: 'Active' },
+      { value: 'false', label: 'Inactive' },
       { value: '', label: 'Unknown' },
     ])
   })
@@ -162,9 +162,9 @@ describe('display formatting', () => {
   })
 
   it('applies custom true/false labels, leaving Unknown', () => {
-    const labels = { true: 'Not funded', false: 'Funded' }
-    expect(formatBool(true, labels)).toBe('Not funded')
-    expect(formatBool(false, labels)).toBe('Funded')
+    const labels = { true: 'Active', false: 'Inactive' }
+    expect(formatBool(true, labels)).toBe('Active')
+    expect(formatBool(false, labels)).toBe('Inactive')
     expect(formatBool(null, labels)).toBe('Unknown')
   })
 
@@ -221,6 +221,24 @@ describe('buildExtendedDiff', () => {
 
   it('omits unchanged fields', () => {
     expect(buildExtendedDiff(base, base, KEYS)).toEqual({})
+  })
+
+  // isso_name is the one extended field whose displayed value can be resolved
+  // by the backend rather than stored, so the form is seeded with a name that
+  // is not in the column. Omitting it while untouched is what stops an
+  // unrelated edit from persisting the resolved name as a stored override.
+  it('omits an untouched isso_name that was resolved rather than stored', () => {
+    const keys = [...KEYS, 'isso_name'] as (keyof FismaSystemType)[]
+    const loaded = {
+      ...base,
+      isso_name: 'Resolved From User Record',
+    } as unknown as FismaSystemType
+    const edited = { ...loaded, fips: 'High' } as FismaSystemType
+
+    const diff = buildExtendedDiff(edited, loaded, keys)
+
+    expect(diff).toEqual({ fips: 'High' })
+    expect(diff).not.toHaveProperty('isso_name')
   })
 
   it('includes only changed fields, at their typed value', () => {

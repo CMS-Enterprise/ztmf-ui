@@ -26,6 +26,7 @@ export default function StatisticsBlocks({
 }) {
   const { fismaSystems } = useContextProp()
   const [totalSystems, setTotalSystems] = useState<number>(0)
+  const [answeredSystems, setAnsweredSystems] = useState<number>(0)
   const [avgSystemScore, setAvgSystemScore] = useState<number>(0)
   const [maxSystemAcronym, setMaxSystemAcronym] = useState<string>('')
   const [maxSystemScore, setMaxSystemScore] = useState<number>(0)
@@ -40,7 +41,12 @@ export default function StatisticsBlocks({
   const [loading, setLoading] = useState<boolean>(false)
 
   useEffect(() => {
-    const totalCount = fismaSystems.length
+    // Count only the systems that actually contribute a score. The `scores` map
+    // is already scoped to the selected data call(s), so systems with no answers
+    // in the selection must not inflate the denominator (that dragged the average
+    // below the scale minimum — see ztmf-ui#633). Counted inside the loop so the
+    // numerator and denominator always cover the same systems.
+    let scoredCount: number = 0
     let maxScore: number = 0
     let maxScoreSystem: string = ''
     let maxScoreTier: ScoreTier | undefined
@@ -62,16 +68,18 @@ export default function StatisticsBlocks({
           minScoreTier = entry.tier
         }
         totalScores += entry.score
+        scoredCount += 1
       }
     }
-    if (totalCount === 0) {
+    if (scoredCount === 0) {
       setAvgSystemScore(0)
       setMinSystemScore(0)
     } else {
-      setAvgSystemScore(Number((totalScores / totalCount).toFixed(2)))
+      setAvgSystemScore(Number((totalScores / scoredCount).toFixed(2)))
       setMinSystemScore(minScore)
     }
-    setTotalSystems(totalCount)
+    setAnsweredSystems(scoredCount)
+    setTotalSystems(fismaSystems.length)
     setMaxSystemScore(maxScore)
     setMaxSystemTier(maxScoreTier)
     setMaxSystemAcronym(maxScoreSystem || '')
@@ -99,14 +107,14 @@ export default function StatisticsBlocks({
       }}
     >
       <StatisticsPaper variant="outlined">
-        <Typography variant="h2" sx={{ color: '#004297', fontSize: '56px' }}>
-          {totalSystems}
+        <Typography variant="h2" sx={{ color: '#004297', fontSize: '44px' }}>
+          {answeredSystems.toLocaleString()} / {totalSystems.toLocaleString()}
         </Typography>
         <Typography
           variant="body1"
           sx={{ fontSize: '16px', overflowWrap: 'break-word' }}
         >
-          Total Systems
+          Scored / Total Systems
         </Typography>
       </StatisticsPaper>
       <StatisticsPaper variant="outlined">

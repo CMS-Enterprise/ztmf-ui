@@ -80,8 +80,7 @@ export function optionsForField(
 
 // Custom labels for the true/false ends of a tri-state boolean. For fields
 // whose Yes/No reads ambiguously against the label (e.g. a negatively-phrased
-// "Not Funded for Remediation", where "No" would mean "it is funded"). Unknown
-// is always Unknown.
+// label where "No" would be a double negative). Unknown is always Unknown.
 export type BooleanLabels = { true: string; false: string }
 
 /**
@@ -167,6 +166,13 @@ export function formatList(v: string[] | null | undefined): string {
  * leaves them untouched, while a per-type clear signal (enum '', boolean null,
  * array []) passes through as the user's clear. On create, pass an empty
  * baseline so only the fields the user set are sent.
+ *
+ * Omission is what protects a field the backend resolves rather than stores:
+ * the System Details form is seeded from a read that returns a resolved
+ * isso_name, so an untouched field must stay out of the payload or saving an
+ * unrelated edit would persist the resolved name as a stored override. A
+ * missing baseline defeats that, since every field then counts as changed;
+ * pass an empty system on create and a real one on update, never null.
  *
  * @param edited - The edited system.
  * @param baseline - The system to diff against (the loaded system, or an empty

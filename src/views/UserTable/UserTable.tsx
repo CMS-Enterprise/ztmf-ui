@@ -35,6 +35,7 @@ import {
   hasAdminRead,
   hasUnscopedRead,
   isOpDivTier,
+  isUnscopedWriteAdmin,
   selectableRoles,
 } from '@/utils/userRoles'
 import { fetchOpDivs } from '@/utils/opdivs'
@@ -181,6 +182,12 @@ export default function UserTable() {
   const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
   // opdiv_id -> code, for rendering the OpDivs membership column.
   const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
+  // opdiv_id -> { code, name }, a full label source (incl. parent/inactive) so
+  // the grant modal can label grants to non-assignable OpDivs, which are absent
+  // from its scoped options list.
+  const [opdivLabelMap, setOpDivLabelMap] = useState<
+    Record<number, { code: string; name: string }>
+  >({})
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
   // holds rows refreshed since load, plus a one-time backfill against older
@@ -575,10 +582,13 @@ export default function UserTable() {
       try {
         const all = await fetchOpDivs(true)
         const codeMap: Record<number, string> = {}
+        const labelMap: Record<number, { code: string; name: string }> = {}
         all.forEach((od) => {
           codeMap[od.opdiv_id] = od.code
+          labelMap[od.opdiv_id] = { code: od.code, name: od.name }
         })
         setOpDivCodeMap(codeMap)
+        setOpDivLabelMap(labelMap)
 
         let assignable = all.filter((od) => !od.is_parent && od.active)
         if (isOpDivTier(userInfo)) {
@@ -590,6 +600,7 @@ export default function UserTable() {
         // Non-fatal: the grant modal simply shows no options if this fails.
         setOpDivOptions([])
         setOpDivCodeMap({})
+        setOpDivLabelMap({})
       }
     }
     loadOpDivs()
@@ -929,6 +940,17 @@ export default function UserTable() {
         userid={opdivModalUserId}
         userName={opdivModalUserName}
         opdivOptions={opdivOptions}
+        opdivLabelMap={opdivLabelMap}
+        // Scoped callers (every admin except an unscoped write admin) must not
+        // silently revoke the target's out-of-scope grants on save, so gate the
+        // save-time filter for them. Unscoped write admins (OWNER/HHS_ADMIN)
+        // send the grant set as-is. This is the inverse of the backend's
+        // unscoped-write branch, the predicate it actually decides on.
+        enforceCallerScope={!isUnscopedWriteAdmin(userInfo)}
+        // The caller's RAW grants (unfiltered by parent/active) - the save-time
+        // preserve boundary. Wider than opdivOptions so a caller-held grant to a
+        // since re-parented/deactivated OpDiv is preserved, not silently revoked.
+        callerGrantIds={userInfo.assignedopdivids ?? []}
         onChanged={refreshUserRow}
       />
       <ConfirmDialog

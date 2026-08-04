@@ -27,6 +27,7 @@ import {
   ListSubheader,
   Menu,
   Button,
+  Alert,
 } from '@mui/material'
 import CloseIcon from '@mui/icons-material/Close'
 import { useState, useEffect, useMemo, useCallback } from 'react'
@@ -52,6 +53,7 @@ import { hasSystemAccess } from '@/utils/userRoles'
 import { TIERS } from '@/utils/tierStyles'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
+import { resolveRowCallId, datacallNameComparator } from './rowCall'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { parseDatacallName } from '@/utils/datacallGrouping'
@@ -60,6 +62,7 @@ import type { OpDiv } from '@/types'
 import {
   applyDashboardFilters,
   hasNoActiveFilters,
+  isOpenCallInView,
   EMPTY_DASHBOARD_FILTERS,
   type DashboardFilterState,
 } from './dashboardFilters'
@@ -80,6 +83,8 @@ declare module '@mui/x-data-grid' {
     opdivOptions: OpDivOption[]
     showEnvFilter: boolean
     showOpDivFilter: boolean
+    hasOpenCall: boolean
+    openCallInView: boolean
   }
 }
 
@@ -218,6 +223,8 @@ export function QuickSearchToolbar(props: {
   opdivOptions?: OpDivOption[]
   showEnvFilter?: boolean
   showOpDivFilter?: boolean
+  hasOpenCall?: boolean
+  openCallInView?: boolean
 }) {
   const { showDecommissioned, setShowDecommissioned } = useContextProp()
   // The free-text quick-filter lives in the grid's own filter model, not in
@@ -235,6 +242,16 @@ export function QuickSearchToolbar(props: {
   const opdivOptions = props.opdivOptions ?? []
   const showEnvFilter = props.showEnvFilter ?? false
   const showOpDivFilter = props.showOpDivFilter ?? false
+  const hasOpenCall = props.hasOpenCall ?? true
+  const openCallInView = props.openCallInView ?? true
+  // Why the call-scoped toggles are grayed out, when they are: no call open
+  // at all vs an open call outside the selected year. Empty while they apply
+  // (an empty title suppresses the Tooltip).
+  const callScopeHint = openCallInView
+    ? ''
+    : hasOpenCall
+      ? 'The open data call is not in the selected view'
+      : 'No data call is currently open'
 
   const switchSx = {
     '& .MuiSwitch-switchBase.Mui-checked': { color: '#004297' },
@@ -253,172 +270,233 @@ export function QuickSearchToolbar(props: {
   }
 
   return (
-    <Box
-      sx={{
-        py: 1,
-        px: 1,
-        display: 'flex',
-        flexWrap: 'wrap',
-        gap: 1.5,
-        justifyContent: 'space-between',
-        alignItems: 'center',
-      }}
-    >
-      <GridToolbarQuickFilter
-        debounceMs={250}
-        sx={{
-          '& .MuiInputBase-input::placeholder': {
-            color: '#404040',
-            opacity: 0.8,
-          },
-          '& .MuiInputBase-root:after': {
-            borderBottomColor: '#5666b8',
-          },
-          '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
-            borderBottomColor: '#5666b8',
-          },
-        }}
-      />
-      {/* All facet filters live in one right-aligned cluster next to the
-          Show Decommissioned toggle. */}
+    <>
       <Box
         sx={{
+          py: 1,
+          px: 1,
           display: 'flex',
           flexWrap: 'wrap',
           gap: 1.5,
+          justifyContent: 'space-between',
           alignItems: 'center',
-          justifyContent: 'flex-end',
         }}
       >
-        {showEnvFilter && (
-          <FormControl size="small" sx={{ width: 200 }}>
-            <Select
-              multiple
-              displayEmpty
-              value={filters.environments}
-              onChange={(e) =>
-                onFiltersChange({
-                  ...filters,
-                  environments: e.target.value as string[],
-                })
-              }
-              inputProps={{ 'aria-label': 'Filter by environment' }}
-              renderValue={(selected) => {
-                const vals = selected as string[]
-                if (vals.length === 0)
-                  return <span style={{ color: '#6b6b6b' }}>Environment</span>
-                if (vals.length === 1) return vals[0]
-                return `${vals.length} environments`
-              }}
-              sx={selectValueSx}
-            >
-              {envOptions.map((opt) => (
-                <MenuItem key={opt} value={opt}>
-                  <Checkbox
-                    checked={filters.environments.includes(opt)}
-                    readOnly
-                    size="small"
-                  />
-                  <ListItemText primary={opt} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
-        {showOpDivFilter && (
-          <FormControl size="small" sx={{ width: 200 }}>
-            <Select
-              multiple
-              displayEmpty
-              value={filters.opdivIds}
-              onChange={(e) =>
-                onFiltersChange({
-                  ...filters,
-                  opdivIds: e.target.value as number[],
-                })
-              }
-              inputProps={{ 'aria-label': 'Filter by OpDiv' }}
-              renderValue={(selected) => {
-                const ids = selected as number[]
-                if (ids.length === 0)
-                  return <span style={{ color: '#6b6b6b' }}>OpDiv</span>
-                if (ids.length === 1)
-                  return (
-                    opdivOptions.find((o) => o.id === ids[0])?.label ??
-                    String(ids[0])
-                  )
-                return `${ids.length} OpDivs`
-              }}
-              sx={selectValueSx}
-            >
-              {opdivOptions.map((o) => (
-                <MenuItem key={o.id} value={o.id}>
-                  <Checkbox
-                    checked={filters.opdivIds.includes(o.id)}
-                    readOnly
-                    size="small"
-                  />
-                  <ListItemText primary={o.label} />
-                </MenuItem>
-              ))}
-            </Select>
-          </FormControl>
-        )}
-        <FormControlLabel
-          control={
-            <Switch
-              checked={filters.notUpdatedOnly}
-              onChange={(e) =>
-                onFiltersChange({
-                  ...filters,
-                  notUpdatedOnly: e.target.checked,
-                })
-              }
-              sx={switchSx}
-            />
-          }
-          label="Not updated only"
-          sx={{ m: 0 }}
-        />
-        <FormControlLabel
-          control={
-            <Switch
-              checked={showDecommissioned}
-              onChange={(e) => setShowDecommissioned(e.target.checked)}
-              sx={switchSx}
-            />
-          }
-          label="Show Decommissioned"
-          sx={{ m: 0 }}
-        />
-        <Button
-          size="small"
-          startIcon={<CloseIcon />}
-          onClick={() => {
-            onFiltersChange(EMPTY_DASHBOARD_FILTERS)
-            // Show Decommissioned lives in Title context (it gates a refetch),
-            // not in the client-side filter model — so clear it separately or it
-            // would survive "Clear filters".
-            setShowDecommissioned(false)
-            // The DataGrid quick-filter is grid state, not DashboardFilterState,
-            // so reset it via the grid API or the typed term survives (#573).
-            apiRef.current.setQuickFilterValues([])
+        <GridToolbarQuickFilter
+          debounceMs={250}
+          sx={{
+            '& .MuiInputBase-input::placeholder': {
+              color: '#404040',
+              opacity: 0.8,
+            },
+            '& .MuiInputBase-root:after': {
+              borderBottomColor: '#5666b8',
+            },
+            '& .MuiInputBase-root:hover:not(.Mui-disabled):before': {
+              borderBottomColor: '#5666b8',
+            },
           }}
-          // ...and both Show Decommissioned and the quick-filter are active
-          // filters for the button's own enabled state: without this, toggling
-          // only Show Decommissioned left Clear filters greyed out (#566), and
-          // typing only a search term would leave it greyed out too (#573).
-          disabled={
-            hasNoActiveFilters(filters) &&
-            !showDecommissioned &&
-            !hasQuickFilter
-          }
-          sx={{ color: '#004297', textTransform: 'none', mr: 2, flexShrink: 0 }}
+        />
+        {/* All facet filters live in one right-aligned cluster next to the
+          Show Decommissioned toggle. */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            gap: 1.5,
+            alignItems: 'center',
+            justifyContent: 'flex-end',
+          }}
         >
-          Clear filters
-        </Button>
+          {showEnvFilter && (
+            <FormControl size="small" sx={{ width: 200 }}>
+              <Select
+                multiple
+                displayEmpty
+                value={filters.environments}
+                onChange={(e) =>
+                  onFiltersChange({
+                    ...filters,
+                    environments: e.target.value as string[],
+                  })
+                }
+                inputProps={{ 'aria-label': 'Filter by environment' }}
+                renderValue={(selected) => {
+                  const vals = selected as string[]
+                  if (vals.length === 0)
+                    return <span style={{ color: '#6b6b6b' }}>Environment</span>
+                  if (vals.length === 1) return vals[0]
+                  return `${vals.length} environments`
+                }}
+                sx={selectValueSx}
+              >
+                {envOptions.map((opt) => (
+                  <MenuItem key={opt} value={opt}>
+                    <Checkbox
+                      checked={filters.environments.includes(opt)}
+                      readOnly
+                      size="small"
+                    />
+                    <ListItemText primary={opt} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          {showOpDivFilter && (
+            <FormControl size="small" sx={{ width: 200 }}>
+              <Select
+                multiple
+                displayEmpty
+                value={filters.opdivIds}
+                onChange={(e) =>
+                  onFiltersChange({
+                    ...filters,
+                    opdivIds: e.target.value as number[],
+                  })
+                }
+                inputProps={{ 'aria-label': 'Filter by OpDiv' }}
+                renderValue={(selected) => {
+                  const ids = selected as number[]
+                  if (ids.length === 0)
+                    return <span style={{ color: '#6b6b6b' }}>OpDiv</span>
+                  if (ids.length === 1)
+                    return (
+                      opdivOptions.find((o) => o.id === ids[0])?.label ??
+                      String(ids[0])
+                    )
+                  return `${ids.length} OpDivs`
+                }}
+                sx={selectValueSx}
+              >
+                {opdivOptions.map((o) => (
+                  <MenuItem key={o.id} value={o.id}>
+                    <Checkbox
+                      checked={filters.opdivIds.includes(o.id)}
+                      readOnly
+                      size="small"
+                    />
+                    <ListItemText primary={o.label} />
+                  </MenuItem>
+                ))}
+              </Select>
+            </FormControl>
+          )}
+          {/* Both call-scoped toggles gray out when the open call is not in
+            view (ui#639): "Not updated only" is a current-cycle laggard
+            signal with nothing to match, and "Open data call only" would
+            empty the grid. The span wrappers keep the tooltips firing on the
+            disabled controls. */}
+          <Tooltip title={callScopeHint}>
+            <span>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={filters.openCallOnly}
+                    onChange={(e) =>
+                      onFiltersChange({
+                        ...filters,
+                        openCallOnly: e.target.checked,
+                      })
+                    }
+                    disabled={!openCallInView}
+                    sx={switchSx}
+                  />
+                }
+                label="Open data call only"
+                sx={{ m: 0 }}
+              />
+            </span>
+          </Tooltip>
+          <Tooltip title={callScopeHint}>
+            <span>
+              <FormControlLabel
+                control={
+                  <Switch
+                    checked={filters.notUpdatedOnly}
+                    onChange={(e) =>
+                      onFiltersChange({
+                        ...filters,
+                        notUpdatedOnly: e.target.checked,
+                      })
+                    }
+                    disabled={!openCallInView}
+                    sx={switchSx}
+                  />
+                }
+                label="Not updated only"
+                sx={{ m: 0 }}
+              />
+            </span>
+          </Tooltip>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={showDecommissioned}
+                onChange={(e) => setShowDecommissioned(e.target.checked)}
+                sx={switchSx}
+              />
+            }
+            label="Show Decommissioned"
+            sx={{ m: 0 }}
+          />
+          <Button
+            size="small"
+            startIcon={<CloseIcon />}
+            onClick={() => {
+              onFiltersChange(EMPTY_DASHBOARD_FILTERS)
+              // Show Decommissioned lives in Title context (it gates a refetch),
+              // not in the client-side filter model — so clear it separately or it
+              // would survive "Clear filters".
+              setShowDecommissioned(false)
+              // The DataGrid quick-filter is grid state, not DashboardFilterState,
+              // so reset it via the grid API or the typed term survives (#573).
+              apiRef.current.setQuickFilterValues([])
+            }}
+            // ...and both Show Decommissioned and the quick-filter are active
+            // filters for the button's own enabled state: without this, toggling
+            // only Show Decommissioned left Clear filters greyed out (#566), and
+            // typing only a search term would leave it greyed out too (#573).
+            disabled={
+              hasNoActiveFilters(filters) &&
+              !showDecommissioned &&
+              !hasQuickFilter
+            }
+            sx={{
+              color: '#004297',
+              textTransform: 'none',
+              mr: 2,
+              flexShrink: 0,
+            }}
+          >
+            Clear filters
+          </Button>
+        </Box>
       </Box>
-    </Box>
+      {/* Toolbar-row captions crowd the filter cluster and wrap it (ui#639),
+          so the call-scope notice renders as its own slim banner between the
+          filters and the column headers. */}
+      {/* role="status" rather than MUI's default role="alert": this is a
+          standing contextual notice, and an assertive role would interrupt
+          screen readers at mount and on every year switch.
+
+          The live region is the keyboard- and screen-reader-reachable
+          counterpart of the disabled switches' hover tooltips, so it has to
+          actually announce. That is why the wrapper stays mounted and only its
+          contents change: a live region inserted into the DOM at the same
+          moment as its text is generally not announced, so gating the region
+          itself on the condition would have made it silent in exactly the
+          cases it exists to cover. */}
+      <Box role="status" aria-live="polite">
+        {!openCallInView && (
+          <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>
+            {hasOpenCall
+              ? 'The open data call is not in the selected view'
+              : "No open data call; showing each system's most recently updated call"}
+          </Alert>
+        )}
+      </Box>
+    </>
   )
 }
 // Cache for pillar scores to avoid repeated API calls
@@ -440,6 +518,7 @@ export default function FismaTable({
     latestDataCallId,
     selectedDatacall,
     datacalls,
+    activeDatacallIds,
     userInfo,
     datacenterEnvironments,
   } = useContextProp()
@@ -463,6 +542,10 @@ export default function FismaTable({
   // not-updated filter) only makes sense then; a past/closed call shows a
   // neutral Complete/Incomplete chip instead (ztmf#537). Rows without a chosen
   // call, or before latestDataCallId has loaded, keep the current rendering.
+  // Agrees with resolveRowCallId (the Data Call column) by construction:
+  // buildDashboardMaps fills chosenCallMap and systemCallMap for the same key
+  // set, so a row is grayed iff its column names a non-open call. Keep the
+  // two in step if either resolution changes.
   const isRowCurrentCall = useCallback(
     (fismasystemid: number): boolean => {
       const chosen = chosenCallMap[fismasystemid]
@@ -470,6 +553,32 @@ export default function FismaTable({
       return chosen === latestDataCallId && !latestDeadlinePassed
     },
     [chosenCallMap, latestDataCallId, latestDeadlinePassed]
+  )
+  // Whether any data call is open at all, and whether that open call is part
+  // of what the table is showing. The year picker can select a historical
+  // group while a newer call is open; in that view no row is current, so the
+  // call-scoped toggles ("Not updated only", "Open data call only") and the
+  // past-call graying key on the viewed calls, not the calendar (ui#639).
+  // Without the in-view check the first toggle silently empties the grid (the
+  // reported bug) and the second keeps only rows with no call data.
+  const hasOpenCall = Boolean(latestDataCallId) && !latestDeadlinePassed
+  const openCallInView = isOpenCallInView(
+    latestDataCallId,
+    latestDeadlinePassed,
+    activeDatacallIds
+  )
+  const callById = useMemo(
+    () => new Map(datacalls.map((d) => [d.datacallid, d])),
+    [datacalls]
+  )
+  // Sort key for the Data Call column: call names do not sort chronologically
+  // ("FY2025 Q3" vs "FY25 ZTM"), so the column orders by deadline instead.
+  const deadlineByCallName = useMemo(
+    () =>
+      new Map(
+        datacalls.map((d) => [d.datacall, new Date(d.deadline).getTime()])
+      ),
+    [datacalls]
   )
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const [open, setOpen] = useState<boolean>(false)
@@ -586,6 +695,22 @@ export default function FismaTable({
     })
   }, [envOptions, opdivOptions, showEnvFilter, showOpDivFilter])
 
+  // The call-scoped facets only mean something while the open call is in
+  // view (their switches gray out otherwise). Drop any stored true when it is
+  // not, so a year-picker move to a historical group, or a /datacalls refetch
+  // that flips the newest call closed, cannot leave an invisible filter
+  // emptying the grid (ui#639). (openness is evaluated when datacalls load,
+  // not continuously, so a deadline passing while the page sits open takes
+  // effect on the next fetch or reload.)
+  useEffect(() => {
+    if (openCallInView) return
+    setFilters((prev) =>
+      prev.notUpdatedOnly || prev.openCallOnly
+        ? { ...prev, notUpdatedOnly: false, openCallOnly: false }
+        : prev
+    )
+  }, [openCallInView])
+
   const filteredRows = useMemo(
     () =>
       applyDashboardFilters(
@@ -618,19 +743,16 @@ export default function FismaTable({
   }
 
   const handleOpenPillarScores = async (row: FismaSystemType) => {
-    // Use the same call the dashboard row is displaying (chosen by most-recently-updated
-    // in buildDashboardMaps) so the modal's "current" always matches the table cell.
-    // Falls back to newest-by-deadline if chosenCallMap has no entry (e.g. single-call
-    // system or map not yet populated), then to activeDataCallId as a last resort.
-    const chosenId = chosenCallMap[row.fismasystemid]
-    const rowDataCallId =
-      chosenId ??
-      sortDatacallsByDeadline(
-        (systemCallMap[row.fismasystemid] ?? [])
-          .map((id) => datacalls.find((d) => d.datacallid === id))
-          .filter((d): d is datacall => Boolean(d))
-      )[0]?.datacallid ??
-      activeDataCallId
+    // Same resolution as the Data Call column, so the modal's "current"
+    // always matches the call the row displays.
+    const rowDataCallId = resolveRowCallId(
+      row.fismasystemid,
+      chosenCallMap,
+      systemCallMap,
+      datacalls,
+      activeDataCallId,
+      activeDatacallIds
+    )
 
     try {
       // Check cache first
@@ -758,6 +880,32 @@ export default function FismaTable({
           </Box>
         )
       },
+    },
+    {
+      // Which call the row is displaying (ui#639), named plainly so a
+      // past-call row is identifiable and quick-searchable without relying
+      // on the grayed styling.
+      field: 'rowdatacall',
+      headerName: 'Data Call',
+      // Renders as the column-header tooltip: the resolution is not obvious
+      // from the name (it is not simply "last completed call").
+      description:
+        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the newest selected call for a system with no data in them.",
+      width: 130,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value) =>
+        callById.get(
+          resolveRowCallId(
+            value.row.fismasystemid,
+            chosenCallMap,
+            systemCallMap,
+            datacalls,
+            activeDataCallId,
+            activeDatacallIds
+          )
+        )?.datacall ?? '',
+      sortComparator: datacallNameComparator(deadlineByCallName),
     },
     {
       // Questionnaire progress for the active data call (ztmf#299). The
@@ -892,6 +1040,16 @@ export default function FismaTable({
         isRowSelectable={(params: GridRowParams) =>
           params.row.fismasystemid in scores
         }
+        // De-emphasize rows displaying a closed call while the open call is
+        // in view (ui#639). Only in that mixed view: between calls, or on a
+        // historical year, every row is past-call and graying the whole grid
+        // distinguishes nothing. The Data Call column carries the same state
+        // as text.
+        getRowClassName={(params) =>
+          openCallInView && !isRowCurrentCall(params.row.fismasystemid)
+            ? 'past-call-row'
+            : ''
+        }
         columns={columns}
         checkboxSelection
         apiRef={apiRef}
@@ -915,6 +1073,8 @@ export default function FismaTable({
             opdivOptions,
             showEnvFilter,
             showOpDivFilter,
+            hasOpenCall,
+            openCallInView,
           },
           filterPanel: {
             sx: {
@@ -956,6 +1116,17 @@ export default function FismaTable({
           },
           '& .MuiDataGrid-columnHeaders .MuiSvgIcon-root': {
             color: 'white',
+          },
+          // De-emphasis must not dim interactive elements: whole-row opacity
+          // drops the name link, checkbox, and action icons below WCAG
+          // contrast minima while they stay clickable. Tint the row and mute
+          // only the cell text (rgba .6 on white holds AA); links, controls,
+          // and chips keep their own full-contrast colors.
+          '& .past-call-row': {
+            backgroundColor: '#f5f5f5',
+          },
+          '& .past-call-row .MuiDataGrid-cell': {
+            color: 'rgba(0, 0, 0, 0.6)',
           },
         }}
       />
