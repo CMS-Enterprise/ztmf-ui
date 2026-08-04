@@ -16,13 +16,19 @@ import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { colors } from '@/theme/tokens'
+import { FismaSystemType } from '@/types'
 
 type Props = {
-  fismaSystemMap: Record<number, { name: string; acronym: string }>
   open: boolean
   handleClose: () => void
   userid: GridRowId
   userName: string
+  // Global fisma-system metadata, fetched once by the parent (UserTable)
+  // and passed down so opening the modal only costs the two per-user reads.
+  // allSystems labels cross-OpDiv orphan assignments; decommSystems adds
+  // the "(Decommissioned)" flag for retired-system chips.
+  allSystems: FismaSystemType[]
+  decommSystems: FismaSystemType[]
 }
 
 const searchInputSx = {
@@ -59,43 +65,80 @@ const rowMetaSx = {
 
 /**
  * Assign FISMA systems modal. Renders the checkbox list described by the
- * mockup (frame 16) in the shared Modal shell, replacing the legacy
- * SideDrawer + Autocomplete. Behavior is unchanged: checking a row POSTs
- * the assignment immediately, unchecking opens a confirm dialog before
- * the DELETE, and the footer Done button just closes - nothing is queued.
+ * mockup (frame 16) in the shared Modal shell. Checking a row POSTs the
+ * assignment immediately, unchecking opens a confirm dialog before the
+ * DELETE, and the footer Done button just closes - nothing is queued.
+ *
+ * The pickable set comes from GET /users/:id/assignablefismasystems, which
+ * is already scoped to the target user's OpDivs (and intersected with the
+ * caller's OpDivs when the caller is scoped). Current assignments outside
+ * that set - cross-OpDiv orphans or decommissioned systems - still render,
+ * labeled and subdued, so an admin can see and remove them; once unchecked
+ * they leave the list and cannot be re-picked.
  */
 export default function AssignSystemModal({
-  fismaSystemMap,
   open,
   handleClose,
   userid,
   userName,
+  allSystems,
+  decommSystems,
 }: Props) {
   const [assignedSystems, setAssignedSystems] = React.useState<number[]>([])
+  // Systems the target user is eligible to be assigned - already scoped
+  // to their OpDivs (and intersected with the caller's OpDivs when the
+  // caller is scoped) by GET /users/:id/assignablefismasystems. Drives
+  // the pickable rows.
+  const [assignable, setAssignable] = React.useState<FismaSystemType[]>([])
   const [openSnackBar, setOpenSnackBar] = React.useState<boolean>(false)
   const [pendingUnassign, setPendingUnassign] = React.useState<{
     systemid: number
     nextValue: number[]
   } | null>(null)
   const [search, setSearch] = React.useState<string>('')
-
+  // Track the userid the current state belongs to so a same-user reopen
+  // keeps rows visible (and just refreshes underneath) while opening for
+  // a different user clears them BEFORE the new fetches land (no
+  // previous-user row flash).
+  const stateOwnerRef = React.useRef<GridRowId>('')
   React.useEffect(() => {
     if (!open || !userid) return
+    if (stateOwnerRef.current !== userid) {
+      setAssignedSystems([])
+      setAssignable([])
+      stateOwnerRef.current = userid
+    }
     const controller = new AbortController()
-    async function fetchAssigned() {
-      try {
-        const res = await axiosInstance.get(
+    async function fetchPerUser() {
+      // Two parallel reads. allSettled so an assignable-endpoint hiccup
+      // doesn't blank the list for an admin trying to remove an
+      // existing assignment.
+      const [assignedRes, assignableRes] = await Promise.allSettled([
+        axiosInstance.get<{ data: number[] | null }>(
           `/users/${userid}/assignedfismasystems`,
           { signal: controller.signal }
+        ),
+        axiosInstance.get<{ data: FismaSystemType[] | null }>(
+          `/users/${userid}/assignablefismasystems`,
+          { signal: controller.signal }
+        ),
+      ])
+      if (controller.signal.aborted) return
+      if (assignedRes.status === 'fulfilled') {
+        setAssignedSystems(assignedRes.value.data.data ?? [])
+      } else if (!isAuthHandled(assignedRes.reason)) {
+        console.error('Error fetching assigned systems:', assignedRes.reason)
+      }
+      if (assignableRes.status === 'fulfilled') {
+        setAssignable(assignableRes.value.data.data ?? [])
+      } else if (!isAuthHandled(assignableRes.reason)) {
+        console.error(
+          'Error fetching assignable systems:',
+          assignableRes.reason
         )
-        setAssignedSystems(res.data.data || [])
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        console.error('Error fetching assigned systems:', error)
       }
     }
-    fetchAssigned()
+    fetchPerUser()
     return () => {
       controller.abort()
     }
@@ -107,30 +150,85 @@ export default function AssignSystemModal({
     if (!open) setSearch('')
   }, [open])
 
-  const sortedSystemIds = React.useMemo(
-    () =>
-      Object.keys(fismaSystemMap)
-        .map(Number)
-        .sort((a, b) => {
-          const acrA = fismaSystemMap[a]?.acronym || ''
-          const acrB = fismaSystemMap[b]?.acronym || ''
-          return acrA.localeCompare(acrB)
-        }),
-    [fismaSystemMap]
+  // Label map merged from the three metadata sources. The server always
+  // filters on the decommissioned flag, so the decommissioned list and
+  // the two active lists (global + per-user assignable) never share an
+  // id; later loops can't silently clear an earlier decommissioned flag.
+  // Order therefore only settles label text, where the per-user
+  // assignable response is the freshest and wins. Ids present only in
+  // the global list are cross-OpDiv orphans - excluded from assignable
+  // by design, but still needing a label so an admin can see what they
+  // are unassigning.
+  const systemMap = React.useMemo(() => {
+    const map: Record<
+      number,
+      { name: string; acronym: string; decommissioned: boolean }
+    > = {}
+    const add = (s: FismaSystemType, decommissioned: boolean) => {
+      map[s.fismasystemid] = {
+        name: s.fismasubsystem
+          ? s.fismaname + ' - ' + s.fismasubsystem
+          : s.fismaname,
+        acronym: s.fismaacronym,
+        decommissioned,
+      }
+    }
+    for (const s of decommSystems) add(s, true)
+    for (const s of allSystems) add(s, false)
+    for (const s of assignable) add(s, false)
+    return map
+  }, [decommSystems, allSystems, assignable])
+
+  const assignableIds = React.useMemo(
+    () => new Set(assignable.map((s) => s.fismasystemid)),
+    [assignable]
   )
 
+  // Rows = the assignable set plus any current assignments outside it
+  // (cross-OpDiv orphans, decommissioned systems), so those stay visible
+  // and removable. Sorted by acronym for scanability.
+  const sortedSystemIds = React.useMemo(() => {
+    const set = new Set<number>()
+    for (const s of assignable) set.add(s.fismasystemid)
+    for (const id of assignedSystems) set.add(id)
+    return Array.from(set).sort((a, b) => {
+      const acrA = systemMap[a]?.acronym || ''
+      const acrB = systemMap[b]?.acronym || ''
+      return acrA.localeCompare(acrB)
+    })
+  }, [assignable, assignedSystems, systemMap])
+
+  // Substring filter on the raw acronym + name (not the decorated label),
+  // so a clean acronym search is never coupled to display formatting.
   const filteredSystemIds = React.useMemo(() => {
     const needle = search.trim().toLowerCase()
     if (!needle) return sortedSystemIds
     return sortedSystemIds.filter((id) => {
-      const sys = fismaSystemMap[id]
+      const sys = systemMap[id]
       if (!sys) return false
       return (
         sys.name.toLowerCase().includes(needle) ||
         sys.acronym.toLowerCase().includes(needle)
       )
     })
-  }, [sortedSystemIds, fismaSystemMap, search])
+  }, [sortedSystemIds, systemMap, search])
+
+  /**
+   * Display name for a row: acronym-decorated and suffixed for
+   * decommissioned systems, with a legible fallback for an id missing
+   * from every metadata source (parent fetch failed or system removed
+   * mid-session) so the admin can still tell what they are unassigning.
+   * @param {number} id - The fismasystemid to label.
+   * @returns {string} The display label.
+   */
+  const labelFor = React.useCallback(
+    (id: number): string => {
+      const s = systemMap[id]
+      if (!s) return `Unknown or decommissioned system (id ${id})`
+      return s.decommissioned ? `${s.name} (Decommissioned)` : s.name
+    },
+    [systemMap]
+  )
 
   const handleConfirmUnassign = async (confirm: boolean) => {
     const target = pendingUnassign
@@ -148,13 +246,12 @@ export default function AssignSystemModal({
     }
   }
 
-  // Bulk-assign every currently visible (filtered) system that is not yet
-  // assigned. "In scope" = whatever the search filter leaves; this mirrors
-  // the mockup's framing ("they're responsible for in REBEL and SCNDRL")
-  // by letting an admin narrow scope via the search box first.
+  // Bulk-assign every currently visible (filtered) ASSIGNABLE system that
+  // is not yet assigned. Out-of-scope leftovers in the list are display-only
+  // and never bulk-assigned.
   const handleSelectAllInScope = async () => {
     const toAdd = filteredSystemIds.filter(
-      (id) => !assignedSystems.includes(id)
+      (id) => assignableIds.has(id) && !assignedSystems.includes(id)
     )
     if (toAdd.length === 0) return
     const results = await Promise.allSettled(
@@ -186,6 +283,9 @@ export default function AssignSystemModal({
 
   const handleToggle = async (systemId: number, checked: boolean) => {
     if (checked) {
+      // Only assignable systems can be (re-)assigned; out-of-scope rows
+      // exist purely so they can be unassigned.
+      if (!assignableIds.has(systemId)) return
       try {
         await axiosInstance.post(`/users/${userid}/assignedfismasystems`, {
           fismasystemid: systemId,
@@ -224,8 +324,8 @@ export default function AssignSystemModal({
               variant="text"
               color="primary"
               onClick={handleSelectAllInScope}
-              disabled={filteredSystemIds.every((id) =>
-                assignedSystems.includes(id)
+              disabled={filteredSystemIds.every(
+                (id) => !assignableIds.has(id) || assignedSystems.includes(id)
               )}
               sx={{ mr: 'auto', textTransform: 'none', fontWeight: 600 }}
             >
@@ -248,7 +348,7 @@ export default function AssignSystemModal({
           <OutlinedInput
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            placeholder="Search by name or FISMA ID"
+            placeholder="Search by name or acronym"
             fullWidth
             sx={searchInputSx}
             startAdornment={
@@ -280,23 +380,38 @@ export default function AssignSystemModal({
               </Typography>
             ) : (
               filteredSystemIds.map((systemId) => {
-                const system = fismaSystemMap[systemId]
+                const system = systemMap[systemId]
                 const isAssigned = assignedSystems.includes(systemId)
+                // Decommissioned or cross-OpDiv leftovers render subdued:
+                // present so they can be unassigned, visually "historical".
+                const outOfScope =
+                  !assignableIds.has(systemId) ||
+                  system?.decommissioned === true
                 return (
                   <Box
                     key={systemId}
                     component="label"
                     htmlFor={`assign-system-${systemId}`}
-                    sx={rowSx}
+                    sx={{
+                      ...rowSx,
+                      ...(outOfScope && {
+                        opacity: 0.65,
+                        fontStyle: 'italic',
+                      }),
+                    }}
                   >
                     <Checkbox
                       id={`assign-system-${systemId}`}
                       checked={isAssigned}
+                      // Out-of-scope rows only support unchecking.
+                      disabled={!isAssigned && outOfScope}
                       onChange={(e) => handleToggle(systemId, e.target.checked)}
                       sx={{ p: 0.25 }}
                     />
                     <Box sx={{ flex: 1, minWidth: 0 }}>
-                      <Typography sx={rowTitleSx}>{system?.name}</Typography>
+                      <Typography sx={rowTitleSx}>
+                        {labelFor(systemId)}
+                      </Typography>
                       <Typography sx={rowMetaSx}>{system?.acronym}</Typography>
                     </Box>
                   </Box>
@@ -323,11 +438,10 @@ export default function AssignSystemModal({
         confirmationText={
           pendingUnassign
             ? `Are you sure you want to unassign ${
-                fismaSystemMap[pendingUnassign.systemid]?.acronym ??
-                'this system'
+                systemMap[pendingUnassign.systemid]?.acronym ?? 'this system'
               }${
-                fismaSystemMap[pendingUnassign.systemid]
-                  ? ` - ${fismaSystemMap[pendingUnassign.systemid].name}`
+                systemMap[pendingUnassign.systemid]
+                  ? ` - ${systemMap[pendingUnassign.systemid].name}`
                   : ''
               } from ${userName || 'this user'}?`
             : ''

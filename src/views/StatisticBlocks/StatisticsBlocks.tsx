@@ -131,7 +131,7 @@ export default function StatisticsBlocks({
       }
     }
     const avg = scored > 0 ? scoreSum / scored : 0
-    return { total, avg, optimalAdvanced, belowInitial }
+    return { total, scored, avg, optimalAdvanced, belowInitial }
   }, [fismaSystems, scores])
 
   // Average-score trend vs the prior datacall, when one is available.
@@ -150,7 +150,13 @@ export default function StatisticsBlocks({
 
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
-      <StatCard label="Total systems" value={stats.total} />
+      <StatCard
+        label="Total systems"
+        value={stats.total.toLocaleString('en-US')}
+        // Scored-vs-total at a glance (parity with main's Scored / Total
+        // Systems stat) without spending a whole card on it.
+        hint={`${stats.scored} scored`}
+      />
       <StatCard
         label="Avg ZT score"
         value={stats.avg.toFixed(2)}

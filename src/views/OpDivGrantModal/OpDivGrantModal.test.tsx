@@ -42,6 +42,7 @@ const opdivOptions: OpDiv[] = [
     name: 'Division A',
     is_parent: false,
     active: true,
+    system_delegate_enabled: false,
   },
   {
     opdiv_id: 2,
@@ -49,8 +50,19 @@ const opdivOptions: OpDiv[] = [
     name: 'Division B',
     is_parent: false,
     active: true,
+    system_delegate_enabled: false,
   },
 ]
+
+// Full label source (incl. the non-assignable OpDiv 99, e.g. a parent/inactive
+// division), so the modal can label a grant to it even though it is absent from
+// opdivOptions. Id 77 is intentionally absent to exercise the "OpDiv #{id}"
+// fallback.
+const opdivLabelMap: Record<number, { code: string; name: string }> = {
+  1: { code: 'AAA', name: 'Division A' },
+  2: { code: 'BBB', name: 'Division B' },
+  99: { code: 'ZZZ', name: 'Parent Division' },
+}
 
 function renderModal(
   overrides: Partial<React.ComponentProps<typeof OpDivGrantModal>> = {}
@@ -62,6 +74,9 @@ function renderModal(
       userid={USER_ID}
       userName="Test User"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={jest.fn()}
       {...overrides}
     />
@@ -73,9 +88,9 @@ beforeEach(() => {
   mockedNavigate.mockReset()
 })
 
-// The most important test: verifies the scopedIds filter strips out-of-scope
-// grants before the PUT so an OPDIV_ADMIN never triggers a backend 403.
-test('PUT body excludes grants the target user holds outside the caller scope', async () => {
+// Scoped caller (OPDIV_ADMIN, enforceCallerScope=true): the save strips
+// out-of-scope grants before the PUT so the backend scope gate never 403s.
+test('scoped caller: PUT body excludes grants the target holds outside caller scope', async () => {
   // Target user holds [1, 2, 99]. OpDiv 99 is absent from opdivOptions
   // (out of caller scope), so only [1, 2] must reach the batch endpoint.
   mock
@@ -83,7 +98,7 @@ test('PUT body excludes grants the target user holds outside the caller scope', 
     .reply(200, { data: [1, 2, 99] })
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
 
-  renderModal()
+  renderModal({ enforceCallerScope: true })
   await waitFor(() => expect(mock.history.get).toHaveLength(1))
 
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
@@ -93,6 +108,139 @@ test('PUT body excludes grants the target user holds outside the caller scope', 
   expect(body.opdiv_ids).toHaveLength(2)
   expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 2]))
   expect(body.opdiv_ids).not.toContain(99)
+})
+
+// Unscoped caller (OWNER/HHS_ADMIN, enforceCallerScope=false): the save must
+// PRESERVE the target's non-assignable grants. Omitting 99 would read as a
+// revocation to the backend and silently drop the grant.
+test('unscoped caller: PUT body preserves grants outside the assignable set', async () => {
+  mock
+    .onGet(`/users/${USER_ID}/assignedopdivs`)
+    .reply(200, { data: [1, 2, 99] })
+  mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
+
+  renderModal({ enforceCallerScope: false })
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+
+  await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  const body = JSON.parse(mock.history.put[0].data)
+  expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 2, 99]))
+  expect(body.opdiv_ids).toHaveLength(3)
+})
+
+// Scoped caller whose OWN grant (99) is to an OpDiv since re-parented or
+// deactivated: 99 is in callerGrantIds (the backend still sees IsAssignedOpDiv
+// = true) but absent from opdivOptions (parent/inactive is filtered out). The
+// save must PRESERVE 99 - filtering on the narrower assignable set would strip
+// it from the PUT and the backend's toRemove gate (pure grant membership) would
+// then silently revoke the target's grant. The save boundary is the caller's
+// raw scope, not the dropdown's assignable set.
+test('scoped caller: preserves a caller-held grant that is no longer assignable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
+  mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
+
+  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 99] })
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+
+  await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  const body = JSON.parse(mock.history.put[0].data)
+  expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 99]))
+  expect(body.opdiv_ids).toHaveLength(2)
+})
+
+// A grant to a non-assignable OpDiv (99, absent from opdivOptions) still
+// renders a row with a readable label from opdivLabelMap - never a blank row.
+test('labels a grant to a non-assignable OpDiv from the full label map', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
+
+  renderModal()
+
+  // The row renders the label map entry (code badge + name), not a raw id.
+  expect(await screen.findByText('ZZZ')).toBeInTheDocument()
+  expect(screen.getByText('Parent Division')).toBeInTheDocument()
+})
+
+// A grant to an OpDiv missing from the label map falls back to "OpDiv #{id}"
+// rather than an empty chip.
+test('falls back to "OpDiv #{id}" for a grant missing from the label map', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [77] })
+
+  renderModal()
+
+  expect(await screen.findByText('OpDiv #77')).toBeInTheDocument()
+})
+
+// The list is the union of assignable OpDivs and current grants: a
+// non-assignable grant (99) renders because the target holds it, and once the
+// row is unchecked locally it cannot be re-added by any other row - nothing
+// non-assignable and un-granted is ever offered.
+test('list offers assignable OpDivs plus current grants only', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
+
+  renderModal()
+  // The grant renders (so the fetch has resolved and rows are settled).
+  await screen.findByText('Parent Division')
+
+  // Assignable OpDivs are offered as rows...
+  expect(screen.getByText('Division A')).toBeInTheDocument()
+  expect(screen.getByText('Division B')).toBeInTheDocument()
+  // ...and nothing outside assignable + granted appears (id 77 has no grant).
+  expect(screen.queryByText('OpDiv #77')).not.toBeInTheDocument()
+})
+
+// A grant outside the caller's own backend scope (99 here is held by the target
+// via another admin, not by this caller) is stripped on save regardless, so a
+// delete would be a silent no-op: it renders WITHOUT a delete affordance, while
+// an in-scope chip keeps it.
+test('scoped caller: a chip outside the caller scope is not deletable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
+
+  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 2] })
+
+  // Rows render as labelled checkboxes; a locked (out-of-scope) row disables
+  // its checkbox so the grant cannot be toggled into a silent no-op.
+  const inScope = await screen.findByRole('checkbox', {
+    name: /division a/i,
+  })
+  const outOfScope = screen.getByRole('checkbox', {
+    name: /parent division/i,
+  })
+
+  expect(inScope).toBeEnabled()
+  expect(outOfScope).toBeDisabled()
+})
+
+// A caller-held grant that is merely non-assignable now (99 in callerGrantIds
+// but absent from opdivOptions, e.g. re-parented/deactivated) stays deletable:
+// removing it is a real, permitted revocation, unlike an out-of-scope grant.
+test('scoped caller: a caller-held but non-assignable chip stays deletable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
+
+  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 99] })
+
+  const heldNonAssignable = await screen.findByRole('checkbox', {
+    name: /parent division/i,
+  })
+
+  expect(heldNonAssignable).toBeEnabled()
+})
+
+// An unscoped caller's removal really revokes, so their out-of-scope chip must
+// keep the delete affordance.
+test('unscoped caller: an out-of-scope grant chip stays deletable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
+
+  renderModal({ enforceCallerScope: false })
+
+  const outOfScope = await screen.findByRole('checkbox', {
+    name: /parent division/i,
+  })
+
+  expect(outOfScope).toBeEnabled()
 })
 
 test('success: modal closes and onChanged fires after save', async () => {
@@ -240,6 +388,9 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       userid={USER_ID}
       userName="Test User"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={jest.fn()}
     />
   )
@@ -250,6 +401,9 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       userid={USER_ID}
       userName="Test User"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={jest.fn()}
     />
   )
@@ -299,6 +453,9 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
       userid={USER_ID_B}
       userName="Test User B"
       opdivOptions={opdivOptions}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
+      callerGrantIds={[1, 2]}
       onChanged={onChanged}
     />
   )

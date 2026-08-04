@@ -12,6 +12,13 @@ export type DashboardFilterState = {
   opdivIds: number[]
   /** When true, keep only systems that have a questionnaire but zero updates. */
   notUpdatedOnly: boolean
+  /**
+   * When true, keep only systems whose displayed call is the open one (ui#639).
+   * An opt-in focus filter, deliberately default-off: hiding closed-call rows
+   * by default would drop them silently from the view and the row-selection
+   * export, and disagree with the stat tiles, which count all systems.
+   */
+  openCallOnly: boolean
 }
 
 /** An empty filter state — nothing selected, everything passes. */
@@ -19,6 +26,7 @@ export const EMPTY_DASHBOARD_FILTERS: DashboardFilterState = {
   environments: [],
   opdivIds: [],
   notUpdatedOnly: false,
+  openCallOnly: false,
 }
 
 /**
@@ -30,7 +38,33 @@ export function hasNoActiveFilters(filters: DashboardFilterState): boolean {
   return (
     filters.environments.length === 0 &&
     filters.opdivIds.length === 0 &&
-    !filters.notUpdatedOnly
+    !filters.notUpdatedOnly &&
+    !filters.openCallOnly
+  )
+}
+
+/**
+ * True when the open data call is part of what the dashboard is showing:
+ * a newest-by-deadline call exists, is still open, and is among the calls
+ * selected in the year picker. Every call-scoped affordance (the "Not
+ * updated only" and "Open data call only" switches, past-call row graying)
+ * keys on this, not merely on a call being open: the year picker can select
+ * a historical group while a newer call is open, and in that view no row is
+ * current, so a live call-scoped filter would empty the grid (ui#639).
+ * @param {number} latestDataCallId - Newest-by-deadline call id (0 before load).
+ * @param {boolean} latestDeadlinePassed - Whether that call's deadline passed.
+ * @param {number[]} activeDatacallIds - Call ids selected in the year picker.
+ * @returns {boolean} True when the open call is in the selected view.
+ */
+export function isOpenCallInView(
+  latestDataCallId: number,
+  latestDeadlinePassed: boolean,
+  activeDatacallIds: number[]
+): boolean {
+  return (
+    latestDataCallId > 0 &&
+    !latestDeadlinePassed &&
+    activeDatacallIds.includes(latestDataCallId)
   )
 }
 
@@ -68,8 +102,9 @@ export function isNotUpdated(
  * @param {DashboardFilterState} filters - The active selections.
  * @param {(fismasystemid: number) => boolean} [isCurrentCall] - Whether a row's
  *   displayed call is the current/active one. The "Not updated" facet only
- *   matches current-call laggards (ztmf#537); defaults to treating every row as
- *   current so callers without call context keep the original behavior.
+ *   matches current-call laggards (ztmf#537), and the "Open data call only"
+ *   facet keeps only current-call rows (ui#639); defaults to treating every
+ *   row as current so callers without call context keep the original behavior.
  * @returns {FismaSystemType[]} The subset of rows passing every active facet.
  */
 export function applyDashboardFilters(
@@ -85,6 +120,9 @@ export function applyDashboardFilters(
   const opdivSet = new Set(filters.opdivIds)
 
   return rows.filter((row) => {
+    if (filters.openCallOnly && !isCurrentCall(row.fismasystemid)) {
+      return false
+    }
     if (envSet.size > 0) {
       const category = categoryMap[row.datacenterenvironment]
       if (!category || !envSet.has(category)) return false

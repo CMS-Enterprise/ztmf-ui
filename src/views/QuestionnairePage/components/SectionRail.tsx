@@ -3,7 +3,7 @@ import Typography from '@mui/material/Typography'
 import CheckCircleIcon from '@mui/icons-material/CheckCircle'
 import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked'
-import { colors, fonts, radius } from '@/theme/tokens'
+import { colors, fonts, radius, status } from '@/theme/tokens'
 import type { FismaQuestion } from '@/types'
 import Card from './Card'
 import CisaReferenceCard from './CisaReferenceCard'
@@ -17,6 +17,13 @@ export type SectionRailProps = {
   selectedIndex: number
   /** Set of functionids that have an answered score row. */
   answeredFunctionIds: Set<number>
+  /**
+   * Carried-forward confirmation state per functionid. Drives the
+   * text-bearing marker under a question's name ("Not yet confirmed" /
+   * "Updated") - the same classification the question view's chip reads.
+   * Omit to render no markers (e.g. a closed call).
+   */
+  carryStateFor?: (functionid: number) => 'none' | 'unconfirmed' | 'updated'
   /** Fired when the user picks a question in the section list. */
   onFunctionClick: (fn: FismaQuestion) => void
 }
@@ -34,6 +41,7 @@ export default function SectionRail({
   category,
   selectedIndex,
   answeredFunctionIds,
+  carryStateFor,
   onFunctionClick,
 }: SectionRailProps) {
   if (!category) {
@@ -108,6 +116,9 @@ export default function SectionRail({
           {category.steps.map((fn, i) => {
             const isCurrent = fn.function.functionid === selectedIndex
             const isAnswered = answeredFunctionIds.has(fn.function.functionid)
+            // Text-bearing, not color-only (508); part of the row's
+            // accessible content so screen readers hear the state.
+            const carryState = carryStateFor?.(fn.function.functionid) ?? 'none'
             return (
               <Box
                 key={fn.function.functionid}
@@ -155,18 +166,34 @@ export default function SectionRail({
                 >
                   Q{i + 1}
                 </Typography>
-                <Typography
-                  sx={{
-                    fontSize: 13,
-                    fontWeight: isCurrent ? 600 : 500,
-                    flex: 1,
-                    whiteSpace: 'nowrap',
-                    overflow: 'hidden',
-                    textOverflow: 'ellipsis',
-                  }}
-                >
-                  {addSpace(fn.function.function)}
-                </Typography>
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <Typography
+                    sx={{
+                      fontSize: 13,
+                      fontWeight: isCurrent ? 600 : 500,
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}
+                  >
+                    {addSpace(fn.function.function)}
+                  </Typography>
+                  {carryState !== 'none' && (
+                    <Typography
+                      sx={{
+                        fontSize: 11,
+                        color:
+                          carryState === 'unconfirmed'
+                            ? status.warning.color
+                            : colors.up,
+                      }}
+                    >
+                      {carryState === 'unconfirmed'
+                        ? 'Not yet confirmed'
+                        : 'Updated'}
+                    </Typography>
+                  )}
+                </Box>
               </Box>
             )
           })}

@@ -6,7 +6,6 @@ import {
   MenuItem,
   OutlinedInput,
   Select,
-  Tooltip,
   Typography,
 } from '@mui/material'
 import {
@@ -19,14 +18,20 @@ import Field, { fieldInputSx } from '@/components/ui/Field'
 import { StatusChip } from '@/components/ui/StatusChip'
 import { optionalEmailValidator } from '@/views/EditSystemModal/validators'
 import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
+import {
+  useSystemAttributes,
+  optionsForField,
+  booleanOptions,
+  boolToSelectValue,
+  selectValueToBool,
+  isCrossFieldHidden,
+} from '@/utils/systemMetadataVocab'
+import type { SystemAttribute } from '@/types'
 import { getTodayISO, MAX_NOTES_LENGTH } from '@/utils/decommission'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { colors, radius } from '@/theme/tokens'
-import {
-  EXTENDED_METADATA_SUBHEADER,
-  EXTENDED_METADATA_LOCK_TOOLTIP,
-} from '@/constants'
-import { getFieldsBySection } from './fieldConfig'
+import { EXTENDED_METADATA_SUBHEADER } from '@/constants'
+import { getFieldsBySection, type FieldConfig } from './fieldConfig'
 
 /**
  * In-page edit view for the System Detail page. Renders the card-grouped
@@ -61,7 +66,12 @@ interface SystemDetailEditViewProps {
     e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
     key: string
   ) => void
-  onFieldChange: (key: string, value: string) => void
+  // Sets an extended field to its typed value: a string for enums/text, a
+  // boolean|null for the tri-state booleans, or a string[] for the multi-select.
+  onFieldChange: (
+    key: string,
+    value: string | boolean | string[] | null
+  ) => void
   onValidatedFieldChange: (key: string, isValid: boolean, value: string) => void
   onDecommissionDateChange: (value: string) => void
   onDecommissionNotesChange: (value: string) => void
@@ -72,12 +82,6 @@ interface SystemDetailEditViewProps {
   onReactivateRequest: () => void
   validateDecommissionDate: (dateStr: string) => boolean
   onSdlSyncToggle: (checked: boolean) => void
-  /**
-   * True for organization-wide admins: the Extended Metadata fields render
-   * editable. Scoped tiers see the values populated but locked, with a
-   * tooltip explaining the gate.
-   */
-  extendedEditable: boolean
   /**
    * Datacenter-environment vocabulary for the select field, passed down from
    * SystemDetailPage (which reads it from the outlet context).
@@ -200,13 +204,18 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
     validateDecommissionDate,
     onSdlSyncToggle,
     onValidatedFieldChange,
-    extendedEditable,
     datacenterEnvironments,
     targetMaturitySlot,
     opdivName,
   } = props
 
-  const extendedFields = getFieldsBySection('extended')
+  const attributes = useSystemAttributes()
+  // cloud_service_model and cloud_vendor do not apply to a non-cloud system;
+  // hide them while cloud_system is No (crossFieldClears empties them on the
+  // way out, so nothing hidden holds a stale value).
+  const extendedFields = getFieldsBySection('extended').filter(
+    (field) => !isCrossFieldHidden(field.key, editedSystem)
+  )
 
   const requiredError = (key: keyof FormValidType): boolean => !formValid[key]
   const requiredErrorText = (key: keyof FormValidType): string =>
@@ -592,19 +601,17 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
         </Card>
       </Box>
 
-      {/* Extended Metadata - full width below both columns. Inputs are
-          disabled unless the caller is an organization-wide admin; scoped
-          tiers see the values populated but locked, with a tooltip
-          explaining the gate. isso_name is display-only (backend-resolved),
-          so it renders disabled for everyone. */}
+      {/* Extended Metadata - full width below both columns. Standard system
+          attributes editable across all OpDivs. A field marked read-only in
+          fieldConfig renders disabled. Each control stores its typed clear
+          signal when emptied (enum '', boolean null, array []) so the save's
+          dirty-diff can tell "clear this" from "leave unchanged". */}
       <Box sx={{ gridColumn: '1 / -1' }}>
         <Card title="Extended Metadata">
           <Typography
             sx={{ fontSize: 12, color: colors.neutral500, mt: -1.5, mb: 2 }}
           >
-            {extendedEditable
-              ? EXTENDED_METADATA_SUBHEADER
-              : EXTENDED_METADATA_LOCK_TOOLTIP}
+            {EXTENDED_METADATA_SUBHEADER}
           </Typography>
           <Box
             sx={{
@@ -617,58 +624,187 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               gap: 2,
             }}
           >
-            {extendedFields.map((field) => {
-              const value = String(editedSystem[field.key] ?? '')
-              const editable = extendedEditable && !field.readOnly
-              // Optional email fields validate on content only: empty is
-              // fine, a non-empty value must be a well-formed address. The
-              // validity feeds the page's formValid map so a bad address
-              // gates Save the same way the modal path does.
-              const emailError =
-                field.type === 'email' && editable
-                  ? optionalEmailValidator(value)
-                  : false
-              const row = (
-                <TextRow
-                  id={`edit-${field.key}`}
-                  label={field.label}
-                  value={value}
-                  showError={Boolean(emailError)}
-                  errorText={emailError || ''}
-                  disabled={!editable}
-                  onChange={(e) => {
-                    const next = e.target.value
-                    if (field.type === 'email') {
-                      onValidatedFieldChange(
-                        field.key,
-                        optionalEmailValidator(next) === false,
-                        next
-                      )
-                    } else {
-                      onFieldChange(field.key, next)
-                    }
-                  }}
-                />
-              )
-              // readOnly fields are locked for everyone (backend-resolved),
-              // so the role-gate tooltip would be misleading on them.
-              return extendedEditable || field.readOnly ? (
-                <Box key={field.key}>{row}</Box>
-              ) : (
-                <Tooltip
-                  key={field.key}
-                  title={EXTENDED_METADATA_LOCK_TOOLTIP}
-                  arrow
-                  placement="top"
-                >
-                  <Box>{row}</Box>
-                </Tooltip>
-              )
-            })}
+            {extendedFields.map((field) => (
+              <ExtendedFieldControl
+                key={field.key}
+                field={field}
+                editedSystem={editedSystem}
+                attributes={attributes}
+                onFieldChange={onFieldChange}
+                onValidatedFieldChange={onValidatedFieldChange}
+              />
+            ))}
           </Box>
         </Card>
       </Box>
     </Box>
+  )
+}
+
+/**
+ * One extended-metadata input, rendered per its configured type: canonical
+ * enum select, tri-state boolean (Yes/No/Unknown), decomposed multi-select,
+ * validated email, or free text. Enum options come from the system-attributes
+ * vocabulary; a field marked read-only in fieldConfig renders disabled.
+ * @param {object} props - Component props.
+ * @param {FieldConfig} props.field - The field to render.
+ * @param {FismaSystemType} props.editedSystem - The draft being edited.
+ * @param {SystemAttribute[]} props.attributes - Vocabulary rows for enums.
+ * @param {(key: string, value: string | boolean | string[] | null) => void} props.onFieldChange
+ *   - Typed setter; each control passes its per-type clear signal when emptied.
+ * @param {(key: string, isValid: boolean, value: string) => void} props.onValidatedFieldChange
+ *   - Setter for email fields, feeding the page's formValid map.
+ * @returns {JSX.Element} The labelled input.
+ */
+function ExtendedFieldControl({
+  field,
+  editedSystem,
+  attributes,
+  onFieldChange,
+  onValidatedFieldChange,
+}: {
+  field: FieldConfig
+  editedSystem: FismaSystemType
+  attributes: SystemAttribute[]
+  onFieldChange: (
+    key: string,
+    value: string | boolean | string[] | null
+  ) => void
+  onValidatedFieldChange: (key: string, isValid: boolean, value: string) => void
+}) {
+  const id = `edit-${field.key}`
+  const disabled = field.readOnly
+  const selectAccessibility = {
+    labelId: `${id}-label`,
+    inputProps: { 'aria-labelledby': `${id}-label` },
+  }
+  if (field.type === 'select') {
+    const current = editedSystem[field.key] as string | null | undefined
+    return (
+      <Field id={id} label={field.label} helperText={field.helpText}>
+        <Select
+          id={id}
+          fullWidth
+          displayEmpty
+          disabled={disabled}
+          value={current || ''}
+          // enum clear signal is '' so the backend's blankToNil nulls it.
+          onChange={(e) => onFieldChange(field.key, e.target.value)}
+          input={<OutlinedInput sx={fieldInputSx} />}
+          renderValue={(selected) =>
+            selected ? (
+              (selected as string)
+            ) : (
+              <Box component="span" sx={{ color: colors.neutral500 }}>
+                None
+              </Box>
+            )
+          }
+          {...selectAccessibility}
+        >
+          <MenuItem value="">None</MenuItem>
+          {optionsForField(attributes, field.key).map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </Field>
+    )
+  }
+  if (field.type === 'boolean') {
+    return (
+      <Field id={id} label={field.label} helperText={field.helpText}>
+        <Select
+          id={id}
+          fullWidth
+          displayEmpty
+          disabled={disabled}
+          value={boolToSelectValue(
+            editedSystem[field.key] as boolean | null | undefined
+          )}
+          // Unknown ('') maps to null - the boolean clear signal.
+          onChange={(e) =>
+            onFieldChange(field.key, selectValueToBool(e.target.value))
+          }
+          input={<OutlinedInput sx={fieldInputSx} />}
+          {...selectAccessibility}
+        >
+          {booleanOptions(field.booleanLabels).map((o) => (
+            <MenuItem key={o.label} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </Field>
+    )
+  }
+  if (field.type === 'multiselect') {
+    const current =
+      (editedSystem[field.key] as string[] | null | undefined) ?? []
+    return (
+      <Field id={id} label={field.label} helperText={field.helpText}>
+        <Select
+          id={id}
+          fullWidth
+          multiple
+          disabled={disabled}
+          value={current}
+          // Deselecting all yields [] - the array clear signal.
+          onChange={(e) =>
+            onFieldChange(field.key, e.target.value as unknown as string[])
+          }
+          input={<OutlinedInput sx={fieldInputSx} />}
+          renderValue={(selected) => (selected as string[]).join(', ')}
+          {...selectAccessibility}
+        >
+          {optionsForField(attributes, field.key).map((o) => (
+            <MenuItem key={o.value} value={o.value}>
+              {o.label}
+            </MenuItem>
+          ))}
+        </Select>
+      </Field>
+    )
+  }
+  const value = String(editedSystem[field.key] ?? '')
+  // Optional email fields validate on content only: empty is fine, a
+  // non-empty value must be a well-formed address. The validity feeds the
+  // page's formValid map so a bad address gates Save the same way the
+  // modal path does.
+  const emailError =
+    field.type === 'email' && !disabled ? optionalEmailValidator(value) : false
+  return (
+    <Field
+      id={id}
+      label={field.label}
+      helperText={field.helpText}
+      error={emailError || undefined}
+    >
+      <OutlinedInput
+        id={id}
+        fullWidth
+        disabled={disabled}
+        value={value}
+        error={Boolean(emailError)}
+        // Send the raw value, so clearing sends '' (the blankToNil clear
+        // signal) rather than null, which the backend reads as "leave
+        // unchanged".
+        onChange={(e) => {
+          const next = e.target.value
+          if (field.type === 'email') {
+            onValidatedFieldChange(
+              field.key,
+              optionalEmailValidator(next) === false,
+              next
+            )
+          } else {
+            onFieldChange(field.key, next)
+          }
+        }}
+        sx={fieldInputSx}
+      />
+    </Field>
   )
 }
 

@@ -26,7 +26,8 @@ import { fetchOpDivs } from '@/utils/opdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { EXTENDED_METADATA_KEYS } from '@/views/SystemDetailPage/fieldConfig'
-import type { OpDiv } from '@/types'
+import { buildExtendedDiff } from '@/utils/systemMetadataVocab'
+import type { FismaSystemType, OpDiv } from '@/types'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -41,7 +42,6 @@ export default function EditSystemModal({
   system,
   mode,
   datacenterEnvironments = [],
-  extendedEditable = false,
 }: editSystemModalProps) {
   const {
     editedFismaSystem,
@@ -156,16 +156,13 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        // Extended metadata only sent when the caller is an
-        // organization-wide admin. The backend also strips these on scoped
-        // users - defense-in-depth. Null leaves a value unchanged (the
-        // backend writes only non-null fields, so imported data isn't
-        // clobbered).
-        if (extendedEditable) {
-          for (const key of EXTENDED_METADATA_KEYS) {
-            editBody[key] = editedFismaSystem[key] ?? null
-          }
-        }
+        // Extended metadata: dirty-diff. Omitted = leave unchanged; a field's
+        // per-type clear signal (enum '', boolean null, array []) = clear. Send
+        // only the fields the user changed from the loaded system.
+        Object.assign(
+          editBody,
+          buildExtendedDiff(editedFismaSystem, system, EXTENDED_METADATA_KEYS)
+        )
         await axiosInstance.put(
           `fismasystems/${editedFismaSystem.fismasystemid}`,
           editBody
@@ -204,14 +201,16 @@ export default function EditSystemModal({
           sdl_sync_enabled: editedFismaSystem.sdl_sync_enabled ?? false,
           opdiv_id: editedFismaSystem.opdiv_id,
         }
-        // Extended metadata only sent when the caller is an
-        // organization-wide admin. The backend also strips these on scoped
-        // users - defense-in-depth.
-        if (extendedEditable) {
-          for (const key of EXTENDED_METADATA_KEYS) {
-            body[key] = editedFismaSystem[key] ?? null
-          }
-        }
+        // Create: no prior system, so send only the extended fields the user
+        // actually set (diff against the empty baseline).
+        Object.assign(
+          body,
+          buildExtendedDiff(
+            editedFismaSystem,
+            EMPTY_SYSTEM as FismaSystemType,
+            EXTENDED_METADATA_KEYS
+          )
+        )
         await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
@@ -399,13 +398,11 @@ export default function EditSystemModal({
                 </Box>
               )}
             </SystemFormFields>
-            {extendedEditable && (
-              <ExtendedMetadataFields
-                editedFismaSystem={editedFismaSystem}
-                setEditedFismaSystem={setEditedFismaSystem}
-                mode={mode}
-              />
-            )}
+            <ExtendedMetadataFields
+              editedFismaSystem={editedFismaSystem}
+              setEditedFismaSystem={setEditedFismaSystem}
+              mode={mode}
+            />
           </Box>
         </Modal>
         <ConfirmDialog

@@ -27,6 +27,7 @@ jest.mock('../Title/Context', () => ({
     userInfo: { role: 'OWNER' },
     latestDataCallId: 5,
     selectedDatacall: null,
+    activeDatacallIds: [],
     datacalls: [],
     datacenterEnvironments: [],
     showDecommissioned: false,

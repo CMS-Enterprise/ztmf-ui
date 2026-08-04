@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams, useNavigate } from 'react-router-dom'
+import { useParams, Link as RouterLink } from 'react-router-dom'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import _ from 'lodash'
 
@@ -30,18 +30,24 @@ import { StatusChip, CodeBadge } from '@/components/ui/StatusChip'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
 import {
   isAdmin as checkIsAdmin,
-  hasUnscopedRead,
   isSystemScoped,
+  isSystemDelegate,
+  isISSO,
+  hasSystemAccess,
 } from '@/utils/userRoles'
 
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
 import TargetMaturityCard from './TargetMaturityCard'
 import { EXTENDED_METADATA_KEYS } from './fieldConfig'
+import {
+  buildExtendedDiff,
+  crossFieldClears,
+} from '@/utils/systemMetadataVocab'
+import SystemDelegatesSection from './SystemDelegatesSection'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
-  const navigate = useNavigate()
   const {
     fismaSystems,
     setFismaSystems,
@@ -50,6 +56,8 @@ export default function SystemDetailPage() {
     latestDataCallId,
     datacalls,
     datacenterEnvironments,
+    fetchFismaSystems,
+    showDecommissioned,
   } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
@@ -321,8 +329,13 @@ export default function SystemDetailPage() {
     }
   }
 
-  const handleFieldChange = (key: string, value: string) => {
-    setEditedSystem((prev) => (prev ? { ...prev, [key]: value } : prev))
+  const handleFieldChange = (
+    key: string,
+    value: string | boolean | string[] | null
+  ) => {
+    setEditedSystem((prev) =>
+      prev ? { ...prev, [key]: value, ...crossFieldClears(key, value) } : prev
+    )
   }
 
   const handleValidatedFieldChange = (
@@ -357,6 +370,16 @@ export default function SystemDetailPage() {
 
   const handleSave = async () => {
     if (!editedSystem) return
+    // The extended-metadata payload is a diff against the loaded system, and
+    // buildExtendedDiff treats a missing baseline as "every field is unset",
+    // which sends all of them. editedSystem outlives the system it was seeded
+    // from, so saving without a baseline would persist values the user never
+    // touched, including an ISSO name the backend derived rather than stored.
+    // Refuse the save rather than writing a payload built from no baseline.
+    if (!system) {
+      notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
+      return
+    }
     setIsSaving(true)
     try {
       // Full-system PUT. The page-level Edit button is gated on isAdmin,
@@ -375,23 +398,31 @@ export default function SystemDetailPage() {
         issoemail: editedSystem.issoemail,
         sdl_sync_enabled: editedSystem.sdl_sync_enabled,
       }
-      // Extended metadata fields are editable across all OpDivs; send each,
-      // using null to leave a value unchanged (the backend writes only
-      // non-null fields, so imported data isn't clobbered).
-      for (const key of EXTENDED_METADATA_KEYS) {
-        putBody[key] = editedSystem[key] ?? null
-      }
+      // Extended metadata: send only the fields the user changed. The backend
+      // reads an omitted field as "leave unchanged" and a per-type clear signal
+      // (enum '', boolean null, array []) as "clear".
+      Object.assign(
+        putBody,
+        buildExtendedDiff(editedSystem, system, EXTENDED_METADATA_KEYS)
+      )
       await axiosInstance.put(
         `fismasystems/${editedSystem.fismasystemid}`,
         putBody
       )
 
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
-      setFismaSystems((prev) =>
-        prev.map((s) =>
-          s.fismasystemid !== editedSystem.fismasystemid ? s : editedSystem
-        )
-      )
+      // Refetch rather than echoing the local draft into state. The PUT returns
+      // no body, and the saved value of a field the backend resolves is not the
+      // value that was sent: clearing isso_name stores NULL, and the list read
+      // then resolves the name from the ISSO's user record. Echoing the draft
+      // would show the cleared field as empty until the next fetch.
+      //
+      // The caller's decommissioned view mode is preserved so saving does not
+      // change which systems the dashboard lists. That mode can exclude the
+      // system just saved, so clearing triedFetch lets the single-system
+      // fallback re-add it.
+      triedFetch.current = false
+      await fetchFismaSystems(showDecommissioned)
     } catch (error) {
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
@@ -629,9 +660,20 @@ export default function SystemDetailPage() {
       : undefined
   const datacallNameById = (id?: number) =>
     id ? datacalls.find((dc) => dc.datacallid === id)?.datacall : undefined
-  const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
-  const opdivName =
-    opdivs.find((o) => o.opdiv_id === system.opdiv_id)?.name ?? null
+  const systemOpDiv = opdivs.find((o) => o.opdiv_id === system.opdiv_id)
+  const opdivCode = systemOpDiv?.code
+  const opdivName = systemOpDiv?.name ?? null
+
+  // Delegates section: visible to any assigned non-delegate (incl. ISSM) when
+  // the system's OpDiv has the capability enabled; hidden from delegates.
+  // Managing (add/invite/remove/renew) is ISSO + admin only - ISSM sees the
+  // roster read-only (the backend would 404 an ISSM write). The toggle read
+  // comes from the already-fetched opdivs list.
+  const canViewDelegates =
+    hasSystemAccess(userInfo) &&
+    !isSystemDelegate(userInfo) &&
+    !!systemOpDiv?.system_delegate_enabled
+  const canManageDelegates = isAdmin || isISSO(userInfo)
 
   // Target maturity owns its own edit/save lifecycle (see TargetMaturityCard).
   // The card is slotted into the right column of whichever view renders
@@ -674,16 +716,13 @@ export default function SystemDetailPage() {
       <Button
         variant="outlined"
         color="primary"
-        onClick={() =>
-          navigate(
-            `/questionnaire/${system.fismaacronym.toLowerCase()}`,
-            // QuestionnairePage reads the system id off location.state, not
-            // the URL, so we must pass it here (the page's early-return
-            // guard will otherwise show "Cannot load questionnaire from a
-            // direct link"). Mirrors how FismaTable opens the questionnaire.
-            { state: { fismasystemid: system.fismasystemid } }
-          )
-        }
+        // A real router link rather than onClick + navigate, so open-in-new-
+        // tab and copy-link work (ui#640). Same-tab clicks still carry the
+        // system id via route state; a new tab resolves it from the acronym
+        // in the URL (the questionnaire's deep-link path).
+        component={RouterLink}
+        to={`/questionnaire/${system.fismaacronym.toLowerCase()}`}
+        state={{ fismasystemid: system.fismasystemid }}
       >
         View questionnaire
       </Button>
@@ -795,7 +834,6 @@ export default function SystemDetailPage() {
           }
           targetMaturitySlot={targetMaturityCard}
           opdivName={opdivName}
-          extendedEditable={hasUnscopedRead(userInfo)}
         />
       ) : (
         <SystemDetailReadView
@@ -810,6 +848,14 @@ export default function SystemDetailPage() {
         />
       )}
 
+      {canViewDelegates && (
+        <Box sx={{ mt: 4 }}>
+          <SystemDelegatesSection
+            system={system}
+            canManage={canManageDelegates}
+          />
+        </Box>
+      )}
       <ConfirmDialog
         confirmationText={CONFIRMATION_MESSAGE}
         open={openConfirmDialog}

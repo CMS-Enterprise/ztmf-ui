@@ -261,4 +261,49 @@ describe('ProgressCell', () => {
     expect(screen.queryByText('Complete')).not.toBeInTheDocument()
     expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
   })
+
+  // --- Carried-forward wording on the current call ---
+
+  it('reads Awaiting confirmation for a current-call system with carried answers and zero updates', () => {
+    // The answers exist (carried forward) but none count as updated —
+    // "0/41 Not updated" read as data loss; the chip says the actual state.
+    render(
+      <ProgressCell
+        entry={{ ...untouchedEntry, questionsanswered: 41 }}
+        isCurrentCall={true}
+      />
+    )
+    expect(screen.getByText('0/41')).toBeInTheDocument()
+    expect(screen.getByText('Awaiting confirmation')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+  })
+
+  it('reads Not started for a current-call system with no answers at all', () => {
+    render(
+      <ProgressCell
+        entry={{ ...untouchedEntry, questionsanswered: 0 }}
+        isCurrentCall={true}
+      />
+    )
+    expect(screen.getByText('0/41')).toBeInTheDocument()
+    expect(screen.getByText('Not started')).toBeInTheDocument()
+    expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+  })
+
+  it('keeps the legacy Not updated wording when questionsanswered is absent', () => {
+    // ztmf#437 may not be deployed everywhere; without the field the split
+    // would be a guess, so the cell keeps saying what it always said.
+    render(<ProgressCell entry={untouchedEntry} isCurrentCall={true} />)
+    expect(screen.getByText('Not updated')).toBeInTheDocument()
+  })
+
+  it('describes the carried-forward state in the tooltip', () => {
+    expect(progressTooltip({ ...untouchedEntry, questionsanswered: 41 })).toBe(
+      'Answers carried forward from a previous data call — not yet confirmed'
+    )
+    // No answers at all keeps the plain no-updates line.
+    expect(progressTooltip({ ...untouchedEntry, questionsanswered: 0 })).toBe(
+      'No updates this data call'
+    )
+  })
 })

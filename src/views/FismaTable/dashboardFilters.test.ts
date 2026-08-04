@@ -3,6 +3,7 @@ import {
   applyDashboardFilters,
   isNotUpdated,
   hasNoActiveFilters,
+  isOpenCallInView,
   EMPTY_DASHBOARD_FILTERS,
 } from './dashboardFilters'
 
@@ -133,6 +134,62 @@ test('facets combine with AND', () => {
   )
   // Cloud ∩ opdiv 10 = {1,3}; not-updated of those = {1}
   expect(out.map((r) => r.fismasystemid)).toEqual([1])
+})
+
+test('open-call-only filter keeps only current-call rows', () => {
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ openCallOnly: true }),
+    (id) => id !== 1 && id !== 4 // sys1 and sys4 display a past call
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([2, 3])
+})
+
+test('open-call-only filter is a no-op without call context', () => {
+  // Callers without a predicate treat every row as current (the documented
+  // default), so the facet passes everything through.
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ openCallOnly: true })
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([1, 2, 3, 4])
+})
+
+test('open-call-only defaults off and counts as an active filter when on', () => {
+  // Default-off is deliberate (ui#639): default-on would hide closed-call
+  // rows silently and desync the export and stat tiles from the table.
+  expect(EMPTY_DASHBOARD_FILTERS.openCallOnly).toBe(false)
+  expect(hasNoActiveFilters(filters({ openCallOnly: true }))).toBe(false)
+})
+
+test('open-call-only composes with not-updated: current-call laggards only', () => {
+  const out = applyDashboardFilters(
+    ROWS,
+    PROGRESS,
+    CATEGORY_MAP,
+    filters({ openCallOnly: true, notUpdatedOnly: true }),
+    () => true
+  )
+  expect(out.map((r) => r.fismasystemid)).toEqual([1])
+})
+
+test('isOpenCallInView requires the open call to be among the viewed calls', () => {
+  // The whole point of the gate (ui#639): a call being open is not enough,
+  // it must be in the year-picker selection or no viewed row can be current.
+  expect(isOpenCallInView(5, false, [5, 4])).toBe(true)
+  expect(isOpenCallInView(5, false, [103, 4])).toBe(false) // open, out of view
+  expect(isOpenCallInView(5, true, [5, 4])).toBe(false) // in view, closed
+})
+
+test('isOpenCallInView is false before the datacall list loads', () => {
+  // latestDataCallId initializes to 0 in context; the gate must not treat
+  // that as an open call.
+  expect(isOpenCallInView(0, false, [0])).toBe(false)
+  expect(isOpenCallInView(0, false, [])).toBe(false)
 })
 
 test('a row whose environment is not in the category map is excluded when env filter is active', () => {

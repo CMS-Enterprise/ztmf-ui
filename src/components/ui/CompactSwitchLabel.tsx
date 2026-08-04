@@ -14,6 +14,8 @@ export type CompactSwitchLabelProps = {
   label: ReactNode
   /** Optional accessible label override. */
   ariaLabel?: string
+  /** Grays out and blocks the switch (e.g. a facet with nothing to match). */
+  disabled?: boolean
 }
 
 /**
@@ -33,6 +35,7 @@ export function CompactSwitchLabel({
   onChange,
   label,
   ariaLabel,
+  disabled,
 }: CompactSwitchLabelProps) {
   return (
     <FormControlLabel
@@ -69,11 +72,17 @@ export function CompactSwitchLabel({
           backgroundColor: colors.neutral400,
           opacity: 1,
         },
+        // The custom track sets opacity 1, which defeats MUI's built-in
+        // disabled dimming; restore a visible grayed state.
+        '& .MuiSwitch-switchBase.Mui-disabled + .MuiSwitch-track': {
+          opacity: 0.4,
+        },
       }}
       control={
         <Switch
           checked={checked}
           onChange={(e) => onChange(e.target.checked)}
+          disabled={disabled}
           inputProps={ariaLabel ? { 'aria-label': ariaLabel } : undefined}
         />
       }
