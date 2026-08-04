@@ -66,9 +66,8 @@ export function ProgressCell({
   if (!isCurrentCall) {
     // Coalesce so a response that omits the count renders an honest 0/N rather
     // than a bare "/N": the fraction interpolates the value directly, and React
-    // drops undefined from the output. The current-call branch below keeps its
-    // own null check because it has a distinct legacy wording to fall back to;
-    // here zero and missing describe the same state to the reader.
+    // drops undefined from the output. Zero and missing describe the same state
+    // to the reader.
     const answered = entry.questionsanswered ?? 0
     if (answered >= entry.questionsexpected) {
       return (
