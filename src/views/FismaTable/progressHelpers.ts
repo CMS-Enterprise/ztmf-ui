@@ -42,8 +42,14 @@ export function progressSortValue(
   if (!entry) return 2
   if (entry.questionsexpected <= 0) return 1.5
   if (!isCurrentCall) {
+    // Coalesce before the arithmetic. The type says the field is always served,
+    // but a response that omits it would otherwise produce NaN here, and a NaN
+    // sort key compares equal to every other row, so the row lands in an
+    // arbitrary position rather than anywhere meaningful. Treating a missing
+    // count as zero ranks it with the genuinely unanswered, which is the
+    // honest reading and matches what the cell renders.
     return Math.min(
-      Math.max(entry.questionsanswered, 0) / entry.questionsexpected,
+      Math.max(entry.questionsanswered ?? 0, 0) / entry.questionsexpected,
       1
     )
   }

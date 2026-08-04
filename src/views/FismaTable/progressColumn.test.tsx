@@ -102,6 +102,25 @@ describe('progressSortValue', () => {
       progressSortValue(pastComplete, false)
     )
   })
+
+  it('returns a usable rank for a past-call row missing the answered count', () => {
+    // The type requires the field, so absence can only be reached at runtime
+    // against a response that omits it, and the cast is how the test expresses
+    // that. Without coalescing this returned NaN, which compares equal to every
+    // other rank and drops the row at an arbitrary position instead of ranking
+    // it. Zero is the honest rank: nothing recorded as answered.
+    const missingAnswered = {
+      ...untouchedEntry,
+      questionsanswered: undefined,
+    } as unknown as ScoreProgress
+    const rank = progressSortValue(missingAnswered, false)
+    expect(Number.isNaN(rank)).toBe(false)
+    expect(rank).toBe(0)
+    // Ranks with the genuinely unanswered rather than above a partial call.
+    expect(rank).toBeLessThan(
+      progressSortValue({ ...untouchedEntry, questionsanswered: 10 }, false)
+    )
+  })
 })
 
 describe('progressTooltip', () => {
@@ -201,6 +220,22 @@ describe('ProgressCell', () => {
     expect(screen.getByText('0/41')).toBeInTheDocument()
     expect(screen.getByText('Incomplete')).toBeInTheDocument()
     expect(screen.queryByText('Not updated')).not.toBeInTheDocument()
+    expect(screen.queryByText('Complete')).not.toBeInTheDocument()
+  })
+
+  it('renders 0/total on a past call when the answered count is missing', () => {
+    // Reachable only at runtime against a response that omits the field, which
+    // the cast expresses. The fraction interpolates the value directly and React
+    // drops undefined, so without coalescing this rendered a bare "/41" beside a
+    // warning chip. This is the one input where retiring the score-presence
+    // proxy changes what a reader sees, so it is pinned here.
+    const missingAnswered = {
+      ...untouchedEntry,
+      questionsanswered: undefined,
+    } as unknown as ScoreProgress
+    render(<ProgressCell entry={missingAnswered} isCurrentCall={false} />)
+    expect(screen.getByText('0/41')).toBeInTheDocument()
+    expect(screen.getByText('Incomplete')).toBeInTheDocument()
     expect(screen.queryByText('Complete')).not.toBeInTheDocument()
   })
 
