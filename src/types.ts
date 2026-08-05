@@ -153,6 +153,18 @@ export type FismaSystemType = {
   // Extended metadata fields, typed and canonicalized by the backend.
   // Enum strings carry a canonical value or null; the tri-state booleans are
   // true / false / null = Unknown; cloud_service_model is a decomposed list.
+  //
+  // isso_name is asymmetric between read and write, and that asymmetry is the
+  // contract. A read may return either the stored override or a name the backend
+  // resolved from the ISSO's user record, and the payload does not say which. A
+  // write always stores. So echoing back a value the user did not edit converts a
+  // resolved name into a permanent stored override for that system, silently, and
+  // no server-side rule rejects it.
+  //
+  // The guarantee therefore lives in this client, by decision rather than by
+  // accident: send only the fields the user changed. buildExtendedDiff does that,
+  // and it needs a real baseline to work. Any move toward sending the whole
+  // object reintroduces the bug with every existing test still green.
   isso_name?: string | null
   hva?: boolean | null
   fips?: string | null
