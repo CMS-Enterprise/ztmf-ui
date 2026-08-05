@@ -53,10 +53,20 @@ beforeEach(() => {
   mockAxiosGet.mockResolvedValue(blobResponse)
 })
 
-function renderFooter(selectedRows: number[]) {
+function renderFooter(
+  selectedRows: number[],
+  extra: {
+    systemCallMap?: Record<number, number[]>
+    chosenCallMap?: Record<number, number>
+  } = {}
+) {
   return render(
     <MemoryRouter>
-      <CustomFooterSaveComponent {...baseProps} selectedRows={selectedRows} />
+      <CustomFooterSaveComponent
+        {...baseProps}
+        {...extra}
+        selectedRows={selectedRows}
+      />
     </MemoryRouter>
   )
 }
@@ -96,5 +106,29 @@ describe('CustomFooterSaveComponent download button', () => {
     // Must NOT be a bare export URL (no fsids = download everything)
     expect(calledUrl).not.toMatch(/\/export$/)
     expect(calledUrl).not.toMatch(/\/export\?$/)
+  })
+
+  it('targets a not-started system displayed call, not the active call', () => {
+    // A not-started system has no score-derived call (empty systemCallMap), but
+    // the dashboard shows it against call 7 (a past-year view). The export must
+    // target 7, not the active call 42 - otherwise a past-year export silently
+    // hits the wrong call once the backend starts returning rows for it.
+    renderFooter([3], { systemCallMap: {}, chosenCallMap: { 3: 7 } })
+    fireEvent.click(
+      screen.getByRole('button', { name: /download selected system answers/i })
+    )
+    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
+    expect(calledUrl).toContain('/datacalls/7/export')
+    expect(calledUrl).not.toContain('/datacalls/42/export')
+    expect(calledUrl).toContain('fsids=3')
+  })
+
+  it('disables export when selected rows display different calls', () => {
+    // Two never-started rows shown against different calls have no single
+    // export target, so the button stays disabled rather than guessing.
+    renderFooter([3, 4], { systemCallMap: {}, chosenCallMap: { 3: 7, 4: 9 } })
+    expect(
+      screen.getByRole('button', { name: /download selected system answers/i })
+    ).toBeDisabled()
   })
 })

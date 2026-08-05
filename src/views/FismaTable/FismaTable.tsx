@@ -77,6 +77,7 @@ declare module '@mui/x-data-grid' {
     activeDataCallId: number
     scores: Record<number, SystemScoreEntry>
     systemCallMap?: Record<number, number[]>
+    chosenCallMap?: Record<number, number>
   }
   interface ToolbarPropsOverrides {
     filters: DashboardFilterState
@@ -105,10 +106,24 @@ export function CustomFooterSaveComponent(
   // rows' own call(s): if they all share one call, export that; an empty
   // provenance falls back to the active call; a selection that spans more than
   // one call has no single export target, so the button is disabled.
+  //
+  // A not-started system has no score-derived call (systemCallMap keys off
+  // scores), so it would otherwise contribute nothing and let an
+  // all-never-started selection fall through to the active call - wrong in a
+  // past-year view. The dashboard still shows such a row against one chosen
+  // call (chosenCallMap, which buildDashboardMaps fills for every row), so fall
+  // back to that per row before the global active-call default.
   const selectedCallIds = new Set<number>()
   const callMap = props.systemCallMap ?? {}
+  const chosenMap = props.chosenCallMap ?? {}
   for (const id of props.selectedRows ?? []) {
-    for (const cid of callMap[id as number] ?? []) selectedCallIds.add(cid)
+    const scoreCalls = callMap[id as number] ?? []
+    if (scoreCalls.length > 0) {
+      for (const cid of scoreCalls) selectedCallIds.add(cid)
+    } else {
+      const chosen = chosenMap[id as number]
+      if (chosen != null) selectedCallIds.add(chosen)
+    }
   }
   const exportCallId =
     selectedCallIds.size === 1
@@ -1038,6 +1053,7 @@ export default function FismaTable({
             activeDataCallId,
             scores,
             systemCallMap,
+            chosenCallMap,
           },
           toolbar: {
             filters,
