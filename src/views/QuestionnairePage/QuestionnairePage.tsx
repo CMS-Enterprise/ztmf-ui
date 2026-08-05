@@ -116,6 +116,10 @@ const CssTextField = styled(TextField)({
     },
   },
 })
+// Ties the carried-forward guidance line to the Confirm button it explains, so
+// a screen reader hears the reason with the action.
+const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
+
 const addSpace = (str: string) => {
   for (let i = 0; i < str.length; i++) {
     if (
@@ -641,6 +645,11 @@ export default function QuestionnarePage() {
     priorReviewBlocked:
       priorReviewState === 'pending' || priorReviewState === 'initializing',
   })
+  // Derived from the button so the sentence and the action it describes cannot
+  // drift apart. !currentPriorResponse suppresses it on insights questions,
+  // where the card owns the explanation — a resolved review unblocks the
+  // button, so nothing else would.
+  const showCarryForwardHelper = showConfirmButton && !currentPriorResponse
   const [confirming, setConfirming] = React.useState(false)
   // The Complete-time summary dialog. null = closed.
   const [confirmSummary, setConfirmSummary] =
@@ -1769,6 +1778,20 @@ export default function QuestionnarePage() {
                       />
                     </>
                   )}
+                  {/* Sits where the prior-response flow puts its own review
+                      message, so both variants instruct in the same place.
+                      "before continuing" is advisory on purpose: Next is not
+                      blocked on this variant. Plain text, not a live region —
+                      the chip below owns the announcement. */}
+                  {showCarryForwardHelper && (
+                    <Typography
+                      id={CARRY_FORWARD_HELPER_ID}
+                      sx={{ mt: 0.5, fontSize: 12, color: '#8a4b00' }}
+                    >
+                      Review the carried-forward answer and confirm it, or write
+                      a new justification, before continuing.
+                    </Typography>
+                  )}
                   <Box
                     sx={{
                       display: 'flex',
@@ -1843,6 +1866,11 @@ export default function QuestionnarePage() {
                           startIcon={<CheckCircleOutlineIcon />}
                           onClick={handleConfirmClick}
                           disabled={confirming}
+                          aria-describedby={
+                            showCarryForwardHelper
+                              ? CARRY_FORWARD_HELPER_ID
+                              : undefined
+                          }
                           sx={{ textTransform: 'none' }}
                         >
                           Confirm this answer is still accurate
