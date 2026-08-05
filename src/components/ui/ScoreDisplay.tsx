@@ -23,6 +23,11 @@ export type ScoreDisplayProps = {
   barWidth?: number
   /** Show the tier name to the right of the value. Defaults to true. */
   showTier?: boolean
+  /**
+   * Stack the tier name above the bar + value row instead of beside it.
+   * Halves the horizontal footprint for tight table columns.
+   */
+  stacked?: boolean
 }
 
 /**
@@ -41,6 +46,7 @@ export function ScoreDisplay({
   tier,
   barWidth = 64,
   showTier = true,
+  stacked = false,
 }: ScoreDisplayProps) {
   const hasScore = typeof score === 'number'
   const resolvedTier: ScoreTier = tier ?? 'Not Assessed'
@@ -52,53 +58,122 @@ export function ScoreDisplay({
     ? colors.neutral500
     : TIER_CHIP_STYLES[resolvedTier].color
 
+  const tierLabel = showTier && (
+    <Box
+      component="span"
+      sx={{ fontSize: 12, fontWeight: 500, color: tierText }}
+    >
+      {resolvedTier}
+    </Box>
+  )
+
+  if (stacked) {
+    return (
+      <Box
+        sx={{
+          display: 'flex',
+          flexDirection: 'column',
+          alignItems: 'flex-start',
+          gap: 0.25,
+        }}
+      >
+        {tierLabel}
+        <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+          <ScoreBar
+            barWidth={barWidth}
+            notAssessed={notAssessed}
+            fill={fill}
+            tier={resolvedTier}
+          />
+          <ScoreValue notAssessed={notAssessed} score={score} />
+        </Box>
+      </Box>
+    )
+  }
+
   return (
     <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-      <Box
-        sx={{
-          width: barWidth,
-          height: 6,
-          borderRadius: `${radius.sm}px`,
-          flexShrink: 0,
-          ...(notAssessed
-            ? {
-                border: `1px dashed ${colors.neutral200}`,
-                boxSizing: 'border-box',
-              }
-            : { backgroundColor: colors.neutral200, overflow: 'hidden' }),
-        }}
-      >
-        {!notAssessed && (
-          <Box
-            sx={{
-              width: `${fill * 100}%`,
-              height: '100%',
-              borderRadius: `${radius.sm}px`,
-              backgroundColor: tierDot[resolvedTier],
-            }}
-          />
-        )}
-      </Box>
-      <Box
-        component="span"
-        sx={{
-          fontFamily: fonts.mono,
-          fontSize: 14,
-          fontWeight: 600,
-          color: notAssessed ? colors.neutral500 : colors.ink,
-          minWidth: 34,
-        }}
-      >
-        {notAssessed ? EM_DASH : score.toFixed(2)}
-      </Box>
-      {showTier && (
+      <ScoreBar
+        barWidth={barWidth}
+        notAssessed={notAssessed}
+        fill={fill}
+        tier={resolvedTier}
+      />
+      <ScoreValue notAssessed={notAssessed} score={score} />
+      {tierLabel}
+    </Box>
+  )
+}
+
+/**
+ * The filled (or dashed not-assessed) score track.
+ * @param {object} props - Bar width, fill fraction, tier and assessed state.
+ * @returns {JSX.Element} The bar.
+ */
+function ScoreBar({
+  barWidth,
+  notAssessed,
+  fill,
+  tier,
+}: {
+  barWidth: number
+  notAssessed: boolean
+  fill: number
+  tier: ScoreTier
+}) {
+  return (
+    <Box
+      sx={{
+        width: barWidth,
+        height: 6,
+        borderRadius: `${radius.sm}px`,
+        flexShrink: 0,
+        ...(notAssessed
+          ? {
+              border: `1px dashed ${colors.neutral200}`,
+              boxSizing: 'border-box',
+            }
+          : { backgroundColor: colors.neutral200, overflow: 'hidden' }),
+      }}
+    >
+      {!notAssessed && (
         <Box
-          component="span"
-          sx={{ fontSize: 12, fontWeight: 500, color: tierText }}
-        >
-          {resolvedTier}
-        </Box>
+          sx={{
+            width: `${fill * 100}%`,
+            height: '100%',
+            borderRadius: `${radius.sm}px`,
+            backgroundColor: tierDot[tier],
+          }}
+        />
       )}
+    </Box>
+  )
+}
+
+/**
+ * The monospace numeric value, or an em-dash when not assessed.
+ * @param {object} props - Score and assessed state.
+ * @returns {JSX.Element} The value span.
+ */
+function ScoreValue({
+  notAssessed,
+  score,
+}: {
+  notAssessed: boolean
+  score?: number
+}) {
+  return (
+    <Box
+      component="span"
+      sx={{
+        fontFamily: fonts.mono,
+        fontSize: 14,
+        fontWeight: 600,
+        color: notAssessed ? colors.neutral500 : colors.ink,
+        minWidth: 34,
+      }}
+    >
+      {notAssessed || typeof score !== 'number' ? EM_DASH : score.toFixed(2)}
     </Box>
   )
 }

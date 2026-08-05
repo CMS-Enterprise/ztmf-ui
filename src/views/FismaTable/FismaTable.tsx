@@ -39,7 +39,7 @@ import { progressSortValue } from './progressHelpers'
 import { isNotUpdated, isOpenCallInView } from './dashboardFilters'
 import { resolveRowCallId, datacallNameComparator } from './rowCall'
 import ScoreDisplay from '@/components/ui/ScoreDisplay'
-import { CodeBadge, StatusChip } from '@/components/ui/StatusChip'
+import { CodeBadge } from '@/components/ui/StatusChip'
 import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
 import CompactSwitchLabel from '@/components/ui/CompactSwitchLabel'
 import { colors, fonts, radius } from '@/theme/tokens'
@@ -673,7 +673,9 @@ export default function FismaTable({
       field: 'Score',
       headerName: 'Zero Trust Score',
       type: 'number',
-      width: 240,
+      // Stacked tier-over-bar layout roughly halves the footprint the old
+      // inline row needed; the freed width goes to the Data Call column.
+      width: 150,
       align: 'left',
       headerAlign: 'left',
       hideable: false,
@@ -683,7 +685,7 @@ export default function FismaTable({
       },
       renderCell: (params) => {
         const entry = scores[params.row.fismasystemid]
-        return <ScoreDisplay score={entry?.score} tier={entry?.tier} />
+        return <ScoreDisplay score={entry?.score} tier={entry?.tier} stacked />
       },
     },
     {
@@ -696,7 +698,10 @@ export default function FismaTable({
       // from the name (it is not simply "last completed call").
       description:
         "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the newest selected call for a system with no data in them.",
-      width: 130,
+      // Flexes into the width the stacked Score column freed; call names
+      // like "FY2020 Imperial Archives Import" were truncating at 130px.
+      flex: 1,
+      minWidth: 170,
       align: 'center',
       headerAlign: 'center',
       valueGetter: (value) =>
@@ -745,20 +750,9 @@ export default function FismaTable({
         />
       ),
     },
-    {
-      field: 'status',
-      headerName: 'Status',
-      flex: 0.8,
-      minWidth: 110,
-      valueGetter: (params) =>
-        params.row.decommissioned ? 'Decommissioned' : 'Active',
-      renderCell: (params) =>
-        params.row.decommissioned ? (
-          <StatusChip label="Decom." kind="neutral" />
-        ) : (
-          <StatusChip label="Active" kind="active" />
-        ),
-    },
+    // No Status column: the decommissioned toggle swaps the fetch, so the
+    // table is always all-active or all-decommissioned and a per-row status
+    // could never differ within a view. Revisit if the views ever mix.
     {
       field: 'actions',
       headerName: 'Actions',
