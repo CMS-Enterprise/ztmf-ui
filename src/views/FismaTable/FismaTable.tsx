@@ -9,6 +9,7 @@ import Tooltip from '@mui/material/Tooltip'
 import {
   Alert,
   Box,
+  Button,
   InputBase,
   ListItemText,
   ListSubheader,
@@ -109,6 +110,25 @@ function TableToolbar({
     : hasOpenCall
       ? 'The open data call is not in the selected view'
       : 'No data call is currently open'
+  // One-click reset of every facet, the decommissioned toggle, and the typed
+  // search term (#566/#573). Show Decommissioned counts as an active filter
+  // for the enabled state - it lives in Title context (it gates a refetch)
+  // but reads as a filter to the user.
+  const hasActiveFilters =
+    search.trim() !== '' ||
+    envFilter !== 'all' ||
+    opdivFilter !== 'all' ||
+    notUpdatedOnly ||
+    openCallOnly ||
+    showDecommissioned
+  const handleClearAll = () => {
+    setSearch('')
+    setEnvFilter('all')
+    setOpDivFilter('all')
+    setNotUpdatedOnly(false)
+    setOpenCallOnly(false)
+    setShowDecommissioned(false)
+  }
   const compactAutocompleteSx = {
     '& .MuiInputBase-root': {
       height: 30,
@@ -263,6 +283,16 @@ function TableToolbar({
             onChange={setShowDecommissioned}
             label="Show decommissioned"
           />
+          <Button
+            variant="text"
+            color="primary"
+            size="small"
+            onClick={handleClearAll}
+            disabled={!hasActiveFilters}
+            sx={{ fontSize: 13, fontWeight: 600, textTransform: 'none' }}
+          >
+            Clear filters
+          </Button>
         </Box>
       </Box>
       {/* Toolbar-row captions crowd the filter cluster and wrap it (ui#639),
@@ -935,15 +965,20 @@ export default function FismaTable({
             // De-emphasis must not dim interactive elements: whole-row
             // opacity would drop the name link, checkbox, and action icons
             // below WCAG contrast minima while they stay clickable. Tint the
-            // row background only; cells that set their own text color (the
-            // link, chips, score) keep full contrast, and the Data Call
-            // column names the older call outright.
+            // row background and mute the plain-text columns by field, so
+            // the name link, chips, badges, and score keep their own
+            // full-contrast colors (the Data Call column also names the
+            // older call outright). neutral500 on neutral50 holds AA.
             '& .past-call-row': {
               backgroundColor: colors.neutral50,
             },
             '& .past-call-row .MuiDataGrid-cell': {
               color: colors.neutral500,
             },
+            '& .past-call-row [data-field="fismaacronym"] .MuiTypography-root, & .past-call-row [data-field="isso_name"] .MuiTypography-root, & .past-call-row [data-field="datacenterenvironment"] .MuiTypography-root, & .past-call-row [data-field="rowdatacall"] .MuiTypography-root, & .past-call-row [data-field="fismaname"] .MuiTypography-root':
+              {
+                color: colors.neutral500,
+              },
           }}
         />
       </Box>
