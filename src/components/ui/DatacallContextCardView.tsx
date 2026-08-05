@@ -1,9 +1,15 @@
-import { useMemo } from 'react'
+import { useMemo, useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import Chip from '@mui/material/Chip'
-import Autocomplete from '@mui/material/Autocomplete'
-import TextField from '@mui/material/TextField'
+import Checkbox from '@mui/material/Checkbox'
+import IconButton from '@mui/material/IconButton'
+import ListItemText from '@mui/material/ListItemText'
+import ListSubheader from '@mui/material/ListSubheader'
+import Menu from '@mui/material/Menu'
+import MenuItem from '@mui/material/MenuItem'
+import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
+import CloseIcon from '@mui/icons-material/Close'
 import StatusChip from '@/components/ui/StatusChip'
 import { colors, radius } from '@/theme/tokens'
 import {
@@ -30,14 +36,23 @@ export type DatacallContextCardViewProps = {
   datacalls: datacall[]
   /**
    * Currently-selected single datacall, or null while the dashboard is
-   * aggregating the active year's calls.
+   * aggregating more than one of the active year's calls.
    */
   selectedDatacall: datacall | null
   /**
-   * Fired when the user picks a datacall, or with null when they clear the
-   * pick to return to the aggregated year view.
+   * Fired when the user picks a datacall (single-pick mode), or with null
+   * when they clear back to the aggregated year view.
    */
   onSelect: (dc: datacall | null) => void
+  /**
+   * Multi-select toggle (#467). When provided, the dropdown renders checkbox
+   * rows and stays open across clicks: a call in a different year switches
+   * to that whole year, a call in the active year toggles on/off (the
+   * caller's rules; this view just forwards the click). When omitted, rows
+   * are plain single-pick items that close the menu (the questionnaire's
+   * one-call-at-a-time mode).
+   */
+  onToggle?: (dc: datacall) => void
   /**
    * Datacall id considered "latest" by the system; rendered with a "Current"
    * outlined chip inside the picker dropdown so users can spot the active
@@ -47,7 +62,8 @@ export type DatacallContextCardViewProps = {
   /**
    * The data calls the dashboard is currently aggregating (the active
    * year's toggled-on calls). Drives the aggregate summary shown while no
-   * single call is selected, and the Opens/Closes range on the right.
+   * single call is selected, the checkbox states, and the Opens/Closes
+   * range on the right.
    */
   activeDatacallIds?: number[]
   /**
@@ -66,20 +82,22 @@ export type DatacallContextCardViewProps = {
 }
 
 /**
- * Pure presentational shell for the datacall context card. Owns no state and
- * no context: the parent supplies the datacall list, current selection, and
- * the change handler. Keeping this layer pure means it can be rendered from
- * Storybook, dropped into snapshot tests, or composed under a different
- * data source without dragging Title-context coupling along with it.
+ * Pure presentational shell for the datacall context card. Owns no state
+ * beyond the open menu anchor: the parent supplies the datacall list, the
+ * current selection/aggregate set, and the change handlers. Keeping this
+ * layer pure means it can be rendered from Storybook, dropped into snapshot
+ * tests, or composed under a different data source without dragging
+ * Title-context coupling along with it.
  *
- * The interactive picker is a searchable Autocomplete styled to read like a
- * pill (primary50 fill, primary text, 30px height), with options grouped by
- * fiscal year (newest first) and labeled with their tenant (CMS quarterly /
- * HHS ZTM). While the dashboard is aggregating a whole year (no single call
- * selected), the picker shows an aggregate summary ("FY2026 - 3 calls") and
- * the right side shows the opens/closes range across those calls; clearing a
- * single-call pick returns to that aggregated view. When {@link readOnly} is
- * true the picker collapses to a non-interactive pill of the same shape.
+ * The picker is a pill button (primary50 fill, primary text, 30px height)
+ * opening a menu of calls grouped by fiscal year (newest first) and labeled
+ * with their tenant (CMS quarterly / HHS ZTM). With {@link onToggle} the
+ * rows carry checkboxes and support the year-grouped multi-select (#467);
+ * without it a click picks that one call. While more than one call is
+ * aggregated the pill shows a summary ("FY2026 - 3 calls") and the right
+ * side shows the opens/closes span across those calls; the clear X returns
+ * a single-call pick to that aggregated view. When {@link readOnly} is true
+ * the picker collapses to a non-interactive pill of the same shape.
  * @param {DatacallContextCardViewProps} props - Component props.
  * @returns {JSX.Element | null} The card markup, or null when the datacall
  *   list is empty (so callers can mount the card unconditionally).
@@ -88,18 +106,14 @@ export default function DatacallContextCardView({
   datacalls,
   selectedDatacall,
   onSelect,
+  onToggle,
   latestDataCallId,
   activeDatacallIds = [],
   readOnly = false,
   clearable = true,
 }: DatacallContextCardViewProps) {
-  // Options flattened from the year groups so the Autocomplete's groupBy
-  // always sees contiguous groups (newest year first, deadline order within
-  // a year, unparseable names at the bottom).
-  const groupedOptions = useMemo(
-    () => groupDatacallsByYear(datacalls).flatMap((group) => group.calls),
-    [datacalls]
-  )
+  const [menuAnchor, setMenuAnchor] = useState<null | HTMLElement>(null)
+  const groups = useMemo(() => groupDatacallsByYear(datacalls), [datacalls])
   const activeCalls = useMemo(
     () => datacalls.filter((dc) => activeDatacallIds.includes(dc.datacallid)),
     [datacalls, activeDatacallIds]
@@ -135,7 +149,24 @@ export default function DatacallContextCardView({
     ? windowCalls.every((dc) => new Date() > new Date(dc.deadline))
     : false
 
-  const pillLabel = selectedDatacall?.datacall ?? aggregateSummary
+  const pillLabel =
+    selectedDatacall?.datacall ?? (aggregating ? aggregateSummary : '-')
+  const menuOpen = Boolean(menuAnchor)
+  const closeMenu = () => setMenuAnchor(null)
+
+  const pillSx = {
+    display: 'inline-flex',
+    alignItems: 'center',
+    height: 30,
+    px: 1.5,
+    fontSize: 13,
+    fontWeight: 600,
+    color: colors.primary,
+    backgroundColor: colors.primary50,
+    borderRadius: `${radius.button}px`,
+    minWidth: 240,
+    boxSizing: 'border-box' as const,
+  }
 
   return (
     <Box
@@ -171,153 +202,161 @@ export default function DatacallContextCardView({
       {readOnly ? (
         <Box
           aria-label={`Datacall: ${pillLabel}`}
-          sx={{
-            display: 'inline-flex',
-            alignItems: 'center',
-            height: 30,
-            px: 1.5,
-            fontSize: 13,
-            fontWeight: 600,
-            color: colors.primary,
-            backgroundColor: colors.primary50,
-            borderRadius: `${radius.button}px`,
-            minWidth: 240,
-            cursor: 'default',
-          }}
+          sx={{ ...pillSx, cursor: 'default' }}
         >
           {pillLabel}
         </Box>
       ) : (
-        <Autocomplete
-          size="small"
-          options={groupedOptions}
-          value={selectedDatacall}
-          getOptionLabel={(dc) => dc.datacall}
-          isOptionEqualToValue={(a, b) => a.datacallid === b.datacallid}
-          groupBy={(dc) => {
-            const { fiscalYear } = parseDatacallName(dc.datacall)
-            return fiscalYear ? `FY${fiscalYear}` : 'Other'
-          }}
-          onChange={(_event, dc) => onSelect(dc)}
-          // Clearing returns to the aggregated year view. Hidden while
-          // already aggregating (nothing to clear) and on pages that view
-          // one specific call (nothing to clear TO).
-          disableClearable={!clearable || !selectedDatacall}
-          clearText="Show the whole year"
-          renderOption={(props, option) => {
-            const isCurrent = option.datacallid === latestDataCallId
-            const inActiveSet = activeDatacallIds.includes(option.datacallid)
-            const closed = new Date() > new Date(option.deadline)
-            const { tenant } = parseDatacallName(option.datacall)
-            const deadlineLabel = new Date(option.deadline).toLocaleDateString(
-              'en-US',
-              { month: 'short', day: 'numeric', year: 'numeric' }
-            )
-            const { key, ...rest } = props
-            return (
-              <li key={key} {...rest}>
-                <Box sx={{ width: '100%' }}>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      justifyContent: 'space-between',
-                      gap: 1,
+        <>
+          <Box
+            component="button"
+            type="button"
+            onClick={(e: React.MouseEvent<HTMLElement>) =>
+              setMenuAnchor(e.currentTarget)
+            }
+            aria-haspopup="true"
+            aria-expanded={menuOpen ? 'true' : undefined}
+            aria-label={
+              aggregating
+                ? `Select data calls (viewing ${aggregateSummary})`
+                : `Select data calls (viewing ${pillLabel})`
+            }
+            sx={{
+              ...pillSx,
+              justifyContent: 'space-between',
+              gap: 0.5,
+              border: 'none',
+              cursor: 'pointer',
+              fontFamily: 'inherit',
+              '&:hover': { backgroundColor: colors.neutral100 },
+            }}
+          >
+            <Box component="span">{pillLabel}</Box>
+            <ArrowDropDownIcon sx={{ fontSize: 20 }} />
+          </Box>
+          {/* Clearing a single-call pick returns to the aggregated year
+              view. Hidden while already aggregating (nothing to clear) and
+              on pages that view one specific call (nothing to clear TO). */}
+          {clearable && selectedDatacall && (
+            <IconButton
+              size="small"
+              aria-label="Show the whole year"
+              onClick={() => onSelect(null)}
+              sx={{ color: colors.primary, ml: -1 }}
+            >
+              <CloseIcon sx={{ fontSize: 16 }} />
+            </IconButton>
+          )}
+          <Menu
+            anchorEl={menuAnchor}
+            open={menuOpen}
+            onClose={closeMenu}
+            MenuListProps={{
+              'aria-label': 'Data calls',
+              dense: true,
+              sx: { minWidth: 300 },
+            }}
+          >
+            {groups.flatMap((group) => [
+              <ListSubheader
+                key={`year-${group.year ?? 'other'}`}
+                sx={{
+                  fontSize: 11,
+                  fontWeight: 600,
+                  letterSpacing: '0.08em',
+                  textTransform: 'uppercase',
+                  color: colors.neutral500,
+                  lineHeight: '28px',
+                }}
+              >
+                {group.year != null ? `FY${group.year}` : 'Other'}
+              </ListSubheader>,
+              ...group.calls.map((option) => {
+                const isCurrent = option.datacallid === latestDataCallId
+                const checked = activeDatacallIds.includes(option.datacallid)
+                const closed = new Date() > new Date(option.deadline)
+                const { tenant } = parseDatacallName(option.datacall)
+                const deadlineLabel = new Date(
+                  option.deadline
+                ).toLocaleDateString('en-US', {
+                  month: 'short',
+                  day: 'numeric',
+                  year: 'numeric',
+                })
+                return (
+                  <MenuItem
+                    key={option.datacallid}
+                    dense
+                    selected={!onToggle && checked}
+                    onClick={() => {
+                      // Multi mode toggles and stays open so several calls
+                      // can be flipped in one visit; single-pick closes.
+                      if (onToggle) {
+                        onToggle(option)
+                        return
+                      }
+                      onSelect(option)
+                      closeMenu()
                     }}
                   >
-                    <Typography variant="body2" sx={{ fontWeight: 500 }}>
-                      {option.datacall}
-                      {tenant !== 'Other' && (
+                    {onToggle && (
+                      <Checkbox
+                        checked={checked}
+                        readOnly
+                        size="small"
+                        sx={{ mr: 1, p: 0.25 }}
+                      />
+                    )}
+                    <ListItemText
+                      primary={
                         <Box
                           component="span"
-                          sx={{ color: colors.neutral500, fontWeight: 400 }}
+                          sx={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 1,
+                          }}
                         >
-                          {' '}
-                          - {tenant}
+                          <Box component="span" sx={{ fontWeight: 500 }}>
+                            {option.datacall}
+                            {tenant !== 'Other' && (
+                              <Box
+                                component="span"
+                                sx={{
+                                  color: colors.neutral500,
+                                  fontWeight: 400,
+                                }}
+                              >
+                                {' '}
+                                - {tenant}
+                              </Box>
+                            )}
+                          </Box>
+                          {isCurrent && (
+                            <Chip
+                              label="Current"
+                              size="small"
+                              variant="outlined"
+                              color="primary"
+                              sx={{
+                                height: 18,
+                                fontSize: '0.65rem',
+                                '& .MuiChip-label': { px: 0.75 },
+                              }}
+                            />
+                          )}
                         </Box>
-                      )}
-                    </Typography>
-                    <Box
-                      sx={{ display: 'flex', alignItems: 'center', gap: 0.5 }}
-                    >
-                      {aggregating && inActiveSet && (
-                        <Chip
-                          label="In view"
-                          size="small"
-                          variant="outlined"
-                          sx={{
-                            height: 18,
-                            fontSize: '0.65rem',
-                            '& .MuiChip-label': { px: 0.75 },
-                          }}
-                        />
-                      )}
-                      {isCurrent && (
-                        <Chip
-                          label="Current"
-                          size="small"
-                          variant="outlined"
-                          color="primary"
-                          sx={{
-                            height: 18,
-                            fontSize: '0.65rem',
-                            '& .MuiChip-label': { px: 0.75 },
-                          }}
-                        />
-                      )}
-                    </Box>
-                  </Box>
-                  <Typography
-                    variant="caption"
-                    sx={{ color: 'text.secondary' }}
-                  >
-                    {closed ? 'Closed' : 'Active'} · deadline {deadlineLabel}
-                  </Typography>
-                </Box>
-              </li>
-            )
-          }}
-          slotProps={{ paper: { sx: { minWidth: 280 } } }}
-          sx={{
-            minWidth: 240,
-            '& .MuiInputBase-root': {
-              height: 30,
-              fontSize: 13,
-              fontWeight: 600,
-              color: colors.primary,
-              backgroundColor: colors.primary50,
-              borderRadius: `${radius.button}px`,
-              py: '0 !important',
-              paddingRight: '8px !important',
-            },
-            '& .MuiAutocomplete-input': {
-              py: '0 !important',
-              color: colors.primary,
-            },
-            // The aggregate summary rides in the placeholder; keep it as
-            // readable as a real value, not placeholder-gray.
-            '& .MuiAutocomplete-input::placeholder': {
-              color: colors.primary,
-              opacity: 1,
-              fontWeight: 600,
-            },
-            '& .MuiOutlinedInput-notchedOutline': { border: 'none' },
-            '& .MuiAutocomplete-popupIndicator': { color: colors.primary },
-            '& .MuiAutocomplete-clearIndicator': { color: colors.primary },
-          }}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              placeholder={aggregating ? aggregateSummary : 'Select datacall'}
-              inputProps={{
-                ...params.inputProps,
-                'aria-label': aggregating
-                  ? `Select datacall (viewing ${aggregateSummary})`
-                  : 'Select datacall',
-              }}
-            />
-          )}
-        />
+                      }
+                      secondary={`${closed ? 'Closed' : 'Active'} · deadline ${deadlineLabel}`}
+                      secondaryTypographyProps={{ fontSize: '0.75rem' }}
+                    />
+                  </MenuItem>
+                )
+              }),
+            ])}
+          </Menu>
+        </>
       )}
 
       <StatusChip

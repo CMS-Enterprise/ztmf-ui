@@ -24,6 +24,9 @@ type ContextType = {
   // Single-select adapter over the year-grouped model: picking a call narrows
   // the active set to just that call; null resets to the latest year all-on.
   setSelectedDatacall: (dc: datacall | null) => void
+  // Multi-select toggle (#467): a call in another year switches to that whole
+  // year all-on; within the active year it toggles, never emptying the year.
+  toggleActiveDatacall: (dc: datacall) => void
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
   fetchFismaSystems: (decommissioned?: boolean) => Promise<void>

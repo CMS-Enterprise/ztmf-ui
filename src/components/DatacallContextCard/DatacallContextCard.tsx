@@ -53,6 +53,7 @@ export default function DatacallContextCard({
     datacalls,
     selectedDatacall,
     setSelectedDatacall,
+    toggleActiveDatacall,
     latestDataCallId,
     activeDatacallIds,
   } = useContextProp()
@@ -69,6 +70,10 @@ export default function DatacallContextCard({
         }
         setSelectedDatacall(dc)
       }}
+      // Multi-select toggles only apply to the global selection (#467): an
+      // overridden page (the questionnaire) views one call at a time, so its
+      // picker stays single-pick.
+      onToggle={overridden ? undefined : toggleActiveDatacall}
       latestDataCallId={latestDataCallId}
       // With an override the card describes exactly one call; the global
       // aggregate set would leak "In view" chips for calls this page is
