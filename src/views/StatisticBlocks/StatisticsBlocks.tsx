@@ -116,12 +116,23 @@ export default function StatisticsBlocks({
     let scoreSum = 0
     let optimalAdvanced = 0
     let belowInitial = 0
+    // Best/worst scored system in the selection, with its acronym so the
+    // tiles can name the actual system (parity with main's Highest/Lowest
+    // System Score tiles).
+    let highest: { score: number; acronym: string } | null = null
+    let lowest: { score: number; acronym: string } | null = null
     for (const system of fismaSystems) {
       const entry = scores[system.fismasystemid]
       if (!entry) continue
       if (entry.score) {
         scoreSum += entry.score
         scored += 1
+        if (!highest || entry.score > highest.score) {
+          highest = { score: entry.score, acronym: system.fismaacronym }
+        }
+        if (!lowest || entry.score < lowest.score) {
+          lowest = { score: entry.score, acronym: system.fismaacronym }
+        }
       }
       if (entry.tier === 'Optimal' || entry.tier === 'Advanced') {
         optimalAdvanced += 1
@@ -131,7 +142,15 @@ export default function StatisticsBlocks({
       }
     }
     const avg = scored > 0 ? scoreSum / scored : 0
-    return { total, scored, avg, optimalAdvanced, belowInitial }
+    return {
+      total,
+      scored,
+      avg,
+      optimalAdvanced,
+      belowInitial,
+      highest,
+      lowest,
+    }
   }, [fismaSystems, scores])
 
   // Average-score trend vs the prior datacall, when one is available.
@@ -162,6 +181,18 @@ export default function StatisticsBlocks({
         value={stats.avg.toFixed(2)}
         hint={avgHint}
         hintColor={avgHintColor}
+      />
+      <StatCard
+        label="Highest score"
+        value={stats.highest ? stats.highest.score.toFixed(2) : '-'}
+        hint={stats.highest?.acronym}
+        valueColor={stats.highest ? colors.up : colors.neutral500}
+      />
+      <StatCard
+        label="Lowest score"
+        value={stats.lowest ? stats.lowest.score.toFixed(2) : '-'}
+        hint={stats.lowest?.acronym}
+        valueColor={stats.lowest ? colors.down : colors.neutral500}
       />
       <StatCard
         label="Optimal / Advanced"
