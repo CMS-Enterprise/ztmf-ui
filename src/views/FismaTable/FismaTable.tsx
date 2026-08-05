@@ -111,8 +111,8 @@ export function CustomFooterSaveComponent(
   // scores), so it would otherwise contribute nothing and let an
   // all-never-started selection fall through to the active call - wrong in a
   // past-year view. The dashboard still shows such a row against one chosen
-  // call (chosenCallMap, which buildDashboardMaps fills for every row), so fall
-  // back to that per row before the global active-call default.
+  // call (chosenCallMap, which buildDashboardMaps fills for every selectable
+  // row), so fall back to that per row before the global active-call default.
   const selectedCallIds = new Set<number>()
   const callMap = props.systemCallMap ?? {}
   const chosenMap = props.chosenCallMap ?? {}

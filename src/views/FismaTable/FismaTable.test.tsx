@@ -131,4 +131,34 @@ describe('CustomFooterSaveComponent download button', () => {
       screen.getByRole('button', { name: /download selected system answers/i })
     ).toBeDisabled()
   })
+
+  it('targets a scored system score-derived call', () => {
+    // A scored system resolves through systemCallMap (calls it has scores in),
+    // not the chosen-call fallback. Pins that the not-started fallback did not
+    // displace the original path.
+    renderFooter([1], { systemCallMap: { 1: [7] } })
+    fireEvent.click(
+      screen.getByRole('button', { name: /download selected system answers/i })
+    )
+    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
+    expect(calledUrl).toContain('/datacalls/7/export')
+    expect(calledUrl).toContain('fsids=1')
+  })
+
+  it('exports a mixed scored + not-started selection sharing one call', () => {
+    // Scored system 1 has a score in call 7; not-started system 3 is displayed
+    // against call 7. They share one target, so export goes to call 7 with both
+    // ids rather than disabling or splitting.
+    renderFooter([1, 3], {
+      systemCallMap: { 1: [7] },
+      chosenCallMap: { 3: 7 },
+    })
+    fireEvent.click(
+      screen.getByRole('button', { name: /download selected system answers/i })
+    )
+    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
+    expect(calledUrl).toContain('/datacalls/7/export')
+    expect(calledUrl).toContain('fsids=1')
+    expect(calledUrl).toContain('fsids=3')
+  })
 })
