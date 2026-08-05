@@ -42,6 +42,7 @@ import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import EditOpDivCell from './EditOpDivCell'
+import { isUserCellEditable } from './cellEditGuards'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -845,28 +846,14 @@ export default function UserTable() {
           rows={rows}
           apiRef={apiRef}
           columns={columns}
-          // Cell-level edit gates (defense-in-depth; server enforces the same rules):
-          // - role: locked on existing rows whose current role is outside this
-          //   admin's assignable tier, preventing unauthorized role changes.
-          // - opdivs / identity_provider: locked to new rows only — existing
-          //   users' OpDiv memberships and derived IdP are managed via the
-          //   Assign OpDivs action, not inline editing.
-          isCellEditable={(params) => {
-            if (params.field === 'role') {
-              return (
-                params.row.isNew ||
-                !params.row.role ||
-                assignableRoles.includes(params.row.role)
-              )
-            }
-            if (params.field === 'opdivs') {
-              return !!params.row.isNew
-            }
-            if (params.field === 'identity_provider') {
-              return !!params.row.isNew && showIdpSelector
-            }
-            return true
-          }}
+          // Cell-level edit gates live in cellEditGuards so they can be tested
+          // without the grid. See that file for what each field allows and why.
+          isCellEditable={(params) =>
+            isUserCellEditable(params.field, params.row, {
+              assignableRoles,
+              showIdpSelector,
+            })
+          }
           editMode="row"
           getRowId={(row) => row.userid}
           initialState={{
