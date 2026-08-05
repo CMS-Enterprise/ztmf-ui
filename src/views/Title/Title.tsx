@@ -66,7 +66,7 @@ export default function Title() {
   // (all on by default). See groupDatacallsByYear / #467.
   // Only the setter is needed now that the year is implied by the selected
   // call; kept as state so fetchDatacalls' initial-load reset still works.
-  const [, setActiveYear] = useState<number | null>(null)
+  const [activeYear, setActiveYear] = useState<number | null>(null)
   const [activeDatacallIds, setActiveDatacallIds] = useState<number[]>([])
   const [latestDeadline, setLatestDeadline] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
@@ -225,6 +225,38 @@ export default function Title() {
       setActiveDatacallIds([dc.datacallid])
     },
     [datacallsByYear]
+  )
+  // Multi-select toggle for the picker's checkbox rows (#467 semantics):
+  // selecting a call in a different year switches to that whole year (all
+  // calls on); within the active year, toggle a call but never leave the
+  // year empty. The dashboard aggregates whatever set is toggled on.
+  const toggleActiveDatacall = useCallback(
+    (dc: datacall) => {
+      const group = datacallsByYear.find((g) =>
+        g.calls.some((c) => c.datacallid === dc.datacallid)
+      )
+      if (!group) return
+      if (group.year !== activeYear) {
+        setActiveYear(group.year)
+        setActiveDatacallIds(group.calls.map((c) => c.datacallid))
+        return
+      }
+      setActiveDatacallIds((prev) => {
+        const removing = prev.includes(dc.datacallid)
+        if (removing && prev.length === 1) return prev // never empty the year
+        const next = new Set(prev)
+        if (removing) {
+          next.delete(dc.datacallid)
+        } else {
+          next.add(dc.datacallid)
+        }
+        // Keep the group's deadline order (newest first) so the dashboard
+        // merge deterministically resolves a multi-call system to its
+        // newest call.
+        return group.calls.map((c) => c.datacallid).filter((id) => next.has(id))
+      })
+    },
+    [datacallsByYear, activeYear]
   )
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
@@ -640,6 +672,7 @@ export default function Title() {
               activeDatacallIds,
               selectedDatacall,
               setSelectedDatacall,
+              toggleActiveDatacall,
               showDecommissioned,
               setShowDecommissioned,
               fetchFismaSystems,
