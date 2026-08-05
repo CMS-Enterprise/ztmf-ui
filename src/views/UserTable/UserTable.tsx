@@ -773,9 +773,8 @@ export default function UserTable() {
       sx={{
         pt: 3,
         pb: 4,
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
+        // Natural document flow: the grid renders at its full height
+        // (autoHeight) and the page scrolls, pushing the CMS footer down.
         boxSizing: 'border-box',
       }}
     >
@@ -816,10 +815,6 @@ export default function UserTable() {
           border: `1px solid ${colors.neutral200}`,
           borderRadius: `${radius.card}px`,
           overflow: 'hidden',
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
           '& .actions': { color: 'text.secondary' },
           '& .textPrimary': { color: 'text.primary' },
         }}
@@ -836,7 +831,9 @@ export default function UserTable() {
           showDeleted={showDeleted}
           setShowDeleted={setShowDeleted}
         />
-        <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex' }}>
+        {/* Fixed grid height (parity with main): rows scroll inside the
+            grid while the page scrolls around the card. */}
+        <Box sx={{ height: 600, width: '100%' }}>
           <DataGrid
             aria-label="Users"
             rows={filteredRows}
@@ -903,8 +900,7 @@ export default function UserTable() {
             disableColumnMenu
             disableRowSelectionOnClick
             sx={{
-              flex: 1,
-              minHeight: 0,
+              height: '100%',
               border: 'none',
               backgroundColor: colors.white,
               '& .MuiDataGrid-columnHeaders': {
