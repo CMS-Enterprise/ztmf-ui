@@ -50,7 +50,9 @@ import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresMo
 import { FismaTableProps } from '@/types'
 import type { ScoreAggregate, SystemScoreEntry, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
-import { TIERS } from '@/utils/tierStyles'
+import { ScoreCell } from './scoreColumn'
+import { scoreSortValue } from './scoreHelpers'
+import { isSystemSelectable } from './rowSelection'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
 import { resolveRowCallId, datacallNameComparator } from './rowCall'
@@ -848,38 +850,10 @@ export default function FismaTable({
       align: 'center',
       headerAlign: 'center',
       hideable: false,
-      valueGetter: (value) => {
-        const entry = scores[value.row.fismasystemid]
-        if (!entry || !entry.score) {
-          return 0
-        }
-        return entry.score.toFixed(2)
-      },
-      renderCell: (params) => {
-        const entry = scores[params.row.fismasystemid]
-        const score = entry?.score ?? 0
-        // Tier comes from the backend on /scores/aggregate; do not derive
-        // it from the numeric score. Cells without a tier render with no
-        // background fill so a transient deploy mismatch reads as
-        // "unknown" rather than a misleading color.
-        const backgroundColor = entry?.tier
-          ? TIERS[entry.tier]?.cell.backgroundColor ?? 'transparent'
-          : 'transparent'
-        return (
-          <Box
-            sx={{
-              border: 1,
-              p: 1,
-              px: 4,
-              borderRadius: 2,
-              borderColor: 'darkgray',
-              backgroundColor,
-            }}
-          >
-            {score.toFixed(2)}
-          </Box>
-        )
-      },
+      valueGetter: (value) => scoreSortValue(scores[value.row.fismasystemid]),
+      renderCell: (params) => (
+        <ScoreCell entry={scores[params.row.fismasystemid]} />
+      ),
     },
     {
       // Which call the row is displaying (ui#639), named plainly so a
@@ -1037,7 +1011,7 @@ export default function FismaTable({
       <DataGrid
         rows={filteredRows}
         isRowSelectable={(params: GridRowParams) =>
-          params.row.fismasystemid in scores
+          isSystemSelectable(params.row.fismasystemid, scores, progress)
         }
         // De-emphasize rows displaying a closed call while the open call is
         // in view (ui#639). Only in that mixed view: between calls, or on a
