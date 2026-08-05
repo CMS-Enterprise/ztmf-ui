@@ -11,6 +11,11 @@ export type PillarRailProps = {
   currentCategoryName: string
   /** Counts the answered functions inside a pillar. */
   answeredCountInCategory: (cat: Category) => number
+  /**
+   * Counts the carried-forward, not-yet-confirmed functions inside a pillar
+   * ("N to confirm" line). Omit to render no confirmation lines.
+   */
+  toConfirmCountInCategory?: (cat: Category) => number
   /** Fired when the user picks a pillar. */
   onPillarClick: (category: Category) => void
 }
@@ -28,6 +33,7 @@ export default function PillarRail({
   categories,
   currentCategoryName,
   answeredCountInCategory,
+  toConfirmCountInCategory,
   onPillarClick,
 }: PillarRailProps) {
   const main = categories.filter((c) => c.name !== 'CrossCutting')
@@ -39,6 +45,7 @@ export default function PillarRail({
         items={main}
         currentName={currentCategoryName}
         answeredCountInCategory={answeredCountInCategory}
+        toConfirmCountInCategory={toConfirmCountInCategory}
         onClick={onPillarClick}
       />
       {cross.length > 0 && (
@@ -48,6 +55,7 @@ export default function PillarRail({
             items={cross}
             currentName={currentCategoryName}
             answeredCountInCategory={answeredCountInCategory}
+            toConfirmCountInCategory={toConfirmCountInCategory}
             onClick={onPillarClick}
           />
         </Box>
