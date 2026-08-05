@@ -622,11 +622,9 @@ export default function Title() {
           sx={{
             px: { xs: 2, sm: 4 },
             minWidth: 800,
-            // Match the authenticated <main> shell: fill the column and own
-            // the scroll so the CMS footer stays anchored at the viewport.
+            // Fill the shell column so the CMS footer sits at the bottom of
+            // short pages; taller content pushes it down (document scroll).
             flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
           }}
         >
           <ServerErrorPage />
@@ -638,8 +636,6 @@ export default function Title() {
             px: { xs: 2, sm: 4 },
             minWidth: 800,
             flex: 1,
-            minHeight: 0,
-            overflowY: 'auto',
           }}
         >
           <LoginPage />

@@ -243,12 +243,8 @@ export default function HomePageContainer() {
       sx={{
         pt: 3,
         pb: 4,
-        // Cap at main's height (not just min) so the FISMA table child with
-        // flex: 1 + min-height: 0 is *bounded* and its internal scroll fires
-        // instead of growing this column and triggering main's outer scroll.
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
+        // Natural document flow: the FISMA table renders at its full height
+        // (autoHeight) and the page scrolls, pushing the CMS footer down.
         boxSizing: 'border-box',
       }}
     >

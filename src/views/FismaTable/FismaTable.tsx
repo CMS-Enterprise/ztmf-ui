@@ -871,13 +871,6 @@ export default function FismaTable({
         border: `1px solid ${colors.neutral200}`,
         borderRadius: `${radius.card}px`,
         overflow: 'hidden',
-        // Fill the remaining canvas above the CMS footer (Home is a flex
-        // column; main is the scroll container). min-height: 0 lets the
-        // DataGrid inside us scroll internally instead of growing the card.
-        flex: 1,
-        minHeight: 0,
-        display: 'flex',
-        flexDirection: 'column',
       }}
     >
       <TableToolbar
@@ -899,7 +892,9 @@ export default function FismaTable({
         showDecommissioned={showDecommissioned}
         setShowDecommissioned={setShowDecommissioned}
       />
-      <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex' }}>
+      {/* Fixed grid height (parity with main): the grid scrolls its rows
+          internally while the page scrolls around the card. */}
+      <Box sx={{ height: 600, width: '100%' }}>
         <DataGrid
           rows={rows}
           columns={columns}
@@ -945,10 +940,7 @@ export default function FismaTable({
           pageSizeOptions={PAGE_SIZES}
           slots={{ footer: DataGridPaginationFooter }}
           sx={{
-            // Grow into the flex parent so the grid's internal scroll
-            // (not main's) handles row overflow.
-            flex: 1,
-            minHeight: 0,
+            height: '100%',
             border: 'none',
             '& .MuiDataGrid-columnHeaders': {
               backgroundColor: colors.neutral50,

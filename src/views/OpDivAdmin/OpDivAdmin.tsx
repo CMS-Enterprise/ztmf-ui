@@ -522,9 +522,8 @@ export default function OpDivAdmin() {
       sx={{
         pt: 3,
         pb: 4,
-        display: 'flex',
-        flexDirection: 'column',
-        height: '100%',
+        // Natural document flow: the grid renders at its full height
+        // (autoHeight) and the page scrolls, pushing the CMS footer down.
         boxSizing: 'border-box',
       }}
     >
@@ -553,10 +552,6 @@ export default function OpDivAdmin() {
           border: `1px solid ${colors.neutral200}`,
           borderRadius: `${radius.card}px`,
           overflow: 'hidden',
-          flex: 1,
-          minHeight: 0,
-          display: 'flex',
-          flexDirection: 'column',
         }}
       >
         <OpDivsToolbar
@@ -567,7 +562,9 @@ export default function OpDivAdmin() {
           showDeactivated={showDeactivated}
           setShowDeactivated={setShowDeactivated}
         />
-        <Box sx={{ flex: 1, minHeight: 0, width: '100%', display: 'flex' }}>
+        {/* Fixed grid height (parity with main): rows scroll inside the
+            grid while the page scrolls around the card. */}
+        <Box sx={{ height: 600, width: '100%' }}>
           <DataGrid
             aria-label="Operating Divisions"
             rows={filteredRows}
@@ -588,8 +585,7 @@ export default function OpDivAdmin() {
             disableColumnMenu
             disableRowSelectionOnClick
             sx={{
-              flex: 1,
-              minHeight: 0,
+              height: '100%',
               border: 'none',
               backgroundColor: colors.white,
               '& .MuiDataGrid-columnHeaders': {

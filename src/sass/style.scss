@@ -1,30 +1,26 @@
-// App-shell layout. The chrome (USA banner, header, CMS footer) stays
-// anchored to the viewport; the main content area is the scroll container,
-// so every view manages its own vertical overflow internally instead of
-// growing the document past the fold. Views can use flex: 1 + min-height: 0
-// on a child of main to make it fill the canvas (e.g. the dashboard table).
+// Document-scroll layout: content grows the page and pushes the CMS footer
+// down, and the browser owns the scrollbar (matches main). Tables render at
+// their natural height (DataGrid autoHeight) instead of scrolling inside a
+// viewport-bounded canvas - a page-size row set was squeezing the dashboard
+// table down to a few visible rows.
 html,
 body {
   margin: 0;
   padding: 0;
-  height: 100%;
 }
 
 #root {
   display: flex;
   flex-direction: column;
-  height: 100vh;
+  min-height: 100vh;
 }
 
 main {
   flex: 1;
-  min-height: 0;
-  overflow-y: auto;
 }
 
-// Belt-and-suspenders: if a view doesn't fill main, keep the footer at the
-// bottom of the column. (With height: 100vh the column is already bounded,
-// so this only triggers when sibling content above main is shorter.)
+// Keep the footer at the bottom of the viewport when a view is shorter than
+// the fold; taller views push it down naturally.
 footer {
   margin-top: auto;
 }
