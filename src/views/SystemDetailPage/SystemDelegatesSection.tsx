@@ -4,23 +4,15 @@ import {
   Autocomplete,
   Box,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
-  Chip,
-  Dialog,
-  DialogActions,
-  DialogContent,
-  DialogTitle,
   IconButton,
   List,
   ListItem,
   ListItemText,
+  OutlinedInput,
   TextField,
   Tooltip,
   Typography,
 } from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
 import AddIcon from '@mui/icons-material/Add'
 import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EventRepeatIcon from '@mui/icons-material/EventRepeat'
@@ -35,6 +27,10 @@ import {
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import Modal from '@/components/ui/Modal'
+import Field, { fieldInputSx } from '@/components/ui/Field'
+import StatusChip, { type StatusKind } from '@/components/ui/StatusChip'
+import { colors, radius } from '@/theme/tokens'
 import { getTodayISO, addMonthsISO } from '@/utils/decommission'
 
 // Same shape UserTable validates against; the backend is the authority, this
@@ -67,14 +63,14 @@ function daysUntil(iso: string | null): number | null {
 // case (a non-expiring account) simply reads as Active.
 function delegateStatus(iso: string | null): {
   label: string
-  color: 'success' | 'warning' | 'error'
+  kind: StatusKind
 } {
   const days = daysUntil(iso)
-  if (days === null) return { label: 'Active', color: 'success' }
-  if (days < 0) return { label: 'Expired', color: 'error' }
+  if (days === null) return { label: 'Active', kind: 'active' }
+  if (days < 0) return { label: 'Expired', kind: 'danger' }
   if (days <= EXPIRING_SOON_DAYS)
-    return { label: 'Expiring soon', color: 'warning' }
-  return { label: 'Active', color: 'success' }
+    return { label: 'Expiring soon', kind: 'warning' }
+  return { label: 'Active', kind: 'active' }
 }
 
 function formatExpiry(iso: string | null): string {
@@ -321,149 +317,187 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
   const count = !loading && delegates.length > 0 ? ` (${delegates.length})` : ''
 
   return (
-    <Card variant="outlined">
-      <CardHeader
-        title={`Delegates${count}`}
-        titleTypographyProps={{ variant: 'h6' }}
-        subheader="Contractor and support-staff access to this system's data-call answers"
-        action={
-          canManage ? (
-            <Button startIcon={<AddIcon />} onClick={openProvision}>
-              Provision new delegate
-            </Button>
-          ) : undefined
-        }
-        sx={{ pb: 0 }}
-      />
-      <CardContent>
-        {guardMessage && (
-          <Alert
-            severity="warning"
-            sx={{ mb: 2 }}
-            onClose={() => setGuardMessage('')}
+    <Box
+      sx={{
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: `${radius.card}px`,
+        p: 2.25,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'flex-start',
+          justifyContent: 'space-between',
+          gap: 2,
+          mb: 1.5,
+        }}
+      >
+        <Box>
+          <Typography
+            component="h2"
+            sx={{ fontSize: 14, fontWeight: 700, color: colors.ink }}
           >
-            {guardMessage}
-          </Alert>
-        )}
-
+            {`Delegates${count}`}
+          </Typography>
+          <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 0.25 }}>
+            Contractor and support-staff access to this system&apos;s data-call
+            answers
+          </Typography>
+        </Box>
         {canManage && (
-          <Box sx={{ mb: 3, maxWidth: 640 }}>
-            <Autocomplete
-              options={candidates}
-              value={null}
-              blurOnSelect
-              clearOnBlur
-              disabled={attaching}
-              filterOptions={(x) => x}
-              getOptionLabel={(o) => candidateLabel(o)}
-              isOptionEqualToValue={(a, b) => a.userid === b.userid}
-              // Same status chip the roster uses, so an expiring or expired
-              // candidate reads the same way in both places. Attaching an
-              // expired one is allowed but still needs a renew to grant access.
-              renderOption={(props, option) => {
-                const status = delegateStatus(option.access_expires_at ?? null)
-                return (
-                  <li {...props} key={option.userid}>
-                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                      <span>{candidateLabel(option)}</span>
-                      <Chip
-                        label={status.label}
-                        color={status.color}
-                        size="small"
-                        variant={
-                          status.color === 'success' ? 'outlined' : 'filled'
-                        }
-                      />
-                    </Box>
-                  </li>
-                )
-              }}
-              inputValue={candidateInput}
-              onInputChange={(_e, v) => setCandidateInput(v)}
-              onChange={(_e, value) => {
-                if (value) handleAttach(value)
-              }}
-              noOptionsText="No eligible delegates"
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  label="Attach an existing delegate"
-                  placeholder="Search by name or email"
-                  variant="standard"
-                  InputLabelProps={{ sx: { marginTop: 0 } }}
-                />
-              )}
-            />
-          </Box>
+          <Button
+            variant="outlined"
+            color="primary"
+            size="small"
+            startIcon={<AddIcon />}
+            onClick={openProvision}
+          >
+            Provision new delegate
+          </Button>
         )}
+      </Box>
 
-        {loading ? (
-          <Typography variant="body2" color="text.secondary">
-            Loading delegates...
-          </Typography>
-        ) : delegates.length === 0 ? (
-          <Typography variant="body2" color="text.secondary">
-            No delegates on this system.
-          </Typography>
-        ) : (
-          <List disablePadding>
-            {delegates.map((d) => {
-              const status = delegateStatus(d.access_expires_at)
+      {guardMessage && (
+        <Alert
+          severity="warning"
+          sx={{ mb: 2 }}
+          onClose={() => setGuardMessage('')}
+        >
+          {guardMessage}
+        </Alert>
+      )}
+
+      {canManage && (
+        <Box sx={{ mb: 3, maxWidth: 640 }}>
+          <Autocomplete
+            options={candidates}
+            value={null}
+            blurOnSelect
+            clearOnBlur
+            disabled={attaching}
+            filterOptions={(x) => x}
+            getOptionLabel={(o) => candidateLabel(o)}
+            isOptionEqualToValue={(a, b) => a.userid === b.userid}
+            // Same status chip the roster uses, so an expiring or expired
+            // candidate reads the same way in both places. Attaching an
+            // expired one is allowed but still needs a renew to grant access.
+            renderOption={(props, option) => {
+              const status = delegateStatus(option.access_expires_at ?? null)
               return (
-                <ListItem
-                  key={d.userid}
-                  divider
-                  secondaryAction={
-                    canManage ? (
-                      <Box sx={{ display: 'flex', gap: 0.5 }}>
-                        <Tooltip title="Renew expiration">
-                          <IconButton
-                            edge="end"
-                            aria-label={`Renew ${d.fullname}`}
-                            onClick={() => openRenew(d)}
-                          >
-                            <EventRepeatIcon />
-                          </IconButton>
-                        </Tooltip>
-                        <Tooltip title="Remove delegate">
-                          <IconButton
-                            edge="end"
-                            aria-label={`Remove ${d.fullname}`}
-                            onClick={() => setPendingRemove(d)}
-                          >
-                            <DeleteOutlineIcon />
-                          </IconButton>
-                        </Tooltip>
-                      </Box>
-                    ) : undefined
-                  }
-                >
-                  <ListItemText
-                    primary={
-                      <Box
-                        sx={{ display: 'flex', alignItems: 'center', gap: 1 }}
-                      >
-                        <span>{d.fullname}</span>
-                        <Chip
-                          label={status.label}
-                          color={status.color}
-                          size="small"
-                          variant={
-                            status.color === 'success' ? 'outlined' : 'filled'
-                          }
-                        />
-                      </Box>
-                    }
-                    secondary={`${d.email} - Expires ${formatExpiry(
-                      d.access_expires_at
-                    )}`}
-                  />
-                </ListItem>
+                <li {...props} key={option.userid}>
+                  <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                    <span>{candidateLabel(option)}</span>
+                    <StatusChip label={status.label} kind={status.kind} />
+                  </Box>
+                </li>
               )
-            })}
-          </List>
-        )}
-      </CardContent>
+            }}
+            inputValue={candidateInput}
+            onInputChange={(_e, v) => setCandidateInput(v)}
+            onChange={(_e, value) => {
+              if (value) handleAttach(value)
+            }}
+            noOptionsText="No eligible delegates"
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                label="Attach an existing delegate"
+                placeholder="Search by name or email"
+                size="small"
+                sx={{
+                  '& .MuiOutlinedInput-root': { fontSize: 13 },
+                  '& fieldset': { borderColor: colors.border },
+                }}
+              />
+            )}
+          />
+        </Box>
+      )}
+
+      {loading ? (
+        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+          Loading delegates...
+        </Typography>
+      ) : delegates.length === 0 ? (
+        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+          No delegates on this system.
+        </Typography>
+      ) : (
+        <List disablePadding>
+          {delegates.map((d) => {
+            const status = delegateStatus(d.access_expires_at)
+            return (
+              <ListItem
+                key={d.userid}
+                divider
+                sx={{
+                  px: 0.5,
+                  '&.MuiListItem-divider': {
+                    borderBottomColor: colors.neutral100,
+                  },
+                }}
+                secondaryAction={
+                  canManage ? (
+                    <Box sx={{ display: 'flex', gap: 0.5 }}>
+                      <Tooltip title="Renew expiration">
+                        <IconButton
+                          edge="end"
+                          aria-label={`Renew ${d.fullname}`}
+                          onClick={() => openRenew(d)}
+                        >
+                          <EventRepeatIcon
+                            fontSize="small"
+                            sx={{ color: colors.neutral700 }}
+                          />
+                        </IconButton>
+                      </Tooltip>
+                      <Tooltip title="Remove delegate">
+                        <IconButton
+                          edge="end"
+                          aria-label={`Remove ${d.fullname}`}
+                          onClick={() => setPendingRemove(d)}
+                        >
+                          <DeleteOutlineIcon
+                            fontSize="small"
+                            sx={{ color: colors.neutral700 }}
+                          />
+                        </IconButton>
+                      </Tooltip>
+                    </Box>
+                  ) : undefined
+                }
+              >
+                <ListItemText
+                  primary={
+                    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                      <Box
+                        component="span"
+                        sx={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: colors.ink,
+                        }}
+                      >
+                        {d.fullname}
+                      </Box>
+                      <StatusChip label={status.label} kind={status.kind} />
+                    </Box>
+                  }
+                  secondary={`${d.email} - Expires ${formatExpiry(
+                    d.access_expires_at
+                  )}`}
+                  secondaryTypographyProps={{
+                    fontSize: 12,
+                    color: colors.neutral500,
+                  }}
+                />
+              </ListItem>
+            )
+          })}
+        </List>
+      )}
 
       <ConfirmDialog
         title="Confirm Remove Delegate"
@@ -478,105 +512,134 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
         confirmLabel="Remove"
       />
 
-      <Dialog
+      <Modal
         open={renewTarget !== null}
         onClose={() => setRenewTarget(null)}
-        maxWidth="xs"
-        fullWidth
-        aria-label="Renew delegate expiration"
+        title="Renew Delegate Expiration"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="text"
+              color="inherit"
+              onClick={() => setRenewTarget(null)}
+            >
+              Cancel
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleRenew}>
+              Save
+            </Button>
+          </>
+        }
       >
-        <DialogTitle>Renew Delegate Expiration</DialogTitle>
-        <DialogContent>
-          <Typography variant="body2" sx={{ mb: 1 }}>
-            {renewTarget
-              ? `Set a new expiration for ${renewTarget.fullname}. Expiration is per-user, so this applies to every system they are a delegate on.`
-              : ''}
-          </Typography>
-          <TextField
-            label="Access expires"
+        <Typography sx={{ fontSize: 13, color: colors.neutral700, mb: 2 }}>
+          {renewTarget
+            ? `Set a new expiration for ${renewTarget.fullname}. Expiration is per-user, so this applies to every system they are a delegate on.`
+            : ''}
+        </Typography>
+        <Field
+          id="renew-expires"
+          label="Access expires"
+          required
+          error={renewError || undefined}
+        >
+          <OutlinedInput
+            id="renew-expires"
             type="date"
-            variant="standard"
             fullWidth
             value={renewDate}
             onChange={(e) => setRenewDate(e.target.value)}
             error={!!renewError}
-            helperText={renewError}
-            InputLabelProps={{ shrink: true, sx: { marginTop: 0 } }}
+            sx={fieldInputSx}
           />
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={() => setRenewTarget(null)}>Cancel</CmsButton>
-          <CmsButton onClick={handleRenew}>Save</CmsButton>
-        </DialogActions>
-      </Dialog>
+        </Field>
+      </Modal>
 
-      <Dialog
+      <Modal
         open={provisionOpen}
         onClose={() => setProvisionOpen(false)}
-        maxWidth="xs"
-        fullWidth
-        aria-label="Provision new delegate"
+        title="Provision new delegate"
+        size="sm"
+        footer={
+          <>
+            <Button
+              variant="text"
+              color="inherit"
+              onClick={() => setProvisionOpen(false)}
+              disabled={provisioning}
+            >
+              Cancel
+            </Button>
+            <Button
+              variant="contained"
+              color="primary"
+              onClick={handleProvision}
+              disabled={provisioning}
+            >
+              {provisioning ? 'Provisioning...' : 'Provision'}
+            </Button>
+          </>
+        }
       >
-        <DialogTitle>Provision new delegate</DialogTitle>
-        <DialogContent>
-          {provisionGuard && (
-            <Alert severity="warning" sx={{ mb: 2 }}>
-              {provisionGuard}
-            </Alert>
-          )}
-          <Typography variant="body2" color="text.secondary" sx={{ mb: 1 }}>
-            Creates a delegate account for this system. No email is sent; the
-            person signs in through the usual login.
-          </Typography>
-          <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2, mt: 1 }}>
-            <TextField
-              label="Name"
-              variant="standard"
-              required
+        {provisionGuard && (
+          <Alert severity="warning" sx={{ mb: 2 }}>
+            {provisionGuard}
+          </Alert>
+        )}
+        <Typography sx={{ fontSize: 13, color: colors.neutral500, mb: 2 }}>
+          Creates a delegate account for this system. No email is sent; the
+          person signs in through the usual login.
+        </Typography>
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Field
+            id="provision-name"
+            label="Name"
+            required
+            error={provisionErrors.fullname}
+          >
+            <OutlinedInput
+              id="provision-name"
+              fullWidth
               value={provisionName}
               onChange={(e) => setProvisionName(e.target.value)}
               error={!!provisionErrors.fullname}
-              helperText={provisionErrors.fullname}
-              InputLabelProps={{ sx: { marginTop: 0 } }}
+              sx={fieldInputSx}
             />
-            <TextField
-              label="Email"
-              variant="standard"
-              required
+          </Field>
+          <Field
+            id="provision-email"
+            label="Email"
+            required
+            error={provisionErrors.email}
+          >
+            <OutlinedInput
+              id="provision-email"
+              fullWidth
               value={provisionEmail}
               onChange={(e) => setProvisionEmail(e.target.value)}
               error={!!provisionErrors.email}
-              helperText={provisionErrors.email}
-              InputLabelProps={{ sx: { marginTop: 0 } }}
+              sx={fieldInputSx}
             />
-            <TextField
-              label="Access expires"
+          </Field>
+          <Field
+            id="provision-expires"
+            label="Access expires"
+            required
+            error={provisionErrors.access_expires_at}
+            helperText="Defaults to three months from today"
+          >
+            <OutlinedInput
+              id="provision-expires"
               type="date"
-              variant="standard"
-              required
+              fullWidth
               value={provisionExpiry}
               onChange={(e) => setProvisionExpiry(e.target.value)}
               error={!!provisionErrors.access_expires_at}
-              helperText={
-                provisionErrors.access_expires_at ??
-                'Defaults to three months from today'
-              }
-              InputLabelProps={{ shrink: true, sx: { marginTop: 0 } }}
+              sx={fieldInputSx}
             />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <CmsButton
-            onClick={() => setProvisionOpen(false)}
-            disabled={provisioning}
-          >
-            Cancel
-          </CmsButton>
-          <CmsButton onClick={handleProvision} disabled={provisioning}>
-            {provisioning ? 'Provisioning...' : 'Provision'}
-          </CmsButton>
-        </DialogActions>
-      </Dialog>
-    </Card>
+          </Field>
+        </Box>
+      </Modal>
+    </Box>
   )
 }
