@@ -1716,6 +1716,22 @@ export default function QuestionnarePage() {
           categories={categories}
           currentCategoryName={currentCategoryName}
           answeredCountInCategory={answeredCountInCategory}
+          // Cross-pillar confirmation visibility: every pillar shows how many
+          // carried-forward answers still need confirming, so the remaining
+          // work is scannable without paging section by section. Same
+          // classification the section rail's per-question markers use.
+          toConfirmCountInCategory={(cat) =>
+            cat.steps.reduce(
+              (acc, s) =>
+                carryForwardState(
+                  scoreByFunction[s.function.functionid],
+                  isOpenCall
+                ) === 'unconfirmed'
+                  ? acc + 1
+                  : acc,
+              0
+            )
+          }
           onPillarClick={(category) => {
             const first = category.steps[0]
             if (first) navigateToFunction(category.name, first)

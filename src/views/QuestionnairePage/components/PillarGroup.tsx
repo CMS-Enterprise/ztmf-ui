@@ -1,6 +1,6 @@
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
-import { colors, fonts, radius } from '@/theme/tokens'
+import { colors, fonts, radius, status } from '@/theme/tokens'
 import type { Category } from '../helpers'
 
 /** Props for {@link PillarGroup}. */
@@ -13,6 +13,14 @@ export type PillarGroupProps = {
   currentName: string
   /** Counts the answered functions inside a pillar; drives the X / Y badge. */
   answeredCountInCategory: (cat: Category) => number
+  /**
+   * Counts the carried-forward, not-yet-confirmed functions inside a pillar.
+   * Renders an "N to confirm" line under the pillar so the whole
+   * questionnaire's remaining-confirmation work is scannable from the rail
+   * (the per-question markers live in the section rail). Omit to render no
+   * confirmation lines (e.g. a closed call).
+   */
+  toConfirmCountInCategory?: (cat: Category) => number
   /** Called when the user picks a pillar. */
   onClick: (category: Category) => void
 }
@@ -33,6 +41,7 @@ export default function PillarGroup({
   items,
   currentName,
   answeredCountInCategory,
+  toConfirmCountInCategory,
   onClick,
 }: PillarGroupProps) {
   return (
@@ -55,6 +64,7 @@ export default function PillarGroup({
           const isCurrent = cat.name === currentName
           const total = cat.steps.length
           const answered = answeredCountInCategory(cat)
+          const toConfirm = toConfirmCountInCategory?.(cat) ?? 0
           return (
             <Box
               key={cat.name}
@@ -65,9 +75,6 @@ export default function PillarGroup({
                 if (e.key === 'Enter' || e.key === ' ') onClick(cat)
               }}
               sx={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
                 px: 1,
                 py: 0.75,
                 borderRadius: `${radius.sm}px`,
@@ -82,19 +89,34 @@ export default function PillarGroup({
                 },
               }}
             >
-              <Typography sx={{ fontSize: 13, fontWeight: 'inherit' }}>
-                {cat.name === 'CrossCutting' ? 'Cross-cutting' : cat.name}
-              </Typography>
-              <Typography
+              <Box
                 sx={{
-                  fontFamily: fonts.mono,
-                  fontSize: 12,
-                  color: answered === total ? colors.up : colors.neutral500,
-                  fontWeight: answered === total ? 600 : 500,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
                 }}
               >
-                {answered} / {total}
-              </Typography>
+                <Typography sx={{ fontSize: 13, fontWeight: 'inherit' }}>
+                  {cat.name === 'CrossCutting' ? 'Cross-cutting' : cat.name}
+                </Typography>
+                <Typography
+                  sx={{
+                    fontFamily: fonts.mono,
+                    fontSize: 12,
+                    color: answered === total ? colors.up : colors.neutral500,
+                    fontWeight: answered === total ? 600 : 500,
+                  }}
+                >
+                  {answered} / {total}
+                </Typography>
+              </Box>
+              {toConfirm > 0 && (
+                // Text-bearing, not color-only (508); same classification the
+                // section rail's per-question markers read.
+                <Typography sx={{ fontSize: 11, color: status.warning.color }}>
+                  {toConfirm} to confirm
+                </Typography>
+              )}
             </Box>
           )
         })}
