@@ -76,6 +76,35 @@ describe('StatisticsBlocks — ztmf-ui#633 selection-scoped scoring', () => {
     expect(tileHint('Total systems')).toBe('2 scored')
   })
 
+  it('keeps the average between the lowest and highest displayed scores, named by acronym', () => {
+    mockFismaSystems = [sys(1, 'AAA'), sys(2, 'BBB'), sys(3, 'CCC')]
+    const scores: Record<number, SystemScoreEntry> = {
+      1: score(1.5, 'Traditional'),
+      2: score(3, 'Initial'),
+      3: score(4.82, 'Advanced'),
+    }
+    render(<StatisticsBlocks scores={scores} />)
+
+    const avg = Number(tileValue('Avg ZT score'))
+    const low = Number(tileValue('Lowest score'))
+    const high = Number(tileValue('Highest score'))
+    expect(low).toBeLessThanOrEqual(avg)
+    expect(avg).toBeLessThanOrEqual(high)
+    expect(low).toBe(1.5)
+    expect(high).toBe(4.82)
+    // The tiles name the actual best/worst system.
+    expect(tileHint('Highest score')).toBe('CCC')
+    expect(tileHint('Lowest score')).toBe('AAA')
+  })
+
+  it('renders placeholder Highest/Lowest tiles when nothing is scored', () => {
+    mockFismaSystems = [sys(1, 'AAA'), sys(2, 'BBB')]
+    render(<StatisticsBlocks scores={{}} />)
+
+    expect(tileValue('Highest score')).toBe('-')
+    expect(tileValue('Lowest score')).toBe('-')
+  })
+
   it('counts tier buckets from the backend tiers, not score thresholds', () => {
     mockFismaSystems = [sys(1, 'AAA'), sys(2, 'BBB'), sys(3, 'CCC')]
     const scores: Record<number, SystemScoreEntry> = {
