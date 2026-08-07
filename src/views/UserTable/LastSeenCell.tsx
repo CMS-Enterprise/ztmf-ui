@@ -30,10 +30,15 @@ export default function LastSeenCell({ value, now }: Props) {
       </Typography>
     )
   }
+  const absolute = formatLastSeenAbsolute(value)
+  const relative = formatLastSeenRelative(value, now ?? new Date())
   return (
-    <Tooltip title={formatLastSeenAbsolute(value)} placement="top">
-      <Typography variant="body2">
-        {formatLastSeenRelative(value, now ?? new Date())}
+    <Tooltip title={absolute} placement="top">
+      {/* The tooltip is hover-only, so the absolute timestamp rides in the
+          accessible name too - a screen reader hears both, not just the
+          relative phrase (508). */}
+      <Typography variant="body2" aria-label={`${relative} (${absolute})`}>
+        {relative}
       </Typography>
     </Tooltip>
   )
