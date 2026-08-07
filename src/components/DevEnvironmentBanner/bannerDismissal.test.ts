@@ -49,9 +49,49 @@ test('records and reports a dismissal for one copy version only', () => {
 test('writes the dismissal under the documented key', () => {
   setBannerDismissed(bannerVersion('Testing is ongoing.'))
   // Pinned: renaming the key un-dismisses the banner for everyone.
-  expect(localStorage.getItem('ztmf_banner_dismissed')).toBe(
-    bannerVersion('Testing is ongoing.')
+  const raw = localStorage.getItem('ztmf_banner_dismissed')
+  expect(JSON.parse(raw as string)).toEqual({
+    v: bannerVersion('Testing is ongoing.'),
+    t: expect.any(Number),
+  })
+})
+
+test('expires a dismissal older than the TTL', () => {
+  const version = bannerVersion('Testing is ongoing.')
+  const eightDaysAgo = Date.now() - 8 * 24 * 60 * 60 * 1000
+  localStorage.setItem(
+    'ztmf_banner_dismissed',
+    JSON.stringify({ v: version, t: eightDaysAgo })
   )
+  expect(isBannerDismissed(version)).toBe(false)
+})
+
+test('honors a dismissal inside the TTL', () => {
+  const version = bannerVersion('Testing is ongoing.')
+  const sixDaysAgo = Date.now() - 6 * 24 * 60 * 60 * 1000
+  localStorage.setItem(
+    'ztmf_banner_dismissed',
+    JSON.stringify({ v: version, t: sixDaysAgo })
+  )
+  expect(isBannerDismissed(version)).toBe(true)
+})
+
+// Records written before the TTL existed are bare stamps with no timestamp.
+// They must read as not-dismissed and survive the read - clearing them is the
+// trap #683 is open for.
+test.each([
+  ['a pre-TTL bare stamp', bannerVersion('Testing is ongoing.')],
+  ['a record with no timestamp', JSON.stringify({ v: 'default' })],
+  ['a non-numeric timestamp', JSON.stringify({ v: 'default', t: 'today' })],
+  // A numeric string would coerce through the subtraction and read as fresh,
+  // so the type guard is what rejects it rather than the NaN comparison.
+  ['a stringified timestamp', `{"v":"default","t":"${Date.now()}"}`],
+  ['unparseable content', '{not json'],
+])('treats %s as not dismissed without clearing it', (_label, stored) => {
+  localStorage.setItem('ztmf_banner_dismissed', stored)
+  expect(isBannerDismissed(bannerVersion('Testing is ongoing.'))).toBe(false)
+  expect(isBannerDismissed('default')).toBe(false)
+  expect(localStorage.getItem('ztmf_banner_dismissed')).toBe(stored)
 })
 
 test('a later dismissal replaces the stamp rather than accumulating keys', () => {
