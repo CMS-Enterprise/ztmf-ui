@@ -1,9 +1,12 @@
 import {
   LAST_SEEN_EMPTY_LABEL,
+  NO_ACTIVITY_FILTER_ITEM,
   compareLastSeen,
   formatLastSeenAbsolute,
   formatLastSeenRelative,
+  hasNoActivityFilter,
   parseLastSeen,
+  withNoActivityFilter,
 } from './lastSeen'
 
 describe('parseLastSeen', () => {
@@ -87,6 +90,58 @@ describe('compareLastSeen', () => {
     // Desc mirrors the grid: it negates the comparator's result.
     const desc = [...rows].sort((a, b) => -compareLastSeen(a, b, 'desc'))
     expect(desc).toEqual([newer, older, null, null])
+  })
+})
+
+describe('withNoActivityFilter / hasNoActivityFilter', () => {
+  it('turning ON injects the isEmpty item and reports active', () => {
+    const next = withNoActivityFilter({ items: [] }, true)
+    expect(next.items).toEqual([NO_ACTIVITY_FILTER_ITEM])
+    expect(hasNoActivityFilter(next)).toBe(true)
+  })
+
+  // The community DataGrid keeps only ONE column-filter item
+  // (disableMultipleColumnsFiltering is hard-set) and silently discards the
+  // rest. An implementation that APPENDS after an existing panel filter puts
+  // the no-activity item at index 1, where the grid throws it away and the
+  // toggle does nothing - so ON must replace the items outright.
+  it('turning ON replaces a pre-existing column filter instead of appending', () => {
+    const withPanelFilter = {
+      items: [{ id: 1, field: 'role', operator: 'is', value: 'ISSO' }],
+    }
+    const next = withNoActivityFilter(withPanelFilter, true)
+    expect(next.items).toEqual([NO_ACTIVITY_FILTER_ITEM])
+  })
+
+  it('preserves quick-filter text across both transitions', () => {
+    const quick = { items: [], quickFilterValues: ['skywalker'] }
+    const on = withNoActivityFilter(quick, true)
+    expect(on.quickFilterValues).toEqual(['skywalker'])
+    const off = withNoActivityFilter(on, false)
+    expect(off.quickFilterValues).toEqual(['skywalker'])
+    expect(off.items).toEqual([])
+  })
+
+  it('turning OFF removes only the no-activity item', () => {
+    const model = {
+      items: [
+        { id: 1, field: 'role', operator: 'is', value: 'ISSO' },
+        NO_ACTIVITY_FILTER_ITEM,
+      ],
+    }
+    const off = withNoActivityFilter(model, false)
+    expect(off.items).toEqual([
+      { id: 1, field: 'role', operator: 'is', value: 'ISSO' },
+    ])
+    expect(hasNoActivityFilter(off)).toBe(false)
+  })
+
+  it('hasNoActivityFilter is false for an unrelated last_seen filter', () => {
+    expect(
+      hasNoActivityFilter({
+        items: [{ id: 2, field: 'last_seen', operator: 'after', value: 'x' }],
+      })
+    ).toBe(false)
   })
 })
 

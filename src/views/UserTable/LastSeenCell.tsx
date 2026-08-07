@@ -1,5 +1,7 @@
+import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
+import { visuallyHidden } from '@mui/utils'
 import {
   LAST_SEEN_EMPTY_LABEL,
   formatLastSeenAbsolute,
@@ -34,11 +36,13 @@ export default function LastSeenCell({ value, now }: Props) {
   const relative = formatLastSeenRelative(value, now ?? new Date())
   return (
     <Tooltip title={absolute} placement="top">
-      {/* The tooltip is hover-only, so the absolute timestamp rides in the
-          accessible name too - a screen reader hears both, not just the
-          relative phrase (508). */}
-      <Typography variant="body2" aria-label={`${relative} (${absolute})`}>
+      <Typography variant="body2">
         {relative}
+        {/* The tooltip is hover-only, so the absolute timestamp also rides
+            along visually hidden - a screen reader hears both, not just the
+            relative phrase (508). A hidden span rather than aria-label
+            because ARIA-in-HTML doesn't permit aria-label on a paragraph. */}
+        <Box component="span" sx={visuallyHidden}>{` (${absolute})`}</Box>
       </Typography>
     </Tooltip>
   )
