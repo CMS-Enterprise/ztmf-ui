@@ -50,7 +50,9 @@ import PillarScoresModal from '../../components/PillarScoresModal/PillarScoresMo
 import { FismaTableProps } from '@/types'
 import type { ScoreAggregate, SystemScoreEntry, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
-import { TIERS } from '@/utils/tierStyles'
+import { ScoreCell } from './scoreColumn'
+import { scoreSortValue } from './scoreHelpers'
+import { isSystemSelectable } from './rowSelection'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
 import { resolveRowCallId, datacallNameComparator } from './rowCall'
@@ -75,6 +77,7 @@ declare module '@mui/x-data-grid' {
     activeDataCallId: number
     scores: Record<number, SystemScoreEntry>
     systemCallMap?: Record<number, number[]>
+    chosenCallMap?: Record<number, number>
   }
   interface ToolbarPropsOverrides {
     filters: DashboardFilterState
@@ -103,10 +106,24 @@ export function CustomFooterSaveComponent(
   // rows' own call(s): if they all share one call, export that; an empty
   // provenance falls back to the active call; a selection that spans more than
   // one call has no single export target, so the button is disabled.
+  //
+  // A not-started system has no score-derived call (systemCallMap keys off
+  // scores), so it would otherwise contribute nothing and let an
+  // all-never-started selection fall through to the active call - wrong in a
+  // past-year view. The dashboard still shows such a row against one chosen
+  // call (chosenCallMap, which buildDashboardMaps fills for every selectable
+  // row), so fall back to that per row before the global active-call default.
   const selectedCallIds = new Set<number>()
   const callMap = props.systemCallMap ?? {}
+  const chosenMap = props.chosenCallMap ?? {}
   for (const id of props.selectedRows ?? []) {
-    for (const cid of callMap[id as number] ?? []) selectedCallIds.add(cid)
+    const scoreCalls = callMap[id as number] ?? []
+    if (scoreCalls.length > 0) {
+      for (const cid of scoreCalls) selectedCallIds.add(cid)
+    } else {
+      const chosen = chosenMap[id as number]
+      if (chosen != null) selectedCallIds.add(chosen)
+    }
   }
   const exportCallId =
     selectedCallIds.size === 1
@@ -848,38 +865,36 @@ export default function FismaTable({
       align: 'center',
       headerAlign: 'center',
       hideable: false,
-      valueGetter: (value) => {
-        const entry = scores[value.row.fismasystemid]
-        if (!entry || !entry.score) {
-          return 0
-        }
-        return entry.score.toFixed(2)
-      },
-      renderCell: (params) => {
-        const entry = scores[params.row.fismasystemid]
-        const score = entry?.score ?? 0
-        // Tier comes from the backend on /scores/aggregate; do not derive
-        // it from the numeric score. Cells without a tier render with no
-        // background fill so a transient deploy mismatch reads as
-        // "unknown" rather than a misleading color.
-        const backgroundColor = entry?.tier
-          ? TIERS[entry.tier]?.cell.backgroundColor ?? 'transparent'
-          : 'transparent'
-        return (
-          <Box
-            sx={{
-              border: 1,
-              p: 1,
-              px: 4,
-              borderRadius: 2,
-              borderColor: 'darkgray',
-              backgroundColor,
-            }}
-          >
-            {score.toFixed(2)}
-          </Box>
-        )
-      },
+      valueGetter: (value) => scoreSortValue(scores[value.row.fismasystemid]),
+      renderCell: (params) => (
+        <ScoreCell entry={scores[params.row.fismasystemid]} />
+      ),
+    },
+    {
+      // Which call the row is displaying (ui#639), named plainly so a
+      // past-call row is identifiable and quick-searchable without relying
+      // on the grayed styling.
+      field: 'rowdatacall',
+      headerName: 'Data Call',
+      // Renders as the column-header tooltip: the resolution is not obvious
+      // from the name (it is not simply "last completed call").
+      description:
+        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the newest selected call for a system with no data in them.",
+      width: 130,
+      align: 'center',
+      headerAlign: 'center',
+      valueGetter: (value) =>
+        callById.get(
+          resolveRowCallId(
+            value.row.fismasystemid,
+            chosenCallMap,
+            systemCallMap,
+            datacalls,
+            activeDataCallId,
+            activeDatacallIds
+          )
+        )?.datacall ?? '',
+      sortComparator: datacallNameComparator(deadlineByCallName),
     },
     {
       // Which call the row is displaying (ui#639), named plainly so a
@@ -931,7 +946,6 @@ export default function FismaTable({
         <ProgressCell
           entry={progress?.[params.row.fismasystemid]}
           isCurrentCall={isRowCurrentCall(params.row.fismasystemid)}
-          hasScore={Boolean(scores[params.row.fismasystemid])}
         />
       ),
     },
@@ -1038,7 +1052,17 @@ export default function FismaTable({
       <DataGrid
         rows={filteredRows}
         isRowSelectable={(params: GridRowParams) =>
-          params.row.fismasystemid in scores
+          isSystemSelectable(params.row.fismasystemid, scores, progress)
+        }
+        // De-emphasize rows displaying a closed call while the open call is
+        // in view (ui#639). Only in that mixed view: between calls, or on a
+        // historical year, every row is past-call and graying the whole grid
+        // distinguishes nothing. The Data Call column carries the same state
+        // as text.
+        getRowClassName={(params) =>
+          openCallInView && !isRowCurrentCall(params.row.fismasystemid)
+            ? 'past-call-row'
+            : ''
         }
         // De-emphasize rows displaying a closed call while the open call is
         // in view (ui#639). Only in that mixed view: between calls, or on a
@@ -1065,6 +1089,7 @@ export default function FismaTable({
             activeDataCallId,
             scores,
             systemCallMap,
+            chosenCallMap,
           },
           toolbar: {
             filters,

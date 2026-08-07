@@ -31,11 +31,13 @@ const mock = new MockAdapter(axiosInstance)
 
 const USER_ID = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa'
 const USER_ID_B = 'bbbbbbbb-bbbb-4bbb-8bbb-bbbbbbbbbbbb'
+const CALLER_ID = 'cccccccc-cccc-4ccc-8ccc-cccccccccccc'
 
-// Represents the caller's grantable scope (children, active, and — for an
-// OPDIV_ADMIN — limited to their own OpDivs). OpDiv 99 is intentionally absent
-// so scope-filter tests can verify it is stripped from the PUT body.
-const opdivOptions: OpDiv[] = [
+// The full assignable universe: active, non-parent OpDivs, NOT narrowed to the
+// caller. The modal narrows this against the caller's fresh grants itself. 99 is
+// intentionally absent (parent/inactive) so it can only ever appear as a
+// current grant, never as a selectable option.
+const assignableOpDivs: OpDiv[] = [
   {
     opdiv_id: 1,
     code: 'AAA',
@@ -56,13 +58,20 @@ const opdivOptions: OpDiv[] = [
 
 // Full label source (incl. the non-assignable OpDiv 99, e.g. a parent/inactive
 // division), so the modal can label a grant to it even though it is absent from
-// opdivOptions. Id 77 is intentionally absent to exercise the "OpDiv #{id}"
+// assignableOpDivs. Id 77 is intentionally absent to exercise the "OpDiv #{id}"
 // fallback.
 const opdivLabelMap: Record<number, { code: string; name: string }> = {
   1: { code: 'AAA', name: 'Division A' },
   2: { code: 'BBB', name: 'Division B' },
   99: { code: 'ZZZ', name: 'Parent Division' },
 }
+
+// The acting caller's own current grants, served fresh by the modal's on-open
+// fetch. Mutable so a test can change it between two opens (the staleness case).
+let callerGrants: number[] = [1, 2]
+// Status the caller-scope fetch returns; non-200 exercises the failure paths
+// (500 = generic error guard, 401 = auth redirect).
+let callerFetchStatus = 200
 
 function renderModal(
   overrides: Partial<React.ComponentProps<typeof OpDivGrantModal>> = {}
@@ -73,19 +82,37 @@ function renderModal(
       handleClose={jest.fn()}
       userid={USER_ID}
       userName="Test User"
-      opdivOptions={opdivOptions}
+      assignableOpDivs={assignableOpDivs}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
-      callerGrantIds={[1, 2]}
+      callerUserId={CALLER_ID}
       onChanged={jest.fn()}
       {...overrides}
     />
   )
 }
 
+// Waits for the modal's on-open fetches to settle (Save enabled = not loading).
+// Fetch-count-agnostic, so it survives the extra caller-scope fetch.
+const waitForReady = () =>
+  waitFor(() =>
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  )
+
 beforeEach(() => {
   mock.reset()
   mockedNavigate.mockReset()
+  callerGrants = [1, 2]
+  callerFetchStatus = 200
+  // The caller-scope fetch is read at request time, so mutating callerGrants
+  // (or callerFetchStatus) between opens changes what the next open sees.
+  mock
+    .onGet(`/users/${CALLER_ID}/assignedopdivs`)
+    .reply(() =>
+      callerFetchStatus === 200
+        ? [200, { data: callerGrants }]
+        : [callerFetchStatus, {}]
+    )
 })
 
 // Scoped caller (OPDIV_ADMIN, enforceCallerScope=true): the save strips
@@ -99,7 +126,7 @@ test('scoped caller: PUT body excludes grants the target holds outside caller sc
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
 
   renderModal({ enforceCallerScope: true })
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  await waitForReady()
 
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -120,7 +147,7 @@ test('unscoped caller: PUT body preserves grants outside the assignable set', as
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
 
   renderModal({ enforceCallerScope: false })
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  await waitForReady()
 
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -141,8 +168,9 @@ test('scoped caller: preserves a caller-held grant that is no longer assignable'
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
 
-  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 99] })
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  callerGrants = [1, 99]
+  renderModal()
+  await waitForReady()
 
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -150,6 +178,123 @@ test('scoped caller: preserves a caller-held grant that is no longer assignable'
   const body = JSON.parse(mock.history.put[0].data)
   expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 99]))
   expect(body.opdiv_ids).toHaveLength(2)
+})
+
+// The staleness AC: an OPDIV_ADMIN whose OWN grants change mid-session gets the
+// current scope on the NEXT open, no reload. First open the caller does not hold
+// 99; between opens they gain it; the second open must preserve the target's
+// grant to 99, not strip it (which the backend would then revoke). Fetching the
+// caller's scope fresh on each open is what makes the second open see the newer
+// set - a session-cached scope would still be missing 99.
+test('scoped caller: a mid-session scope change is picked up on the next open', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
+  mock.onPut(`/users/${USER_ID}/opdivs`).reply(204)
+
+  const modal = (open: boolean) => (
+    <OpDivGrantModal
+      open={open}
+      handleClose={jest.fn()}
+      userid={USER_ID}
+      userName="Test User"
+      assignableOpDivs={assignableOpDivs}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={true}
+      callerUserId={CALLER_ID}
+      onChanged={jest.fn()}
+    />
+  )
+
+  // First open: caller does not hold 99 yet.
+  callerGrants = [1]
+  const { rerender } = renderWithProviders(modal(true))
+  await waitForReady()
+
+  // Close, the caller gains 99, then reopen.
+  rerender(modal(false))
+  callerGrants = [1, 99]
+  rerender(modal(true))
+  await waitForReady()
+
+  await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  const body = JSON.parse(mock.history.put[0].data)
+  // The second open used the fresher scope, so 99 survives.
+  expect(body.opdiv_ids).toEqual(expect.arrayContaining([1, 99]))
+  expect(body.opdiv_ids).toHaveLength(2)
+})
+
+// The data-integrity guard: if the caller-scope fetch fails, the modal must
+// block the save. Filtering the target's grants against an empty fallback scope
+// would strip - and the backend then revoke - grants the caller actually holds.
+test('scoped caller: a caller-scope fetch failure disables the modal and blocks save', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 2] })
+  callerFetchStatus = 500
+
+  renderModal()
+
+  await screen.findByText(ERROR_MESSAGES.tryAgain)
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  expect(screen.getByRole('combobox')).toBeDisabled()
+  expect(mock.history.put).toHaveLength(0)
+})
+
+// A scoped caller whose own grants were all revoked mid-session has an empty
+// (but successfully fetched) scope. Save must be blocked so it can't PUT an
+// empty desired set - distinct from the fetch-failure guard: the picker is
+// enabled (load succeeded), only Save is blocked.
+test('scoped caller: an empty caller scope blocks save without a fetch error', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 2] })
+  callerGrants = []
+
+  renderModal()
+
+  // Picker enabled proves the load finished (not a loading/fetchFailed state)...
+  await waitFor(() => expect(screen.getByRole('combobox')).toBeEnabled())
+  // ...but Save stays disabled because the caller has no scope to grant from.
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+  expect(mock.history.put).toHaveLength(0)
+})
+
+// Both fetches failing surfaces exactly one error toast, not one per fetch.
+test('surfaces a single error snackbar when both fetches fail', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(500)
+  callerFetchStatus = 500
+
+  renderModal()
+
+  await screen.findByText(ERROR_MESSAGES.tryAgain)
+  expect(screen.getAllByText(ERROR_MESSAGES.tryAgain)).toHaveLength(1)
+})
+
+// A 401 on the caller-scope fetch (target ok) redirects to sign-in via the auth
+// interceptor and suppresses the generic error toast, same as a 401 on the
+// target fetch.
+test('a 401 on the caller-scope fetch redirects to sign-in without a generic toast', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 2] })
+  callerFetchStatus = 401
+
+  renderModal()
+
+  await waitFor(() => {
+    expect(mockedNavigate).toHaveBeenCalledWith(Routes.SIGNIN, {
+      replace: true,
+      state: { message: ERROR_MESSAGES.expired, reason: 'EXPIRED' },
+    })
+  })
+  expect(screen.queryByText(ERROR_MESSAGES.tryAgain)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+})
+
+// Self-row: an admin opening the modal on their own row (userid === callerUserId)
+// hits the same endpoint for both fetches, so it must fire a single request.
+test('self-row: caller opening their own row fires a single grants fetch', async () => {
+  renderModal({ userid: CALLER_ID })
+  await waitForReady()
+
+  const selfGets = mock.history.get.filter(
+    (g) => g.url === `/users/${CALLER_ID}/assignedopdivs`
+  )
+  expect(selfGets).toHaveLength(1)
 })
 
 // A grant to a non-assignable OpDiv (99, absent from opdivOptions) still chips
@@ -180,8 +325,9 @@ test('dropdown excludes a non-assignable grant even though it chips', async () =
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
 
   renderModal()
-  // The grant chips (so the fetch has resolved and options are settled).
-  await screen.findByText('ZZZ - Parent Division')
+  // Wait for both fetches so the picker is enabled and the assignable set is
+  // narrowed against the caller's fresh scope.
+  await waitForReady()
 
   // Open the dropdown.
   await userEvent.click(screen.getByRole('combobox'))
@@ -199,11 +345,13 @@ test('dropdown excludes a non-assignable grant even though it chips', async () =
 test('scoped caller: a chip outside the caller scope is not deletable', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
 
-  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 2] })
+  // Caller holds [1, 2]; 99 is held by the target via another admin.
+  renderModal()
+  await waitForReady()
 
-  const inScope = (await screen.findByText('AAA - Division A')).closest(
-    '.MuiChip-root'
-  ) as HTMLElement
+  const inScope = screen
+    .getByText('AAA - Division A')
+    .closest('.MuiChip-root') as HTMLElement
   const outOfScope = screen
     .getByText('ZZZ - Parent Division')
     .closest('.MuiChip-root') as HTMLElement
@@ -218,11 +366,13 @@ test('scoped caller: a chip outside the caller scope is not deletable', async ()
 test('scoped caller: a caller-held but non-assignable chip stays deletable', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1, 99] })
 
-  renderModal({ enforceCallerScope: true, callerGrantIds: [1, 99] })
+  callerGrants = [1, 99]
+  renderModal()
+  await waitForReady()
 
-  const heldNonAssignable = (
-    await screen.findByText('ZZZ - Parent Division')
-  ).closest('.MuiChip-root') as HTMLElement
+  const heldNonAssignable = screen
+    .getByText('ZZZ - Parent Division')
+    .closest('.MuiChip-root') as HTMLElement
 
   expect(heldNonAssignable.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
 })
@@ -249,7 +399,7 @@ test('success: modal closes and onChanged fires after save', async () => {
   const onChanged = jest.fn()
   renderModal({ handleClose, onChanged })
 
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  await waitForReady()
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
   await waitFor(() => {
@@ -266,7 +416,7 @@ test('modal stays open on save error and does not call onChanged', async () => {
   const onChanged = jest.fn()
   renderModal({ handleClose, onChanged })
 
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  await waitForReady()
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
   expect(await screen.findByText(ERROR_MESSAGES.tryAgain)).toBeInTheDocument()
@@ -281,7 +431,7 @@ test('403 shows the permission snackbar and does not close the modal', async () 
   const handleClose = jest.fn()
   renderModal({ handleClose })
 
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  await waitForReady()
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
   expect(await screen.findByText(ERROR_MESSAGES.permission)).toBeInTheDocument()
@@ -293,7 +443,7 @@ test('401 redirects to sign-in without firing a generic error snackbar', async (
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(401)
 
   renderModal()
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  await waitForReady()
   await userEvent.click(screen.getByRole('button', { name: /^save$/i }))
 
   await waitFor(() => {
@@ -313,7 +463,7 @@ test('save button is disabled while the request is in flight', async () => {
   renderModal()
   const saveButton = screen.getByRole('button', { name: /^save$/i })
 
-  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+  await waitForReady()
   await userEvent.click(saveButton)
 
   expect(saveButton).toBeDisabled()
@@ -379,10 +529,10 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       handleClose={jest.fn()}
       userid={USER_ID}
       userName="Test User"
-      opdivOptions={opdivOptions}
+      assignableOpDivs={assignableOpDivs}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
-      callerGrantIds={[1, 2]}
+      callerUserId={CALLER_ID}
       onChanged={jest.fn()}
     />
   )
@@ -392,10 +542,10 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
       handleClose={jest.fn()}
       userid={USER_ID}
       userName="Test User"
-      opdivOptions={opdivOptions}
+      assignableOpDivs={assignableOpDivs}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
-      callerGrantIds={[1, 2]}
+      callerUserId={CALLER_ID}
       onChanged={jest.fn()}
     />
   )
@@ -444,16 +594,16 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
       handleClose={jest.fn()}
       userid={USER_ID_B}
       userName="Test User B"
-      opdivOptions={opdivOptions}
+      assignableOpDivs={assignableOpDivs}
       opdivLabelMap={opdivLabelMap}
       enforceCallerScope={true}
-      callerGrantIds={[1, 2]}
+      callerUserId={CALLER_ID}
       onChanged={onChanged}
     />
   )
 
-  // Both GETs have been sent; user B's has already resolved.
-  await waitFor(() => expect(mock.history.get).toHaveLength(2))
+  // User B's fetches have resolved (Save enabled); user A's is still pending.
+  await waitForReady()
 
   // Release user A's stale fetch — the cancelled flag should swallow the result.
   resolveUserA()
