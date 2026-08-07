@@ -24,4 +24,13 @@ describe('LastSeenCell', () => {
     const tooltip = await screen.findByRole('tooltip')
     expect(tooltip).toHaveTextContent('2026')
   })
+
+  it('carries the absolute timestamp in the accessible name (tooltip is hover-only)', () => {
+    render(<LastSeenCell value={new Date('2026-08-04T12:00:00Z')} now={now} />)
+    const el = screen.getByText('3 days ago')
+    expect(el).toHaveAttribute(
+      'aria-label',
+      expect.stringMatching(/^3 days ago \(.*2026.*\)$/)
+    )
+  })
 })
