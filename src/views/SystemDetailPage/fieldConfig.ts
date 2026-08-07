@@ -8,6 +8,9 @@ export interface FieldConfig {
   key: keyof FismaSystemType
   label: string
   section: FieldSection
+  // Required to edit, not to create: true blocks the save while the field is
+  // blank. Create-only requirements stay false here and are enforced in the
+  // add-system modal.
   required: boolean
   type: FieldType
   // Display-only: rendered but never editable and excluded from the write
@@ -58,8 +61,9 @@ export const fieldConfigs: FieldConfig[] = [
   {
     key: 'component',
     label: 'Component',
+    // A CMS concept with no OpDiv equivalent, so unset on most non-CMS systems.
     section: 'identity',
-    required: true,
+    required: false,
     type: 'text',
   },
   {
@@ -97,15 +101,19 @@ export const fieldConfigs: FieldConfig[] = [
   {
     key: 'issoemail',
     label: 'ISSO Email',
+    // Required to create, not to edit: a system loaded without an ISSO must not
+    // be frozen. A typed value is still format-checked.
     section: 'contacts',
-    required: true,
+    required: false,
     type: 'email',
   },
   {
     key: 'datacallcontact',
     label: 'Data Call Contact',
+    // Not collected at onboarding, so unset on nearly every non-CMS system. A
+    // typed value is still format-checked.
     section: 'contacts',
-    required: true,
+    required: false,
     type: 'email',
   },
 

@@ -42,6 +42,7 @@ import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import EditOpDivCell from './EditOpDivCell'
+import { isUserCellEditable } from './cellEditGuards'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -188,6 +189,10 @@ export default function UserTable() {
   const [opdivLabelMap, setOpDivLabelMap] = useState<
     Record<number, { code: string; name: string }>
   >({})
+  // All assignable OpDivs (active, non-parent), NOT narrowed to the caller's
+  // scope. The grant modal narrows this against the caller's fresh grants
+  // itself, so it isn't fed the session-old scope that opdivOptions carries.
+  const [allAssignableOpDivs, setAllAssignableOpDivs] = useState<OpDiv[]>([])
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
   // holds rows refreshed since load, plus a one-time backfill against older
@@ -590,7 +595,13 @@ export default function UserTable() {
         setOpDivCodeMap(codeMap)
         setOpDivLabelMap(labelMap)
 
-        let assignable = all.filter((od) => !od.is_parent && od.active)
+        const activeNonParent = all.filter((od) => !od.is_parent && od.active)
+        setAllAssignableOpDivs(activeNonParent)
+
+        // opdivOptions stays caller-narrowed for the inline EditOpDivCell. The
+        // grant modal does NOT use this; it narrows the full set against the
+        // caller's fresh scope itself, so it isn't fed this session-old value.
+        let assignable = activeNonParent
         if (isOpDivTier(userInfo)) {
           const own = new Set(userInfo.assignedopdivids ?? [])
           assignable = assignable.filter((od) => own.has(od.opdiv_id))
@@ -599,6 +610,7 @@ export default function UserTable() {
       } catch {
         // Non-fatal: the grant modal simply shows no options if this fails.
         setOpDivOptions([])
+        setAllAssignableOpDivs([])
         setOpDivCodeMap({})
         setOpDivLabelMap({})
       }
@@ -839,28 +851,14 @@ export default function UserTable() {
           rows={rows}
           apiRef={apiRef}
           columns={columns}
-          // Cell-level edit gates (defense-in-depth; server enforces the same rules):
-          // - role: locked on existing rows whose current role is outside this
-          //   admin's assignable tier, preventing unauthorized role changes.
-          // - opdivs / identity_provider: locked to new rows only — existing
-          //   users' OpDiv memberships and derived IdP are managed via the
-          //   Assign OpDivs action, not inline editing.
-          isCellEditable={(params) => {
-            if (params.field === 'role') {
-              return (
-                params.row.isNew ||
-                !params.row.role ||
-                assignableRoles.includes(params.row.role)
-              )
-            }
-            if (params.field === 'opdivs') {
-              return !!params.row.isNew
-            }
-            if (params.field === 'identity_provider') {
-              return !!params.row.isNew && showIdpSelector
-            }
-            return true
-          }}
+          // Cell-level edit gates live in cellEditGuards so they can be tested
+          // without the grid. See that file for what each field allows and why.
+          isCellEditable={(params) =>
+            isUserCellEditable(params.field, params.row, {
+              assignableRoles,
+              showIdpSelector,
+            })
+          }
           editMode="row"
           getRowId={(row) => row.userid}
           initialState={{
@@ -939,7 +937,7 @@ export default function UserTable() {
         handleClose={handleCloseOpDivModal}
         userid={opdivModalUserId}
         userName={opdivModalUserName}
-        opdivOptions={opdivOptions}
+        assignableOpDivs={allAssignableOpDivs}
         opdivLabelMap={opdivLabelMap}
         // Scoped callers (every admin except an unscoped write admin) must not
         // silently revoke the target's out-of-scope grants on save, so gate the
@@ -947,10 +945,11 @@ export default function UserTable() {
         // send the grant set as-is. This is the inverse of the backend's
         // unscoped-write branch, the predicate it actually decides on.
         enforceCallerScope={!isUnscopedWriteAdmin(userInfo)}
-        // The caller's RAW grants (unfiltered by parent/active) - the save-time
-        // preserve boundary. Wider than opdivOptions so a caller-held grant to a
-        // since re-parented/deactivated OpDiv is preserved, not silently revoked.
-        callerGrantIds={userInfo.assignedopdivids ?? []}
+        // The acting admin's own id. The modal fetches this user's CURRENT
+        // grants on open for its scope, rather than reading the session-old
+        // userInfo.assignedopdivids, so a mid-session grant change can't
+        // silently revoke a target's grant on save.
+        callerUserId={userInfo.userid}
         onChanged={refreshUserRow}
       />
       <ConfirmDialog
