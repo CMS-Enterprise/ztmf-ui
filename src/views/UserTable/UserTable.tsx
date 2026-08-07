@@ -23,7 +23,6 @@ import {
   GridRowEditStopReasons,
   GridToolbarQuickFilter,
   GridFilterModel,
-  GridSortItem,
   useGridApiRef,
 } from '@mui/x-data-grid'
 import { Chip, FormControlLabel, Switch, Typography } from '@mui/material'
@@ -58,7 +57,7 @@ import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import LastSeenCell from './LastSeenCell'
 import {
-  compareLastSeen,
+  lastSeenSortComparator,
   parseLastSeen,
   hasNoActivityFilter,
   withNoActivityFilter,
@@ -765,14 +764,9 @@ export default function UserTable() {
       valueGetter: (params) => parseLastSeen(params.row.last_seen),
       // Direction-aware so never-active rows sort last under BOTH asc and
       // desc; see compareLastSeen for how it pre-compensates the grid's
-      // negation on desc.
-      sortComparator: (v1, v2, cellParams1) => {
-        const direction =
-          (cellParams1.api.getSortModel() as GridSortItem[]).find(
-            (item) => item.field === cellParams1.field
-          )?.sort ?? 'asc'
-        return compareLastSeen(v1, v2, direction === 'desc' ? 'desc' : 'asc')
-      },
+      // negation on desc, and lastSeenSortComparator for the live-direction
+      // read (and the TODO for the v7 getSortComparator migration).
+      sortComparator: lastSeenSortComparator,
       renderCell: (params) => <LastSeenCell value={params.value ?? null} />,
     },
     {

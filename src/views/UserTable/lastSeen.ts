@@ -6,7 +6,11 @@
  * tracking began 2026-08-06, so a null for an older account means "no recorded
  * activity since tracking began", not "never signed in".
  */
-import type { GridFilterModel } from '@mui/x-data-grid'
+import type {
+  GridComparatorFn,
+  GridFilterModel,
+  GridSortItem,
+} from '@mui/x-data-grid'
 
 /** Neutral empty state - see the module note on why it isn't "Never logged in". */
 export const LAST_SEEN_EMPTY_LABEL = 'No activity recorded'
@@ -106,4 +110,27 @@ export function compareLastSeen(
   if (aNull) return direction === 'desc' ? -1 : 1
   if (bNull) return direction === 'desc' ? 1 : -1
   return a.getTime() - b.getTime()
+}
+
+/**
+ * The column's comparator: reads the LIVE sort direction off the grid api at
+ * compare time (v6 commits the new sort model to state before applying the
+ * sort, so this sees the direction being applied, not the previous one) and
+ * hands it to compareLastSeen. Exported so the grid-level test can exercise
+ * this exact wiring - the getSortModel() read is the fragile part, not the
+ * pure comparison.
+ *
+ * TODO(x-data-grid v7): replace with getSortComparator(direction) on the
+ * column def and drop the direction plumbing here - a v7 upgrade that keeps
+ * this workaround would still work, but the native hook is the intended API.
+ */
+export const lastSeenSortComparator: GridComparatorFn<Date | null> = (
+  v1,
+  v2,
+  cellParams1
+) => {
+  const direction = (cellParams1.api.getSortModel() as GridSortItem[]).find(
+    (item) => item.field === cellParams1.field
+  )?.sort
+  return compareLastSeen(v1, v2, direction === 'desc' ? 'desc' : 'asc')
 }
