@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DevEnvironmentBanner from './DevEnvironmentBanner'
+import { bannerVersion, setBannerDismissed } from './bannerDismissal'
 import CONFIG from '@/utils/config'
 
 // The component reads build-time config derived from import.meta.env, which
@@ -133,13 +134,13 @@ test('a signed-in dismissal survives with the default copy too', async () => {
   ).not.toBeInTheDocument()
 })
 
-test('an already-dismissed banner stays hidden when a session starts mid-mount', async () => {
-  const user = userEvent.setup()
-  // Covers the effect rather than the state initializer.
-  const { rerender } = render(<DevEnvironmentBanner authenticated />)
-  await user.click(screen.getByRole('button', { name: /close/i }))
+test('picks up a stored dismissal when the session starts mid-mount', () => {
+  // Mounted signed-out, so the state initializer skips storage; only the effect
+  // can hide the banner once the loader flips authenticated.
+  setBannerDismissed(bannerVersion(''))
+  const { rerender } = render(<DevEnvironmentBanner />)
+  expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
 
-  rerender(<DevEnvironmentBanner />)
   rerender(<DevEnvironmentBanner authenticated />)
   expect(
     screen.queryByText(/non-production environment/i)
