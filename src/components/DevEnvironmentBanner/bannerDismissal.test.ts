@@ -8,6 +8,12 @@ beforeEach(() => {
   localStorage.clear()
 })
 
+// resetMocks clears a spy's implementation but leaves it installed over
+// Storage.prototype, breaking localStorage for every test added after.
+afterEach(() => {
+  jest.restoreAllMocks()
+})
+
 test('derives a stable stamp for the same copy', () => {
   expect(bannerVersion('Testing runs through July 17th.')).toBe(
     bannerVersion('Testing runs through July 17th.')
@@ -38,6 +44,22 @@ test('records and reports a dismissal for one copy version only', () => {
   expect(isBannerDismissed(current)).toBe(true)
   // Replacing the copy re-surfaces the banner rather than staying dismissed.
   expect(isBannerDismissed(bannerVersion('Testing has ended.'))).toBe(false)
+})
+
+test('writes the dismissal under the documented key', () => {
+  setBannerDismissed(bannerVersion('Testing is ongoing.'))
+  // Pinned: renaming the key un-dismisses the banner for everyone.
+  expect(localStorage.getItem('ztmf_banner_dismissed')).toBe(
+    bannerVersion('Testing is ongoing.')
+  )
+})
+
+test('a later dismissal replaces the stamp rather than accumulating keys', () => {
+  setBannerDismissed(bannerVersion('First notice.'))
+  setBannerDismissed(bannerVersion('Second notice.'))
+  expect(localStorage.length).toBe(1)
+  expect(isBannerDismissed(bannerVersion('First notice.'))).toBe(false)
+  expect(isBannerDismissed(bannerVersion('Second notice.'))).toBe(true)
 })
 
 test('reports not dismissed when storage throws', () => {

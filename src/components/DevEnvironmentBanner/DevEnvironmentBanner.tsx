@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Link from '@mui/material/Link'
 import CONFIG from '@/utils/config'
@@ -33,23 +33,21 @@ type DevEnvironmentBannerProps = {
  * Persistent warning banner that marks non-production environments so testers
  * do not mistake them for production or enter real data. Rendered once in the
  * app shell; hidden entirely in production and after a user dismisses it. For
- * signed-in users the dismissal persists across reloads and tabs until the
- * banner copy changes.
+ * signed-in users the dismissal persists until the banner copy changes.
  * @param {DevEnvironmentBannerProps} props Component props.
  * @returns {JSX.Element | null}
  */
 export default function DevEnvironmentBanner({
   authenticated = false,
 }: DevEnvironmentBannerProps) {
-  const version = useMemo(() => bannerVersion(CONFIG.DEV_BANNER_MESSAGE), [])
+  const version = bannerVersion(CONFIG.DEV_BANNER_MESSAGE)
   const [dismissed, setDismissed] = useState(
     () => authenticated && isBannerDismissed(version)
   )
 
-  // Dismissals are recorded for signed-in users only, and re-read when the
-  // session starts. So a dismissal made pre-login never suppresses the
-  // authenticated banner - testers still get one showing of the testing copy
-  // and its feedback link once they sign in.
+  // Handles the loader flipping authenticated mid-mount. Re-reading also means
+  // a pre-login dismissal never suppresses the signed-in banner, so testers
+  // still get one showing of the testing copy and its feedback link.
   useEffect(() => {
     if (authenticated) setDismissed(isBannerDismissed(version))
   }, [authenticated, version])
