@@ -22,6 +22,7 @@ import {
   GridRenderEditCellParams,
   GridRowEditStopReasons,
   GridToolbarQuickFilter,
+  GridFilterModel,
   useGridApiRef,
 } from '@mui/x-data-grid'
 import { Chip, FormControlLabel, Switch, Typography } from '@mui/material'
@@ -54,6 +55,13 @@ import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
+import LastSeenCell from './LastSeenCell'
+import {
+  lastSeenSortComparator,
+  parseLastSeen,
+  hasNoActivityFilter,
+  withNoActivityFilter,
+} from './lastSeen'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
   setRows: (newRows: (oldRows: GridRowsProp) => GridRowsProp) => void
@@ -63,11 +71,20 @@ interface EditToolbarProps {
   isAdmin?: boolean
   showDeleted: boolean
   setShowDeleted: (value: boolean) => void
+  noActivityOnly: boolean
+  setNoActivityOnly: (value: boolean) => void
 }
 
 function EditToolbar(props: EditToolbarProps) {
-  const { setRows, setRowModesModel, isAdmin, showDeleted, setShowDeleted } =
-    props
+  const {
+    setRows,
+    setRowModesModel,
+    isAdmin,
+    showDeleted,
+    setShowDeleted,
+    noActivityOnly,
+    setNoActivityOnly,
+  } = props
   const addUserRow = () => {
     const userid = Math.floor(Math.random() * 1000) + 1
     setRows((oldRows) => [
@@ -103,6 +120,23 @@ function EditToolbar(props: EditToolbarProps) {
         }}
       />
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+        <FormControlLabel
+          control={
+            <Switch
+              checked={noActivityOnly}
+              onChange={(e) => setNoActivityOnly(e.target.checked)}
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: '#004297',
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: '#004297',
+                },
+              }}
+            />
+          }
+          label="No Activity Only"
+        />
         <FormControlLabel
           control={
             <Switch
@@ -174,6 +208,18 @@ export default function UserTable() {
     assignedfismasystems: [],
   })
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
+  // Controlled so the "No Activity Only" toolbar switch can inject/remove an
+  // isEmpty filter on last_seen while quick-filter text (which also lives in
+  // this model) keeps working. The switch state is DERIVED from the model, so
+  // removing the filter via the column filter panel un-checks the switch too.
+  // The toggle logic lives in lastSeen.ts (withNoActivityFilter) because the
+  // community grid's single-filter-item limit makes it subtle enough to pin
+  // with tests.
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] })
+  const noActivityOnly = hasNoActivityFilter(filterModel)
+  const setNoActivityOnly = (value: boolean) => {
+    setFilterModel((prev) => withNoActivityFilter(prev, value))
+  }
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
   const [assignModalUserName, setAssignModalUserName] = useState<string>('')
@@ -708,6 +754,22 @@ export default function UserTable() {
       renderCell: (params) => params.row.identity_provider || '—',
     },
     {
+      field: 'last_seen',
+      headerName: 'Last Seen',
+      flex: 0.75,
+      type: 'dateTime',
+      // valueGetter (not just renderCell) so sorting, the isEmpty filter
+      // operator, and the toolbar's No Activity switch all see a real
+      // Date-or-null instead of the raw ISO string.
+      valueGetter: (params) => parseLastSeen(params.row.last_seen),
+      // Direction-aware so never-active rows sort last under BOTH asc and
+      // desc; see compareLastSeen for how it pre-compensates the grid's
+      // negation on desc, and lastSeenSortComparator for the live-direction
+      // read (and the TODO for the v7 getSortComparator migration).
+      sortComparator: lastSeenSortComparator,
+      renderCell: (params) => <LastSeenCell value={params.value ?? null} />,
+    },
+    {
       field: 'actions',
       type: 'actions',
       headerName: 'Actions',
@@ -861,6 +923,8 @@ export default function UserTable() {
               sortModel: [{ field: 'role', sort: 'asc' }],
             },
           }}
+          filterModel={filterModel}
+          onFilterModelChange={setFilterModel}
           rowModesModel={rowModesModel}
           onRowModesModelChange={handleRowModesModelChange}
           onProcessRowUpdateError={handleProcessRowUpdateError}
@@ -876,6 +940,8 @@ export default function UserTable() {
               isAdmin,
               showDeleted,
               setShowDeleted,
+              noActivityOnly,
+              setNoActivityOnly,
             },
             filterPanel: {
               sx: {
