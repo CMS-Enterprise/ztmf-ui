@@ -6,9 +6,48 @@
  * tracking began 2026-08-06, so a null for an older account means "no recorded
  * activity since tracking began", not "never signed in".
  */
+import type { GridFilterModel } from '@mui/x-data-grid'
 
 /** Neutral empty state - see the module note on why it isn't "Never logged in". */
 export const LAST_SEEN_EMPTY_LABEL = 'No activity recorded'
+
+/** The filter item the "No Activity Only" toolbar switch injects. */
+export const NO_ACTIVITY_FILTER_ITEM = {
+  id: 'no-activity',
+  field: 'last_seen',
+  operator: 'isEmpty',
+}
+
+/** Whether the model currently carries the no-activity filter (drives the switch). */
+export function hasNoActivityFilter(model: GridFilterModel): boolean {
+  return model.items.some(
+    (item) => item.field === 'last_seen' && item.operator === 'isEmpty'
+  )
+}
+
+/**
+ * Toggle the no-activity filter on a filter model. The community DataGrid
+ * allows only ONE column-filter item (disableMultipleColumnsFiltering is
+ * hard-set); sanitizeFilterModel drops anything past the first and logs a
+ * console error. So switching ON must REPLACE the items array outright, not
+ * append - an appended item at index 1 would be silently discarded whenever
+ * the user already had a filter applied via the column filter panel. The
+ * spread preserves quickFilterValues, which live beside items and are not
+ * subject to the single-item limit.
+ */
+export function withNoActivityFilter(
+  model: GridFilterModel,
+  on: boolean
+): GridFilterModel {
+  return {
+    ...model,
+    items: on
+      ? [NO_ACTIVITY_FILTER_ITEM]
+      : model.items.filter(
+          (item) => !(item.field === 'last_seen' && item.operator === 'isEmpty')
+        ),
+  }
+}
 
 /** Parse an ISO timestamp defensively; null for missing or unparseable input. */
 export function parseLastSeen(iso: string | null | undefined): Date | null {

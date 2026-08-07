@@ -57,7 +57,12 @@ import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
 import LastSeenCell from './LastSeenCell'
-import { compareLastSeen, parseLastSeen } from './lastSeen'
+import {
+  compareLastSeen,
+  parseLastSeen,
+  hasNoActivityFilter,
+  withNoActivityFilter,
+} from './lastSeen'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
   setRows: (newRows: (oldRows: GridRowsProp) => GridRowsProp) => void
@@ -208,23 +213,13 @@ export default function UserTable() {
   // isEmpty filter on last_seen while quick-filter text (which also lives in
   // this model) keeps working. The switch state is DERIVED from the model, so
   // removing the filter via the column filter panel un-checks the switch too.
+  // The toggle logic lives in lastSeen.ts (withNoActivityFilter) because the
+  // community grid's single-filter-item limit makes it subtle enough to pin
+  // with tests.
   const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] })
-  const noActivityOnly = filterModel.items.some(
-    (item) => item.field === 'last_seen' && item.operator === 'isEmpty'
-  )
+  const noActivityOnly = hasNoActivityFilter(filterModel)
   const setNoActivityOnly = (value: boolean) => {
-    setFilterModel((prev) => ({
-      ...prev,
-      items: value
-        ? [
-            ...prev.items.filter((item) => item.field !== 'last_seen'),
-            { id: 'no-activity', field: 'last_seen', operator: 'isEmpty' },
-          ]
-        : prev.items.filter(
-            (item) =>
-              !(item.field === 'last_seen' && item.operator === 'isEmpty')
-          ),
-    }))
+    setFilterModel((prev) => withNoActivityFilter(prev, value))
   }
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
