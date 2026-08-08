@@ -897,32 +897,6 @@ export default function FismaTable({
       sortComparator: datacallNameComparator(deadlineByCallName),
     },
     {
-      // Which call the row is displaying (ui#639), named plainly so a
-      // past-call row is identifiable and quick-searchable without relying
-      // on the grayed styling.
-      field: 'rowdatacall',
-      headerName: 'Data Call',
-      // Renders as the column-header tooltip: the resolution is not obvious
-      // from the name (it is not simply "last completed call").
-      description:
-        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the newest selected call for a system with no data in them.",
-      width: 130,
-      align: 'center',
-      headerAlign: 'center',
-      valueGetter: (value) =>
-        callById.get(
-          resolveRowCallId(
-            value.row.fismasystemid,
-            chosenCallMap,
-            systemCallMap,
-            datacalls,
-            activeDataCallId,
-            activeDatacallIds
-          )
-        )?.datacall ?? '',
-      sortComparator: datacallNameComparator(deadlineByCallName),
-    },
-    {
       // Questionnaire progress for the active data call (ztmf#299). The
       // fraction counts answers genuinely edited this cycle - answers
       // pre-populated from the previous data call do not count until a
@@ -1053,16 +1027,6 @@ export default function FismaTable({
         rows={filteredRows}
         isRowSelectable={(params: GridRowParams) =>
           isSystemSelectable(params.row.fismasystemid, scores, progress)
-        }
-        // De-emphasize rows displaying a closed call while the open call is
-        // in view (ui#639). Only in that mixed view: between calls, or on a
-        // historical year, every row is past-call and graying the whole grid
-        // distinguishes nothing. The Data Call column carries the same state
-        // as text.
-        getRowClassName={(params) =>
-          openCallInView && !isRowCurrentCall(params.row.fismasystemid)
-            ? 'past-call-row'
-            : ''
         }
         // De-emphasize rows displaying a closed call while the open call is
         // in view (ui#639). Only in that mixed view: between calls, or on a

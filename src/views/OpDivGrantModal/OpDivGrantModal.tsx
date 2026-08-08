@@ -57,34 +57,6 @@ type Props = {
    */
   callerUserId: string
   /**
-   * Full label source (all OpDivs, incl. parent/inactive), keyed by opdiv_id.
-   * Separate from opdivOptions so a grant to a non-assignable OpDiv still
-   * resolves to a readable chip instead of a blank one. Ids missing here fall
-   * back to "OpDiv #{id}".
-   */
-  opdivLabelMap: Record<number, { code: string; name: string }>
-  /**
-   * True when the caller is scope-limited (an OPDIV_ADMIN): the save must drop
-   * grants outside the caller's own scope, since the backend rejects a desired
-   * set containing an ID the caller doesn't hold. False for unscoped admins
-   * (OWNER/HHS_ADMIN), whose save must PRESERVE the target's out-of-scope
-   * grants - omitting them reads as a revocation.
-   */
-  enforceCallerScope: boolean
-  /**
-   * The caller's RAW own-grant ids - the backend's true add/remove scope
-   * (IsAssignedOpDiv), unfiltered by parent/active. This is the save-time
-   * preserve boundary and MUST be a superset of the dropdown's assignable set:
-   * opdivOptions is additionally narrowed to !is_parent && active, so a grant
-   * the caller holds to an OpDiv that was later re-parented or deactivated is
-   * absent from opdivOptions but still in the caller's backend scope. Filtering
-   * the save on the narrower opdivOptions would strip such a grant from the PUT
-   * and the backend would then revoke it (its toRemove gate is pure grant
-   * membership) - the same silent-revocation this modal exists to prevent.
-   * Only consulted when enforceCallerScope is true.
-   */
-  callerGrantIds: number[]
-  /**
    * Fired after a successful save so the caller can refresh the user's row
    * (grants + derived identity_provider) against post-mutation server state.
    */
