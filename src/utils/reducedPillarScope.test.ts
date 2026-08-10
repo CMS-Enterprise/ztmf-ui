@@ -77,13 +77,23 @@ describe('reducedPillarScopeApplies', () => {
     )
   })
 
-  // An FY26 name is authoritative, so a broken deadline on the cycle itself is
-  // still in scope; a non-FY26 call can only qualify by deadline, so it is not.
-  it('trusts the name over an unparseable deadline', () => {
+  // An FY26 name is authoritative, so a missing or unparseable deadline on the
+  // cycle itself is still in scope - matching the backend, which never consults
+  // the target's deadline for an FY26-named call. A non-FY26 call can only
+  // qualify by deadline, so it is not.
+  it('trusts the name over a bad deadline', () => {
     const brokenFY26 = call(70, 'FY2026 Broken', 'not-a-date')
     expect(reducedPillarScopeApplies([brokenFY26], brokenFY26.datacallid)).toBe(
       true
     )
+
+    const emptyDeadlineFY26 = call(73, 'FY26 ZTM', '')
+    expect(
+      reducedPillarScopeApplies(
+        [emptyDeadlineFY26],
+        emptyDeadlineFY26.datacallid
+      )
+    ).toBe(true)
 
     const brokenOther = call(72, 'Ad Hoc', 'not-a-date')
     expect(

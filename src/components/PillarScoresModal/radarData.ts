@@ -7,6 +7,23 @@ export type RadarDatum = {
 }
 
 /**
+ * The comparison call's score for one pillar, matched on pillarid so a comparison
+ * missing an earlier pillar cannot shift scores onto the wrong row. undefined when
+ * that call has no row for the pillar.
+ *
+ * Shared by the chart and the accessible table that mirrors it, so the two cannot
+ * disagree about what "no comparison" means.
+ */
+export function findComparisonPillarScore(
+  comparisonScoreEntry: ScoreAggregate | null | undefined,
+  pillarid: number
+): number | undefined {
+  return comparisonScoreEntry?.pillarscores?.find(
+    (p) => p.pillarid === pillarid
+  )?.score
+}
+
+/**
  * Builds the radar series from the anchor call's pillars, pairing each with the
  * comparison call's score for the same pillarid.
  *
@@ -26,8 +43,6 @@ export function buildRadarData(
   return anchorPillarScores.map((pillar) => ({
     pillar: pillar.pillar,
     current: pillar.score ?? 0,
-    previous: comparisonScoreEntry?.pillarscores?.find(
-      (p) => p.pillarid === pillar.pillarid
-    )?.score,
+    previous: findComparisonPillarScore(comparisonScoreEntry, pillar.pillarid),
   }))
 }

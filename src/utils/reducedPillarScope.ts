@@ -1,7 +1,7 @@
 import type { datacall } from '@/types'
 
 // Mirrors rolloverHardcodeTargetPrefixes in the backend's scores.go.
-export const REDUCED_PILLAR_SCOPE_PREFIXES = ['FY2026', 'FY26'] as const
+const REDUCED_PILLAR_SCOPE_PREFIXES = ['FY2026', 'FY26'] as const
 
 const isFY26Named = (name: string | undefined) =>
   REDUCED_PILLAR_SCOPE_PREFIXES.some((prefix) =>
@@ -32,8 +32,11 @@ export function reducedPillarScopeApplies(
   if (!datacalls?.length || !datacallid) return false
 
   const viewed = datacalls.find((d) => d.datacallid === datacallid)
-  if (!viewed?.deadline) return false
+  if (!viewed) return false
+  // Name first: an FY26 cycle is in scope on its name alone, matching the
+  // backend, which never consults the target's deadline in that case.
   if (isFY26Named(viewed.datacall)) return true
+  if (!viewed.deadline) return false
 
   const lastFY26Deadline = datacalls
     .filter((d) => isFY26Named(d.datacall))
