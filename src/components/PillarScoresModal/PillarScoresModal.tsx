@@ -38,7 +38,7 @@ import { tierStyle, TIERS } from '@/utils/tierStyles'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { parseDatacallName } from '@/utils/datacallGrouping'
 import { useContextProp } from '@/views/Title/Context'
-import { buildRadarData } from './radarData'
+import { buildRadarData, findComparisonPillarScore } from './radarData'
 
 interface PillarScoresModalProps {
   open: boolean
@@ -489,10 +489,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
             </Typography>
             <Grid container spacing={2}>
               {(latestScore.pillarscores ?? []).map((pillar) => {
-                const previousPillarScore =
-                  comparisonScoreEntry?.pillarscores?.find(
-                    (p) => p.pillarid === pillar.pillarid
-                  )?.score
+                const previousPillarScore = findComparisonPillarScore(
+                  comparisonScoreEntry,
+                  pillar.pillarid
+                )
 
                 const currentScore = pillar.score ?? 0
                 const trendInfo = getTrendInfo(
@@ -839,10 +839,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       </TableHead>
                       <TableBody>
                         {latestScore?.pillarscores?.map((pillar) => {
-                          const previousPillarScore =
-                            comparisonScoreEntry?.pillarscores?.find(
-                              (p) => p.pillarid === pillar.pillarid
-                            )?.score
+                          const previousPillarScore = findComparisonPillarScore(
+                            comparisonScoreEntry,
+                            pillar.pillarid
+                          )
 
                           const currentScore = pillar.score ?? 0
                           const prevScore = previousPillarScore ?? 0
