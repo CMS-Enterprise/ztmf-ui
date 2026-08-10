@@ -77,7 +77,8 @@ export default function QuestionnareModal({
   onClose,
   system,
 }: SystemDetailsModalProps) {
-  const { userInfo, datacenterEnvironments, datacalls } = useContextProp()
+  const { userInfo, datacenterEnvironments, datacalls, latestDataCallId } =
+    useContextProp()
   // Resolve the system's raw datacenter environment to its scoring category
   // for pillar filtering; fall back to the raw value until the vocabulary
   // loads or for any unmapped value.
@@ -85,6 +86,13 @@ export default function QuestionnareModal({
     toCategoryMap(datacenterEnvironments)[
       system?.datacenterenvironment ?? ''
     ] ?? system?.datacenterenvironment
+  // Derived here, not inside the fetch effect: depending on the datacalls array
+  // would re-run that effect whenever the context refetches, resetting an open
+  // modal to question 1 and discarding unsaved notes. A boolean is stable.
+  const reducedPillarScope = React.useMemo(
+    () => reducedPillarScopeApplies(datacalls, latestDataCallId),
+    [datacalls, latestDataCallId]
+  )
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
@@ -299,9 +307,7 @@ export default function QuestionnareModal({
           // latest call, but one rule beats two.
           const sortedPillars = filterPillarsForSystem(
             sortPillars(Object.keys(organizedData)),
-            reducedPillarScopeApplies(datacalls, latestDataCallId)
-              ? systemCategory
-              : null
+            reducedPillarScope ? systemCategory : null
           )
           const categoriesData: Category[] = sortedPillars.map((pillar) => ({
             name: pillar,
@@ -332,7 +338,7 @@ export default function QuestionnareModal({
       fetchData()
       return () => controller.abort()
     }
-  }, [open, system, systemCategory, datacalls])
+  }, [open, system, systemCategory, reducedPillarScope])
   React.useEffect(() => {
     if (questionId) {
       const controller = new AbortController()
