@@ -34,6 +34,7 @@ import { MAX_QUESTIONNAIRE_NOTES_LENGTH, STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
+import { reducedPillarScopeApplies } from '@/utils/reducedPillarScope'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
@@ -76,7 +77,7 @@ export default function QuestionnareModal({
   onClose,
   system,
 }: SystemDetailsModalProps) {
-  const { userInfo, datacenterEnvironments } = useContextProp()
+  const { userInfo, datacenterEnvironments, datacalls } = useContextProp()
   // Resolve the system's raw datacenter environment to its scoring category
   // for pillar filtering; fall back to the raw value until the vocabulary
   // loads or for any unmapped value.
@@ -294,9 +295,13 @@ export default function QuestionnareModal({
             }
             organizedData[question.pillar.pillar].push(question)
           })
+          // Same threshold as QuestionnairePage; this modal only ever shows the
+          // latest call, but one rule beats two.
           const sortedPillars = filterPillarsForSystem(
             sortPillars(Object.keys(organizedData)),
-            systemCategory
+            reducedPillarScopeApplies(datacalls, latestDataCallId)
+              ? systemCategory
+              : null
           )
           const categoriesData: Category[] = sortedPillars.map((pillar) => ({
             name: pillar,
@@ -327,7 +332,7 @@ export default function QuestionnareModal({
       fetchData()
       return () => controller.abort()
     }
-  }, [open, system, systemCategory])
+  }, [open, system, systemCategory, datacalls])
   React.useEffect(() => {
     if (questionId) {
       const controller = new AbortController()
