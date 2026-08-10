@@ -70,21 +70,57 @@ describe('reducedPillarScopeApplies', () => {
     expect(reducedPillarScopeApplies(ALL, 0)).toBe(false)
   })
 
-  it('does not apply when a deadline is unparseable', () => {
-    const broken = call(70, 'FY2026 Broken', 'not-a-date')
-    expect(reducedPillarScopeApplies([broken], broken.datacallid)).toBe(false)
+  it('trims the name before matching, as the backend does', () => {
+    const padded = call(71, '  FY2026 ZTM', '2026-09-11T23:59:59Z')
+    expect(reducedPillarScopeApplies([FY25, padded], padded.datacallid)).toBe(
+      true
+    )
   })
 
-  it('picks the EARLIEST FY26 deadline as the anchor when there are several', () => {
+  // An FY26 name is authoritative, so a broken deadline on the cycle itself is
+  // still in scope; a non-FY26 call can only qualify by deadline, so it is not.
+  it('trusts the name over an unparseable deadline', () => {
+    const brokenFY26 = call(70, 'FY2026 Broken', 'not-a-date')
+    expect(reducedPillarScopeApplies([brokenFY26], brokenFY26.datacallid)).toBe(
+      true
+    )
+
+    const brokenOther = call(72, 'Ad Hoc', 'not-a-date')
+    expect(
+      reducedPillarScopeApplies([FY26, brokenOther], brokenOther.datacallid)
+    ).toBe(false)
+  })
+
+  it('applies to every FY26 cycle when there are several', () => {
     const fy26Q1 = call(50, 'FY2026 Q1', '2026-01-31T23:59:59Z')
     const fy26Q4 = call(51, 'FY2026 Q4', '2026-09-30T23:59:59Z')
-    const between = call(52, 'FY2025 Late', '2026-06-01T23:59:59Z')
-    const calls = [fy26Q4, fy26Q1, between, FY25]
+    const calls = [fy26Q4, fy26Q1, FY25]
 
     expect(reducedPillarScopeApplies(calls, fy26Q1.datacallid)).toBe(true)
     expect(reducedPillarScopeApplies(calls, fy26Q4.datacallid)).toBe(true)
-    // The threshold is on time, not on the name.
-    expect(reducedPillarScopeApplies(calls, between.datacallid)).toBe(true)
     expect(reducedPillarScopeApplies(calls, FY25.datacallid)).toBe(false)
+  })
+
+  // A non-FY26 call qualifies only once it is past EVERY FY26 cycle, so a cycle
+  // interleaved between two FY26 calls stays out.
+  it('requires a later cycle to be past every FY26 deadline', () => {
+    const fy26Q1 = call(50, 'FY2026 Q1', '2026-01-31T23:59:59Z')
+    const fy26Q4 = call(51, 'FY2026 Q4', '2026-09-30T23:59:59Z')
+    const between = call(52, 'Ad Hoc', '2026-06-01T23:59:59Z')
+    const after = call(53, 'Ad Hoc Later', '2026-12-01T23:59:59Z')
+    const calls = [fy26Q4, fy26Q1, between, after]
+
+    expect(reducedPillarScopeApplies(calls, between.datacallid)).toBe(false)
+    expect(reducedPillarScopeApplies(calls, after.datacallid)).toBe(true)
+  })
+
+  // The regression the name check prevents: an FY26 call mis-dated before a
+  // closed cycle must not drag that closed cycle into scope and restate it.
+  it('does not pull a closed cycle into scope via a mis-dated FY26 call', () => {
+    const misdatedFY26 = call(54, 'FY2026 Q1', '2024-06-01T23:59:59Z')
+    const calls = [misdatedFY26, FY25, FY26]
+
+    expect(reducedPillarScopeApplies(calls, FY25.datacallid)).toBe(false)
+    expect(reducedPillarScopeApplies(calls, misdatedFY26.datacallid)).toBe(true)
   })
 })
