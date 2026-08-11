@@ -42,6 +42,7 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { sortPillars } from '@/utils/sortPillars'
 import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
+import { reducedPillarScopeApplies } from '@/utils/reducedPillarScope'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
@@ -936,9 +937,14 @@ export default function QuestionnarePage() {
                 }
                 organizedData[question.pillar.pillar].push(question)
               })
+              // Cycles before FY26 collected the full question set and their
+              // answers still exist, so filtering them hid answered history
+              // (ztmf-misc#289). null short-circuits the filter.
               const sortedPillars = filterPillarsForSystem(
                 sortPillars(Object.keys(organizedData)),
-                systemCategory
+                reducedPillarScopeApplies(datacalls, activeDataCallId)
+                  ? systemCategory
+                  : null
               )
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
                 const sortedSteps = sortFunctions(pillar, organizedData[pillar])
