@@ -371,6 +371,11 @@ export type users = {
   deleted?: boolean
   isNew?: boolean
   identity_provider?: 'okta' | 'entra'
+  // Most recent recorded activity (incl. sign-ins), list endpoint only.
+  // null = no activity recorded since tracking began (2026-08-06), which for
+  // older accounts is NOT the same as "never signed in" - keep any empty-state
+  // wording neutral. /users/current always returns null for this field.
+  last_seen?: string | null
 }
 
 export type datacall = {

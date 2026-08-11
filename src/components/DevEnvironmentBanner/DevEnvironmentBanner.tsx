@@ -1,7 +1,12 @@
-import { useState } from 'react'
+import { useEffect, useState } from 'react'
 import Alert from '@mui/material/Alert'
 import Link from '@mui/material/Link'
 import CONFIG from '@/utils/config'
+import {
+  bannerVersion,
+  isBannerDismissed,
+  setBannerDismissed,
+} from './bannerDismissal'
 
 /**
  * Fallback copy shown in any non-production environment (dev, impl, local) when
@@ -27,14 +32,25 @@ type DevEnvironmentBannerProps = {
 /**
  * Persistent warning banner that marks non-production environments so testers
  * do not mistake them for production or enter real data. Rendered once in the
- * app shell; hidden entirely in production and after a user dismisses it.
+ * app shell; hidden entirely in production and after a user dismisses it. For
+ * signed-in users the dismissal persists until the banner copy changes.
  * @param {DevEnvironmentBannerProps} props Component props.
  * @returns {JSX.Element | null}
  */
 export default function DevEnvironmentBanner({
   authenticated = false,
 }: DevEnvironmentBannerProps) {
-  const [dismissed, setDismissed] = useState(false)
+  const version = bannerVersion(CONFIG.DEV_BANNER_MESSAGE)
+  const [dismissed, setDismissed] = useState(
+    () => authenticated && isBannerDismissed(version)
+  )
+
+  // Handles the loader flipping authenticated mid-mount. Re-reading also means
+  // a pre-login dismissal never suppresses the signed-in banner, so testers
+  // still get one showing of the testing copy and its feedback link.
+  useEffect(() => {
+    if (authenticated) setDismissed(isBannerDismissed(version))
+  }, [authenticated, version])
 
   if (!CONFIG.IS_NONPROD || dismissed) {
     return null
@@ -56,7 +72,10 @@ export default function DevEnvironmentBanner({
   return (
     <Alert
       severity="warning"
-      onClose={() => setDismissed(true)}
+      onClose={() => {
+        setDismissed(true)
+        if (authenticated) setBannerDismissed(version)
+      }}
       role="region"
       aria-label="Non-production environment notice"
       sx={{

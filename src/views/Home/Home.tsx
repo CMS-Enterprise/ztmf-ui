@@ -103,7 +103,7 @@ export default function HomePageContainer() {
   }
   return (
     <Box>
-      <StatisticsBlocks scores={scoreMap} />
+      <StatisticsBlocks scores={scoreMap} progress={progressMap} />
       <BreadCrumbs />
       <FismaTable
         scores={scoreMap}
