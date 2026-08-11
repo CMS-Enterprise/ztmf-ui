@@ -4,7 +4,7 @@ import Paper from '@mui/material/Paper'
 import { Typography } from '@mui/material'
 import { styled } from '@mui/material/styles'
 import { useContextProp } from '../Title/Context'
-import type { ScoreTier, SystemScoreEntry } from '@/types'
+import type { ScoreProgress, ScoreTier, SystemScoreEntry } from '@/types'
 import { TIERS } from '@/utils/tierStyles'
 const StatisticsPaper = styled(Paper)(({ theme }) => ({
   padding: theme.spacing(2),
@@ -21,8 +21,10 @@ const StatisticsPaper = styled(Paper)(({ theme }) => ({
 }))
 export default function StatisticsBlocks({
   scores,
+  progress,
 }: {
   scores: Record<number, SystemScoreEntry>
+  progress?: Record<number, ScoreProgress>
 }) {
   const { fismaSystems } = useContextProp()
   const [totalSystems, setTotalSystems] = useState<number>(0)
@@ -41,12 +43,14 @@ export default function StatisticsBlocks({
   const [loading, setLoading] = useState<boolean>(false)
 
   useEffect(() => {
-    // Count only the systems that actually contribute a score. The `scores` map
-    // is already scoped to the selected data call(s), so systems with no answers
-    // in the selection must not inflate the denominator (that dragged the average
-    // below the scale minimum — see ztmf-ui#633). Counted inside the loop so the
-    // numerator and denominator always cover the same systems.
+    // The average divides by the scored systems only: the scores map is scoped
+    // to the selected call(s), so unscored systems must not dilute it. The
+    // Scored / Systems tile pairs that scored count with a denominator scoped
+    // the same way - the systems actually in the selected call(s), taken from
+    // the progress map - instead of a call-scoped numerator over an all-systems
+    // denominator, which read as an order-of-magnitude larger backlog than real.
     let scoredCount: number = 0
+    let inCallCount: number = 0
     let maxScore: number = 0
     let maxScoreSystem: string = ''
     let maxScoreTier: ScoreTier | undefined
@@ -56,6 +60,22 @@ export default function StatisticsBlocks({
     let totalScores: number = 0
     for (const system of fismaSystems) {
       const entry = scores[system.fismasystemid]
+      // A system is in the selected call(s) if the progress map carries a row
+      // for it with questions to answer (questionsexpected > 0), a set that
+      // includes never-started systems. A scored system always has such a row
+      // when the progress fetch succeeds, so the ratio stays within 100% without
+      // a special case; if the whole progress fetch fails the denominator reads
+      // 0, which surfaces the outage instead of hiding it behind a false "all
+      // scored" (which counting scored systems here would produce).
+      const progressEntry = progress?.[system.fismasystemid]
+      if ((progressEntry?.questionsexpected ?? 0) > 0) {
+        inCallCount += 1
+      }
+      // Truthy check, not a null check, on purpose. Backend system scores are
+      // floored at 1.0 (each pillar averages the answer score plus one), so a
+      // real score is never 0. A 0 here only comes from an absent/null score
+      // being coalesced to 0 upstream, which must not count as scored. If
+      // scoring ever moves to a 0-based scale, this has to distinguish the two.
       if (entry && entry.score) {
         if (entry.score > maxScore) {
           maxScore = entry.score
@@ -79,7 +99,7 @@ export default function StatisticsBlocks({
       setMinSystemScore(minScore)
     }
     setAnsweredSystems(scoredCount)
-    setTotalSystems(fismaSystems.length)
+    setTotalSystems(inCallCount)
     setMaxSystemScore(maxScore)
     setMaxSystemTier(maxScoreTier)
     setMaxSystemAcronym(maxScoreSystem || '')
@@ -87,7 +107,7 @@ export default function StatisticsBlocks({
     setMinSystemTier(minScoreTier)
     setMinSystemAcronym(minScoreSystem || '')
     setLoading(false)
-  }, [fismaSystems, scores])
+  }, [fismaSystems, scores, progress])
   if (loading) {
     return <p>Loading ...</p>
   }
@@ -114,7 +134,7 @@ export default function StatisticsBlocks({
           variant="body1"
           sx={{ fontSize: '16px', overflowWrap: 'break-word' }}
         >
-          Scored / Total Systems
+          Scored / Systems in selected data calls
         </Typography>
       </StatisticsPaper>
       <StatisticsPaper variant="outlined">
