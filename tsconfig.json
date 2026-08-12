@@ -41,7 +41,6 @@
       "node",
       "react",
       "uuid",
-      "yup",
       "@testing-library/jest-dom"
     ]
   },
