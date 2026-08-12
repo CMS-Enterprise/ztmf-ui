@@ -55,7 +55,11 @@ import { scoreSortValue } from './scoreHelpers'
 import { isSystemSelectable } from './rowSelection'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
-import { resolveRowCallId, datacallNameComparator } from './rowCall'
+import {
+  resolveRowCallId,
+  resolveQuestionnaireCall,
+  datacallNameComparator,
+} from './rowCall'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { parseDatacallName } from '@/utils/datacallGrouping'
@@ -973,8 +977,14 @@ export default function FismaTable({
                     openQuestionnaire(
                       params.row.fismasystemid,
                       params.row.fismaacronym,
-                      rowCallObjs[0] ??
-                        datacalls.find((d) => d.datacallid === activeDataCallId)
+                      resolveQuestionnaireCall(
+                        params.row.fismasystemid,
+                        chosenCallMap,
+                        systemCallMap,
+                        datacalls,
+                        activeDataCallId,
+                        activeDatacallIds
+                      )
                     )
                   }}
                   color="inherit"
