@@ -40,7 +40,6 @@
       "lodash",
       "node",
       "react",
-      "uuid",
       "@testing-library/jest-dom"
     ]
   },
