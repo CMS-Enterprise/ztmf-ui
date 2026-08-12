@@ -30,6 +30,10 @@ export interface UsersToolbarProps {
   showDeleted: boolean
   /** "Show deactivated" toggle handler. */
   setShowDeleted: (value: boolean) => void
+  /** Whether the grid is filtered to users with no recorded activity. */
+  noActivityOnly: boolean
+  /** "No activity only" toggle handler (injects an isEmpty last_seen filter). */
+  setNoActivityOnly: (value: boolean) => void
 }
 
 /**
@@ -43,6 +47,8 @@ export interface UsersToolbarProps {
 export default function UsersToolbar({
   search,
   setSearch,
+  noActivityOnly,
+  setNoActivityOnly,
   roleFilter,
   setRoleFilter,
   roleOptions,
@@ -168,6 +174,11 @@ export default function UsersToolbar({
             }}
           />
         )}
+      />
+      <CompactSwitchLabel
+        checked={noActivityOnly}
+        onChange={setNoActivityOnly}
+        label="No activity only"
       />
       <CompactSwitchLabel
         checked={showDeleted}

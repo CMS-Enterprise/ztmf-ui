@@ -7,6 +7,7 @@ import Card from './Card'
 import TierChip from './TierChip'
 import CompactTrend from './CompactTrend'
 import { pillarRank } from './helpers'
+import { findComparisonPillarScore } from '../radarData'
 
 /**
  * Highest possible zero trust score on the user-facing scale. The backend
@@ -54,9 +55,7 @@ export default function PillarGrid({
       }}
     >
       {sorted.map((p) => {
-        const prev = previousScore?.pillarscores?.find(
-          (pp) => pp.pillarid === p.pillarid
-        )?.score
+        const prev = findComparisonPillarScore(previousScore, p.pillarid)
         const tier: ScoreTier = p.tier ?? 'Not Assessed'
         const notAssessed = tier === 'Not Assessed'
         const fillPct =

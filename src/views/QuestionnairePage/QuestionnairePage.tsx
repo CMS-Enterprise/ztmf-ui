@@ -5,7 +5,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import Typography from '@mui/material/Typography'
 import { useParams } from 'react-router-dom'
 import { Spinner } from '@cmsgov/design-system'
-import { colors } from '@/theme/tokens'
+import { colors, status } from '@/theme/tokens'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ui/PageHeader'
@@ -36,8 +36,6 @@ import {
 import { isAuthHandled, notify } from '@/utils/notify'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { sortPillars } from '@/utils/sortPillars'
-import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
-import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -115,6 +113,10 @@ const CssTextField = styled(TextField)({
     },
   },
 })
+// Ties the carried-forward guidance line to the Confirm button it explains, so
+// a screen reader hears the reason with the action.
+const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
+
 export default function QuestionnarePage() {
   const {
     userInfo,
@@ -124,7 +126,6 @@ export default function QuestionnarePage() {
     latestDeadline,
     fismaSystems,
     datacalls,
-    datacenterEnvironments,
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
@@ -479,13 +480,6 @@ export default function QuestionnarePage() {
     void load()
     return () => controller.abort()
   }, [system])
-  // Resolve the system's raw datacenter environment to its scoring category
-  // for pillar filtering. Falls back to the raw value until the vocabulary
-  // loads or for any value not in the map.
-  const systemCategory =
-    toCategoryMap(datacenterEnvironments)[
-      systemInfo?.datacenterenvironment ?? ''
-    ] ?? systemInfo?.datacenterenvironment
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -619,6 +613,11 @@ export default function QuestionnarePage() {
     priorReviewBlocked:
       priorReviewState === 'pending' || priorReviewState === 'initializing',
   })
+  // Derived from the button so the sentence and the action it describes cannot
+  // drift apart. !currentPriorResponse suppresses it on insights questions,
+  // where the card owns the explanation — a resolved review unblocks the
+  // button, so nothing else would.
+  const showCarryForwardHelper = showConfirmButton && !currentPriorResponse
   const [confirming, setConfirming] = React.useState(false)
   // The Complete-time summary dialog. null = closed.
   const [confirmSummary, setConfirmSummary] =
@@ -885,7 +884,7 @@ export default function QuestionnarePage() {
           let targetFuncId: number | undefined
           try {
             const response = await axiosInstance.get(
-              `/fismasystems/${system}/questions`,
+              `/fismasystems/${system}/questions?datacallid=${activeDataCallId}`,
               { signal: controller.signal }
             )
             // Decommissioned systems join to zero functions, so the questions
@@ -915,10 +914,10 @@ export default function QuestionnarePage() {
                 }
                 organizedData[question.pillar.pillar].push(question)
               })
-              const sortedPillars = filterPillarsForSystem(
-                sortPillars(Object.keys(organizedData)),
-                systemCategory
-              )
+              // The reduced-pillar rule is applied by the API for the cycle
+              // requested above (ztmf#545), so whatever comes back is already
+              // the right set.
+              const sortedPillars = sortPillars(Object.keys(organizedData))
               const categoriesData: Category[] = sortedPillars.map((pillar) => {
                 const sortedSteps = sortFunctions(pillar, organizedData[pillar])
                 const sortedStepFuncId = sortedSteps.map(
@@ -1054,7 +1053,6 @@ export default function QuestionnarePage() {
     latestDataCallId,
     latestDatacall,
     latestDeadline,
-    systemCategory,
     datacalls,
   ])
   React.useEffect(() => {
@@ -1962,12 +1960,31 @@ export default function QuestionnarePage() {
                       startIcon={<CheckCircleOutlineIcon />}
                       onClick={handleConfirmClick}
                       disabled={confirming}
+                      aria-describedby={
+                        showCarryForwardHelper
+                          ? CARRY_FORWARD_HELPER_ID
+                          : undefined
+                      }
                       sx={{ textTransform: 'none' }}
                     >
                       Confirm this answer is still accurate
                     </Button>
                   )}
                 </Box>
+              )}
+              {/* Sits where the prior-response flow puts its own review
+                  message, so both variants instruct in the same place.
+                  "before continuing" is advisory on purpose: Next is not
+                  blocked on this variant. Plain text, not a live region -
+                  the chip above owns the announcement. */}
+              {showCarryForwardHelper && (
+                <Typography
+                  id={CARRY_FORWARD_HELPER_ID}
+                  sx={{ mt: 0.5, fontSize: 12, color: status.warning.color }}
+                >
+                  Review the carried-forward answer and confirm it, or write a
+                  new justification, before continuing.
+                </Typography>
               )}
               {draftStatus !== 'idle' && !isReadOnly && (
                 <Alert

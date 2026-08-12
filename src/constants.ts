@@ -59,15 +59,6 @@ export const CONFIRMATION_MESSAGE_QUESTION =
 export const NOTES_UPDATE_REQUIRED_MSG =
   'Please update your notes to reflect the changed answer.'
 
-/**
- * Pillars hidden on the questionnaire for SaaS systems. Names must match the API's
- * `question.pillar.pillar` value exactly.
- */
-export const SAAS_EXCLUDED_PILLARS = ['Devices', 'Applications'] as const
-
-// If we wanted to filter out some pillars for other environments, we could add them here.
-// For now, only SaaS triggers any filtering.
-
 // ---------
 
 /**

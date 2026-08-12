@@ -1,5 +1,9 @@
 import type { datacall } from '@/types'
-import { resolveRowCallId, datacallNameComparator } from './rowCall'
+import {
+  resolveRowCallId,
+  resolveQuestionnaireCall,
+  datacallNameComparator,
+} from './rowCall'
 
 const call = (datacallid: number, deadline: string): datacall => ({
   datacallid,
@@ -58,6 +62,62 @@ describe('last-resort call for a system with no data in the view', () => {
   it('still prefers real row data over the view', () => {
     expect(resolveRowCallId(7, { 7: 1 }, {}, DATACALLS, 2, [2, 3])).toBe(1)
     expect(resolveRowCallId(7, {}, { 7: [1] }, DATACALLS, 2, [2, 3])).toBe(1)
+  })
+})
+
+describe('resolveQuestionnaireCall', () => {
+  it('opens the column call for a score-less system, not the active call', () => {
+    // Past-year view: calls 1 and 3 are selected, the open call (2) is not. A
+    // score-less system is displayed against call 3. The icon must open call 3,
+    // the same call the column names - not the open call the old activeDataCallId
+    // fallback resolved to.
+    const call = resolveQuestionnaireCall(7, { 7: 3 }, {}, DATACALLS, 2, [1, 3])
+    expect(call?.datacallid).toBe(3)
+    expect(call?.datacallid).not.toBe(2)
+  })
+
+  it('opens the displayed call, not a hidden older scored call', () => {
+    // Scored in older call 1 but displayed against newer call 3 (a progress-only
+    // row updated more recently), so the row reads "Not scored" and its column
+    // names 3. The icon opens 3 to match the column, not the hidden score in 1.
+    const call = resolveQuestionnaireCall(
+      7,
+      { 7: 3 },
+      { 7: [1] },
+      DATACALLS,
+      2,
+      [1, 3]
+    )
+    expect(call?.datacallid).toBe(3)
+  })
+
+  it('matches the column newest-in-view fallback for a score-less system with no chosen call', () => {
+    // No chosen call and the active call is out of view: both the column and the
+    // icon resolve to the newest selected call (3), not the open call (2).
+    const call = resolveQuestionnaireCall(7, {}, {}, DATACALLS, 2, [1, 3])
+    expect(call?.datacallid).toBe(3)
+  })
+
+  it('keeps the active call when it is one of the selected calls (no regression)', () => {
+    const call = resolveQuestionnaireCall(7, {}, {}, DATACALLS, 1, [1, 3])
+    expect(call?.datacallid).toBe(1)
+  })
+
+  it('always names the same call as the Data Call column', () => {
+    // The icon and the column must never disagree: resolveQuestionnaireCall is
+    // resolveRowCallId plus a lookup, so it matches for every input shape.
+    const cases: Parameters<typeof resolveRowCallId>[] = [
+      [7, { 7: 3 }, {}, DATACALLS, 2, [1, 3]],
+      [7, { 7: 3 }, { 7: [1] }, DATACALLS, 2, [1, 3]],
+      [7, {}, { 7: [1, 2] }, DATACALLS, 3],
+      [7, {}, {}, DATACALLS, 2, [1, 3]],
+      [7, {}, {}, DATACALLS, 1, [1, 3]],
+    ]
+    for (const args of cases) {
+      expect(resolveQuestionnaireCall(...args)?.datacallid).toBe(
+        resolveRowCallId(...args)
+      )
+    }
   })
 })
 
