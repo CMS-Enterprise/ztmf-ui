@@ -57,40 +57,37 @@ function ProgressState({
  * "Updated this cycle" only has meaning for the current/active data call. For a
  * past call nobody has touched anything this cycle, so questionsupdated is 0 for
  * every system - showing "0/40 Not updated" wrongly reads a completed historical
- * call as missing (ztmf#537). A past call with a score for that system was
- * completed, so it gets a neutral "Complete" chip instead of the current-cycle
- * fraction and Updated/Not-updated chip.
+ * call as missing (ztmf#537). A past call is judged on how much of it was
+ * answered instead: fully answered reads as a neutral "Complete" chip, and
+ * partially answered keeps the answered/total fraction with an "Incomplete"
+ * chip, rather than the current-cycle Updated/Not-updated framing.
  *
  * States:
- *   - past call (isCurrentCall false) with a score: neutral "Complete" chip -
- *     the score is the completion signal (ScoreProgress has no "total answered"
- *     field); the orange laggard chip never appears off the active call;
+ *   - past call (isCurrentCall false), fully answered: neutral "Complete" chip;
+ *     partially answered: answered/total fraction with an "Incomplete" chip.
+ *     The orange laggard chip never appears off the active call;
  *   - a system with no applicable questionnaire (0/0) renders a neutral
  *     "N/A" chip, not an orange "Not updated" one - it is not a laggard,
  *     there is nothing to nudge;
  *   - current call, any genuine edit: "Updated" (green);
  *   - current call, zero updates: "Awaiting confirmation" (carried answers
- *     exist) or "Not started" (none do), both warning-colored laggards;
- *     legacy "Not updated" when questionsanswered is not served.
+ *     exist) or "Not started" (none do), both warning-colored laggards. A
+ *     response omitting the answered count reads as "Not started", the same
+ *     way the past-call branch treats it as zero.
  * @param {object} props - Component props.
  * @param {ScoreProgress | undefined} props.entry - The system's progress row;
  *   undefined renders an em-dash (progress fetch failed or not covered).
  * @param {boolean} [props.isCurrentCall=true] - Whether the row's displayed call
  *   is the current/active one. Defaults true so callers without call context
  *   keep the original current-cycle rendering.
- * @param {boolean} [props.hasScore=false] - Whether the system has a score for
- *   the displayed call. Used only for a past call, where a score means the call
- *   was completed.
  * @returns {JSX.Element} The progress cell.
  */
 export function ProgressCell({
   entry,
   isCurrentCall = true,
-  hasScore = false,
 }: {
   entry: ScoreProgress | undefined
   isCurrentCall?: boolean
-  hasScore?: boolean
 }) {
   // The em-dash is decoration; the hidden text is the announcement.
   const noData = (
@@ -123,27 +120,16 @@ export function ProgressCell({
   // A past data call is closed: "updated this cycle" is meaningless, so never
   // show the orange laggard chip here. But completion is answered/total, NOT
   // updated/total - imported and carried-over answers are answered yet never
-  // "updated this cycle", so gating on updates (or on mere score presence)
-  // would either drop them or, worse, mask a partially-answered historical
-  // call as done. Prefer QuestionsAnswered (ztmf#437): a fully-answered past
-  // call is a neutral "Complete"; a partially-answered one shows an honest
-  // answered/total with an "Incomplete" chip. Until the backend field ships,
-  // fall back to the prior score-presence proxy.
+  // "updated this cycle", so gating on updates would either drop them or,
+  // worse, mask a partially-answered historical call as done (ztmf#437): a
+  // fully-answered past call is a neutral "Complete"; a partially-answered
+  // one shows an honest answered/total with an "Incomplete" chip.
   if (!isCurrentCall) {
-    const answered = entry.questionsanswered
-    if (answered == null) {
-      if (!hasScore) {
-        return noData
-      }
-      return (
-        <ProgressState
-          tooltip={progressTooltip(entry, { completed: true })}
-          label="Complete"
-        >
-          <Chip size="small" label="Complete" variant="outlined" />
-        </ProgressState>
-      )
-    }
+    // Coalesce so a response that omits the count renders an honest 0/N rather
+    // than a bare "/N": the fraction interpolates the value directly, and React
+    // drops undefined from the output. Zero and missing describe the same state
+    // to the reader.
+    const answered = entry.questionsanswered ?? 0
     if (answered >= entry.questionsexpected) {
       return (
         <ProgressState
@@ -175,16 +161,16 @@ export function ProgressCell({
   // Zero updates splits two materially different states: carried-forward
   // answers awaiting confirmation vs no answers at all — a blanket "Not
   // updated" read as data loss to ISSOs who had just reviewed everything.
-  // questionsanswered may be absent until ztmf#437 is deployed everywhere;
-  // keep the legacy wording then rather than guessing.
-  const answered = entry.questionsanswered
+  // Coalesce as the past-call branch does, so both branches read the count the
+  // same way rather than one trusting the type and the other guarding against
+  // it. A response that omits the count describes a system with nothing
+  // recorded as answered, which is what "Not started" already says.
+  const answered = entry.questionsanswered ?? 0
   const label = updated
     ? 'Updated'
-    : answered == null
-      ? 'Not updated'
-      : answered > 0
-        ? 'Awaiting confirmation'
-        : 'Not started'
+    : answered > 0
+      ? 'Awaiting confirmation'
+      : 'Not started'
   return (
     <ProgressState
       tooltip={progressTooltip(entry)}

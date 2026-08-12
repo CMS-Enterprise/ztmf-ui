@@ -24,6 +24,7 @@ import type {
   FismaSystemType,
 } from '@/types'
 import { buildDashboardMaps } from './aggregateScores'
+import { deriveExportCallId } from './exportCall'
 
 /** Short fiscal-year label, e.g. "FY2022 ..." -> "FY22". Falls back to the name. */
 function shortFy(name: string | undefined): string {
@@ -182,20 +183,15 @@ export default function HomePageContainer() {
     }
   }, [activeDataCallId, datacalls])
 
-  // The export endpoint targets one data call. Derive it from the selected
-  // rows' own call(s): if they all share one call, export that; an empty
-  // selection falls back to the active call; a selection that spans more
-  // than one call has no single export target, so the button is disabled.
-  const selectedCallIds = new Set<number>()
-  for (const id of selectedRows) {
-    for (const cid of systemCallMap[id] ?? []) selectedCallIds.add(cid)
-  }
-  const exportCallId =
-    selectedCallIds.size === 1
-      ? [...selectedCallIds][0]
-      : selectedCallIds.size === 0
-        ? activeDataCallId
-        : null
+  // The single call the export targets, or null (button disabled) when the
+  // selection spans more than one call. Derivation logic + rationale live in
+  // exportCall.ts so the not-started fallback is unit-testable.
+  const exportCallId = deriveExportCallId(
+    selectedRows,
+    systemCallMap,
+    chosenCallMap,
+    activeDataCallId
+  )
 
   const handleExport = async () => {
     if (!exportCallId) return
@@ -301,6 +297,7 @@ export default function HomePageContainer() {
 
       <StatisticsBlocks
         scores={scoreMap}
+        progress={progressMap}
         priorAvg={priorAvg}
         priorLabel={priorLabel}
       />

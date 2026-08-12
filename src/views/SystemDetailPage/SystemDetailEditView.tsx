@@ -1,3 +1,4 @@
+import { useState } from 'react'
 import {
   Box,
   Button,
@@ -178,6 +179,60 @@ function TextRow({
   )
 }
 
+/**
+ * Optional email input: empty is fine, a non-empty value must be a
+ * well-formed address. The validity feeds the page's formValid map so a bad
+ * address gates Save the same way a hard-required field does, without
+ * demanding a value (#674: required to create, not to edit).
+ * @param {object} props - Component props.
+ * @param {string} props.id - Input id (label htmlFor pairing).
+ * @param {string} props.label - Visible label.
+ * @param {string} props.fieldKey - The system field the input edits.
+ * @param {string} props.value - Current draft value.
+ * @param {(key: string, isValid: boolean, value: string) => void} props.onValidatedFieldChange
+ *   - Validated setter from the page.
+ * @returns {JSX.Element} The labelled input.
+ */
+function OptionalEmailRow({
+  id,
+  label,
+  fieldKey,
+  value,
+  onValidatedFieldChange,
+}: {
+  id: string
+  label: string
+  fieldKey: string
+  value: string
+  onValidatedFieldChange: (key: string, isValid: boolean, value: string) => void
+}) {
+  // Local draft so an invalid keystroke still renders: the page's validated
+  // setter only commits valid values to editedSystem, and binding the input
+  // straight to that would freeze it mid-typo.
+  const [draft, setDraft] = useState(value)
+  const emailError = optionalEmailValidator(draft)
+  return (
+    <Field id={id} label={label} error={emailError || undefined}>
+      <OutlinedInput
+        id={id}
+        fullWidth
+        value={draft}
+        error={Boolean(emailError)}
+        onChange={(e) => {
+          const next = e.target.value
+          setDraft(next)
+          onValidatedFieldChange(
+            fieldKey,
+            optionalEmailValidator(next) === false,
+            next
+          )
+        }}
+        sx={fieldInputSx}
+      />
+    </Field>
+  )
+}
+
 export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
   const {
     system,
@@ -245,7 +300,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
           <TextRow
             id="edit-fismaname"
-            label="Fisma Name"
+            label="FISMA Name"
             required
             value={editedSystem.fismaname}
             showError={requiredError('fismaname')}
@@ -261,7 +316,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           >
             <TextRow
               id="edit-fismaacronym"
-              label="Fisma Acronym"
+              label="FISMA Acronym"
               required
               value={editedSystem.fismaacronym}
               showError={requiredError('fismaacronym')}
@@ -277,14 +332,16 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               onChange={(e) => onFieldChange('groupacronym', e.target.value)}
             />
           </Box>
+          {/* Required to create, not to edit (#674): a CMS concept with no
+              OpDiv equivalent, so unset on most non-CMS systems - a blank
+              here must not freeze an unrelated edit. */}
           <TextRow
             id="edit-component"
             label="Component"
-            required
-            value={editedSystem.component}
-            showError={requiredError('component')}
-            errorText={requiredErrorText('component')}
-            onChange={(e) => onInputChange(e, 'component')}
+            value={editedSystem.component ?? ''}
+            showError={false}
+            errorText=""
+            onChange={(e) => onFieldChange('component', e.target.value)}
           />
           <TextRow
             id="edit-groupname"
@@ -304,7 +361,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
           />
           <TextRow
             id="edit-fismasubsystem"
-            label="Fisma Subsystem"
+            label="FISMA Subsystem"
             value={editedSystem.fismasubsystem ?? ''}
             showError={false}
             errorText=""
@@ -512,27 +569,26 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
               disabled
               onChange={() => {}}
             />
-            <TextRow
+            {/* Required to create, not to edit (#674); a typed value is
+                still format-checked and feeds formValid so a bad address
+                gates Save. */}
+            <OptionalEmailRow
               id="edit-datacallcontact"
               label="Data Call Contact"
-              required
+              fieldKey="datacallcontact"
               value={editedSystem.datacallcontact ?? ''}
-              showError={requiredError('datacallcontact')}
-              errorText={requiredErrorText('datacallcontact')}
-              onChange={(e) => onInputChange(e, 'datacallcontact')}
+              onValidatedFieldChange={onValidatedFieldChange}
             />
-            <TextRow
+            <OptionalEmailRow
               id="edit-issoemail"
               label="ISSO Email"
-              required
+              fieldKey="issoemail"
               value={editedSystem.issoemail ?? ''}
-              showError={requiredError('issoemail')}
-              errorText={requiredErrorText('issoemail')}
-              onChange={(e) => onInputChange(e, 'issoemail')}
+              onValidatedFieldChange={onValidatedFieldChange}
             />
             <TextRow
               id="edit-fismauid"
-              label="Fisma UID"
+              label="FISMA UID"
               required
               value={editedSystem.fismauid}
               showError={requiredError('fismauid')}

@@ -1,4 +1,5 @@
 import { useMemo } from 'react'
+import { buildRadarData } from '../radarData'
 import Box from '@mui/material/Box'
 import {
   RadarChart,
@@ -58,15 +59,12 @@ export default function TrendRadar({
   // Current/Previous.
   const currentName = currentLabel || 'Current'
   const previousName = previousLabel || 'Previous'
-  const radarData = useMemo(() => {
-    return (latestScore.pillarscores ?? []).map((p) => ({
-      pillar: p.pillar,
-      current: p.score ?? 0,
-      previous:
-        previousScore?.pillarscores?.find((pp) => pp.pillarid === p.pillarid)
-          ?.score ?? 0,
-    }))
-  }, [previousScore, latestScore])
+  // Shared with the per-pillar tiles via radarData.ts, so the radar and the
+  // tiles can never disagree about a pillar's comparison score.
+  const radarData = useMemo(
+    () => buildRadarData(latestScore.pillarscores, previousScore),
+    [previousScore, latestScore]
+  )
 
   return (
     <Box

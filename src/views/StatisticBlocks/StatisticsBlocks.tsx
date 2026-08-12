@@ -2,7 +2,7 @@ import { useMemo, ReactNode } from 'react'
 import Box from '@mui/material/Box'
 import { Typography } from '@mui/material'
 import { useContextProp } from '../Title/Context'
-import type { SystemScoreEntry } from '@/types'
+import type { ScoreProgress, SystemScoreEntry } from '@/types'
 import { colors, fonts, radius } from '@/theme/tokens'
 
 const ARROW_UP = '↑'
@@ -89,6 +89,13 @@ function StatCard({
 export type StatisticsBlocksProps = {
   /** Score map for the active datacall, keyed by fismasystemid. */
   scores: Record<number, SystemScoreEntry>
+  /**
+   * Progress map keyed by fismasystemid. A system is in the selected call(s)
+   * when its row expects questions, a set that includes never-started
+   * systems - the denominator the scored count is paired with, so the ratio
+   * covers the same scope as its numerator.
+   */
+  progress?: Record<number, ScoreProgress>
   /** Average system score for the prior datacall, when one exists. */
   priorAvg?: number
   /** Short label for the prior datacall, e.g. "FY22". */
@@ -105,6 +112,7 @@ export type StatisticsBlocksProps = {
  */
 export default function StatisticsBlocks({
   scores,
+  progress,
   priorAvg,
   priorLabel,
 }: StatisticsBlocksProps) {
@@ -112,6 +120,13 @@ export default function StatisticsBlocks({
 
   const stats = useMemo(() => {
     const total = fismaSystems.length
+    // Systems actually in the selected call(s), from the progress map -
+    // pairing the scored count with an all-systems denominator read as an
+    // order-of-magnitude larger backlog than real. A scored system always
+    // has a progress row when that fetch succeeds, so the ratio stays
+    // within 100%; if the whole progress fetch fails the count reads 0,
+    // surfacing the outage instead of hiding it behind a false "all scored".
+    let inCall = 0
     let scored = 0
     let scoreSum = 0
     let optimalAdvanced = 0
@@ -122,8 +137,15 @@ export default function StatisticsBlocks({
     let highest: { score: number; acronym: string } | null = null
     let lowest: { score: number; acronym: string } | null = null
     for (const system of fismaSystems) {
+      const progressEntry = progress?.[system.fismasystemid]
+      if ((progressEntry?.questionsexpected ?? 0) > 0) {
+        inCall += 1
+      }
       const entry = scores[system.fismasystemid]
       if (!entry) continue
+      // Truthy check on purpose: backend scores are floored at 1.0, so a 0
+      // only comes from an absent/null score coalesced upstream, which must
+      // not count as scored.
       if (entry.score) {
         scoreSum += entry.score
         scored += 1
@@ -144,6 +166,7 @@ export default function StatisticsBlocks({
     const avg = scored > 0 ? scoreSum / scored : 0
     return {
       total,
+      inCall,
       scored,
       avg,
       optimalAdvanced,
@@ -151,7 +174,7 @@ export default function StatisticsBlocks({
       highest,
       lowest,
     }
-  }, [fismaSystems, scores])
+  }, [fismaSystems, scores, progress])
 
   // Average-score trend vs the prior datacall, when one is available.
   const delta =
@@ -170,10 +193,11 @@ export default function StatisticsBlocks({
   return (
     <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 1.5, mb: 2 }}>
       <StatCard
-        label="Total systems"
-        value={stats.total.toLocaleString('en-US')}
-        // Scored-vs-total at a glance (parity with main's Scored / Total
-        // Systems stat) without spending a whole card on it.
+        label="Systems in view"
+        // Systems in the selected data call(s), not all active systems: the
+        // scored hint pairs with a denominator of the same scope (parity
+        // with main's "Scored / Systems in selected data calls" stat).
+        value={stats.inCall.toLocaleString('en-US')}
         hint={`${stats.scored} scored`}
       />
       <StatCard
@@ -197,7 +221,7 @@ export default function StatisticsBlocks({
       <StatCard
         label="Optimal / Advanced"
         value={stats.optimalAdvanced}
-        hint={`of ${stats.total} systems`}
+        hint={`of ${stats.inCall} systems`}
         valueColor={colors.up}
       />
       <StatCard

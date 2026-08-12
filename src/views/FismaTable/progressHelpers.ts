@@ -29,9 +29,7 @@ export function hasNoQuestionnaire(entry: ScoreProgress | undefined): boolean {
  * For a PAST call the "-1 needs a nudge" ranking is wrong - a closed call has no
  * updates to chase, so ranking by questionsupdated would sort every historical
  * row to the laggard top, contradicting its own Complete/Incomplete chip. Past
- * calls are ranked by completion (answered/total) instead, never -1. Prefer
- * QuestionsAnswered (ztmf#437); without it, a past-call row with progress is
- * treated as complete (1) so it never ranks as urgent.
+ * calls are ranked by completion (answered/total, ztmf#437) instead, never -1.
  * @param {ScoreProgress | undefined} entry - The system's progress row.
  * @param {boolean} [isCurrentCall=true] - Whether the row's displayed call is
  *   the current/active one. Past calls sort by completion, not updates.
@@ -44,9 +42,16 @@ export function progressSortValue(
   if (!entry) return 2
   if (entry.questionsexpected <= 0) return 1.5
   if (!isCurrentCall) {
-    const answered = entry.questionsanswered
-    if (answered == null) return 1
-    return Math.min(Math.max(answered, 0) / entry.questionsexpected, 1)
+    // Coalesce before the arithmetic. The type says the field is always served,
+    // but a response that omits it would otherwise produce NaN here, and a NaN
+    // sort key compares equal to every other row, so the row lands in an
+    // arbitrary position rather than anywhere meaningful. Treating a missing
+    // count as zero ranks it with the genuinely unanswered, which is the
+    // honest reading and matches what the cell renders.
+    return Math.min(
+      Math.max(entry.questionsanswered ?? 0, 0) / entry.questionsexpected,
+      1
+    )
   }
   if (entry.questionsupdated <= 0) return -1
   return entry.questionsupdated / entry.questionsexpected

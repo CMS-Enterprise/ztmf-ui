@@ -1,6 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import DevEnvironmentBanner from './DevEnvironmentBanner'
+import { bannerVersion, setBannerDismissed } from './bannerDismissal'
 import CONFIG from '@/utils/config'
 
 // The component reads build-time config derived from import.meta.env, which
@@ -24,6 +25,14 @@ beforeEach(() => {
   mockConfig.DEV_BANNER_MESSAGE = ''
   mockConfig.DEV_FEEDBACK_URL = ''
   mockConfig.DEV_CONTACT_EMAIL = ''
+  // setupTests does not clear storage between tests in a file.
+  localStorage.clear()
+})
+
+// resetMocks clears a spy's implementation but leaves it installed over
+// Storage.prototype, breaking localStorage for every test added after.
+afterEach(() => {
+  jest.restoreAllMocks()
 })
 
 test('renders nothing in production', () => {
@@ -91,6 +100,103 @@ test('rejects a non-https feedback URL', () => {
 test('can be dismissed', async () => {
   const user = userEvent.setup()
   render(<DevEnvironmentBanner />)
+  expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /close/i }))
+  expect(
+    screen.queryByText(/non-production environment/i)
+  ).not.toBeInTheDocument()
+})
+
+test('a signed-in dismissal survives a fresh page load', async () => {
+  const user = userEvent.setup()
+  // Override copy exercises the hashed stamp; the next test covers the sentinel.
+  mockConfig.DEV_BANNER_MESSAGE = 'OpDiv data loaded for testing.'
+  const { unmount } = render(<DevEnvironmentBanner authenticated />)
+  await user.click(screen.getByRole('button', { name: /close/i }))
+  unmount()
+
+  // A remount stands in for a new tab or a reload - both start from scratch.
+  render(<DevEnvironmentBanner authenticated />)
+  expect(
+    screen.queryByText('OpDiv data loaded for testing.')
+  ).not.toBeInTheDocument()
+})
+
+test('a signed-in dismissal survives with the default copy too', async () => {
+  const user = userEvent.setup()
+  const { unmount } = render(<DevEnvironmentBanner authenticated />)
+  await user.click(screen.getByRole('button', { name: /close/i }))
+  unmount()
+
+  render(<DevEnvironmentBanner authenticated />)
+  expect(
+    screen.queryByText(/non-production environment/i)
+  ).not.toBeInTheDocument()
+})
+
+test('picks up a stored dismissal when the session starts mid-mount', () => {
+  // Mounted signed-out, so the state initializer skips storage; only the effect
+  // can hide the banner once the loader flips authenticated.
+  setBannerDismissed(bannerVersion(''))
+  const { rerender } = render(<DevEnvironmentBanner />)
+  expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
+
+  rerender(<DevEnvironmentBanner authenticated />)
+  expect(
+    screen.queryByText(/non-production environment/i)
+  ).not.toBeInTheDocument()
+})
+
+test('does not record a dismissal for signed-out visitors', async () => {
+  const user = userEvent.setup()
+  render(<DevEnvironmentBanner />)
+  await user.click(screen.getByRole('button', { name: /close/i }))
+  expect(localStorage.length).toBe(0)
+})
+
+test('does not persist a dismissal made before sign-in', async () => {
+  const user = userEvent.setup()
+  const { unmount } = render(<DevEnvironmentBanner />)
+  await user.click(screen.getByRole('button', { name: /close/i }))
+  unmount()
+
+  render(<DevEnvironmentBanner />)
+  expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
+})
+
+test('a pre-login dismissal does not suppress the banner after sign-in', async () => {
+  const user = userEvent.setup()
+  mockConfig.DEV_BANNER_MESSAGE = 'OpDiv data loaded for testing.'
+  const { rerender } = render(<DevEnvironmentBanner />)
+  await user.click(screen.getByRole('button', { name: /close/i }))
+
+  rerender(<DevEnvironmentBanner authenticated />)
+  expect(screen.getByText('OpDiv data loaded for testing.')).toBeInTheDocument()
+})
+
+test('shows again for a signed-in user when the banner copy changes', async () => {
+  const user = userEvent.setup()
+  mockConfig.DEV_BANNER_MESSAGE = 'Testing runs through July 17th.'
+  const { unmount } = render(<DevEnvironmentBanner authenticated />)
+  await user.click(screen.getByRole('button', { name: /close/i }))
+  unmount()
+
+  mockConfig.DEV_BANNER_MESSAGE = 'Testing is ongoing.'
+  render(<DevEnvironmentBanner authenticated />)
+  expect(screen.getByText('Testing is ongoing.')).toBeInTheDocument()
+})
+
+test('renders and dismisses when storage is unavailable', async () => {
+  const user = userEvent.setup()
+  // Private browsing and disabled site data make localStorage throw.
+  jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+    throw new Error('storage disabled')
+  })
+  jest.spyOn(Storage.prototype, 'setItem').mockImplementation(() => {
+    throw new Error('storage disabled')
+  })
+
+  render(<DevEnvironmentBanner authenticated />)
   expect(screen.getByText(/non-production environment/i)).toBeInTheDocument()
   await user.click(screen.getByRole('button', { name: /close/i }))
   expect(

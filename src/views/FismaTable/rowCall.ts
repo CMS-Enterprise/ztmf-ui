@@ -88,3 +88,39 @@ export function resolveRowCallId(
   }
   return activeDataCallId
 }
+
+/**
+ * The data call the questionnaire icon opens for a row, as a full datacall
+ * object. Resolves through resolveRowCallId - the exact path the Data Call
+ * column uses - so the column label and the call the icon opens always name the
+ * same call. This covers a score-less row (whose column used to disagree with
+ * the icon's active-call fallback) and a row scored in an older call but
+ * displayed against a newer one (which reads as "Not scored" and must open the
+ * call it is shown against, not the hidden older score). Systems scored in more
+ * than one active call open the call picker before this is reached.
+ * @param {number} fismasystemid - The row's system id.
+ * @param {Record<number, number>} chosenCallMap - System id -> displayed call id.
+ * @param {Record<number, number[]>} systemCallMap - System id -> call ids with scores.
+ * @param {datacall[]} datacalls - All known data calls.
+ * @param {number} activeDataCallId - The dashboard's active call id.
+ * @param {number[]} [activeDatacallIds] - Call ids selected in the year picker.
+ * @returns {datacall | undefined} The call to open, or undefined if none resolves.
+ */
+export function resolveQuestionnaireCall(
+  fismasystemid: number,
+  chosenCallMap: Record<number, number>,
+  systemCallMap: Record<number, number[]>,
+  datacalls: datacall[],
+  activeDataCallId: number,
+  activeDatacallIds?: number[]
+): datacall | undefined {
+  const id = resolveRowCallId(
+    fismasystemid,
+    chosenCallMap,
+    systemCallMap,
+    datacalls,
+    activeDataCallId,
+    activeDatacallIds
+  )
+  return datacalls.find((d) => d.datacallid === id)
+}

@@ -37,7 +37,13 @@ import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
 import { isNotUpdated, isOpenCallInView } from './dashboardFilters'
-import { resolveRowCallId, datacallNameComparator } from './rowCall'
+import { scoreSortValue } from './scoreHelpers'
+import { isSystemSelectable } from './rowSelection'
+import {
+  resolveRowCallId,
+  resolveQuestionnaireCall,
+  datacallNameComparator,
+} from './rowCall'
 import ScoreDisplay from '@/components/ui/ScoreDisplay'
 import { CodeBadge } from '@/components/ui/StatusChip'
 import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
@@ -679,10 +685,7 @@ export default function FismaTable({
       align: 'left',
       headerAlign: 'left',
       hideable: false,
-      valueGetter: (value) => {
-        const entry = scores[value.row.fismasystemid]
-        return entry?.score ?? 0
-      },
+      valueGetter: (value) => scoreSortValue(scores[value.row.fismasystemid]),
       renderCell: (params) => {
         const entry = scores[params.row.fismasystemid]
         return <ScoreDisplay score={entry?.score} tier={entry?.tier} stacked />
@@ -746,7 +749,6 @@ export default function FismaTable({
         <ProgressCell
           entry={progress?.[params.row.fismasystemid]}
           isCurrentCall={isRowCurrentCall(params.row.fismasystemid)}
-          hasScore={Boolean(scores[params.row.fismasystemid])}
         />
       ),
     },
@@ -800,8 +802,14 @@ export default function FismaTable({
                     openQuestionnaire(
                       params.row.fismasystemid,
                       params.row.fismaacronym,
-                      rowCallObjs[0] ??
-                        datacalls.find((d) => d.datacallid === activeDataCallId)
+                      resolveQuestionnaireCall(
+                        params.row.fismasystemid,
+                        chosenCallMap,
+                        systemCallMap,
+                        datacalls,
+                        activeDataCallId,
+                        activeDatacallIds
+                      )
                     )
                   }}
                   color="inherit"
@@ -914,11 +922,14 @@ export default function FismaTable({
               ? (ids) => onSelectionChange!(ids.map((id) => Number(id)))
               : undefined
           }
-          // Matches main: only scored systems are selectable, since there's
-          // nothing to export for a "Not Assessed" row.
+          // Selectable when the system has a score OR is genuinely in the
+          // call (progress row with questions expected): a never-started
+          // system's empty answer sheet is a legitimate export target, and
+          // excluding it silently broke select-all counts (#682).
           isRowSelectable={
             selectionEnabled
-              ? (params: GridRowParams) => params.row.fismasystemid in scores
+              ? (params: GridRowParams) =>
+                  isSystemSelectable(params.row.fismasystemid, scores, progress)
               : undefined
           }
           disableColumnSelector

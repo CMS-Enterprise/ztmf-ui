@@ -108,6 +108,17 @@ describe('JustificationField', () => {
     ).toBeInTheDocument()
   })
 
+  it('names both ways to satisfy the pending review', () => {
+    // "Review the previous response" alone left users guessing what action
+    // clears the gate; the message must name the two that do.
+    render(<Harness />)
+    expect(
+      screen.getByText(
+        'Review the previous response and insert it, or dismiss it and write a new justification, to continue.'
+      )
+    ).toBeInTheDocument()
+  })
+
   it('copies the previous response into the submitted field after acceptance', () => {
     render(<Harness />)
     fireEvent.click(
@@ -120,7 +131,9 @@ describe('JustificationField', () => {
     ).toHaveValue(insight.last_score_notes)
     expect(screen.getByText('Added to response')).toBeInTheDocument()
     expect(
-      screen.queryByText('Review the previous response before continuing.')
+      screen.queryByText(
+        'Review the previous response and insert it, or dismiss it and write a new justification, to continue.'
+      )
     ).not.toBeInTheDocument()
   })
 

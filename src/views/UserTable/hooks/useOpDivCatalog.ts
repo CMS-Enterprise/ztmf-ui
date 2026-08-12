@@ -23,7 +23,8 @@ import type { OpDiv, userData } from '@/types'
  * @param {boolean} isAdmin - Whether the actor can manage OpDiv grants.
  * @param {userData} userInfo - The actor's own profile; needed to narrow
  *   the assignable subset for OpDivAdmins.
- * @returns {{ opdivOptions: OpDiv[], opdivCodeMap: Record<number, string>,
+ * @returns {{ opdivOptions: OpDiv[], allAssignableOpDivs: OpDiv[],
+ *   opdivCodeMap: Record<number, string>,
  *   opdivLabelMap: Record<number, { code: string, name: string }> }}
  *   The three projections; all empty until the catalog loads.
  */
@@ -32,6 +33,7 @@ export function useOpDivCatalog(
   userInfo: userData
 ): {
   opdivOptions: OpDiv[]
+  allAssignableOpDivs: OpDiv[]
   opdivCodeMap: Record<number, string>
   opdivLabelMap: Record<number, { code: string; name: string }>
 } {
@@ -40,6 +42,10 @@ export function useOpDivCatalog(
   const [opdivLabelMap, setOpDivLabelMap] = useState<
     Record<number, { code: string; name: string }>
   >({})
+  // All assignable OpDivs (active, non-parent), NOT narrowed to the caller's
+  // scope. The grant modal narrows this against the caller's fresh grants
+  // itself, so it isn't fed the session-old scope that opdivOptions carries.
+  const [allAssignableOpDivs, setAllAssignableOpDivs] = useState<OpDiv[]>([])
 
   useEffect(() => {
     if (!isAdmin) return
@@ -55,7 +61,13 @@ export function useOpDivCatalog(
         setOpDivCodeMap(codeMap)
         setOpDivLabelMap(labelMap)
 
-        let assignable = all.filter((od) => !od.is_parent && od.active)
+        const activeNonParent = all.filter((od) => !od.is_parent && od.active)
+        setAllAssignableOpDivs(activeNonParent)
+
+        // opdivOptions stays caller-narrowed for the inline OpDiv edit cell.
+        // The grant modal does NOT use this; it narrows the full set against
+        // the caller's fresh scope itself.
+        let assignable = activeNonParent
         if (isOpDivTier(userInfo)) {
           const own = new Set(userInfo.assignedopdivids ?? [])
           assignable = assignable.filter((od) => own.has(od.opdiv_id))
@@ -64,6 +76,7 @@ export function useOpDivCatalog(
       } catch {
         // Non-fatal: the grant modal simply shows no options if this fails.
         setOpDivOptions([])
+        setAllAssignableOpDivs([])
         setOpDivCodeMap({})
         setOpDivLabelMap({})
       }
@@ -71,5 +84,5 @@ export function useOpDivCatalog(
     loadOpDivs()
   }, [isAdmin, userInfo])
 
-  return { opdivOptions, opdivCodeMap, opdivLabelMap }
+  return { opdivOptions, allAssignableOpDivs, opdivCodeMap, opdivLabelMap }
 }

@@ -13,6 +13,7 @@ import {
   GridRowModel,
   GridRenderEditCellParams,
   GridRowEditStopReasons,
+  GridFilterModel,
   useGridApiRef,
 } from '@mui/x-data-grid'
 import { Typography, IconButton, Tooltip } from '@mui/material'
@@ -40,6 +41,14 @@ import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
+import LastSeenCell from './LastSeenCell'
+import { isUserCellEditable } from './cellEditGuards'
+import {
+  lastSeenSortComparator,
+  parseLastSeen,
+  hasNoActivityFilter,
+  withNoActivityFilter,
+} from './lastSeen'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ui/PageHeader'
 import { CodeBadge, StatusChip } from '@/components/ui/StatusChip'
@@ -93,6 +102,19 @@ export default function UserTable() {
     role: '' as users['role'],
     assignedfismasystems: [],
   })
+  // Controlled so the "No activity only" toolbar switch can inject/remove an
+  // isEmpty filter on last_seen while the search quick-filter keeps working.
+  // The switch state is DERIVED from the model, so removing the filter via
+  // the column filter panel un-checks the switch too. The toggle logic lives
+  // in lastSeen.ts (withNoActivityFilter) because the community grid's
+  // single-filter-item limit makes it subtle enough to pin with tests.
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({
+    items: [],
+  })
+  const noActivityOnly = hasNoActivityFilter(filterModel)
+  const setNoActivityOnly = (value: boolean) => {
+    setFilterModel((prev) => withNoActivityFilter(prev, value))
+  }
   const {
     search,
     setSearch,
@@ -104,10 +126,8 @@ export default function UserTable() {
     setShowDeleted,
     quickFilterValues,
   } = useUserFilters()
-  const { opdivOptions, opdivCodeMap, opdivLabelMap } = useOpDivCatalog(
-    isAdmin,
-    userInfo
-  )
+  const { opdivOptions, allAssignableOpDivs, opdivCodeMap, opdivLabelMap } =
+    useOpDivCatalog(isAdmin, userInfo)
   // Global fisma-system metadata for the Assign Systems modal - fetched once
   // per mount so opening the modal only costs its two per-user reads.
   const { allSystems, decommSystems } = useSystemCatalog(isAdmin)
@@ -607,6 +627,23 @@ export default function UserTable() {
       },
     },
     {
+      field: 'last_seen',
+      headerName: 'Last seen',
+      flex: 0.9,
+      minWidth: 120,
+      type: 'dateTime',
+      editable: false,
+      // valueGetter (not just renderCell) so sorting, the isEmpty filter
+      // operator, and the toolbar's No-activity switch all see a real
+      // Date-or-null instead of the raw ISO string.
+      valueGetter: (params) => parseLastSeen(params.row.last_seen),
+      // Direction-aware so never-active rows sort last under BOTH asc and
+      // desc; see lastSeen.ts for how it pre-compensates the grid's negation
+      // on desc.
+      sortComparator: lastSeenSortComparator,
+      renderCell: (params) => <LastSeenCell value={params.value ?? null} />,
+    },
+    {
       field: 'status',
       headerName: 'Status',
       flex: 0.9,
@@ -822,6 +859,8 @@ export default function UserTable() {
         <UsersToolbar
           search={search}
           setSearch={setSearch}
+          noActivityOnly={noActivityOnly}
+          setNoActivityOnly={setNoActivityOnly}
           roleFilter={roleFilter}
           setRoleFilter={setRoleFilter}
           roleOptions={roleOptions}
@@ -850,7 +889,15 @@ export default function UserTable() {
                 : ''
             }
             columnVisibilityModel={{ email: false }}
-            filterModel={{ items: [], quickFilterValues }}
+            // Items are controlled so the toolbar's "No activity only" switch
+            // can inject/remove an isEmpty filter on last_seen (the switch
+            // state is DERIVED from the model, so clearing the filter any
+            // other way un-checks it too); the search text rides along as
+            // the grid's quick filter.
+            filterModel={{ ...filterModel, quickFilterValues }}
+            onFilterModelChange={(model) =>
+              setFilterModel({ items: model.items })
+            }
             // Don't let an admin edit a role they can't assign: if a row's
             // current role is above this admin's tier, lock the role cell so it
             // can't be blanked or downgraded on save. New rows (blank role,
@@ -863,22 +910,12 @@ export default function UserTable() {
             // - opdivs / identity_provider: locked to new rows only -
             //   existing users' OpDiv memberships and derived IdP are
             //   managed via the Assign OpDivs action, not inline editing.
-            isCellEditable={(params) => {
-              if (params.field === 'role') {
-                return (
-                  params.row.isNew ||
-                  !params.row.role ||
-                  assignableRoles.includes(params.row.role)
-                )
-              }
-              if (params.field === 'opdivs') {
-                return !!params.row.isNew
-              }
-              if (params.field === 'identity_provider') {
-                return !!params.row.isNew && showIdpSelector
-              }
-              return true
-            }}
+            isCellEditable={(params) =>
+              isUserCellEditable(params.field, params.row, {
+                assignableRoles,
+                showIdpSelector,
+              })
+            }
             editMode="row"
             getRowId={(row) => row.userid}
             initialState={{
@@ -948,7 +985,7 @@ export default function UserTable() {
         handleClose={handleCloseOpDivModal}
         userid={modals.opdiv.userid}
         userName={modals.opdiv.userName}
-        opdivOptions={opdivOptions}
+        assignableOpDivs={allAssignableOpDivs}
         opdivLabelMap={opdivLabelMap}
         // Scoped callers (every admin except an unscoped write admin) must not
         // silently revoke the target's out-of-scope grants on save, so gate the
@@ -956,10 +993,11 @@ export default function UserTable() {
         // send the grant set as-is. This is the inverse of the backend's
         // unscoped-write branch, the predicate it actually decides on.
         enforceCallerScope={!isUnscopedWriteAdmin(userInfo)}
-        // The caller's RAW grants (unfiltered by parent/active) - the save-time
-        // preserve boundary. Wider than opdivOptions so a caller-held grant to a
-        // since re-parented/deactivated OpDiv is preserved, not silently revoked.
-        callerGrantIds={userInfo.assignedopdivids ?? []}
+        // The acting admin's own id. The modal fetches this user's CURRENT
+        // grants on open for its scope, rather than reading the session-old
+        // userInfo.assignedopdivids, so a mid-session grant change can't
+        // silently revoke a target's grant on save.
+        callerUserId={userInfo.userid}
         onChanged={refreshUserRow}
       />
       <ConfirmDialog

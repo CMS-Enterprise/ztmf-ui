@@ -1,10 +1,9 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import InsightsPanel, {
   OptionInsightBadges,
-  severityStyle,
-  rollupControls,
   ISSO_DETERMINATION_DISCLAIMER,
 } from './InsightsPanel'
+import { severityStyle, rollupControls } from './controlRollup'
 import type { InsightPayload } from '@/types'
 import CONFIG from '@/utils/config'
 

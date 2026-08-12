@@ -1,6 +1,6 @@
 import { render, screen } from '@testing-library/react'
 import StatisticsBlocks from './StatisticsBlocks'
-import type { FismaSystemType, SystemScoreEntry } from '@/types'
+import type { FismaSystemType, ScoreProgress, SystemScoreEntry } from '@/types'
 
 // StatisticsBlocks reads the full active-system list from the outlet context and
 // the selection-scoped score map from props. The bug in ztmf-ui#633 was the
@@ -22,6 +22,18 @@ const score = (
   score: n,
   tier,
 })
+
+// A progress row for a system in the selected call(s). `expected` is the
+// number of applicable questions; > 0 means the system is part of the call.
+const prog = (id: number, expected: number): ScoreProgress =>
+  ({
+    fismasystemid: id,
+    questionsexpected: expected,
+    questionsanswered: 0,
+    questionsupdated: 0,
+    lastupdatedat: null,
+    updatedsincestart: false,
+  }) as ScoreProgress
 
 /**
  * Reads the big numeral out of a stat card located by its eyebrow label.
@@ -70,10 +82,15 @@ describe('StatisticsBlocks — ztmf-ui#633 selection-scoped scoring', () => {
       1: score(2),
       2: score(5),
     }
-    render(<StatisticsBlocks scores={scores} />)
+    const progress: Record<number, ScoreProgress> = {
+      1: prog(1, 40),
+      2: prog(2, 40),
+      3: prog(3, 40),
+    }
+    render(<StatisticsBlocks scores={scores} progress={progress} />)
 
-    expect(tileValue('Total systems')).toBe('3')
-    expect(tileHint('Total systems')).toBe('2 scored')
+    expect(tileValue('Systems in view')).toBe('3')
+    expect(tileHint('Systems in view')).toBe('2 scored')
   })
 
   it('keeps the average between the lowest and highest displayed scores, named by acronym', () => {
@@ -99,7 +116,11 @@ describe('StatisticsBlocks — ztmf-ui#633 selection-scoped scoring', () => {
 
   it('renders placeholder Highest/Lowest tiles when nothing is scored', () => {
     mockFismaSystems = [sys(1, 'AAA'), sys(2, 'BBB')]
-    render(<StatisticsBlocks scores={{}} />)
+    const progress: Record<number, ScoreProgress> = {
+      1: prog(1, 40),
+      2: prog(2, 40),
+    }
+    render(<StatisticsBlocks scores={{}} progress={progress} />)
 
     expect(tileValue('Highest score')).toBe('-')
     expect(tileValue('Lowest score')).toBe('-')
@@ -118,14 +139,62 @@ describe('StatisticsBlocks — ztmf-ui#633 selection-scoped scoring', () => {
     expect(tileValue('Below initial')).toBe('1')
   })
 
-  it('handles a selection no system participated in without going below scale', () => {
-    // No scored systems: average is 0.00 (guarded) and the scored count reads 0.
+  it('handles a call no system has started without going below scale', () => {
+    // Two systems in the call, none scored yet: average is 0.00 (guarded)
+    // and the ratio reads 0 scored of 2 in view.
     mockFismaSystems = [sys(1, 'AAA'), sys(2, 'BBB')]
-    render(<StatisticsBlocks scores={{}} />)
+    const progress: Record<number, ScoreProgress> = {
+      1: prog(1, 40),
+      2: prog(2, 40),
+    }
+    render(<StatisticsBlocks scores={{}} progress={progress} />)
 
     expect(tileValue('Avg ZT score')).toBe('0.00')
-    expect(tileValue('Total systems')).toBe('2')
-    expect(tileHint('Total systems')).toBe('0 scored')
+    expect(tileValue('Systems in view')).toBe('2')
+    expect(tileHint('Systems in view')).toBe('0 scored')
+  })
+
+  it('scopes the denominator to systems in the selected call(s), not the whole inventory', () => {
+    // Four active systems. 1, 2, 3 are in the selected call (progress rows);
+    // 1 and 2 are scored, 3 is not started. System 4 is not in the call at
+    // all (no progress row). The tile reads 3 in view / 2 scored - system 4
+    // is excluded from the denominator instead of permanently counting as
+    // unscored.
+    mockFismaSystems = [
+      sys(1, 'AAA'),
+      sys(2, 'BBB'),
+      sys(3, 'CCC'),
+      sys(4, 'DDD'),
+    ]
+    const scores: Record<number, SystemScoreEntry> = {
+      1: score(2),
+      2: score(5),
+    }
+    const progress: Record<number, ScoreProgress> = {
+      1: prog(1, 40),
+      2: prog(2, 40),
+      3: prog(3, 40),
+    }
+    render(<StatisticsBlocks scores={scores} progress={progress} />)
+
+    expect(tileValue('Systems in view')).toBe('3')
+    expect(tileHint('Systems in view')).toBe('2 scored')
+  })
+
+  it('excludes a system whose questionnaire does not apply (0 expected)', () => {
+    // A 0/0 system carries a progress row but has no questions to answer, so
+    // it is not part of the call's population and must not inflate the
+    // denominator.
+    mockFismaSystems = [sys(1, 'AAA'), sys(2, 'BBB')]
+    const scores: Record<number, SystemScoreEntry> = { 1: score(3) }
+    const progress: Record<number, ScoreProgress> = {
+      1: prog(1, 40),
+      2: prog(2, 0),
+    }
+    render(<StatisticsBlocks scores={scores} progress={progress} />)
+
+    expect(tileValue('Systems in view')).toBe('1')
+    expect(tileHint('Systems in view')).toBe('1 scored')
   })
 
   it('formats large totals with thousands separators', () => {
@@ -135,8 +204,12 @@ describe('StatisticsBlocks — ztmf-ui#633 selection-scoped scoring', () => {
     const scores: Record<number, SystemScoreEntry> = {
       1: score(3.44),
     }
-    render(<StatisticsBlocks scores={scores} />)
+    // All 1342 systems are in the selected call, so the denominator is 1,342.
+    const progress: Record<number, ScoreProgress> = Object.fromEntries(
+      mockFismaSystems.map((s) => [s.fismasystemid, prog(s.fismasystemid, 40)])
+    )
+    render(<StatisticsBlocks scores={scores} progress={progress} />)
 
-    expect(tileValue('Total systems')).toBe('1,342')
+    expect(tileValue('Systems in view')).toBe('1,342')
   })
 })

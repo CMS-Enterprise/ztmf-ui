@@ -168,24 +168,21 @@ export default function SystemDetailPage() {
   const [showReactivateForm, setShowReactivateForm] = useState(false)
   const [reactivatedByName, setReactivatedByName] = useState('')
 
+  // Only the fields required to edit gate the save; keep aligned with the
+  // required fields in fieldConfig.ts. component, datacallcontact, and issoemail
+  // are absent so a blank stored value cannot freeze an unrelated edit.
   const [formValid, setFormValid] = useState<FormValidType>({
-    issoemail: false,
-    datacallcontact: false,
     fismaname: false,
     fismaacronym: false,
     datacenterenvironment: false,
-    component: false,
     fismauid: false,
   })
 
   const [formValidErrorText, setFormValidErrorText] =
     useState<FormValidHelperText>({
-      issoemail: TEXTFIELD_HELPER_TEXT,
-      datacallcontact: TEXTFIELD_HELPER_TEXT,
       fismaname: TEXTFIELD_HELPER_TEXT,
       fismaacronym: TEXTFIELD_HELPER_TEXT,
       datacenterenvironment: TEXTFIELD_HELPER_TEXT,
-      component: TEXTFIELD_HELPER_TEXT,
       fismauid: TEXTFIELD_HELPER_TEXT,
     })
 
@@ -197,12 +194,9 @@ export default function SystemDetailPage() {
         sdl_sync_enabled: system.sdl_sync_enabled ?? false,
       })
       setFormValid({
-        issoemail: (system.issoemail?.length ?? 0) > 0,
-        datacallcontact: (system.datacallcontact?.length ?? 0) > 0,
         fismaname: (system.fismaname?.length ?? 0) > 0,
         fismaacronym: (system.fismaacronym?.length ?? 0) > 0,
         datacenterenvironment: (system.datacenterenvironment?.length ?? 0) > 0,
-        component: (system.component?.length ?? 0) > 0,
         fismauid: (system.fismauid?.length ?? 0) > 0,
       })
       setDecommissionDate(getTodayISO())
