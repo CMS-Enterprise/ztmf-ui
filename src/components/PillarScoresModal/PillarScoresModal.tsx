@@ -487,7 +487,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
             >
               Pillar Scores - {currentDatacallName}
             </Typography>
-            <Grid container spacing={2}>
+            {/* Centered because the row is no longer always full: a reduced-scope
+                system carries four pillars, not six (ztmf#545), and md={2} tiles
+                would otherwise leave a two-tile gap on the right. */}
+            <Grid container spacing={2} justifyContent="center">
               {(latestScore.pillarscores ?? []).map((pillar) => {
                 const previousPillarScore = findComparisonPillarScore(
                   comparisonScoreEntry,

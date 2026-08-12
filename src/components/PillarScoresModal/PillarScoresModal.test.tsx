@@ -161,4 +161,24 @@ describe('PillarScoresModal', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('3.75')).toBeInTheDocument()
   })
+
+  // A reduced-scope system carries four pillars, not six (ztmf#545). The tiles
+  // are md={2}, so four of them fill 8 of 12 columns and used to leave a
+  // two-tile gap on the right rather than sitting centered.
+  it('centers the pillar tiles when a system carries fewer than a full row', () => {
+    const REDUCED = ['Identity', 'Networks', 'Data', 'CrossCutting'].map(
+      (pillar, i) => ({ pillarid: i + 1, pillar, score: 3.0 })
+    )
+    renderModal({
+      scores: [{ ...SCORES[0], pillarscores: REDUCED }],
+    })
+
+    // Scoped by label: the overall system score is a region too.
+    const tiles = screen.getAllByRole('region', { name: /pillar score:/ })
+    expect(tiles).toHaveLength(REDUCED.length)
+
+    const container = tiles[0].closest('.MuiGrid-container')
+    expect(container).not.toBeNull()
+    expect(getComputedStyle(container as Element).justifyContent).toBe('center')
+  })
 })
