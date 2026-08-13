@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -39,7 +39,6 @@ import {
   isUnscopedWriteAdmin,
   selectableRoles,
 } from '@/utils/userRoles'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import EditOpDivCell from './EditOpDivCell'
@@ -175,7 +174,7 @@ function validateEmail(email: string) {
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
-  const { userInfo } = useContextProp()
+  const { userInfo, opdivs } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
   // admins may view the table but every mutating control is withheld. The
   // backend is the security boundary - this only governs which controls render.
@@ -226,19 +225,43 @@ export default function UserTable() {
   const [openOpDivModal, setOpenOpDivModal] = useState<boolean>(false)
   const [opdivModalUserId, setOpDivModalUserId] = useState<GridRowId>('')
   const [opdivModalUserName, setOpDivModalUserName] = useState<string>('')
-  const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
   // opdiv_id -> code, for rendering the OpDivs membership column.
-  const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
+  const opdivCodeMap = useMemo<Record<number, string>>(() => {
+    const map: Record<number, string> = {}
+    opdivs.forEach((od) => {
+      map[od.opdiv_id] = od.code
+    })
+    return map
+  }, [opdivs])
   // opdiv_id -> { code, name }, a full label source (incl. parent/inactive) so
   // the grant modal can label grants to non-assignable OpDivs, which are absent
   // from its scoped options list.
-  const [opdivLabelMap, setOpDivLabelMap] = useState<
+  const opdivLabelMap = useMemo<
     Record<number, { code: string; name: string }>
-  >({})
+  >(() => {
+    const map: Record<number, { code: string; name: string }> = {}
+    opdivs.forEach((od) => {
+      map[od.opdiv_id] = { code: od.code, name: od.name }
+    })
+    return map
+  }, [opdivs])
   // All assignable OpDivs (active, non-parent), NOT narrowed to the caller's
   // scope. The grant modal narrows this against the caller's fresh grants
   // itself, so it isn't fed the session-old scope that opdivOptions carries.
-  const [allAssignableOpDivs, setAllAssignableOpDivs] = useState<OpDiv[]>([])
+  const allAssignableOpDivs = useMemo<OpDiv[]>(
+    () => (isAdmin ? opdivs.filter((od) => !od.is_parent && od.active) : []),
+    [isAdmin, opdivs]
+  )
+  // opdivOptions stays caller-narrowed for the inline EditOpDivCell. The grant
+  // modal does NOT use this; it narrows the full set against the caller's fresh
+  // scope itself, so it isn't fed this session-old value. The HHS parent row is
+  // not a grantable tenant, and an OPDIV_ADMIN may only grant their own OpDivs;
+  // the server enforces the same rule.
+  const opdivOptions = useMemo<OpDiv[]>(() => {
+    if (!isOpDivTier(userInfo)) return allAssignableOpDivs
+    const own = new Set(userInfo.assignedopdivids ?? [])
+    return allAssignableOpDivs.filter((od) => own.has(od.opdiv_id))
+  }, [allAssignableOpDivs, userInfo])
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
   // holds rows refreshed since load, plus a one-time backfill against older
@@ -615,49 +638,6 @@ export default function UserTable() {
     }
   }, [isAdmin])
 
-  // OpDiv options for the grant modal: assignable children only (the HHS
-  // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
-  // own OpDivs, so narrow the option set to their own grants; the server
-  // enforces the same rule.
-  useEffect(() => {
-    if (!isAdmin) return
-    // Pull the full list (incl. inactive/parent) so any granted id resolves to
-    // a code in the OpDivs column; derive the assignable subset from the same
-    // response for the grant modal.
-    async function loadOpDivs() {
-      try {
-        const all = await fetchOpDivs(true)
-        const codeMap: Record<number, string> = {}
-        const labelMap: Record<number, { code: string; name: string }> = {}
-        all.forEach((od) => {
-          codeMap[od.opdiv_id] = od.code
-          labelMap[od.opdiv_id] = { code: od.code, name: od.name }
-        })
-        setOpDivCodeMap(codeMap)
-        setOpDivLabelMap(labelMap)
-
-        const activeNonParent = all.filter((od) => !od.is_parent && od.active)
-        setAllAssignableOpDivs(activeNonParent)
-
-        // opdivOptions stays caller-narrowed for the inline EditOpDivCell. The
-        // grant modal does NOT use this; it narrows the full set against the
-        // caller's fresh scope itself, so it isn't fed this session-old value.
-        let assignable = activeNonParent
-        if (isOpDivTier(userInfo)) {
-          const own = new Set(userInfo.assignedopdivids ?? [])
-          assignable = assignable.filter((od) => own.has(od.opdiv_id))
-        }
-        setOpDivOptions(assignable)
-      } catch {
-        // Non-fatal: the grant modal simply shows no options if this fails.
-        setOpDivOptions([])
-        setAllAssignableOpDivs([])
-        setOpDivCodeMap({})
-        setOpDivLabelMap({})
-      }
-    }
-    loadOpDivs()
-  }, [isAdmin, userInfo])
   const columns: GridColDef[] = [
     {
       field: 'fullname',

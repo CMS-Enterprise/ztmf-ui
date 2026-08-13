@@ -129,11 +129,9 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OpDivAdmin from './OpDivAdmin'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { setOpDivDelegateEnabled } from '@/utils/delegates'
 import type { OpDiv, UserRole, userData } from '@/types'
 
-const fetchOpDivsMock = fetchOpDivs as jest.Mock
 const setEnabledMock = setOpDivDelegateEnabled as jest.Mock
 
 const EMPIRE: OpDiv = {
@@ -145,6 +143,8 @@ const EMPIRE: OpDiv = {
   system_delegate_enabled: false,
 }
 
+const refreshOpdivsMock = jest.fn()
+
 function ctx(role: UserRole) {
   return {
     userInfo: {
@@ -153,6 +153,8 @@ function ctx(role: UserRole) {
       fullname: 'Tester',
       role,
     } as userData,
+    opdivs: [EMPIRE],
+    refreshOpdivs: refreshOpdivsMock,
   }
 }
 
@@ -163,7 +165,6 @@ function renderAs(role: UserRole) {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  fetchOpDivsMock.mockResolvedValue([EMPIRE])
   setEnabledMock.mockResolvedValue({ ...EMPIRE, system_delegate_enabled: true })
 })
 
@@ -219,6 +220,8 @@ test('flipping the toggle confirms then calls the dedicated enable endpoint', as
   await waitFor(() => expect(setEnabledMock).toHaveBeenCalledTimes(1))
   // Toggled from false -> true for EMPIRE (opdiv_id 3).
   expect(setEnabledMock).toHaveBeenCalledWith(3, true)
+  // The grid reads the shared context list, so the write must refresh it.
+  await waitFor(() => expect(refreshOpdivsMock).toHaveBeenCalledTimes(1))
 })
 
 test('cancelling the toggle confirmation writes nothing', async () => {
@@ -239,5 +242,4 @@ test('an OPDIV_ADMIN is bounced - no Manage OpDivs grid renders', () => {
 
   expect(screen.queryByTestId('datagrid-mock')).not.toBeInTheDocument()
   expect(screen.queryByText(/manage opdivs/i)).not.toBeInTheDocument()
-  expect(fetchOpDivsMock).not.toHaveBeenCalled()
 })

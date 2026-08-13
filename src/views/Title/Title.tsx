@@ -12,7 +12,13 @@ import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData, UserRole, datacall, DataCenterEnvironment } from '@/types'
+import {
+  userData,
+  UserRole,
+  datacall,
+  DataCenterEnvironment,
+  OpDiv,
+} from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -33,7 +39,8 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
-import { notify } from '@/utils/notify'
+import { notify, isAuthHandled } from '@/utils/notify'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
@@ -88,6 +95,7 @@ export default function Title() {
   const [datacenterEnvironments, setDatacenterEnvironments] = useState<
     DataCenterEnvironment[]
   >([])
+  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -199,6 +207,29 @@ export default function Title() {
       controller.abort()
     }
   }, [loaderData.status])
+  // OpDiv reference data is read by five pages (systems table, system detail,
+  // user table, OpDiv admin, system form), so it is fetched once here and
+  // passed down via context. The full list (incl. inactive) is fetched so a
+  // system tied to a since-deactivated OpDiv still resolves its name;
+  // consumers that need active-only filter client-side.
+  const refreshOpdivs = useCallback((signal?: AbortSignal) => {
+    fetchOpDivs(true, signal)
+      .then(setOpdivs)
+      .catch((error) => {
+        if (signal?.aborted || isAuthHandled(error)) return
+        console.error('Fetch opdivs error:', error)
+      })
+  }, [])
+
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    refreshOpdivs(controller.signal)
+    return () => {
+      controller.abort()
+    }
+  }, [loaderData.status, refreshOpdivs])
+
   const datacallsByYear = useMemo(
     () => groupDatacallsByYear(datacalls),
     [datacalls]
@@ -648,6 +679,8 @@ export default function Title() {
                   setShowDecommissioned,
                   fetchFismaSystems,
                   datacenterEnvironments,
+                  opdivs,
+                  refreshOpdivs,
                 }}
               />
             </Box>
@@ -661,6 +694,7 @@ export default function Title() {
           system={EMPTY_SYSTEM}
           mode={'create'}
           datacenterEnvironments={datacenterEnvironments}
+          opdivs={opdivs}
         />
         <EmailModal
           openModal={openEmailModal}

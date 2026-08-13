@@ -5,6 +5,7 @@ import {
   userData,
   datacall,
   DataCenterEnvironment,
+  OpDiv,
 } from '@/types'
 
 type ContextType = {
@@ -27,6 +28,12 @@ type ContextType = {
   // Datacenter-environment vocabulary, fetched once at the layout level.
   // Empty until the fetch resolves; consumers fall back to raw values.
   datacenterEnvironments: DataCenterEnvironment[]
+  // OpDiv vocabulary (includeInactive=true), fetched once at the layout level.
+  // Consumers that need active-only filter client-side: opdivs.filter(o => o.active).
+  opdivs: OpDiv[]
+  // Call after any mutation (create/edit/activate/deactivate) to keep the
+  // shared list fresh without a full page reload.
+  refreshOpdivs: () => void
 }
 
 export function useContextProp() {

@@ -20,15 +20,23 @@ import MockAdapter from 'axios-mock-adapter'
 import EditSystemModal from './EditSystemModal'
 import axiosInstance from '@/axiosConfig'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import type { FismaSystemType } from '@/types'
+import type { FismaSystemType, OpDiv } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
 afterEach(() => mock.reset())
-// The modal fetches the OpDiv reference list on open; a bare response keeps the
-// form out of its loading state.
-beforeEach(() =>
-  mock.onGet('/opdivs').reply(200, { data: [{ opdiv_id: 1, name: 'CMS' }] })
-)
+// The OpDiv reference list arrives as a prop from Title (the modal renders
+// outside the Outlet), so the dropdown needs no request mock.
+const OPDIVS: OpDiv[] = [
+  {
+    opdiv_id: 1,
+    code: 'CMS',
+    name: 'CMS',
+    is_parent: false,
+    active: true,
+    system_delegate_enabled: false,
+    insights_enabled: false,
+  },
+]
 
 const SYSTEM = {
   fismasystemid: 42,
@@ -85,6 +93,7 @@ test('clearing an enum select to None saves an empty string, not null', async ()
       system={SYSTEM}
       mode="edit"
       datacenterEnvironments={[]}
+      opdivs={OPDIVS}
     />
   )
 
@@ -127,6 +136,7 @@ test('an untouched extended field is omitted from the save (dirty-diff)', async 
       system={SYSTEM}
       mode="edit"
       datacenterEnvironments={[]}
+      opdivs={OPDIVS}
     />
   )
 
@@ -157,6 +167,7 @@ test('an edited ISSO Name is sent in the save payload', async () => {
       system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
       mode="edit"
       datacenterEnvironments={[]}
+      opdivs={OPDIVS}
     />
   )
 
@@ -186,6 +197,7 @@ test('clearing ISSO Name saves an empty string, which restores the derived name'
       system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
       mode="edit"
       datacenterEnvironments={[]}
+      opdivs={OPDIVS}
     />
   )
 
@@ -215,6 +227,7 @@ test('clearing a free-text field saves an empty string, not null', async () => {
       system={{ ...SYSTEM, cloud_vendor: 'AWS' }}
       mode="edit"
       datacenterEnvironments={[]}
+      opdivs={OPDIVS}
     />
   )
 

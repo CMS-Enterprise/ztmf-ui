@@ -3,13 +3,7 @@ import { useParams } from 'react-router-dom'
 import { Box, CircularProgress, Divider, Typography } from '@mui/material'
 import _ from 'lodash'
 
-import {
-  FismaSystemType,
-  FormValidType,
-  FormValidHelperText,
-  OpDiv,
-} from '@/types'
-import { fetchOpDivs } from '@/utils/opdivs'
+import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import {
@@ -52,6 +46,7 @@ export default function SystemDetailPage() {
     datacenterEnvironments,
     fetchFismaSystems,
     showDecommissioned,
+    opdivs,
   } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
@@ -100,21 +95,6 @@ export default function SystemDetailPage() {
       controller.abort()
     }
   }, [fismaSystems, system, systemId, setFismaSystems])
-
-  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchOpDivs(true, controller.signal)
-      .then(setOpdivs)
-      .catch((error) => {
-        if (controller.signal.aborted || isAuthHandled(error)) return
-        notify('Failed to load OpDiv list.', 'error')
-      })
-    return () => {
-      controller.abort()
-    }
-  }, [])
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)

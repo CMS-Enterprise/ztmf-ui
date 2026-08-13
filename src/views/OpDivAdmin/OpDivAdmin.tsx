@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -29,12 +29,7 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { Routes } from '@/router/constants'
-import {
-  createOpDiv,
-  fetchOpDivs,
-  updateOpDiv,
-  type OpDivInput,
-} from '@/utils/opdivs'
+import { createOpDiv, updateOpDiv, type OpDivInput } from '@/utils/opdivs'
 import { setOpDivDelegateEnabled } from '@/utils/delegates'
 import { isUnscopedWriteAdmin } from '@/utils/userRoles'
 import { parseApiError } from '@/utils/apiErrors'
@@ -73,7 +68,7 @@ function CreateToolbar({
 
 export default function OpDivAdmin() {
   const navigate = useNavigate()
-  const { userInfo } = useContextProp()
+  const { userInfo, opdivs: rows, refreshOpdivs } = useContextProp()
   // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
   // the page only to flip the per-OpDiv System Delegate toggle - every other
   // control stays OWNER-only. The backend enforces both boundaries (OpDiv
@@ -83,7 +78,6 @@ export default function OpDivAdmin() {
   const canManage = isOwner
   const canToggleDelegate = canAccess
 
-  const [rows, setRows] = useState<OpDiv[]>([])
   const [dialogOpen, setDialogOpen] = useState(false)
   const [editing, setEditing] = useState<OpDiv | null>(null)
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
@@ -100,20 +94,6 @@ export default function OpDivAdmin() {
       navigate(Routes.ROOT, { replace: true })
     }
   }, [userInfo.role, canAccess, navigate])
-
-  const loadOpDivs = useCallback(() => {
-    fetchOpDivs(true)
-      .then(setRows)
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        notify(parsed.message, 'error')
-      })
-  }, [])
-
-  useEffect(() => {
-    if (canAccess) loadOpDivs()
-  }, [canAccess, loadOpDivs])
 
   const openCreate = () => {
     setEditing(null)
@@ -160,7 +140,7 @@ export default function OpDivAdmin() {
           'success'
         )
         setDialogOpen(false)
-        loadOpDivs()
+        refreshOpdivs()
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
@@ -191,7 +171,7 @@ export default function OpDivAdmin() {
             : 'Saved - OpDiv activated',
           'success'
         )
-        loadOpDivs()
+        refreshOpdivs()
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
@@ -212,7 +192,7 @@ export default function OpDivAdmin() {
             : 'Saved - System Delegate enabled',
           'success'
         )
-        loadOpDivs()
+        refreshOpdivs()
       })
       .catch((error) => {
         if (isAuthHandled(error)) return
