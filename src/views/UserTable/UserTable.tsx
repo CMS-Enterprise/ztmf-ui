@@ -30,12 +30,11 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
-import { users, OpDiv, FismaSystemType } from '@/types'
+import { users, FismaSystemType } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
   hasUnscopedRead,
-  isOpDivTier,
   isUnscopedWriteAdmin,
   selectableRoles,
 } from '@/utils/userRoles'
@@ -43,6 +42,12 @@ import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import EditOpDivCell from './EditOpDivCell'
 import { isUserCellEditable } from './cellEditGuards'
+import {
+  buildOpDivCodeMap,
+  buildOpDivLabelMap,
+  buildAssignableOpDivs,
+  narrowToCallerScope,
+} from './opdivDerivations'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -225,40 +230,18 @@ export default function UserTable() {
   const [openOpDivModal, setOpenOpDivModal] = useState<boolean>(false)
   const [opdivModalUserId, setOpDivModalUserId] = useState<GridRowId>('')
   const [opdivModalUserName, setOpDivModalUserName] = useState<string>('')
-  // opdiv_id -> code, for rendering the OpDivs membership column.
-  const opdivCodeMap = useMemo<Record<number, string>>(() => {
-    const map: Record<number, string> = {}
-    opdivs.forEach((od) => {
-      map[od.opdiv_id] = od.code
-    })
-    return map
-  }, [opdivs])
-  // opdiv_id -> { code, name }, a full label source (incl. parent/inactive) so
-  // the grant modal can label grants to non-assignable OpDivs, which are absent
-  // from its scoped options list.
-  const opdivLabelMap = useMemo<
-    Record<number, { code: string; name: string }>
-  >(() => {
-    const map: Record<number, { code: string; name: string }> = {}
-    opdivs.forEach((od) => {
-      map[od.opdiv_id] = { code: od.code, name: od.name }
-    })
-    return map
-  }, [opdivs])
-  // All assignable OpDivs (active, non-parent), NOT narrowed to the caller's
-  // scope. The grant modal narrows this against the caller's fresh grants
-  // itself, so it isn't fed the session-old scope that opdivOptions carries.
-  const allAssignableOpDivs = useMemo<OpDiv[]>(
-    () => (isAdmin ? opdivs.filter((od) => !od.is_parent && od.active) : []),
-    [isAdmin, opdivs]
+  // Four views of the shared OpDiv list; see opdivDerivations.ts for what each
+  // one is for and who narrows what.
+  const opdivCodeMap = useMemo(() => buildOpDivCodeMap(opdivs), [opdivs])
+  const opdivLabelMap = useMemo(() => buildOpDivLabelMap(opdivs), [opdivs])
+  const allAssignableOpDivs = useMemo(
+    () => buildAssignableOpDivs(opdivs, isAdmin),
+    [opdivs, isAdmin]
   )
-  // Caller-narrowed, for the inline EditOpDivCell only - the grant modal
-  // narrows the full set against fresh grants itself. Server enforces the same.
-  const opdivOptions = useMemo<OpDiv[]>(() => {
-    if (!isOpDivTier(userInfo)) return allAssignableOpDivs
-    const own = new Set(userInfo.assignedopdivids ?? [])
-    return allAssignableOpDivs.filter((od) => own.has(od.opdiv_id))
-  }, [allAssignableOpDivs, userInfo])
+  const opdivOptions = useMemo(
+    () => narrowToCallerScope(allAssignableOpDivs, userInfo),
+    [allAssignableOpDivs, userInfo]
+  )
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
   // holds rows refreshed since load, plus a one-time backfill against older
