@@ -67,6 +67,11 @@ const emptyUser: userData = {
   assignedfismasystems: [],
 }
 
+// Fixed text, not parseApiError: this fires from the shell on any page, so a
+// generic "something went wrong" would give the user nothing to act on.
+const OPDIVS_LOAD_ERROR =
+  'Failed to load the OpDiv list. OpDiv names and pickers may be incomplete - please reload.'
+
 export default function Title() {
   const location = useLocation()
   const loaderData = useLoaderData() as AuthLoaderData
@@ -207,17 +212,17 @@ export default function Title() {
       controller.abort()
     }
   }, [loaderData.status])
-  // OpDiv reference data is read by five pages (systems table, system detail,
-  // user table, OpDiv admin, system form), so it is fetched once here and
-  // passed down via context. The full list (incl. inactive) is fetched so a
-  // system tied to a since-deactivated OpDiv still resolves its name;
-  // consumers that need active-only filter client-side.
+  // Fetched once for the five pages that read OpDivs, and re-invoked by OpDiv
+  // admin after a write. Includes inactive rows so a system tied to a
+  // deactivated OpDiv still resolves its name. Unlike the sibling fetches
+  // above this notifies rather than logs: it is the only fetch site, so an
+  // empty list persists for the session and leaves the system form's Save stuck.
   const refreshOpdivs = useCallback((signal?: AbortSignal) => {
     fetchOpDivs(true, signal)
       .then(setOpdivs)
       .catch((error) => {
         if (signal?.aborted || isAuthHandled(error)) return
-        console.error('Fetch opdivs error:', error)
+        notify(OPDIVS_LOAD_ERROR, 'error')
       })
   }, [])
 

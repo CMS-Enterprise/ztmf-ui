@@ -24,8 +24,7 @@ import type { FismaSystemType, OpDiv } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
 afterEach(() => mock.reset())
-// The OpDiv reference list arrives as a prop from Title (the modal renders
-// outside the Outlet), so the dropdown needs no request mock.
+// Arrives as a prop from Title, so the dropdown needs no request mock.
 const OPDIVS: OpDiv[] = [
   {
     opdiv_id: 1,

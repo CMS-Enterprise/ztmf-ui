@@ -252,11 +252,8 @@ export default function UserTable() {
     () => (isAdmin ? opdivs.filter((od) => !od.is_parent && od.active) : []),
     [isAdmin, opdivs]
   )
-  // opdivOptions stays caller-narrowed for the inline EditOpDivCell. The grant
-  // modal does NOT use this; it narrows the full set against the caller's fresh
-  // scope itself, so it isn't fed this session-old value. The HHS parent row is
-  // not a grantable tenant, and an OPDIV_ADMIN may only grant their own OpDivs;
-  // the server enforces the same rule.
+  // Caller-narrowed, for the inline EditOpDivCell only - the grant modal
+  // narrows the full set against fresh grants itself. Server enforces the same.
   const opdivOptions = useMemo<OpDiv[]>(() => {
     if (!isOpDivTier(userInfo)) return allAssignableOpDivs
     const own = new Set(userInfo.assignedopdivids ?? [])

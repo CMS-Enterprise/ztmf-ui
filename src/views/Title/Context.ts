@@ -28,11 +28,9 @@ type ContextType = {
   // Datacenter-environment vocabulary, fetched once at the layout level.
   // Empty until the fetch resolves; consumers fall back to raw values.
   datacenterEnvironments: DataCenterEnvironment[]
-  // OpDiv vocabulary (includeInactive=true), fetched once at the layout level.
-  // Consumers that need active-only filter client-side: opdivs.filter(o => o.active).
+  // OpDiv vocabulary incl. inactive; consumers needing active-only filter it.
   opdivs: OpDiv[]
-  // Call after any mutation (create/edit/activate/deactivate) to keep the
-  // shared list fresh without a full page reload.
+  // Refetch after a mutation to keep the shared list fresh.
   refreshOpdivs: () => void
 }
 
