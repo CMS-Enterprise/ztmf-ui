@@ -36,12 +36,16 @@ jest.mock('@mui/x-data-grid', () => {
       getRowId?: (row: Record<string, unknown>) => string | number
       slots?: { toolbar?: (p: unknown) => React.ReactNode }
       slotProps?: { toolbar?: Record<string, unknown> }
+      loading?: boolean
     }) => {
       const { rows = [], columns = [], getRowId, slots, slotProps } = props
       const Toolbar = slots?.toolbar
       return react.createElement(
         'div',
-        { 'data-testid': 'datagrid-mock' },
+        {
+          'data-testid': 'datagrid-mock',
+          'data-loading': String(!!props.loading),
+        },
         Toolbar
           ? react.createElement(Toolbar, {
               key: 'toolbar',
@@ -125,7 +129,7 @@ jest.mock('../Title/Context', () => ({
   },
 }))
 
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OpDivAdmin from './OpDivAdmin'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
@@ -154,6 +158,7 @@ function ctx(role: UserRole) {
       role,
     } as userData,
     opdivs: [EMPIRE],
+    opdivsLoaded: true,
     refreshOpdivs: refreshOpdivsMock,
   }
 }
@@ -235,6 +240,23 @@ test('cancelling the toggle confirmation writes nothing', async () => {
   await user.click(screen.getByRole('button', { name: /^cancel$/i }))
 
   expect(setEnabledMock).not.toHaveBeenCalled()
+})
+
+test('the grid reads as loading until the shared OpDiv list settles', () => {
+  // Otherwise the empty grid's "No rows" overlay reads as "no OpDivs exist".
+  setMockCtx({ ...ctx('OWNER'), opdivs: [], opdivsLoaded: false })
+  renderWithProviders(<OpDivAdmin />)
+
+  expect(screen.getByTestId('datagrid-mock')).toHaveAttribute(
+    'data-loading',
+    'true'
+  )
+
+  act(() => setMockCtx(ctx('OWNER')))
+  expect(screen.getByTestId('datagrid-mock')).toHaveAttribute(
+    'data-loading',
+    'false'
+  )
 })
 
 test('an OPDIV_ADMIN is bounced - no Manage OpDivs grid renders', () => {

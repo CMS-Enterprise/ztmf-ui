@@ -68,7 +68,12 @@ function CreateToolbar({
 
 export default function OpDivAdmin() {
   const navigate = useNavigate()
-  const { userInfo, opdivs: rows, refreshOpdivs } = useContextProp()
+  const {
+    userInfo,
+    opdivs: rows,
+    opdivsLoaded,
+    refreshOpdivs,
+  } = useContextProp()
   // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
   // the page only to flip the per-OpDiv System Delegate toggle - every other
   // control stays OWNER-only. The backend enforces both boundaries (OpDiv
@@ -297,6 +302,9 @@ export default function OpDivAdmin() {
           aria-label="Operating Divisions"
           rows={rows}
           columns={columns}
+          // Without this the grid's "No rows" overlay reads as "no OpDivs
+          // exist" while the shared list is still in flight.
+          loading={!opdivsLoaded}
           getRowId={(row) => row.opdiv_id}
           initialState={{
             sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },

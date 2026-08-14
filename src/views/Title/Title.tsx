@@ -101,6 +101,9 @@ export default function Title() {
     DataCenterEnvironment[]
   >([])
   const [opdivs, setOpdivs] = useState<OpDiv[]>([])
+  // Distinguishes "not fetched yet" from "fetched, and there are none" - both
+  // are an empty list. The questionnaire's insights gate needs the difference.
+  const [opdivsLoaded, setOpdivsLoaded] = useState(false)
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -223,6 +226,11 @@ export default function Title() {
       .catch((error) => {
         if (signal?.aborted || isAuthHandled(error)) return
         notify(OPDIVS_LOAD_ERROR, 'error')
+      })
+      .finally(() => {
+        // Settled either way: a failure resolves to "no OpDivs" rather than
+        // leaving consumers blocked on a load that will never arrive.
+        if (!signal?.aborted) setOpdivsLoaded(true)
       })
   }, [])
 
@@ -685,6 +693,7 @@ export default function Title() {
                   fetchFismaSystems,
                   datacenterEnvironments,
                   opdivs,
+                  opdivsLoaded,
                   refreshOpdivs,
                 }}
               />

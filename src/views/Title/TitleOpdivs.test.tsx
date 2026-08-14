@@ -13,10 +13,15 @@ jest.mock('react-router-dom', () => ({
   Outlet: ({
     context,
   }: {
-    context: { opdivs: OpDiv[]; refreshOpdivs: () => void }
+    context: {
+      opdivs: OpDiv[]
+      opdivsLoaded: boolean
+      refreshOpdivs: () => void
+    }
   }) => (
     <div>
       <button onClick={() => context.refreshOpdivs()}>refresh-opdivs</button>
+      <span>loaded:{String(context.opdivsLoaded)}</span>
       <ul>
         {context.opdivs.map((o) => (
           <li key={o.opdiv_id}>{o.code}</li>
@@ -203,5 +208,16 @@ describe('Title — shared OpDiv context (#558)', () => {
       )
     )
     expect(mockedFetchOpDivs).toHaveBeenCalledTimes(1)
+  })
+
+  it('marks the list loaded once the fetch settles, including on failure', async () => {
+    // The questionnaire's insights gate blocks Next/Complete while this is
+    // false, so a failure has to settle it or the user is stuck for good.
+    mockedFetchOpDivs.mockRejectedValue(new Error('network'))
+
+    render(<Title />)
+
+    expect(screen.getByText('loaded:false')).toBeInTheDocument()
+    expect(await screen.findByText('loaded:true')).toBeInTheDocument()
   })
 })

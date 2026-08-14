@@ -153,6 +153,8 @@ function makeCtx(
         ordr: 60,
       },
     ],
+    opdivs: [],
+    opdivsLoaded: true,
   }
 }
 
