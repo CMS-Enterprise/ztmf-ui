@@ -192,6 +192,8 @@ function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
     setShowDecommissioned: jest.fn(),
     fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
+    opdivs: [],
+    opdivsLoaded: true,
     ...overrides,
   }
 }
@@ -877,20 +879,19 @@ const OPDIV_ROWS = [
 describe('QuestionnairePage justification integration', () => {
   type InsightsResponse = { data: { data: unknown[] } }
 
+  // This block is the insights-enabled variant: SSD-EX's OpDiv (9) carries
+  // insights_enabled, so the layer is expected on unless a test says otherwise.
+  const insightsCtx = (overrides: Record<string, unknown> = {}) =>
+    makeCtx({ opdivs: OPDIV_ROWS, ...overrides })
+
   function installMocks({
     insightRows = [INSIGHT_ROW] as unknown[],
     insightsResponse,
-    opdivRows = OPDIV_ROWS as unknown[],
-    opdivsResponse,
   }: {
     insightRows?: unknown[]
     insightsResponse?: Promise<InsightsResponse>
-    opdivRows?: unknown[]
-    opdivsResponse?: Promise<InsightsResponse>
   } = {}) {
     axios.get.mockImplementation((url: string) => {
-      if (url === '/opdivs')
-        return opdivsResponse ?? Promise.resolve({ data: { data: opdivRows } })
       if (url === 'insights') {
         return (
           insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
@@ -911,7 +912,7 @@ describe('QuestionnairePage justification integration', () => {
   it('keeps the insights layer on an HHS-named call for an insights-enabled OpDiv, and persists an accepted prior response', async () => {
     installMocks()
     setMockCtx(
-      makeCtx({
+      insightsCtx({
         latestDataCallId: 6,
         latestDatacall: 'FY25 ZTM',
         selectedDatacall: HHS_ZTM,
@@ -974,7 +975,7 @@ describe('QuestionnairePage justification integration', () => {
 
   it('shows the insights panel, option badges, and suggestion for a CMS data call', async () => {
     installMocks()
-    setMockCtx(makeCtx())
+    setMockCtx(insightsCtx())
 
     renderAt(DEEP_LINK)
 
@@ -991,10 +992,12 @@ describe('QuestionnairePage justification integration', () => {
   })
 
   it('hides the insights layer when the system belongs to an insights-disabled OpDiv', async () => {
-    installMocks({
-      opdivRows: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
-    })
-    setMockCtx(makeCtx())
+    installMocks()
+    setMockCtx(
+      insightsCtx({
+        opdivs: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
+      })
+    )
 
     renderAt(DEEP_LINK)
 
@@ -1013,12 +1016,8 @@ describe('QuestionnairePage justification integration', () => {
   })
 
   it('keeps the gate closed and submission blocked until the OpDiv lookup settles', async () => {
-    let resolveOpdivs: ((value: InsightsResponse) => void) | null = null
-    const opdivsResponse = new Promise<InsightsResponse>((resolve) => {
-      resolveOpdivs = resolve
-    })
-    installMocks({ opdivsResponse })
-    setMockCtx(makeCtx())
+    installMocks()
+    setMockCtx(insightsCtx({ opdivs: [], opdivsLoaded: false }))
 
     renderAt(DEEP_LINK)
 
@@ -1033,7 +1032,7 @@ describe('QuestionnairePage justification integration', () => {
     expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
 
     await act(async () => {
-      resolveOpdivs?.({ data: { data: OPDIV_ROWS } })
+      setMockCtx(insightsCtx({ opdivsLoaded: true }))
     })
 
     expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
@@ -1048,7 +1047,7 @@ describe('QuestionnairePage justification integration', () => {
       resolveInsights = resolve
     })
     installMocks({ insightsResponse })
-    setMockCtx(makeCtx())
+    setMockCtx(insightsCtx())
 
     renderAt(DEEP_LINK)
 
@@ -1072,7 +1071,7 @@ describe('QuestionnairePage justification integration', () => {
 
   it('keeps the plain four-row notes field when the question has no justification context', async () => {
     installMocks({ insightRows: [] })
-    setMockCtx(makeCtx())
+    setMockCtx(insightsCtx())
 
     renderAt(DEEP_LINK)
 
@@ -1164,15 +1163,10 @@ describe('carried-forward confirmation', () => {
   // variant); pass them to exercise the prior-response card.
   function installScoreMocks(
     scores: Array<{ scoreid: number }>,
-    {
-      insightRows = [] as unknown[],
-      opdivRows = [] as unknown[],
-    }: { insightRows?: unknown[]; opdivRows?: unknown[] } = {}
+    { insightRows = [] as unknown[] }: { insightRows?: unknown[] } = {}
   ) {
     let rows = scores
     axios.get.mockImplementation((url: string) => {
-      if (url === '/opdivs')
-        return Promise.resolve({ data: { data: opdivRows } })
       if (url === 'insights')
         return Promise.resolve({ data: { data: insightRows } })
       if (url.includes('/questions'))
@@ -1299,7 +1293,6 @@ describe('carried-forward confirmation', () => {
           },
         },
       ],
-      opdivRows: [{ opdiv_id: 9, code: 'CMS', insights_enabled: true }],
     })
 
     renderAt(DEEP_LINK)
@@ -1388,7 +1381,6 @@ describe('carried-forward confirmation', () => {
           },
         },
       ],
-      opdivRows: [{ opdiv_id: 9, code: 'CMS', insights_enabled: true }],
     })
 
     renderAt(DEEP_LINK)

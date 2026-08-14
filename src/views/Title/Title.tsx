@@ -12,7 +12,13 @@ import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import { userData, UserRole, datacall, DataCenterEnvironment } from '@/types'
+import {
+  userData,
+  UserRole,
+  datacall,
+  DataCenterEnvironment,
+  OpDiv,
+} from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -33,7 +39,8 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
-import { notify } from '@/utils/notify'
+import { notify, isAuthHandled } from '@/utils/notify'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
@@ -59,6 +66,11 @@ const emptyUser: userData = {
   role: '' as UserRole,
   assignedfismasystems: [],
 }
+
+// Fixed text, not parseApiError: this fires from the shell on any page, so a
+// generic "something went wrong" would give the user nothing to act on.
+const OPDIVS_LOAD_ERROR =
+  'Failed to load the OpDiv list. OpDiv names and pickers may be incomplete - please reload.'
 
 export default function Title() {
   const location = useLocation()
@@ -88,6 +100,10 @@ export default function Title() {
   const [datacenterEnvironments, setDatacenterEnvironments] = useState<
     DataCenterEnvironment[]
   >([])
+  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
+  // Distinguishes "not fetched yet" from "fetched, and there are none" - both
+  // are an empty list. The questionnaire's insights gate needs the difference.
+  const [opdivsLoaded, setOpdivsLoaded] = useState(false)
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -199,6 +215,34 @@ export default function Title() {
       controller.abort()
     }
   }, [loaderData.status])
+  // Fetched once for the five pages that read OpDivs, and re-invoked by OpDiv
+  // admin after a write. Includes inactive rows so a system tied to a
+  // deactivated OpDiv still resolves its name. Unlike the sibling fetches
+  // above this notifies rather than logs: it is the only fetch site, so an
+  // empty list persists for the session and leaves the system form's Save stuck.
+  const refreshOpdivs = useCallback((signal?: AbortSignal) => {
+    fetchOpDivs(true, signal)
+      .then(setOpdivs)
+      .catch((error) => {
+        if (signal?.aborted || isAuthHandled(error)) return
+        notify(OPDIVS_LOAD_ERROR, 'error')
+      })
+      .finally(() => {
+        // Settled either way: a failure resolves to "no OpDivs" rather than
+        // leaving consumers blocked on a load that will never arrive.
+        if (!signal?.aborted) setOpdivsLoaded(true)
+      })
+  }, [])
+
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    refreshOpdivs(controller.signal)
+    return () => {
+      controller.abort()
+    }
+  }, [loaderData.status, refreshOpdivs])
+
   const datacallsByYear = useMemo(
     () => groupDatacallsByYear(datacalls),
     [datacalls]
@@ -648,6 +692,9 @@ export default function Title() {
                   setShowDecommissioned,
                   fetchFismaSystems,
                   datacenterEnvironments,
+                  opdivs,
+                  opdivsLoaded,
+                  refreshOpdivs,
                 }}
               />
             </Box>
@@ -661,6 +708,7 @@ export default function Title() {
           system={EMPTY_SYSTEM}
           mode={'create'}
           datacenterEnvironments={datacenterEnvironments}
+          opdivs={opdivs}
         />
         <EmailModal
           openModal={openEmailModal}

@@ -60,21 +60,7 @@ const NON_CMS_SYSTEM = {
 
 beforeEach(() => {
   mock.reset()
-  mock
-    .onGet('/opdivs')
-    .reply(200, {
-      data: [
-        {
-          opdiv_id: 1,
-          code: 'CMS',
-          name: 'CMS',
-          active: true,
-          system_delegate_enabled: false,
-        },
-      ],
-    })
-    .onGet('/systemattributes')
-    .reply(200, { data: [] })
+  mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
 function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
@@ -88,6 +74,17 @@ function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
       role: 'OPDIV_ADMIN',
     } as userData,
     datacenterEnvironments: [],
+    // OpDivs now arrive on the shared Outlet context instead of a per-page GET.
+    opdivs: [
+      {
+        opdiv_id: 1,
+        code: 'CMS',
+        name: 'CMS',
+        is_parent: false,
+        active: true,
+        system_delegate_enabled: false,
+      },
+    ],
     fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
   }

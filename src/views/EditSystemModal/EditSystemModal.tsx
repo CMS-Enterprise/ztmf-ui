@@ -39,8 +39,6 @@ import {
 } from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { fetchOpDivs } from '@/utils/opdivs'
-import type { OpDiv } from '@/types'
 import {
   getFieldsBySection,
   EXTENDED_METADATA_KEYS,
@@ -70,6 +68,7 @@ export default function EditSystemModal({
   system,
   mode,
   datacenterEnvironments,
+  opdivs: allOpdivs,
 }: editSystemModalProps) {
   const datacenterEnvironmentOptions = toDropdownOptionsWithCurrent(
     datacenterEnvironments,
@@ -87,7 +86,7 @@ export default function EditSystemModal({
     fismauid: false,
     opdiv_id: false,
   })
-  const [opdivs, setOpDivs] = React.useState<OpDiv[]>([])
+  const opdivs = allOpdivs.filter((o) => o.active)
   const isFormValid = (): boolean => {
     return Object.values(formValid).every((value) => value === true)
   }
@@ -120,23 +119,6 @@ export default function EditSystemModal({
       fismauid: TEXTFIELD_HELPER_TEXT,
       opdiv_id: TEXTFIELD_HELPER_TEXT,
     })
-  React.useEffect(() => {
-    if (!open) return
-    const controller = new AbortController()
-    fetchOpDivs(false, controller.signal)
-      .then(setOpDivs)
-      .catch((error) => {
-        // Ignore the abort fired by cleanup on close; surface real failures
-        // so an empty OpDiv list (which leaves Save stuck) isn't silent.
-        if (controller.signal.aborted || isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        notify(
-          parsed.message || 'Failed to load the OpDiv list. Please try again.',
-          'error'
-        )
-      })
-    return () => controller.abort()
-  }, [open])
 
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
