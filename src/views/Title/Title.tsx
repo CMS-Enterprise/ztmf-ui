@@ -12,13 +12,8 @@ import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
-import {
-  userData,
-  UserRole,
-  datacall,
-  DataCenterEnvironment,
-  OpDiv,
-} from '@/types'
+import { userData, datacall, DataCenterEnvironment, OpDiv } from '@/types'
+import { EMPTY_USER } from '@/constants'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
@@ -59,14 +54,6 @@ import { clearOtherUserDrafts } from '../QuestionnairePage/draftStore'
  * @returns {JSX.Element} Component that renders the dashboard contents.
  */
 
-const emptyUser: userData = {
-  userid: '',
-  email: '',
-  fullname: '',
-  role: '' as UserRole,
-  assignedfismasystems: [],
-}
-
 // Fixed text, not parseApiError: this fires from the shell on any page, so a
 // generic "something went wrong" would give the user nothing to act on.
 const OPDIVS_LOAD_ERROR =
@@ -77,7 +64,7 @@ export default function Title() {
   const loaderData = useLoaderData() as AuthLoaderData
   const [openDataCallModal, setOpenDataCallModal] = useState<boolean>(false)
   const userInfo: userData =
-    loaderData.status != 200 ? emptyUser : loaderData.response
+    loaderData.status != 200 ? EMPTY_USER : loaderData.response
   // Determine wether we are on the sign-in page or not
   const normalizedPath = location.pathname.toLowerCase().replace(/\/$/, '')
   const isSignInRoute = normalizedPath === Routes.SIGNIN.toLowerCase()

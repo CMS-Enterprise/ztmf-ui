@@ -41,8 +41,6 @@ export type UserRole =
   | 'ISSO'
   | 'ISSM'
   | 'SYSTEM_DELEGATE'
-  | 'ADMIN'
-  | 'READONLY_ADMIN'
 
 export type OpDiv = {
   opdiv_id: number
