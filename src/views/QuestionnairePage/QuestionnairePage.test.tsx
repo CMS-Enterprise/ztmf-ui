@@ -1413,28 +1413,7 @@ describe('carried-forward confirmation', () => {
 
   it('renders no carried-forward treatment on a closed data call', async () => {
     installScoreMocks([carried7006()])
-    const pastDeadline = '2001-01-01T00:00:00Z'
-    // OWNER stays writable past the deadline (isReadOnly false), isolating
-    // the open-call gate as the only thing hiding the treatment.
-    setMockCtx(
-      makeCtx({
-        latestDeadline: pastDeadline,
-        selectedDatacall: {
-          datacallid: 5,
-          datacall: 'FY2026 Q1',
-          datecreated: '',
-          deadline: pastDeadline,
-        },
-        datacalls: [
-          {
-            datacallid: 5,
-            datacall: 'FY2026 Q1',
-            datecreated: '',
-            deadline: pastDeadline,
-          },
-        ],
-      })
-    )
+    setMockCtx(makeCtx(closedCallCtx()))
 
     renderAt(DEEP_LINK)
 
@@ -1469,6 +1448,27 @@ describe('carried-forward confirmation', () => {
     expect(complete).toHaveAccessibleDescription(COMPLETE_HINT_MSG)
 
     await userEvent.hover(complete)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      COMPLETE_HINT_MSG
+    )
+    // The Tooltip's own wiring lands on the span wrapper CmsButton forces (it
+    // cannot hold a ref). aria-label there would be prohibited — a roleless
+    // element must not be named — so describeChild has to stay on.
+    expect(complete.parentElement).not.toHaveAttribute('aria-label')
+
+    await userEvent.unhover(complete)
+    await waitFor(() =>
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    )
+
+    // Keyboard users reach it too: the hint is not hover-only. MUI opens on
+    // focus only when the last input was a key, and it tracks that in
+    // module-level state (@mui/utils useIsFocusVisible) that any earlier
+    // mousedown in this file latches off — so model the real sequence, keydown
+    // then focus, rather than focusing alone.
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    act(() => complete.focus())
 
     expect(await screen.findByRole('tooltip')).toHaveTextContent(
       COMPLETE_HINT_MSG
@@ -1526,6 +1526,8 @@ describe('carried-forward confirmation', () => {
 
     expect(next).toHaveAccessibleDescription('')
     expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    // Suppressed means suppressed: no stray name on the wrapper either.
+    expect(next.parentElement).not.toHaveAttribute('aria-label')
   })
 
   it('omits the Complete explanation on a closed call, where it would misstate the behavior', async () => {

@@ -1924,8 +1924,10 @@ export default function QuestionnarePage() {
                       <ArrowIcon direction="left" />
                       {` Back`}
                     </CmsButton>
-                    {/* span: CmsButton cannot hold the Tooltip's ref. */}
-                    <Tooltip title={navHintMsg}>
+                    {/* span: CmsButton cannot hold the Tooltip's ref.
+                        describeChild: without it MUI puts aria-label on that
+                        span, which is prohibited on a roleless element. */}
+                    <Tooltip title={navHintMsg} describeChild>
                       <span>
                         <CmsButton
                           onClick={() => {
