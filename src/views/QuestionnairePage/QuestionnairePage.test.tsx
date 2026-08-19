@@ -9,6 +9,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
+import { COMPLETE_HINT_MSG, NEXT_HINT_MSG } from '@/constants'
 import type { userData } from '@/types'
 
 // Rendered-component coverage for three QuestionnairePage effect paths from
@@ -1156,6 +1157,23 @@ describe('carried-forward confirmation', () => {
   const HELPER_COPY =
     'Review the carried-forward answer and confirm it, or write a new justification, before continuing.'
 
+  // A past-deadline cycle. OWNER stays writable past the deadline, so this
+  // isolates the open-call gate from the read-only one.
+  const closedCallCtx = () => {
+    const deadline = '2001-01-01T00:00:00Z'
+    const call = {
+      datacallid: 5,
+      datacall: 'FY2026 Q1',
+      datecreated: '',
+      deadline,
+    }
+    return {
+      latestDeadline: deadline,
+      selectedDatacall: call,
+      datacalls: [call],
+    }
+  }
+
   // Serves a mutable scores list and, like the real backend, flips the
   // targeted row to done when the confirm endpoint is hit — so the refetch
   // after a confirm returns the confirmed row instead of resurrecting the
@@ -1431,6 +1449,98 @@ describe('carried-forward confirmation', () => {
         name: 'Confirm this answer is still accurate',
       })
     ).not.toBeInTheDocument()
+  })
+
+  it('explains what Complete does on the last question, and describes the button with it', async () => {
+    // ISSOs read "Complete" as "submit the whole questionnaire" and asked
+    // whether the last question can be saved on its own at all.
+    installScoreMocks([carried7006()])
+
+    renderAt(DEVICES_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    // A hint, not standing text: nothing is drawn on the page until asked for.
+    // (The sr-only copy backing aria-describedby is in the DOM but not
+    // rendered, which is why this asserts on the tooltip and not on the text.)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    // It describes the action rather than renaming it.
+    expect(complete).toHaveAccessibleName('Complete')
+    expect(complete).toHaveAccessibleDescription(COMPLETE_HINT_MSG)
+
+    await userEvent.hover(complete)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      COMPLETE_HINT_MSG
+    )
+  })
+
+  it('explains what Next does on a question that is not last', async () => {
+    installScoreMocks([carried7006()])
+
+    // 7006 (Identity) is the first of the two questions, so the button is Next.
+    renderAt(DEEP_LINK)
+
+    const next = await screen.findByRole('button', { name: /Next/ })
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    expect(next).toHaveAccessibleDescription(NEXT_HINT_MSG)
+
+    await userEvent.hover(next)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(NEXT_HINT_MSG)
+    // The two variants must not bleed into each other: Next makes no promise
+    // about a summary, which only Complete produces.
+    expect(screen.queryByText(COMPLETE_HINT_MSG)).not.toBeInTheDocument()
+  })
+
+  it('keeps the Next hint on a closed call, where Next still saves', async () => {
+    // Deliberately asymmetric with Complete below: the closed-call wrap-around
+    // only affects the last question, so Next's wording stays true. OWNER stays
+    // writable past the deadline, isolating the open-call gate from read-only.
+    installScoreMocks([carried7006()])
+    setMockCtx(makeCtx(closedCallCtx()))
+
+    renderAt(DEEP_LINK)
+
+    const next = await screen.findByRole('button', { name: /Next/ })
+    expect(next).toHaveAccessibleDescription(NEXT_HINT_MSG)
+  })
+
+  it('shows no navigation hint in a read-only session, which never saves', async () => {
+    installScoreMocks([carried7006()])
+    setMockCtx(
+      makeCtx({
+        userInfo: {
+          userid: 'u-2',
+          email: 'auditor@hhs.gov',
+          fullname: 'Read Only',
+          role: 'HHS_READONLY_ADMIN',
+        } as userData,
+      })
+    )
+
+    renderAt(DEEP_LINK)
+
+    const next = await screen.findByRole('button', { name: /Next/ })
+    await userEvent.hover(next)
+
+    expect(next).toHaveAccessibleDescription('')
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+  })
+
+  it('omits the Complete explanation on a closed call, where it would misstate the behavior', async () => {
+    // A past-deadline call keeps the old wrap-around to question 1 rather than
+    // saving and summarizing, so the sentence must not appear.
+    installScoreMocks([carried7006()])
+    setMockCtx(makeCtx(closedCallCtx()))
+
+    renderAt(DEVICES_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    await userEvent.hover(complete)
+
+    expect(screen.queryByText(COMPLETE_HINT_MSG)).not.toBeInTheDocument()
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
   it('Complete summarizes unconfirmed and unanswered questions with working jump links', async () => {
