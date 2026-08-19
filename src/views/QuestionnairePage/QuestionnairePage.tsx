@@ -1537,18 +1537,12 @@ export default function QuestionnarePage() {
             <List
               sx={{
                 width: '100%',
-                // maxWidth: 500,
                 bgcolor: 'background.paper',
                 position: 'relative',
-                overflow: 'auto',
+                overflowY: 'auto',
                 overflowX: 'hidden',
                 maxHeight: 'calc(100vh - 240px)',
                 '& ul': { padding: 0 },
-                msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
-                '&::-webkit-scrollbar': { display: 'none' },
-                '@supports (-moz-appearance:none)': {
-                  scrollbarWidth: 'none',
-                },
               }}
               subheader={<li />}
             >
