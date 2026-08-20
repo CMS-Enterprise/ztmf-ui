@@ -55,12 +55,14 @@ import { scoreSortValue } from './scoreHelpers'
 import { isSystemSelectable } from './rowSelection'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
-import { resolveRowCallId, datacallNameComparator } from './rowCall'
-import { fetchOpDivs } from '@/utils/opdivs'
+import {
+  resolveRowCallId,
+  resolveQuestionnaireCall,
+  datacallNameComparator,
+} from './rowCall'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { parseDatacallName } from '@/utils/datacallGrouping'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
-import type { OpDiv } from '@/types'
 import {
   applyDashboardFilters,
   hasNoActiveFilters,
@@ -538,6 +540,7 @@ export default function FismaTable({
     activeDatacallIds,
     userInfo,
     datacenterEnvironments,
+    opdivs,
   } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   // "Latest by deadline" is not the same as "still open". Once the newest
@@ -604,7 +607,6 @@ export default function FismaTable({
   const [filters, setFilters] = useState<DashboardFilterState>(
     EMPTY_DASHBOARD_FILTERS
   )
-  const [opdivs, setOpDivs] = useState<OpDiv[]>([])
   const navigate = useNavigate()
 
   // When a system has scores in more than one active call, the questionnaire
@@ -629,20 +631,6 @@ export default function FismaTable({
       },
     })
   }
-
-  // OpDiv list is only needed to label the OpDiv filter. Include inactive
-  // OpDivs so a system tied to a since-deactivated OpDiv still shows a name,
-  // not a bare id. Fetched once; failure is non-fatal.
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchOpDivs(true, controller.signal)
-      .then(setOpDivs)
-      .catch((error) => {
-        if (controller.signal.aborted) return
-        console.error('Fetch opdivs error:', error)
-      })
-    return () => controller.abort()
-  }, [])
 
   // Raw datacenterenvironment -> category label, from the vocabulary already in
   // context. Drives both the Environment filter options and row matching.
@@ -973,8 +961,14 @@ export default function FismaTable({
                     openQuestionnaire(
                       params.row.fismasystemid,
                       params.row.fismaacronym,
-                      rowCallObjs[0] ??
-                        datacalls.find((d) => d.datacallid === activeDataCallId)
+                      resolveQuestionnaireCall(
+                        params.row.fismasystemid,
+                        chosenCallMap,
+                        systemCallMap,
+                        datacalls,
+                        activeDataCallId,
+                        activeDatacallIds
+                      )
                     )
                   }}
                   color="inherit"

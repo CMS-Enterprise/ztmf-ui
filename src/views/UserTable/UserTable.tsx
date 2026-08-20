@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
@@ -22,6 +22,7 @@ import {
   GridRenderEditCellParams,
   GridRowEditStopReasons,
   GridToolbarQuickFilter,
+  GridFilterModel,
   useGridApiRef,
 } from '@mui/x-data-grid'
 import { Chip, FormControlLabel, Switch, Typography } from '@mui/material'
@@ -29,20 +30,24 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
-import { users, OpDiv, FismaSystemType } from '@/types'
+import { users, FismaSystemType } from '@/types'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead,
   hasUnscopedRead,
-  isOpDivTier,
   isUnscopedWriteAdmin,
   selectableRoles,
 } from '@/utils/userRoles'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import EditOpDivCell from './EditOpDivCell'
 import { isUserCellEditable } from './cellEditGuards'
+import {
+  buildOpDivCodeMap,
+  buildOpDivLabelMap,
+  buildAssignableOpDivs,
+  narrowToCallerScope,
+} from './opdivDerivations'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -54,6 +59,13 @@ import { useNavigate } from 'react-router-dom'
 import { Routes } from '@/router/constants'
 import { ERROR_MESSAGES, STATUS_MESSAGES } from '@/constants'
 import EditInputCell from './EditInputCell'
+import LastSeenCell from './LastSeenCell'
+import {
+  lastSeenSortComparator,
+  parseLastSeen,
+  hasNoActivityFilter,
+  withNoActivityFilter,
+} from './lastSeen'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 interface EditToolbarProps {
   setRows: (newRows: (oldRows: GridRowsProp) => GridRowsProp) => void
@@ -63,11 +75,20 @@ interface EditToolbarProps {
   isAdmin?: boolean
   showDeleted: boolean
   setShowDeleted: (value: boolean) => void
+  noActivityOnly: boolean
+  setNoActivityOnly: (value: boolean) => void
 }
 
 function EditToolbar(props: EditToolbarProps) {
-  const { setRows, setRowModesModel, isAdmin, showDeleted, setShowDeleted } =
-    props
+  const {
+    setRows,
+    setRowModesModel,
+    isAdmin,
+    showDeleted,
+    setShowDeleted,
+    noActivityOnly,
+    setNoActivityOnly,
+  } = props
   const addUserRow = () => {
     const userid = Math.floor(Math.random() * 1000) + 1
     setRows((oldRows) => [
@@ -106,6 +127,23 @@ function EditToolbar(props: EditToolbarProps) {
         <FormControlLabel
           control={
             <Switch
+              checked={noActivityOnly}
+              onChange={(e) => setNoActivityOnly(e.target.checked)}
+              sx={{
+                '& .MuiSwitch-switchBase.Mui-checked': {
+                  color: '#004297',
+                },
+                '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
+                  backgroundColor: '#004297',
+                },
+              }}
+            />
+          }
+          label="No Activity Only"
+        />
+        <FormControlLabel
+          control={
+            <Switch
               checked={showDeleted}
               onChange={(e) => setShowDeleted(e.target.checked)}
               sx={{
@@ -134,6 +172,17 @@ function EditToolbar(props: EditToolbarProps) {
     </GridToolbarContainer>
   )
 }
+// Placeholder row for the pre-selection state. The one place the empty-role
+// cast lives in this file; see EMPTY_USER in constants.ts for the userData
+// equivalent.
+const EMPTY_USER_ROW: users = {
+  userid: '',
+  email: '',
+  fullname: '',
+  role: '' as users['role'],
+  assignedfismasystems: [],
+}
+
 function validateEmail(email: string) {
   return /^[a-zA-Z0-9._:$!%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+$/.test(email)
 }
@@ -141,7 +190,7 @@ function validateEmail(email: string) {
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
-  const { userInfo } = useContextProp()
+  const { userInfo, opdivs } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
   // admins may view the table but every mutating control is withheld. The
   // backend is the security boundary - this only governs which controls render.
@@ -166,33 +215,40 @@ export default function UserTable() {
     'success' | 'error' | 'warning' | 'info'
   >('success')
   const [openModal, setOpenModal] = useState<boolean>(false)
-  const [selectedRow, setSelectedRow] = useState<users | undefined>({
-    userid: '',
-    email: '',
-    fullname: '',
-    role: '' as users['role'],
-    assignedfismasystems: [],
-  })
+  const [selectedRow, setSelectedRow] = useState<users | undefined>(
+    EMPTY_USER_ROW
+  )
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
+  // Controlled so the "No Activity Only" toolbar switch can inject/remove an
+  // isEmpty filter on last_seen while quick-filter text (which also lives in
+  // this model) keeps working. The switch state is DERIVED from the model, so
+  // removing the filter via the column filter panel un-checks the switch too.
+  // The toggle logic lives in lastSeen.ts (withNoActivityFilter) because the
+  // community grid's single-filter-item limit makes it subtle enough to pin
+  // with tests.
+  const [filterModel, setFilterModel] = useState<GridFilterModel>({ items: [] })
+  const noActivityOnly = hasNoActivityFilter(filterModel)
+  const setNoActivityOnly = (value: boolean) => {
+    setFilterModel((prev) => withNoActivityFilter(prev, value))
+  }
   const [pendingDeleteRow, setPendingDeleteRow] = useState<users | null>(null)
   const [pendingRestoreRow, setPendingRestoreRow] = useState<users | null>(null)
   const [assignModalUserName, setAssignModalUserName] = useState<string>('')
   const [openOpDivModal, setOpenOpDivModal] = useState<boolean>(false)
   const [opdivModalUserId, setOpDivModalUserId] = useState<GridRowId>('')
   const [opdivModalUserName, setOpDivModalUserName] = useState<string>('')
-  const [opdivOptions, setOpDivOptions] = useState<OpDiv[]>([])
-  // opdiv_id -> code, for rendering the OpDivs membership column.
-  const [opdivCodeMap, setOpDivCodeMap] = useState<Record<number, string>>({})
-  // opdiv_id -> { code, name }, a full label source (incl. parent/inactive) so
-  // the grant modal can label grants to non-assignable OpDivs, which are absent
-  // from its scoped options list.
-  const [opdivLabelMap, setOpDivLabelMap] = useState<
-    Record<number, { code: string; name: string }>
-  >({})
-  // All assignable OpDivs (active, non-parent), NOT narrowed to the caller's
-  // scope. The grant modal narrows this against the caller's fresh grants
-  // itself, so it isn't fed the session-old scope that opdivOptions carries.
-  const [allAssignableOpDivs, setAllAssignableOpDivs] = useState<OpDiv[]>([])
+  // Four views of the shared OpDiv list; see opdivDerivations.ts for what each
+  // one is for and who narrows what.
+  const opdivCodeMap = useMemo(() => buildOpDivCodeMap(opdivs), [opdivs])
+  const opdivLabelMap = useMemo(() => buildOpDivLabelMap(opdivs), [opdivs])
+  const allAssignableOpDivs = useMemo(
+    () => buildAssignableOpDivs(opdivs, isAdmin),
+    [opdivs, isAdmin]
+  )
+  const opdivOptions = useMemo(
+    () => narrowToCallerScope(allAssignableOpDivs, userInfo),
+    [allAssignableOpDivs, userInfo]
+  )
   // userid -> granted opdiv ids, used as a refresh override after the grant modal
   // closes. The list now returns grants inline (assignedopdivids); this map only
   // holds rows refreshed since load, plus a one-time backfill against older
@@ -569,49 +625,6 @@ export default function UserTable() {
     }
   }, [isAdmin])
 
-  // OpDiv options for the grant modal: assignable children only (the HHS
-  // parent row is not a grantable tenant). An OPDIV_ADMIN may only grant their
-  // own OpDivs, so narrow the option set to their own grants; the server
-  // enforces the same rule.
-  useEffect(() => {
-    if (!isAdmin) return
-    // Pull the full list (incl. inactive/parent) so any granted id resolves to
-    // a code in the OpDivs column; derive the assignable subset from the same
-    // response for the grant modal.
-    async function loadOpDivs() {
-      try {
-        const all = await fetchOpDivs(true)
-        const codeMap: Record<number, string> = {}
-        const labelMap: Record<number, { code: string; name: string }> = {}
-        all.forEach((od) => {
-          codeMap[od.opdiv_id] = od.code
-          labelMap[od.opdiv_id] = { code: od.code, name: od.name }
-        })
-        setOpDivCodeMap(codeMap)
-        setOpDivLabelMap(labelMap)
-
-        const activeNonParent = all.filter((od) => !od.is_parent && od.active)
-        setAllAssignableOpDivs(activeNonParent)
-
-        // opdivOptions stays caller-narrowed for the inline EditOpDivCell. The
-        // grant modal does NOT use this; it narrows the full set against the
-        // caller's fresh scope itself, so it isn't fed this session-old value.
-        let assignable = activeNonParent
-        if (isOpDivTier(userInfo)) {
-          const own = new Set(userInfo.assignedopdivids ?? [])
-          assignable = assignable.filter((od) => own.has(od.opdiv_id))
-        }
-        setOpDivOptions(assignable)
-      } catch {
-        // Non-fatal: the grant modal simply shows no options if this fails.
-        setOpDivOptions([])
-        setAllAssignableOpDivs([])
-        setOpDivCodeMap({})
-        setOpDivLabelMap({})
-      }
-    }
-    loadOpDivs()
-  }, [isAdmin, userInfo])
   const columns: GridColDef[] = [
     {
       field: 'fullname',
@@ -706,6 +719,22 @@ export default function UserTable() {
       // HHS-wide admins can set this on new rows; for existing rows the backend
       // derives it from OpDiv membership.
       renderCell: (params) => params.row.identity_provider || '—',
+    },
+    {
+      field: 'last_seen',
+      headerName: 'Last Seen',
+      flex: 0.75,
+      type: 'dateTime',
+      // valueGetter (not just renderCell) so sorting, the isEmpty filter
+      // operator, and the toolbar's No Activity switch all see a real
+      // Date-or-null instead of the raw ISO string.
+      valueGetter: (params) => parseLastSeen(params.row.last_seen),
+      // Direction-aware so never-active rows sort last under BOTH asc and
+      // desc; see compareLastSeen for how it pre-compensates the grid's
+      // negation on desc, and lastSeenSortComparator for the live-direction
+      // read (and the TODO for the v7 getSortComparator migration).
+      sortComparator: lastSeenSortComparator,
+      renderCell: (params) => <LastSeenCell value={params.value ?? null} />,
     },
     {
       field: 'actions',
@@ -861,6 +890,8 @@ export default function UserTable() {
               sortModel: [{ field: 'role', sort: 'asc' }],
             },
           }}
+          filterModel={filterModel}
+          onFilterModelChange={setFilterModel}
           rowModesModel={rowModesModel}
           onRowModesModelChange={handleRowModesModelChange}
           onProcessRowUpdateError={handleProcessRowUpdateError}
@@ -876,6 +907,8 @@ export default function UserTable() {
               isAdmin,
               showDeleted,
               setShowDeleted,
+              noActivityOnly,
+              setNoActivityOnly,
             },
             filterPanel: {
               sx: {

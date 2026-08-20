@@ -33,8 +33,6 @@ import Tooltip from '@mui/material/Tooltip'
 import { MAX_QUESTIONNAIRE_NOTES_LENGTH, STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
-import { filterPillarsForSystem } from '@/utils/filterPillarsForSystem'
-import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { sortFunctions } from '@/utils/sortFunctions'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
@@ -76,14 +74,7 @@ export default function QuestionnareModal({
   onClose,
   system,
 }: SystemDetailsModalProps) {
-  const { userInfo, datacenterEnvironments } = useContextProp()
-  // Resolve the system's raw datacenter environment to its scoring category
-  // for pillar filtering; fall back to the raw value until the vocabulary
-  // loads or for any unmapped value.
-  const systemCategory =
-    toCategoryMap(datacenterEnvironments)[
-      system?.datacenterenvironment ?? ''
-    ] ?? system?.datacenterenvironment
+  const { userInfo } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
@@ -283,7 +274,7 @@ export default function QuestionnareModal({
           }
 
           const questionsRes = await axiosInstance.get(
-            `/fismasystems/${system.fismasystemid}/questions`,
+            `/fismasystems/${system.fismasystemid}/questions?datacallid=${latestDataCallId}`,
             { signal: controller.signal }
           )
           const data = questionsRes.data.data
@@ -294,10 +285,9 @@ export default function QuestionnareModal({
             }
             organizedData[question.pillar.pillar].push(question)
           })
-          const sortedPillars = filterPillarsForSystem(
-            sortPillars(Object.keys(organizedData)),
-            systemCategory
-          )
+          // The API applied the reduced-pillar rule for the cycle requested
+          // above (ztmf#545).
+          const sortedPillars = sortPillars(Object.keys(organizedData))
           const categoriesData: Category[] = sortedPillars.map((pillar) => ({
             name: pillar,
             steps: sortFunctions(pillar, organizedData[pillar]),
@@ -327,7 +317,7 @@ export default function QuestionnareModal({
       fetchData()
       return () => controller.abort()
     }
-  }, [open, system, systemCategory])
+  }, [open, system])
   React.useEffect(() => {
     if (questionId) {
       const controller = new AbortController()

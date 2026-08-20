@@ -58,11 +58,6 @@ stats.*
 !.yarn/sdks
 !.yarn/versions
 
-
-.storybook/main.ts
-.storybook/preview.tsx
-.storybook/README.md
-
 src/__generated__/**
 
 public/build/p-*

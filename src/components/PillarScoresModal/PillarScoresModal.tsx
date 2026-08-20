@@ -38,6 +38,7 @@ import { tierStyle, TIERS } from '@/utils/tierStyles'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { parseDatacallName } from '@/utils/datacallGrouping'
 import { useContextProp } from '@/views/Title/Context'
+import { buildRadarData, findComparisonPillarScore } from './radarData'
 
 interface PillarScoresModalProps {
   open: boolean
@@ -148,19 +149,13 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
     (comparisonScoreEntry?.pillarscores?.length ?? 0) > 0
 
   // Prepare radar chart data
-  const radarData = useMemo(() => {
-    if (!hasValidData || !latestScore?.pillarscores) return []
-    return latestScore.pillarscores.map((pillar) => {
-      const comparisonPillarScore = comparisonScoreEntry?.pillarscores?.find(
-        (p) => p.pillarid === pillar.pillarid
-      )?.score
-      return {
-        pillar: pillar.pillar,
-        current: pillar.score ?? 0,
-        previous: comparisonPillarScore ?? 0,
-      }
-    })
-  }, [hasValidData, latestScore, comparisonScoreEntry])
+  const radarData = useMemo(
+    () =>
+      hasValidData
+        ? buildRadarData(latestScore?.pillarscores, comparisonScoreEntry)
+        : [],
+    [hasValidData, latestScore, comparisonScoreEntry]
+  )
 
   // Focus management for accessibility
   useEffect(() => {
@@ -492,12 +487,15 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
             >
               Pillar Scores - {currentDatacallName}
             </Typography>
-            <Grid container spacing={2}>
+            {/* Centered because the row is no longer always full: a reduced-scope
+                system carries four pillars, not six (ztmf#545), and md={2} tiles
+                would otherwise leave a two-tile gap on the right. */}
+            <Grid container spacing={2} justifyContent="center">
               {(latestScore.pillarscores ?? []).map((pillar) => {
-                const previousPillarScore =
-                  comparisonScoreEntry?.pillarscores?.find(
-                    (p) => p.pillarid === pillar.pillarid
-                  )?.score
+                const previousPillarScore = findComparisonPillarScore(
+                  comparisonScoreEntry,
+                  pillar.pillarid
+                )
 
                 const currentScore = pillar.score ?? 0
                 const trendInfo = getTrendInfo(
@@ -844,10 +842,10 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                       </TableHead>
                       <TableBody>
                         {latestScore?.pillarscores?.map((pillar) => {
-                          const previousPillarScore =
-                            comparisonScoreEntry?.pillarscores?.find(
-                              (p) => p.pillarid === pillar.pillarid
-                            )?.score
+                          const previousPillarScore = findComparisonPillarScore(
+                            comparisonScoreEntry,
+                            pillar.pillarid
+                          )
 
                           const currentScore = pillar.score ?? 0
                           const prevScore = previousPillarScore ?? 0
