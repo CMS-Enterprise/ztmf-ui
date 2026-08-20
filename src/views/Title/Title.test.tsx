@@ -30,6 +30,13 @@ jest.mock('@/utils/dataCenterEnvironments', () => ({
   fetchDataCenterEnvironments: jest.fn(),
 }))
 
+// Without this the axios stub above returns undefined from get(), so every test
+// here would silently run Title's OpDiv error path.
+jest.mock('@/utils/opdivs', () => ({
+  __esModule: true,
+  fetchOpDivs: jest.fn(),
+}))
+
 jest.mock('@/views/QuestionnairePage/draftStore', () => ({
   __esModule: true,
   clearOtherUserDrafts: jest.fn(),
@@ -91,6 +98,7 @@ jest.mock('@/assets/ztmf-logo-color.png', () => 'ztmf-logo-color.png', {
 import { useLoaderData, useLocation } from 'react-router-dom'
 import axiosInstance from '@/axiosConfig'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
 import { notify } from '@/utils/notify'
 import { broadcastLogout } from '@/utils/sessionSync'
@@ -101,6 +109,7 @@ const mockedUseLocation = useLocation as jest.Mock
 const mockedGet = axiosInstance.get as jest.Mock
 const mockedPost = axiosInstance.post as jest.Mock
 const mockedFetchEnvs = fetchDataCenterEnvironments as jest.Mock
+const mockedFetchOpDivs = fetchOpDivs as jest.Mock
 const mockedClearDrafts = clearOtherUserDrafts as jest.Mock
 const mockedNotify = notify as jest.Mock
 const mockedBroadcastLogout = broadcastLogout as jest.Mock
@@ -133,6 +142,7 @@ beforeEach(() => {
   mockedGet.mockResolvedValue({ data: { data: [] } })
   mockedPost.mockResolvedValue({ status: 204 })
   mockedFetchEnvs.mockResolvedValue([])
+  mockedFetchOpDivs.mockResolvedValue([])
   mockedClearDrafts.mockResolvedValue(undefined)
   // jsdom forbids assigning window.location.hash / calling reload on the real
   // object; swap in a writable stub so the logout redirect is observable.

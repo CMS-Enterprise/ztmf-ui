@@ -112,6 +112,8 @@ function makeCtx(role: userData['role'] | undefined) {
     setShowDecommissioned: jest.fn(),
     fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
+    opdivs: [],
+    opdivsLoaded: true,
   }
 }
 
