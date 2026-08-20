@@ -5,7 +5,7 @@ export type QuestionDraft = {
 
 // Shape written to localStorage — callers only see QuestionDraft.
 type StoredDraft = {
-  v: number // format version — entries with a mismatched version are evicted
+  v: number // format version — entries with a mismatched version are ignored, not deleted
   iv: string
   ciphertext: string
   savedAt: number
@@ -19,6 +19,8 @@ const DRAFT_PREFIX = 'ztmf_draft_'
 // Non-extractable keys cannot be exported via JS API — an attacker needs a
 // live browser session, not just a disk dump of the profile directory.
 const DB_NAME = 'ztmf-draft-keys'
+// Bumping this strands existing keys, which makes stored drafts undecryptable —
+// loadDraft declines rather than deletes them, so a roll-forward recovers them.
 const DB_VERSION = 1
 const KEY_STORE = 'keys'
 
@@ -50,9 +52,18 @@ export function __setHashedIdForTesting(userid: string, hash: string): void {
 function openKeyDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
+    // Create the store only when absent: on a DB_VERSION bump the upgrade fires
+    // against a database that already has it, and an unconditional
+    // createObjectStore would throw ConstraintError and abort the open.
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(KEY_STORE)
+      const db = req.result
+      if (!db.objectStoreNames.contains(KEY_STORE)) {
+        db.createObjectStore(KEY_STORE)
+      }
     }
+    // An upgrade blocked by another tab's open connection fires neither success
+    // nor error — reject so callers aren't left pending forever.
+    req.onblocked = () => reject(new Error('key store upgrade blocked'))
     req.onsuccess = () => resolve(req.result)
     req.onerror = () => reject(req.error)
   })
@@ -234,16 +245,27 @@ export const loadDraft = async (
     )
     if (!raw) return null
     const stored = JSON.parse(raw) as StoredDraft
-    // Evict entries from a different format version before any other checks.
-    if (stored.v !== DRAFT_VERSION) {
-      await clearDraft(userid, fismasystemid, functionid, datacallid)
-      return null
-    }
+    // TTL is checked before the version so an entry stranded by a version change
+    // is still reaped once it expires.
     if (!stored.savedAt || Date.now() - stored.savedAt > DRAFT_TTL_MS) {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
       return null
     }
-    const key = await getOrCreateDeviceKey(userid)
+    // Decline entries from a different format version, but leave them in place:
+    // deleting would make a DRAFT_VERSION bump — or a rollback past one, since
+    // this compares !== not < — destroy in-progress drafts irrecoverably. Rolling
+    // forward again makes the entry usable, and the TTL above reaps it otherwise.
+    if (stored.v !== DRAFT_VERSION) return null
+    // Key resolution is exempt from the eviction below: a key store we cannot
+    // reach (DB_VERSION change, a rollback past one, private browsing, storage
+    // pressure) says nothing about the stored entry, and a later load may well
+    // read it. Deleting on a transient failure is how drafts get lost.
+    let key: CryptoKey
+    try {
+      key = await getOrCreateDeviceKey(userid)
+    } catch {
+      return null
+    }
     const draft = await decryptDraft(key, stored.iv, stored.ciphertext)
     // Runtime shape guard — evict and ignore if the decrypted payload doesn't
     // match the expected structure (format migration, bit-flip, schema change).
@@ -256,8 +278,10 @@ export const loadDraft = async (
     }
     return draft
   } catch {
-    // Evict the corrupt entry so it isn't retried on every question load
-    // for the remaining TTL. Ignore secondary storage failures.
+    // Reached only for an entry that is itself unreadable — unparseable JSON, or
+    // ciphertext that won't decrypt under a key we did resolve. Evict so it isn't
+    // retried on every question load for the remaining TTL. Ignore secondary
+    // storage failures.
     try {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
     } catch {

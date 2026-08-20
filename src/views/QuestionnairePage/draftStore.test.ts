@@ -329,7 +329,7 @@ describe('loadDraft', () => {
     expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
   })
 
-  it('returns null and evicts when the version field is wrong', async () => {
+  it('returns null but keeps the entry when the version field is wrong', async () => {
     await saveDraft(
       USER,
       IDS.fismasystemid,
@@ -338,15 +338,16 @@ describe('loadDraft', () => {
       DRAFT
     )
     const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
-    localStorage.setItem(EXPECTED_KEY, JSON.stringify({ ...raw, v: 99 }))
+    const mismatched = JSON.stringify({ ...raw, v: 99 })
+    localStorage.setItem(EXPECTED_KEY, mismatched)
 
     expect(
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).toBeNull()
-    expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(mismatched)
   })
 
-  it('returns null and evicts when the version field is missing', async () => {
+  it('returns null but keeps the entry when the version field is missing', async () => {
     await saveDraft(
       USER,
       IDS.fismasystemid,
@@ -357,7 +358,57 @@ describe('loadDraft', () => {
     const { v: _, ...withoutV } = JSON.parse(
       localStorage.getItem(EXPECTED_KEY)!
     )
-    localStorage.setItem(EXPECTED_KEY, JSON.stringify(withoutV))
+    const withoutVRaw = JSON.stringify(withoutV)
+    localStorage.setItem(EXPECTED_KEY, withoutVRaw)
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(withoutVRaw)
+  })
+
+  // A draft written by a newer DRAFT_VERSION must survive a rollback to older
+  // code and become readable again once the newer version is redeployed.
+  it('recovers a version-mismatched draft when the version matches again', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+
+    // Rolled-back code sees a version it doesn't recognise and declines it.
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: DRAFT_VERSION + 1 })
+    )
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+
+    // Rolling forward again: the untouched entry is readable.
+    localStorage.setItem(EXPECTED_KEY, JSON.stringify(raw))
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toEqual(DRAFT)
+  })
+
+  it('evicts an expired entry even when the version does not match', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: 99, savedAt: 1000 })
+    )
+    jest.spyOn(Date, 'now').mockReturnValue(1000 + FOURTEEN_DAYS_MS + 1)
 
     expect(
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
@@ -542,6 +593,7 @@ function installMemoryIndexedDB(): () => void {
     }
   }
   const db = {
+    objectStoreNames: { contains: (name: string) => stores.has(name) },
     createObjectStore: (name: string) => storeFor(name),
     transaction: (name: string) => ({ objectStore: () => storeFor(name) }),
     close: () => {},
@@ -632,5 +684,153 @@ describe('device key persistence (IndexedDB)', () => {
     // Reload: cache cleared, the key read back from IndexedDB must decrypt.
     __resetKeyCache()
     await expect(loadDraft(IDB_USER, SYS, 1, DC)).resolves.toEqual(DRAFT)
+  })
+})
+
+// The stand-in above models a healthy key store. These model the ways a
+// DB_VERSION change breaks it: an open that errors (the store already holds the
+// object store, or the running code asks for a lower version than is on disk)
+// and an upgrade another tab blocks. None of them may delete a stored draft —
+// the key being unreachable says nothing about whether the draft is good.
+type OpenRequest = {
+  result?: unknown
+  error?: DOMException | null
+  onsuccess?: () => void
+  onerror?: () => void
+  onupgradeneeded?: () => void
+  onblocked?: () => void
+}
+
+function installOpen(behave: (req: OpenRequest) => void): () => void {
+  const holder = globalThis as { indexedDB?: unknown }
+  const original = holder.indexedDB
+  holder.indexedDB = {
+    open() {
+      const req: OpenRequest = {}
+      queueMicrotask(() => behave(req))
+      return req
+    },
+  } as unknown as IDBFactory
+  return () => {
+    holder.indexedDB = original
+  }
+}
+
+describe('key store failures (IndexedDB)', () => {
+  let restore: (() => void) | undefined
+
+  afterEach(() => {
+    restore?.()
+    restore = undefined
+  })
+
+  // Writes a draft with a seeded key, then drops the key cache so the next read
+  // has to resolve the key through IndexedDB. The hash is re-seeded because
+  // __resetKeyCache clears it too, and it must stay stable for EXPECTED_KEY.
+  async function saveThenForgetKey(): Promise<string> {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = localStorage.getItem(EXPECTED_KEY)!
+    __resetKeyCache()
+    __setHashedIdForTesting(USER, H_USER)
+    return raw
+  }
+
+  it('declines but preserves the draft when the key store fails to open', async () => {
+    const raw = await saveThenForgetKey()
+    restore = installOpen((req) => {
+      req.error = new DOMException('VersionError')
+      req.onerror?.()
+    })
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+  })
+
+  it('declines but preserves the draft when the upgrade is blocked', async () => {
+    const raw = await saveThenForgetKey()
+    // A blocked upgrade fires neither success nor error; without the onblocked
+    // rejection this load never settles and the test times out.
+    restore = installOpen((req) => {
+      req.onblocked?.()
+    })
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+  })
+
+  it('reports a failed save without touching the stored draft', async () => {
+    const raw = await saveThenForgetKey()
+    restore = installOpen((req) => {
+      req.error = new DOMException('VersionError')
+      req.onerror?.()
+    })
+
+    expect(
+      await saveDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid, {
+        selectQuestionOption: 9,
+        notes: 'newer text',
+      })
+    ).toBe(false)
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+  })
+
+  it('leaves an existing object store alone during an upgrade', async () => {
+    // What a DB_VERSION bump hits: the upgrade fires against a database that
+    // already has the store, so createObjectStore must not be called.
+    await saveThenForgetKey()
+    const data = new Map<IDBValidKey, unknown>()
+    const store = {
+      get(key: IDBValidKey) {
+        const req: FakeRequest = {}
+        queueMicrotask(() => {
+          req.result = data.get(key)
+          req.onsuccess?.({ target: req })
+        })
+        return req
+      },
+      put(value: unknown, key: IDBValidKey) {
+        data.set(key, value)
+        const req: FakeRequest = {}
+        queueMicrotask(() => {
+          req.result = key
+          req.onsuccess?.({ target: req })
+        })
+        return req
+      },
+    }
+    const createObjectStore = jest.fn(() => {
+      throw new DOMException('ConstraintError')
+    })
+    restore = installOpen((req) => {
+      req.result = {
+        objectStoreNames: { contains: () => true },
+        createObjectStore,
+        transaction: () => ({ objectStore: () => store }),
+        close: () => {},
+      }
+      req.onupgradeneeded?.()
+      req.onsuccess?.()
+    })
+
+    expect(
+      await saveDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid,
+        DRAFT
+      )
+    ).toBe(true)
+    expect(createObjectStore).not.toHaveBeenCalled()
   })
 })
