@@ -117,6 +117,17 @@ install-frostfall:
 	@echo "frostfall $(FROSTFALL_VERSION) installed to $(FROSTFALL_BIN_DIR)/frostfall (sha256 verified)"
 	@case ":$$PATH:" in *":$(FROSTFALL_BIN_DIR):"*) ;; *) echo "NOTE: $(FROSTFALL_BIN_DIR) is not on your PATH. Add it: export PATH=\"$(FROSTFALL_BIN_DIR):$$PATH\"" ;; esac
 
+# Probe 5173-5177 for the vite dev server SPECIFICALLY - some other app parked
+# on one of these ports would otherwise get scanned silently. Vite always
+# injects /@vite/client into the served index, so match on that.
+FROSTFALL_DETECT_PORT = PORT=""; for p in 5173 5174 5175 5176 5177; do \
+		curl -s http://localhost:$$p/ | grep -q "/@vite/client" && { PORT=$$p; break; }; done; \
+	if [ -z "$$PORT" ]; then \
+		echo "No vite dev server answering on 5173-5177."; \
+		echo "Start the stack first: 'make dev-up' and 'make frontend-env' in ../ztmf, then 'yarn dev' here."; \
+		exit 1; fi; \
+	echo "Scanning http://localhost:$$PORT ..."
+
 # Developer self-check against whatever dev stack is already running. Scans dev
 # data, which is fine: every test in .frostfall.yml is data-agnostic. Baselines
 # are NOT taken from this target - use frostfall-ci for anything reproducible.
@@ -126,26 +137,14 @@ install-frostfall:
 frostfall:
 	@if ! command -v frostfall >/dev/null 2>&1; then \
 		echo "frostfall not installed. Run: make install-frostfall"; exit 1; fi
-	@PORT=""; for p in 5173 5174 5175 5176 5177; do \
-		curl -s -o /dev/null http://localhost:$$p && { PORT=$$p; break; }; done; \
-	if [ -z "$$PORT" ]; then \
-		echo "No dev server answering on 5173-5177."; \
-		echo "Start the stack first: 'make dev-up' and 'make frontend-env' in ../ztmf, then 'yarn dev' here."; \
-		exit 1; fi; \
-	echo "Scanning http://localhost:$$PORT ..."; \
+	@$(FROSTFALL_DETECT_PORT); \
 	frostfall --screenshots --base-url http://localhost:$$PORT
 	@echo "Done. Screenshots and per-test artifacts: ./frostfall-artifacts/"
 
 frostfall-report:
 	@if ! command -v frostfall >/dev/null 2>&1; then \
 		echo "frostfall not installed. Run: make install-frostfall"; exit 1; fi
-	@PORT=""; for p in 5173 5174 5175 5176 5177; do \
-		curl -s -o /dev/null http://localhost:$$p && { PORT=$$p; break; }; done; \
-	if [ -z "$$PORT" ]; then \
-		echo "No dev server answering on 5173-5177."; \
-		echo "Start the stack first: 'make dev-up' and 'make frontend-env' in ../ztmf, then 'yarn dev' here."; \
-		exit 1; fi; \
-	echo "Scanning http://localhost:$$PORT ..."; \
+	@$(FROSTFALL_DETECT_PORT); \
 	frostfall --screenshots --format html --base-url http://localhost:$$PORT
 	@echo "Report: ./frostfall-report.html"
 
@@ -156,6 +155,10 @@ frostfall-report:
 frostfall-ci:
 	@if ! command -v frostfall >/dev/null 2>&1; then \
 		echo "frostfall not installed. Run: make install-frostfall"; exit 1; fi
+	@if [ ! -f $(COMPOSE_TEST) ]; then \
+		echo "Backend repo not found ($(COMPOSE_TEST) missing)."; \
+		echo "Clone CMS-Enterprise/ztmf as a sibling of this repo."; \
+		exit 1; fi
 	@if curl -s -o /dev/null http://localhost:5174; then \
 		echo "Port 5174 is already in use (dev server running?). Stop it first:"; \
 		echo "the isolated scan must not attach to a dev-data server."; \
@@ -187,7 +190,7 @@ frostfall-ci:
 		echo "Waiting for vite on :5174..."; \
 		for i in $$(seq 1 60); do \
 			curl -s -o /dev/null http://localhost:5174 && break; \
-			[ "$$i" = 60 ] && { echo "vite never came up on :5174 (see /tmp/frostfall-vite.log)"; exit 1; }; \
+			[ "$$i" = 60 ] && { echo "vite never came up on :5174:"; cat /tmp/frostfall-vite.log || true; exit 1; }; \
 			sleep 1; \
 		done; \
 		frostfall --screenshots --format html "$$@"; \

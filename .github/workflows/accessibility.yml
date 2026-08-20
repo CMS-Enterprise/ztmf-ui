@@ -22,6 +22,9 @@ jobs:
 
       # The isolated stack (compose-test.yml + Empire seed) lives in the
       # backend repo; the Makefile reaches it at ../ztmf, same as local runs.
+      # Deliberately unpinned (tracks main): the stack and seed are meant to
+      # evolve with the backend, and this job is informational, so a breaking
+      # backend change showing up here is signal, not flake.
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
           repository: CMS-Enterprise/ztmf
