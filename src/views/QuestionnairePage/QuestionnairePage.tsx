@@ -14,6 +14,8 @@ import Grid from '@mui/material/Grid'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
+import { visuallyHidden } from '@mui/utils'
 import {
   FismaQuestion,
   FismaSystemType,
@@ -37,6 +39,8 @@ import {
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   CONFIRMATION_MESSAGE_QUESTION,
   NOTES_UPDATE_REQUIRED_MSG,
+  COMPLETE_HINT_MSG,
+  NEXT_HINT_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { sortPillars } from '@/utils/sortPillars'
@@ -116,6 +120,10 @@ const CssTextField = styled(TextField)({
 // Ties the carried-forward guidance line to the Confirm button it explains, so
 // a screen reader hears the reason with the action.
 const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
+// Ties the forward button's hint (Next or Complete) to the button as a
+// description, so keyboard and screen-reader users get it on focus rather than
+// on hover only.
+const NAV_HINT_ID = 'questionnaire-nav-hint'
 
 const addSpace = (str: string) => {
   for (let i = 0; i < str.length; i++) {
@@ -1488,6 +1496,22 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
+  // Hoisted so the button's label, its click handler, and the helper sentence
+  // below cannot disagree about which question is last.
+  const isLastQuestion =
+    selectedIndex === stepFunctionId[stepFunctionId.length - 1]
+  // The forward button's hint, empty wherever it would misstate the behavior.
+  // A read-only session never saves, so neither variant applies. Complete's
+  // wording holds only on an open call — a closed call keeps the old wrap-around
+  // to question 1 instead of saving and summarizing. Next is unconditional
+  // because it behaves the same on open and closed calls.
+  const navHintMsg = isReadOnly
+    ? ''
+    : !isLastQuestion
+      ? NEXT_HINT_MSG
+      : isOpenCall
+        ? COMPLETE_HINT_MSG
+        : ''
   // The data call both header modals present as "current". Prefer the call this
   // questionnaire actually resolved (datacallID covers every entry path,
   // including URL deep links where no route state exists); fall back to the
@@ -1894,62 +1918,77 @@ export default function QuestionnarePage() {
                       <ArrowIcon direction="left" />
                       {` Back`}
                     </CmsButton>
-                    <CmsButton
-                      onClick={() => {
-                        const isLastQuestion =
-                          selectedIndex ===
-                          stepFunctionId[stepFunctionId.length - 1]
-                        // Complete on the open call summarizes instead of
-                        // silently wrapping to question 1. A closed call
-                        // keeps the wrap-around — harmless paging for a
-                        // historical viewer.
-                        if (isLastQuestion && isOpenCall) {
-                          void handleCompleteClick()
-                          return
-                        }
-                        saveGenRef.current++
-                        const id = isLastQuestion
-                          ? stepFunctionId[0]
-                          : stepFunctionId[functionIdIdx[selectedIndex] + 1]
-
-                        if (questions[id]) {
-                          const q = questions[id]
-                          navigate(
-                            `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
-                            {
-                              state: {
-                                fismasystemid: system,
-                                ...datacallStateRef.current,
-                              },
-                              replace: true,
+                    {/* span: CmsButton cannot hold the Tooltip's ref.
+                        describeChild: without it MUI puts aria-label on that
+                        span, which is prohibited on a roleless element. */}
+                    <Tooltip title={navHintMsg} describeChild>
+                      <span>
+                        <CmsButton
+                          onClick={() => {
+                            // Complete on the open call summarizes instead of
+                            // silently wrapping to question 1. A closed call
+                            // keeps the wrap-around — harmless paging for a
+                            // historical viewer.
+                            if (isLastQuestion && isOpenCall) {
+                              void handleCompleteClick()
+                              return
                             }
-                          )
-                        }
-                        if (id !== questionId) setLoadingQuestion(true)
-                        setQuestionId(id)
-                        setSelectedIndex(id)
-                        if (!isReadOnly) {
-                          saveResponse()
-                        }
-                      }}
-                      disabled={
-                        needsNotesUpdate ||
-                        insightsPending ||
-                        priorReviewState === 'pending' ||
-                        priorReviewState === 'initializing'
-                      }
-                      style={{ marginBottom: '8px', marginTop: '8px' }}
-                    >
-                      {selectedIndex ===
-                      stepFunctionId[stepFunctionId.length - 1] ? (
-                        <Typography>Complete</Typography>
-                      ) : (
-                        <Typography>
-                          Next <ArrowIcon direction="right" />
-                        </Typography>
-                      )}
-                      {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
-                    </CmsButton>
+                            saveGenRef.current++
+                            const id = isLastQuestion
+                              ? stepFunctionId[0]
+                              : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+
+                            if (questions[id]) {
+                              const q = questions[id]
+                              navigate(
+                                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                                {
+                                  state: {
+                                    fismasystemid: system,
+                                    ...datacallStateRef.current,
+                                  },
+                                  replace: true,
+                                }
+                              )
+                            }
+                            if (id !== questionId) setLoadingQuestion(true)
+                            setQuestionId(id)
+                            setSelectedIndex(id)
+                            if (!isReadOnly) {
+                              saveResponse()
+                            }
+                          }}
+                          disabled={
+                            needsNotesUpdate ||
+                            insightsPending ||
+                            priorReviewState === 'pending' ||
+                            priorReviewState === 'initializing'
+                          }
+                          aria-describedby={
+                            navHintMsg ? NAV_HINT_ID : undefined
+                          }
+                          style={{ marginBottom: '8px', marginTop: '8px' }}
+                        >
+                          {isLastQuestion ? (
+                            <Typography>Complete</Typography>
+                          ) : (
+                            <Typography>
+                              Next <ArrowIcon direction="right" />
+                            </Typography>
+                          )}
+                          {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
+                        </CmsButton>
+                        {!!navHintMsg && (
+                          <Box
+                            component="span"
+                            id={NAV_HINT_ID}
+                            sx={visuallyHidden}
+                          >
+                            {navHintMsg}
+                          </Box>
+                        )}
+                      </span>
+                    </Tooltip>
                   </Box>
                   {draftStatus !== 'idle' && !isReadOnly && (
                     <Alert
