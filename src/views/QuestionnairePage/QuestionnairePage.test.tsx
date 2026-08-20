@@ -53,12 +53,16 @@ const clearDraftMock = jest
 const loadDraftMock = jest
   .fn<Promise<null>, unknown[]>()
   .mockResolvedValue(null)
+const hasDeclinedDraftMock = jest
+  .fn<Promise<boolean>, unknown[]>()
+  .mockResolvedValue(false)
 
 jest.mock('./draftStore', () => ({
   saveDraft: (...args: unknown[]) =>
     saveDraftMock(...(args as Parameters<typeof saveDraftMock>)),
   loadDraft: (...args: unknown[]) => loadDraftMock(...args),
   clearDraft: (...args: unknown[]) => clearDraftMock(...args),
+  hasDeclinedDraft: (...args: unknown[]) => hasDeclinedDraftMock(...args),
 }))
 
 const notifyMock = jest.fn()
@@ -336,6 +340,57 @@ test('read-only session evicts the current-question draft on mount', async () =>
 
 const viewPings = () =>
   axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'events/view')
+
+// #683: loadDraft declines an entry written by a newer DRAFT_VERSION instead of
+// deleting it, so a rollback doesn't destroy in-progress drafts. That only holds
+// if the page also leaves it alone. The no-edits branch of the debounce effect
+// clears whenever the on-screen values match the server ones, which is exactly
+// the state a declined load leaves behind — so without the declined guard,
+// merely opening the question deletes what the store preserved.
+test('does not clear a draft the store declined to read', async () => {
+  loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(true)
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // Wait for the question to settle, so the debounce effect has run its
+  // no-edits branch — the point at which the unguarded code called clearDraft.
+  await waitFor(() => expect(loadDraftMock).toHaveBeenCalled())
+  await waitFor(() => expect(hasDeclinedDraftMock).toHaveBeenCalled())
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(clearDraftMock).not.toHaveBeenCalled()
+})
+
+test('clears a draft-free question as before, when nothing was declined', async () => {
+  loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(false)
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // The counterpart to the test above: the pre-existing cleanup must survive,
+  // or the guard would just be suppressing it for everyone.
+  await waitFor(() =>
+    expect(clearDraftMock).toHaveBeenCalledWith('u-1', 1002, 7006, 5)
+  )
+})
 
 test('records an events/view ping with the DB questionid when a question opens', async () => {
   axios.get.mockImplementation((url: string) => {

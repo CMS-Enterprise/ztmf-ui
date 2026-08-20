@@ -6,6 +6,7 @@ import {
   __resetKeyCache,
   __setKeyForTesting,
   __setHashedIdForTesting,
+  hasDeclinedDraft,
   QuestionDraft,
   DRAFT_VERSION,
 } from './draftStore'
@@ -183,6 +184,59 @@ describe('saveDraft', () => {
     expect(typeof savedAt).toBe('number')
     expect(savedAt).toBeGreaterThanOrEqual(before)
     expect(savedAt).toBeLessThanOrEqual(after)
+  })
+
+  // After a rollback the running build declines to read a newer entry. If it
+  // then overwrote that entry on the next keystroke, declining would have bought
+  // nothing — the newer draft would be gone anyway.
+  it('refuses to overwrite an entry from a newer format version', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    const newer = JSON.stringify({ ...raw, v: DRAFT_VERSION + 1 })
+    localStorage.setItem(EXPECTED_KEY, newer)
+
+    expect(
+      await saveDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid, {
+        selectQuestionOption: 9,
+        notes: 'typed after the rollback',
+      })
+    ).toBe(false)
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(newer)
+  })
+
+  it('overwrites an entry from an older format version', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: DRAFT_VERSION - 1 })
+    )
+    const newDraft = { selectQuestionOption: 3, notes: 'current build' }
+
+    expect(
+      await saveDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid,
+        newDraft
+      )
+    ).toBe(true)
+    await expect(
+      loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).resolves.toEqual(newDraft)
   })
 
   it('does not expose savedAt in the decrypted QuestionDraft', async () => {
@@ -421,6 +475,49 @@ describe('loadDraft', () => {
     expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
   })
 
+  // savedAt belongs to an envelope this build hasn't validated. A future version
+  // that renames or drops it must not make rolled-back code delete the entry —
+  // that is the same loss class the version check itself guards against.
+  it('keeps a version-mismatched entry whose savedAt is unusable', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const { savedAt: _, ...envelope } = JSON.parse(
+      localStorage.getItem(EXPECTED_KEY)!
+    )
+    const future = JSON.stringify({ ...envelope, v: DRAFT_VERSION + 1 })
+    localStorage.setItem(EXPECTED_KEY, future)
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(future)
+  })
+
+  it('still evicts a matching-version entry whose savedAt is unusable', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, savedAt: 'not-a-number' })
+    )
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
+  })
+
   it('returns null when the stored value is malformed JSON', async () => {
     localStorage.setItem(EXPECTED_KEY, 'not-json{{{')
     expect(
@@ -480,6 +577,72 @@ describe('loadDraft', () => {
     await expect(
       loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).resolves.toBeNull()
+  })
+})
+
+describe('hasDeclinedDraft', () => {
+  it('is false when nothing is stored', async () => {
+    expect(
+      await hasDeclinedDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid
+      )
+    ).toBe(false)
+  })
+
+  it('is false for an entry this build can read', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    expect(
+      await hasDeclinedDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid
+      )
+    ).toBe(false)
+  })
+
+  it('is true for an entry from another format version', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: DRAFT_VERSION + 1 })
+    )
+    expect(
+      await hasDeclinedDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid
+      )
+    ).toBe(true)
+  })
+
+  it('is false for a malformed entry, which is the corrupt path not the declined one', async () => {
+    localStorage.setItem(EXPECTED_KEY, 'not-json{{{')
+    expect(
+      await hasDeclinedDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid
+      )
+    ).toBe(false)
   })
 })
 
@@ -763,14 +926,21 @@ describe('key store failures (IndexedDB)', () => {
     const raw = await saveThenForgetKey()
     // A blocked upgrade fires neither success nor error; without the onblocked
     // rejection this load never settles and the test times out.
+    const close = jest.fn()
     restore = installOpen((req) => {
       req.onblocked?.()
+      // The blocking tab then closes, so the upgrade completes and success fires
+      // on the already-rejected request. That connection has to be closed — a
+      // stray one is itself what blocks the next upgrade.
+      req.result = { close }
+      req.onsuccess?.()
     })
 
     expect(
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).toBeNull()
     expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+    expect(close).toHaveBeenCalled()
   })
 
   it('reports a failed save without touching the stored draft', async () => {

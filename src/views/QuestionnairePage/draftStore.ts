@@ -19,7 +19,8 @@ const DRAFT_PREFIX = 'ztmf_draft_'
 // Non-extractable keys cannot be exported via JS API — an attacker needs a
 // live browser session, not just a disk dump of the profile directory.
 const DB_NAME = 'ztmf-draft-keys'
-// Bumping this strands existing keys; loadDraft declines rather than deletes (#683).
+// Bumping is safe on its own — openKeyDB's guard keeps the store and its keys.
+// Rolling back past a bump strands them (VersionError), so loadDraft declines (#683).
 const DB_VERSION = 1
 const KEY_STORE = 'keys'
 
@@ -204,6 +205,19 @@ async function decryptDraft(
   return JSON.parse(new TextDecoder().decode(decrypted)) as QuestionDraft
 }
 
+// True when the stored entry declares a format version newer than this build's.
+// Absent or unparseable entries are not newer, so they stay overwritable.
+function storedVersionIsNewer(storageKey: string): boolean {
+  try {
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return false
+    const { v } = JSON.parse(raw) as StoredDraft
+    return typeof v === 'number' && v > DRAFT_VERSION
+  } catch {
+    return false
+  }
+}
+
 // Returns true when the draft was successfully persisted, false on any failure
 // (storage quota, private browsing, crypto unavailable). The caller uses the
 // return value to decide whether to show a "saved" or "not saved" indicator.
@@ -231,10 +245,13 @@ export const saveDraft = async (
       ciphertext,
       savedAt: Date.now(),
     }
-    localStorage.setItem(
-      draftKey(hashedId, fismasystemid, functionid, datacallid),
-      JSON.stringify(stored)
-    )
+    const storageKey = draftKey(hashedId, fismasystemid, functionid, datacallid)
+    // Never overwrite an entry from a newer format version. After a rollback this
+    // build declines to read such an entry, and clobbering it here would destroy
+    // the draft it deliberately preserved (#683). Reports false, so the caller
+    // shows "not saved" rather than implying the text is safe.
+    if (storedVersionIsNewer(storageKey)) return false
+    localStorage.setItem(storageKey, JSON.stringify(stored))
     return true
   } catch {
     return false
@@ -254,13 +271,22 @@ export const loadDraft = async (
     )
     if (!raw) return null
     const stored = JSON.parse(raw) as StoredDraft
-    // Before the version check, so an entry stranded by a version change still expires.
-    if (!stored.savedAt || Date.now() - stored.savedAt > DRAFT_TTL_MS) {
+    const expired =
+      typeof stored.savedAt === 'number' &&
+      Date.now() - stored.savedAt > DRAFT_TTL_MS
+    // Declined, not deleted — deleting makes a bump or rollback destroy drafts
+    // (#683). Expired ones still go, so declining isn't unbounded retention.
+    if (stored.v !== DRAFT_VERSION) {
+      if (expired)
+        await clearDraft(userid, fismasystemid, functionid, datacallid)
+      return null
+    }
+    // savedAt is only trusted to justify eviction once the version matches: in a
+    // mismatched envelope a missing one may just be a shape this build predates.
+    if (expired || typeof stored.savedAt !== 'number') {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
       return null
     }
-    // Declined, not deleted — deleting makes a bump or rollback destroy drafts (#683).
-    if (stored.v !== DRAFT_VERSION) return null
     // A key store we can't reach says nothing about the entry, so don't evict on it.
     let key: CryptoKey
     try {
@@ -288,6 +314,30 @@ export const loadDraft = async (
       // ignore
     }
     return null
+  }
+}
+
+// True when a stored entry exists that this build declined to read because its
+// format version is unrecognised. Lets the caller tell "no draft" apart from "a
+// draft we deliberately left alone" and skip its own cleanup — otherwise the app
+// deletes what loadDraft just took care to preserve (#683). Call after loadDraft,
+// which evicts an expired entry before this can report it.
+export const hasDeclinedDraft = async (
+  userid: string,
+  fismasystemid: number,
+  functionid: number,
+  datacallid: number
+): Promise<boolean> => {
+  try {
+    const hashedId = await hashUserId(userid)
+    const raw = localStorage.getItem(
+      draftKey(hashedId, fismasystemid, functionid, datacallid)
+    )
+    if (!raw) return false
+    const { v } = JSON.parse(raw) as StoredDraft
+    return v !== DRAFT_VERSION
+  } catch {
+    return false
   }
 }
 
