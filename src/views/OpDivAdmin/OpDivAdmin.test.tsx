@@ -36,12 +36,16 @@ jest.mock('@mui/x-data-grid', () => {
       getRowId?: (row: Record<string, unknown>) => string | number
       slots?: { toolbar?: (p: unknown) => React.ReactNode }
       slotProps?: { toolbar?: Record<string, unknown> }
+      loading?: boolean
     }) => {
       const { rows = [], columns = [], getRowId, slots, slotProps } = props
       const Toolbar = slots?.toolbar
       return react.createElement(
         'div',
-        { 'data-testid': 'datagrid-mock' },
+        {
+          'data-testid': 'datagrid-mock',
+          'data-loading': String(!!props.loading),
+        },
         Toolbar
           ? react.createElement(Toolbar, {
               key: 'toolbar',
@@ -125,15 +129,13 @@ jest.mock('../Title/Context', () => ({
   },
 }))
 
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OpDivAdmin from './OpDivAdmin'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { setOpDivDelegateEnabled } from '@/utils/delegates'
 import type { OpDiv, UserRole, userData } from '@/types'
 
-const fetchOpDivsMock = fetchOpDivs as jest.Mock
 const setEnabledMock = setOpDivDelegateEnabled as jest.Mock
 
 const EMPIRE: OpDiv = {
@@ -145,6 +147,8 @@ const EMPIRE: OpDiv = {
   system_delegate_enabled: false,
 }
 
+const refreshOpdivsMock = jest.fn()
+
 function ctx(role: UserRole) {
   return {
     userInfo: {
@@ -153,6 +157,9 @@ function ctx(role: UserRole) {
       fullname: 'Tester',
       role,
     } as userData,
+    opdivs: [EMPIRE],
+    opdivsLoaded: true,
+    refreshOpdivs: refreshOpdivsMock,
   }
 }
 
@@ -163,7 +170,6 @@ function renderAs(role: UserRole) {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  fetchOpDivsMock.mockResolvedValue([EMPIRE])
   setEnabledMock.mockResolvedValue({ ...EMPIRE, system_delegate_enabled: true })
 })
 
@@ -219,6 +225,8 @@ test('flipping the toggle confirms then calls the dedicated enable endpoint', as
   await waitFor(() => expect(setEnabledMock).toHaveBeenCalledTimes(1))
   // Toggled from false -> true for EMPIRE (opdiv_id 3).
   expect(setEnabledMock).toHaveBeenCalledWith(3, true)
+  // The grid reads the shared context list, so the write must refresh it.
+  await waitFor(() => expect(refreshOpdivsMock).toHaveBeenCalledTimes(1))
 })
 
 test('cancelling the toggle confirmation writes nothing', async () => {
@@ -234,10 +242,26 @@ test('cancelling the toggle confirmation writes nothing', async () => {
   expect(setEnabledMock).not.toHaveBeenCalled()
 })
 
+test('the grid reads as loading until the shared OpDiv list settles', () => {
+  // Otherwise the empty grid's "No rows" overlay reads as "no OpDivs exist".
+  setMockCtx({ ...ctx('OWNER'), opdivs: [], opdivsLoaded: false })
+  renderWithProviders(<OpDivAdmin />)
+
+  expect(screen.getByTestId('datagrid-mock')).toHaveAttribute(
+    'data-loading',
+    'true'
+  )
+
+  act(() => setMockCtx(ctx('OWNER')))
+  expect(screen.getByTestId('datagrid-mock')).toHaveAttribute(
+    'data-loading',
+    'false'
+  )
+})
+
 test('an OPDIV_ADMIN is bounced - no Manage OpDivs grid renders', () => {
   renderAs('OPDIV_ADMIN')
 
   expect(screen.queryByTestId('datagrid-mock')).not.toBeInTheDocument()
   expect(screen.queryByText(/manage opdivs/i)).not.toBeInTheDocument()
-  expect(fetchOpDivsMock).not.toHaveBeenCalled()
 })

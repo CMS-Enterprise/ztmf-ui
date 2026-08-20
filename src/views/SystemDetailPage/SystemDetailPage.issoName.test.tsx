@@ -63,17 +63,11 @@ const SYSTEM = {
   legacy: null,
 } as unknown as FismaSystemType
 
-const WRITE_ADMIN_ROLES: UserRole[] = [
-  'OWNER',
-  'HHS_ADMIN',
-  'OPDIV_ADMIN',
-  'ADMIN',
-]
+const WRITE_ADMIN_ROLES: UserRole[] = ['OWNER', 'HHS_ADMIN', 'OPDIV_ADMIN']
 
 const NON_WRITE_ROLES: UserRole[] = [
   'HHS_READONLY_ADMIN',
   'OPDIV_READONLY_ADMIN',
-  'READONLY_ADMIN',
   'ISSO',
   'ISSM',
   'SYSTEM_DELEGATE',
@@ -81,21 +75,7 @@ const NON_WRITE_ROLES: UserRole[] = [
 
 beforeEach(() => {
   mock.reset()
-  mock
-    .onGet('/opdivs')
-    .reply(200, {
-      data: [
-        {
-          opdiv_id: 1,
-          code: 'CMS',
-          name: 'CMS',
-          active: true,
-          system_delegate_enabled: false,
-        },
-      ],
-    })
-    .onGet('/systemattributes')
-    .reply(200, { data: [] })
+  mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
 /**
@@ -113,6 +93,17 @@ function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
       role,
     } as userData,
     datacenterEnvironments: [],
+    // OpDivs now arrive on the shared Outlet context instead of a per-page GET.
+    opdivs: [
+      {
+        opdiv_id: 1,
+        code: 'CMS',
+        name: 'CMS',
+        is_parent: false,
+        active: true,
+        system_delegate_enabled: false,
+      },
+    ],
     // The page refetches after a save instead of echoing its draft, so both of
     // these have to be present or the save path throws.
     fetchFismaSystems: jest.fn().mockResolvedValue(undefined),

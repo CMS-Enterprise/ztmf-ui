@@ -106,6 +106,8 @@ beforeEach(() => {
     setShowDecommissioned: jest.fn(),
     fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
+    opdivs: [],
+    opdivsLoaded: true,
   }
 
   mockGet.mockImplementation((url: string) => {

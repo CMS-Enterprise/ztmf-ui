@@ -41,8 +41,6 @@ export type UserRole =
   | 'ISSO'
   | 'ISSM'
   | 'SYSTEM_DELEGATE'
-  | 'ADMIN'
-  | 'READONLY_ADMIN'
 
 export type OpDiv = {
   opdiv_id: number
@@ -284,9 +282,10 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
-  // Datacenter-environment vocabulary for the dropdown. Passed from Title
-  // (the modal renders outside the outlet, so it can't read context).
+  // Datacenter-environment and OpDiv vocabularies for the dropdowns. Passed
+  // from Title because the modal renders outside the Outlet and can't read context.
   datacenterEnvironments: DataCenterEnvironment[]
+  opdivs: OpDiv[]
 }
 
 export type datacallModalProps = {
