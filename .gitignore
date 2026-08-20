@@ -67,3 +67,7 @@ src/__generated__/**
 
 public/build/p-*
 CFACTS_ISSO_ACCESS.md
+
+# Frostfall automated 508/accessibility scan output
+frostfall-report.html
+frostfall-artifacts/

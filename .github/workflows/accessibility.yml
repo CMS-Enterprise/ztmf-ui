@@ -1,0 +1,65 @@
+name: Accessibility
+
+# Informational 508 scan on every PR. Frostfall runs in report-only mode
+# (exit 0) against the committed baseline, so this job going red means the
+# scan itself broke, not that violations were found; enforcement arrives
+# later as an `expect:` block under the ci profile in .frostfall.yml.
+# Deliberately NOT in the required checks.
+
+on:
+  pull_request:
+
+jobs:
+  frostfall:
+    name: Frostfall 508 scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          path: ui
+
+      # The isolated stack (compose-test.yml + Empire seed) lives in the
+      # backend repo; the Makefile reaches it at ../ztmf, same as local runs.
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+        with:
+          repository: CMS-Enterprise/ztmf
+          path: ztmf
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version-file: 'ui/.nvmrc'
+          cache: 'yarn'
+          cache-dependency-path: 'ui/yarn.lock'
+
+      - name: INSTALL - dependencies
+        working-directory: ui
+        run: yarn install --immutable
+
+      - name: INSTALL - frostfall (checksum-verified release binary)
+        working-directory: ui
+        run: |
+          make install-frostfall
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Same lifecycle a developer runs locally: fresh Empire-seeded stack on
+      # :8090, vite on :5174 pointed at it, scan, tear down. One flow, no drift.
+      - name: SCAN - isolated stack
+        working-directory: ui
+        run: make frostfall-ci
+
+      - name: ARTIFACT - report and screenshots
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: frostfall-report
+          path: |
+            ui/frostfall-report.html
+            ui/frostfall-artifacts/
+          if-no-files-found: ignore
+
+      # The Makefile tears down on exit; this is a backstop for hard kills.
+      - name: CLEANUP - test stack
+        if: always()
+        run: docker compose -f ztmf/backend/compose-test.yml down -v || true
