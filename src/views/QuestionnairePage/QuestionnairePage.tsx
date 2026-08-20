@@ -75,7 +75,12 @@ import {
   type ConfirmSummaryEntry,
 } from './confirmState'
 import ConfirmSummaryDialog from './ConfirmSummaryDialog'
-import { saveDraft, loadDraft, clearDraft } from './draftStore'
+import {
+  saveDraft,
+  loadDraft,
+  clearDraft,
+  hasDeclinedDraft,
+} from './draftStore'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
   toSlug,
@@ -230,6 +235,10 @@ export default function QuestionnarePage() {
   // Incremented on every explicit draft clear so in-flight debounced saves
   // that fire after a clear don't resurrect the just-removed draft.
   const saveGenRef = React.useRef(0)
+  // True while the current question has a stored draft this build declined to
+  // read (unrecognised format version). Suppresses the no-edits clearDraft so
+  // the app doesn't delete what draftStore deliberately preserved.
+  const declinedDraftRef = React.useRef(false)
   // Mirrors the payload the debounced draft save would write, so unmount can
   // flush it. The debounce cleanup cancels its own pending timer, and a route
   // change away from this page (System Info, the Dashboard breadcrumb, browser
@@ -500,6 +509,9 @@ export default function QuestionnarePage() {
     if (system && questionId && datacallID > 0) {
       void clearDraft(userInfo.userid, system, questionId, datacallID)
     }
+    // An explicit clear (the answer is saved server-side now) is meant to remove
+    // the entry, declined or not, so nothing is left to suppress.
+    declinedDraftRef.current = false
     setDraftStatus('idle')
   }
 
@@ -1099,6 +1111,9 @@ export default function QuestionnarePage() {
           const sys = systemRef.current
           const uid = userInfo.userid
           if (controller.signal.aborted) return
+          // Reset per question — a declined entry belongs to one question, and a
+          // stale true here would suppress a legitimate clear on the next one.
+          declinedDraftRef.current = false
           // Read-only sessions never load the draft again, so evict any lingering
           // entry instead of letting it sit for the full TTL. Bump the save
           // generation first: an autosave that fired just before isReadOnly
@@ -1139,6 +1154,18 @@ export default function QuestionnarePage() {
               setDraftStatus('idle')
             }
           } else {
+            // Tell "none stored" from "one we declined" — the no-edits clear
+            // below would delete the latter. A ref, not draftStatus:
+            // that gets reset to 'idle' and 'error', re-arming the clear.
+            if (!isReadOnly && sys && questionId && datacallID > 0) {
+              declinedDraftRef.current = await hasDeclinedDraft(
+                uid,
+                sys,
+                questionId,
+                datacallID
+              )
+              if (controller.signal.aborted) return
+            }
             setDraftStatus('idle')
           }
           setOptions(choices)
@@ -1214,11 +1241,14 @@ export default function QuestionnarePage() {
       // values matching the server state does not mean the user reverted manually.
       // Clearing it here would delete a valid in-progress draft on every page load
       // when the server happens to be at the same state as the draft.
+      // A declined draft is skipped for the same reason: the entry is a real
+      // draft this build cannot read, and deleting it loses the user's text.
       if (
         system &&
         questionId &&
         datacallID > 0 &&
-        draftStatusRef.current !== 'restored'
+        draftStatusRef.current !== 'restored' &&
+        !declinedDraftRef.current
       )
         void clearDraft(userInfo.userid, system, questionId, datacallID)
       if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
@@ -1255,6 +1285,8 @@ export default function QuestionnarePage() {
         if (saved && pendingDraftRef.current === pending)
           pendingDraftRef.current = null
         if (saved) {
+          // The stored entry is this build's now, so it is no longer declined.
+          declinedDraftRef.current = false
           if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
         } else {
           setDraftStatus('error')
