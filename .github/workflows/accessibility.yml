@@ -64,7 +64,7 @@ jobs:
       # ignored - see the note on the frostfall-ci recipe in the Makefile.
       - name: UPLOAD - code scanning alerts
         if: always()
-        uses: github/codeql-action/upload-sarif@f3712979fa5f215279b101dd0a2e3bdfb4353324 # v3
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
         with:
           sarif_file: ui/frostfall.sarif
           category: frostfall
