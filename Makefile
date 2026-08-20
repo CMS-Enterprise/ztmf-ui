@@ -103,7 +103,7 @@ FROSTFALL_BIN_DIR ?= $(HOME)/.local/bin
 # fresh DB every run, self-seeds via DB_POPULATE. NEVER compose-dev.yml.
 COMPOSE_TEST := ../ztmf/backend/compose-test.yml
 
-.PHONY: install-frostfall frostfall frostfall-report frostfall-ci
+.PHONY: install-frostfall frostfall frostfall-report frostfall-local frostfall-ci
 
 install-frostfall:
 	@echo "Installing frostfall $(FROSTFALL_VERSION) for $(FROSTFALL_OS)/$(FROSTFALL_ARCH) -> $(FROSTFALL_BIN_DIR)..."
@@ -117,14 +117,18 @@ install-frostfall:
 	@echo "frostfall $(FROSTFALL_VERSION) installed to $(FROSTFALL_BIN_DIR)/frostfall (sha256 verified)"
 	@case ":$$PATH:" in *":$(FROSTFALL_BIN_DIR):"*) ;; *) echo "NOTE: $(FROSTFALL_BIN_DIR) is not on your PATH. Add it: export PATH=\"$(FROSTFALL_BIN_DIR):$$PATH\"" ;; esac
 
-# Probe 5173-5177 for the vite dev server SPECIFICALLY - some other app parked
-# on one of these ports would otherwise get scanned silently. Vite always
-# injects /@vite/client into the served index, so match on that.
+# Probe 5173-5177 for THIS app's vite dev server specifically. The vite marker
+# (/@vite/client) alone is not enough - any other vite project parked on one of
+# these ports would match it and get scanned silently - so also require the
+# app's own <title> in the served index.
 FROSTFALL_DETECT_PORT = PORT=""; for p in 5173 5174 5175 5176 5177; do \
-		curl -s http://localhost:$$p/ | grep -q "/@vite/client" && { PORT=$$p; break; }; done; \
+		PAGE=$$(curl -s http://localhost:$$p/); \
+		echo "$$PAGE" | grep -q "/@vite/client" && echo "$$PAGE" | grep -q "ZT Maturity Dashboard" \
+			&& { PORT=$$p; break; }; done; \
 	if [ -z "$$PORT" ]; then \
-		echo "No vite dev server answering on 5173-5177."; \
+		echo "No ZTMF vite dev server answering on 5173-5177."; \
 		echo "Start the stack first: 'make dev-up' and 'make frontend-env' in ../ztmf, then 'yarn dev' here."; \
+		echo "For a reproducible scan with seeded data, use 'make frostfall-local' instead."; \
 		exit 1; fi; \
 	echo "Scanning http://localhost:$$PORT ..."
 
@@ -158,6 +162,14 @@ frostfall-report:
 # Empire-seeded stack on :8090, our own vite on :5174 pointed at it, scan,
 # tear everything down. Requires :5174 to be FREE - a running dev server would
 # make vite pick another port and the scan would silently hit dev data.
+#
+# This is THE repeatable local runbook, not just the CI entrypoint: seeded data
+# means the findings match the committed baseline exactly, run after run, on
+# any machine with the backend repo cloned alongside. The dev-attach targets
+# above are for eyeballing whatever dev data happens to be up; their counts
+# drift with row counts and are never comparable across machines.
+frostfall-local: frostfall-ci
+
 frostfall-ci:
 	@if ! command -v frostfall >/dev/null 2>&1; then \
 		echo "frostfall not installed. Run: make install-frostfall"; exit 1; fi

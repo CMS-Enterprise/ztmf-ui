@@ -1,9 +1,14 @@
 version: 1
 
-# Frostfall accessibility config. Run against the local dev stack:
+# Frostfall accessibility config.
+#
+# Repeatable local scan (seeded data, matches the committed baseline):
+#   make frostfall-local
+#
+# Quick look at whatever dev stack is already running (counts drift with data):
 #   make dev-up && make frontend-env   (in ../ztmf)
-#   yarn dev                           (here, serves on 5174)
-#   frostfall
+#   yarn dev                           (here)
+#   make frostfall-report
 
 server:
   baseUrl: http://localhost:5174
