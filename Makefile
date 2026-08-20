@@ -148,6 +148,12 @@ frostfall-report:
 	frostfall --screenshots --format html --base-url http://localhost:$$PORT
 	@echo "Report: ./frostfall-report.html"
 
+# The SARIF pass points --baseline at a file that does not exist, ON PURPOSE:
+# baselined violations are omitted from SARIF, so honoring the baseline would
+# upload zero alerts. For GitHub code scanning we want EVERY current violation
+# as an open alert (that is the tracking dashboard); the baseline remains the
+# regression gate for the text/html outputs only. Fixing a violation drops it
+# from the next upload and its alert auto-closes.
 # Isolated end-to-end scan, identical in spirit to ../ztmf's test-e2e: fresh
 # Empire-seeded stack on :8090, our own vite on :5174 pointed at it, scan,
 # tear everything down. Requires :5174 to be FREE - a running dev server would
@@ -195,4 +201,6 @@ frostfall-ci:
 		done; \
 		frostfall --screenshots --format html "$$@"; \
 		echo "Report: ./frostfall-report.html"; \
+		frostfall --format sarif --output frostfall.sarif --baseline .frostfall-no-baseline.json; \
+		echo "SARIF (all violations, baseline ignored): ./frostfall.sarif"; \
 	' frostfall-ci $(FROSTFALL_ARGS)

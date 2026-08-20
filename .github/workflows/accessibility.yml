@@ -15,6 +15,8 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: read
+      # For the SARIF upload to code scanning.
+      security-events: write
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
         with:
@@ -51,6 +53,16 @@ jobs:
       - name: SCAN - isolated stack
         working-directory: ui
         run: make frostfall-ci
+
+      # Every current violation lands as a code scanning alert (Security tab).
+      # The scan step generates frostfall.sarif with the baseline deliberately
+      # ignored - see the note on the frostfall-ci recipe in the Makefile.
+      - name: UPLOAD - code scanning alerts
+        if: always()
+        uses: github/codeql-action/upload-sarif@f3712979fa5f215279b101dd0a2e3bdfb4353324 # v3
+        with:
+          sarif_file: ui/frostfall.sarif
+          category: frostfall
 
       - name: ARTIFACT - report and screenshots
         if: always()

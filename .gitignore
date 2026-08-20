@@ -66,3 +66,4 @@ CFACTS_ISSO_ACCESS.md
 # Frostfall automated 508/accessibility scan output
 frostfall-report.html
 frostfall-artifacts/
+frostfall.sarif
