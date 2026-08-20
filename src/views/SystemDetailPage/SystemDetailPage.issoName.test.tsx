@@ -63,17 +63,11 @@ const SYSTEM = {
   legacy: null,
 } as unknown as FismaSystemType
 
-const WRITE_ADMIN_ROLES: UserRole[] = [
-  'OWNER',
-  'HHS_ADMIN',
-  'OPDIV_ADMIN',
-  'ADMIN',
-]
+const WRITE_ADMIN_ROLES: UserRole[] = ['OWNER', 'HHS_ADMIN', 'OPDIV_ADMIN']
 
 const NON_WRITE_ROLES: UserRole[] = [
   'HHS_READONLY_ADMIN',
   'OPDIV_READONLY_ADMIN',
-  'READONLY_ADMIN',
   'ISSO',
   'ISSM',
   'SYSTEM_DELEGATE',

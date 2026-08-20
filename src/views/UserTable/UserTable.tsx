@@ -172,6 +172,17 @@ function EditToolbar(props: EditToolbarProps) {
     </GridToolbarContainer>
   )
 }
+// Placeholder row for the pre-selection state. The one place the empty-role
+// cast lives in this file; see EMPTY_USER in constants.ts for the userData
+// equivalent.
+const EMPTY_USER_ROW: users = {
+  userid: '',
+  email: '',
+  fullname: '',
+  role: '' as users['role'],
+  assignedfismasystems: [],
+}
+
 function validateEmail(email: string) {
   return /^[a-zA-Z0-9._:$!%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+$/.test(email)
 }
@@ -204,13 +215,9 @@ export default function UserTable() {
     'success' | 'error' | 'warning' | 'info'
   >('success')
   const [openModal, setOpenModal] = useState<boolean>(false)
-  const [selectedRow, setSelectedRow] = useState<users | undefined>({
-    userid: '',
-    email: '',
-    fullname: '',
-    role: '' as users['role'],
-    assignedfismasystems: [],
-  })
+  const [selectedRow, setSelectedRow] = useState<users | undefined>(
+    EMPTY_USER_ROW
+  )
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
   // Controlled so the "No Activity Only" toolbar switch can inject/remove an
   // isEmpty filter on last_seen while quick-filter text (which also lives in
