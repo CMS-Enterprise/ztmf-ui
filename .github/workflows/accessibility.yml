@@ -8,6 +8,11 @@ name: Accessibility
 
 on:
   pull_request:
+  # Code scanning alerts are keyed to the default branch: without a run on
+  # main, the Security tab never populates and fixed violations never
+  # auto-close. PR runs still annotate the PR itself.
+  push:
+    branches: [main]
 
 jobs:
   frostfall:
