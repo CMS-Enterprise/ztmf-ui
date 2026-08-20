@@ -20,7 +20,7 @@ const DRAFT_PREFIX = 'ztmf_draft_'
 // live browser session, not just a disk dump of the profile directory.
 const DB_NAME = 'ztmf-draft-keys'
 // Bumping is safe on its own — openKeyDB's guard keeps the store and its keys.
-// Rolling back past a bump strands them (VersionError), so loadDraft declines (#683).
+// Rolling back past a bump strands them (VersionError), so loadDraft declines.
 const DB_VERSION = 1
 const KEY_STORE = 'keys'
 
@@ -248,7 +248,7 @@ export const saveDraft = async (
     const storageKey = draftKey(hashedId, fismasystemid, functionid, datacallid)
     // Never overwrite an entry from a newer format version. After a rollback this
     // build declines to read such an entry, and clobbering it here would destroy
-    // the draft it deliberately preserved (#683). Reports false, so the caller
+    // the draft it deliberately preserved. Reports false, so the caller
     // shows "not saved" rather than implying the text is safe.
     if (storedVersionIsNewer(storageKey)) return false
     localStorage.setItem(storageKey, JSON.stringify(stored))
@@ -275,7 +275,7 @@ export const loadDraft = async (
       typeof stored.savedAt === 'number' &&
       Date.now() - stored.savedAt > DRAFT_TTL_MS
     // Declined, not deleted — deleting makes a bump or rollback destroy drafts
-    // (#683). Expired ones still go, so declining isn't unbounded retention.
+    // Expired ones still go, so declining isn't unbounded retention.
     if (stored.v !== DRAFT_VERSION) {
       if (expired)
         await clearDraft(userid, fismasystemid, functionid, datacallid)
@@ -317,11 +317,9 @@ export const loadDraft = async (
   }
 }
 
-// True when a stored entry exists that this build declined to read because its
-// format version is unrecognised. Lets the caller tell "no draft" apart from "a
-// draft we deliberately left alone" and skip its own cleanup — otherwise the app
-// deletes what loadDraft just took care to preserve (#683). Call after loadDraft,
-// which evicts an expired entry before this can report it.
+// Call after loadDraft returned null: every other null path evicts, so a
+// surviving entry is one it declined and the caller must not clean up.
+// Presence, not version — the key-store decline has a valid version.
 export const hasDeclinedDraft = async (
   userid: string,
   fismasystemid: number,
@@ -330,12 +328,11 @@ export const hasDeclinedDraft = async (
 ): Promise<boolean> => {
   try {
     const hashedId = await hashUserId(userid)
-    const raw = localStorage.getItem(
-      draftKey(hashedId, fismasystemid, functionid, datacallid)
+    return (
+      localStorage.getItem(
+        draftKey(hashedId, fismasystemid, functionid, datacallid)
+      ) !== null
     )
-    if (!raw) return false
-    const { v } = JSON.parse(raw) as StoredDraft
-    return v !== DRAFT_VERSION
   } catch {
     return false
   }

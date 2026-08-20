@@ -237,7 +237,7 @@ export default function QuestionnarePage() {
   const saveGenRef = React.useRef(0)
   // True while the current question has a stored draft this build declined to
   // read (unrecognised format version). Suppresses the no-edits clearDraft so
-  // the app doesn't delete what draftStore deliberately preserved (#683).
+  // the app doesn't delete what draftStore deliberately preserved.
   const declinedDraftRef = React.useRef(false)
   // Mirrors the payload the debounced draft save would write, so unmount can
   // flush it. The debounce cleanup cancels its own pending timer, and a route
@@ -1154,13 +1154,9 @@ export default function QuestionnarePage() {
               setDraftStatus('idle')
             }
           } else {
-            // No draft came back. Distinguish "none stored" from "one stored that
-            // this build declined to read": deleting the latter is the loss #683
-            // exists to prevent, and the no-edits clear below would do exactly
-            // that on question open. Tracked in a ref rather than draftStatus
-            // because the status is transient — a refused save flips it to
-            // 'error' and the branch below resets it to 'idle', either of which
-            // would silently re-arm the clear.
+            // Tell "none stored" from "one we declined" — the no-edits clear
+            // below would delete the latter. A ref, not draftStatus:
+            // that gets reset to 'idle' and 'error', re-arming the clear.
             if (!isReadOnly && sys && questionId && datacallID > 0) {
               declinedDraftRef.current = await hasDeclinedDraft(
                 uid,
@@ -1246,7 +1242,7 @@ export default function QuestionnarePage() {
       // Clearing it here would delete a valid in-progress draft on every page load
       // when the server happens to be at the same state as the draft.
       // A declined draft is skipped for the same reason: the entry is a real
-      // draft this build cannot read, and deleting it is the loss #683 prevents.
+      // draft this build cannot read, and deleting it loses the user's text.
       if (
         system &&
         questionId &&

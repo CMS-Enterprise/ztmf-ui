@@ -227,6 +227,7 @@ beforeEach(() => {
   saveDraftMock.mockResolvedValue(true)
   clearDraftMock.mockResolvedValue(undefined)
   loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(false)
 })
 
 // ---------------------------------------------------------------------------
@@ -341,12 +342,9 @@ test('read-only session evicts the current-question draft on mount', async () =>
 const viewPings = () =>
   axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'events/view')
 
-// #683: loadDraft declines an entry written by a newer DRAFT_VERSION instead of
-// deleting it, so a rollback doesn't destroy in-progress drafts. That only holds
-// if the page also leaves it alone. The no-edits branch of the debounce effect
-// clears whenever the on-screen values match the server ones, which is exactly
-// the state a declined load leaves behind — so without the declined guard,
-// merely opening the question deletes what the store preserved.
+// The store declines rather than deletes, but the no-edits clear fires
+// whenever on-screen values match the server's — exactly what a declined load
+// leaves behind. Without the guard, opening the question deletes the entry.
 test('does not clear a draft the store declined to read', async () => {
   loadDraftMock.mockResolvedValue(null)
   hasDeclinedDraftMock.mockResolvedValue(true)
@@ -362,12 +360,35 @@ test('does not clear a draft the store declined to read', async () => {
 
   renderAt(DEEP_LINK)
 
-  // Wait for the question to settle, so the debounce effect has run its
-  // no-edits branch — the point at which the unguarded code called clearDraft.
+  // Let the debounce effect run its no-edits branch, where the clear happened.
   await waitFor(() => expect(loadDraftMock).toHaveBeenCalled())
   await waitFor(() => expect(hasDeclinedDraftMock).toHaveBeenCalled())
   await waitFor(() => expect(viewPings()).toHaveLength(1))
   expect(clearDraftMock).not.toHaveBeenCalled()
+})
+
+// The other decline path: unreachable key store, so the version is valid and a
+// version comparison would report false and let the clear below delete it.
+test('does not clear a draft the store kept when the key was unreachable', async () => {
+  loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(true)
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  await waitFor(() => expect(hasDeclinedDraftMock).toHaveBeenCalled())
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(clearDraftMock).not.toHaveBeenCalled()
+  // Asked for the question actually on screen, not a stale one.
+  expect(hasDeclinedDraftMock).toHaveBeenCalledWith('u-1', 1002, 7006, 5)
 })
 
 test('clears a draft-free question as before, when nothing was declined', async () => {
@@ -385,8 +406,7 @@ test('clears a draft-free question as before, when nothing was declined', async 
 
   renderAt(DEEP_LINK)
 
-  // The counterpart to the test above: the pre-existing cleanup must survive,
-  // or the guard would just be suppressing it for everyone.
+  // Counterpart: the pre-existing cleanup must survive the guard.
   await waitFor(() =>
     expect(clearDraftMock).toHaveBeenCalledWith('u-1', 1002, 7006, 5)
   )

@@ -186,9 +186,7 @@ describe('saveDraft', () => {
     expect(savedAt).toBeLessThanOrEqual(after)
   })
 
-  // After a rollback the running build declines to read a newer entry. If it
-  // then overwrote that entry on the next keystroke, declining would have bought
-  // nothing — the newer draft would be gone anyway.
+  // Declining to read is worthless if the next keystroke overwrites it anyway.
   it('refuses to overwrite an entry from a newer format version', async () => {
     await saveDraft(
       USER,
@@ -421,8 +419,7 @@ describe('loadDraft', () => {
     expect(localStorage.getItem(EXPECTED_KEY)).toEqual(withoutVRaw)
   })
 
-  // A draft written by a newer DRAFT_VERSION must survive a rollback to older
-  // code and become readable again once the newer version is redeployed.
+  // Survives a rollback, readable again once the newer version is redeployed.
   it('recovers a version-mismatched draft when the version matches again', async () => {
     await saveDraft(
       USER,
@@ -442,8 +439,7 @@ describe('loadDraft', () => {
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).toBeNull()
 
-    // Roll forward. Sourced from storage, not from `raw`, so a deleted entry
-    // fails here instead of being silently re-created by the test.
+    // From storage, not `raw` — a deleted entry must fail here, not be re-created.
     const survived = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
     localStorage.setItem(
       EXPECTED_KEY,
@@ -475,9 +471,7 @@ describe('loadDraft', () => {
     expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
   })
 
-  // savedAt belongs to an envelope this build hasn't validated. A future version
-  // that renames or drops it must not make rolled-back code delete the entry —
-  // that is the same loss class the version check itself guards against.
+  // A future version dropping savedAt must not make rolled-back code delete.
   it('keeps a version-mismatched entry whose savedAt is unusable', async () => {
     await saveDraft(
       USER,
@@ -580,69 +574,75 @@ describe('loadDraft', () => {
   })
 })
 
+// Each case drives loadDraft first — the caller only asks in its null branch.
 describe('hasDeclinedDraft', () => {
+  const ask = () =>
+    hasDeclinedDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+  const load = () =>
+    loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+  const store = () =>
+    saveDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid, DRAFT)
+
   it('is false when nothing is stored', async () => {
-    expect(
-      await hasDeclinedDraft(
-        USER,
-        IDS.fismasystemid,
-        IDS.functionid,
-        IDS.datacallid
-      )
-    ).toBe(false)
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(false)
   })
 
-  it('is false for an entry this build can read', async () => {
-    await saveDraft(
-      USER,
-      IDS.fismasystemid,
-      IDS.functionid,
-      IDS.datacallid,
-      DRAFT
-    )
-    expect(
-      await hasDeclinedDraft(
-        USER,
-        IDS.fismasystemid,
-        IDS.functionid,
-        IDS.datacallid
-      )
-    ).toBe(false)
+  it('is false once loadDraft has evicted a corrupt entry', async () => {
+    localStorage.setItem(EXPECTED_KEY, 'not-json{{{')
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(false)
   })
 
-  it('is true for an entry from another format version', async () => {
-    await saveDraft(
-      USER,
-      IDS.fismasystemid,
-      IDS.functionid,
-      IDS.datacallid,
-      DRAFT
+  it('is false once loadDraft has evicted an expired entry', async () => {
+    await store()
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, savedAt: 1000 })
     )
+    jest.spyOn(Date, 'now').mockReturnValue(1000 + FOURTEEN_DAYS_MS + 1)
+
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(false)
+  })
+
+  it('is true for an entry declined over its format version', async () => {
+    await store()
     const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
     localStorage.setItem(
       EXPECTED_KEY,
       JSON.stringify({ ...raw, v: DRAFT_VERSION + 1 })
     )
-    expect(
-      await hasDeclinedDraft(
-        USER,
-        IDS.fismasystemid,
-        IDS.functionid,
-        IDS.datacallid
-      )
-    ).toBe(true)
+
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(true)
   })
 
-  it('is false for a malformed entry, which is the corrupt path not the declined one', async () => {
-    localStorage.setItem(EXPECTED_KEY, 'not-json{{{')
-    expect(
-      await hasDeclinedDraft(
-        USER,
-        IDS.fismasystemid,
-        IDS.functionid,
-        IDS.datacallid
-      )
-    ).toBe(false)
+  // The path a version comparison misses: valid version, unreachable key.
+  it('is true for an entry declined over an unreachable key store', async () => {
+    await store()
+    const raw = localStorage.getItem(EXPECTED_KEY)!
+    __resetKeyCache()
+    __setHashedIdForTesting(USER, H_USER)
+    const restore = installOpen((req) => {
+      req.error = new DOMException('VersionError')
+      req.onerror?.()
+    })
+    try {
+      expect(await load()).toBeNull()
+      expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+      expect(await ask()).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('is false when localStorage throws', async () => {
+    jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('SecurityError')
+    })
+    await expect(ask()).resolves.toBe(false)
   })
 })
 
@@ -855,11 +855,8 @@ describe('device key persistence (IndexedDB)', () => {
   })
 })
 
-// The stand-in above models a healthy key store. These model the ways a
-// DB_VERSION change breaks it: an open that errors (the store already holds the
-// object store, or the running code asks for a lower version than is on disk)
-// and an upgrade another tab blocks. None of them may delete a stored draft —
-// the key being unreachable says nothing about whether the draft is good.
+// The ways a DB_VERSION change breaks the key store: an open that errors, and an
+// upgrade another tab blocks. None of them may delete a stored draft.
 type OpenRequest = {
   result?: unknown
   error?: DOMException | null
@@ -929,9 +926,8 @@ describe('key store failures (IndexedDB)', () => {
     const close = jest.fn()
     restore = installOpen((req) => {
       req.onblocked?.()
-      // The blocking tab then closes, so the upgrade completes and success fires
-      // on the already-rejected request. That connection has to be closed — a
-      // stray one is itself what blocks the next upgrade.
+      // Blocking tab closes: success fires on the rejected request. Must close,
+      // since a stray connection is what blocks the next upgrade.
       req.result = { close }
       req.onsuccess?.()
     })
