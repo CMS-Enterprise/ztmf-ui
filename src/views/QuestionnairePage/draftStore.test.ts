@@ -388,8 +388,13 @@ describe('loadDraft', () => {
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).toBeNull()
 
-    // Rolling forward again: the untouched entry is readable.
-    localStorage.setItem(EXPECTED_KEY, JSON.stringify(raw))
+    // Roll forward. Sourced from storage, not from `raw`, so a deleted entry
+    // fails here instead of being silently re-created by the test.
+    const survived = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...survived, v: DRAFT_VERSION })
+    )
     expect(
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).toEqual(DRAFT)

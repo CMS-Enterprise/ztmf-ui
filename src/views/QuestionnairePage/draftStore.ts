@@ -19,8 +19,7 @@ const DRAFT_PREFIX = 'ztmf_draft_'
 // Non-extractable keys cannot be exported via JS API — an attacker needs a
 // live browser session, not just a disk dump of the profile directory.
 const DB_NAME = 'ztmf-draft-keys'
-// Bumping this strands existing keys, which makes stored drafts undecryptable —
-// loadDraft declines rather than deletes them, so a roll-forward recovers them.
+// Bumping this strands existing keys; loadDraft declines rather than deletes (#683).
 const DB_VERSION = 1
 const KEY_STORE = 'keys'
 
@@ -52,19 +51,29 @@ export function __setHashedIdForTesting(userid: string, hash: string): void {
 function openKeyDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
-    // Create the store only when absent: on a DB_VERSION bump the upgrade fires
-    // against a database that already has it, and an unconditional
-    // createObjectStore would throw ConstraintError and abort the open.
+    // Only when absent: on a DB_VERSION bump the store already exists and an
+    // unconditional createObjectStore would throw and abort the open.
     req.onupgradeneeded = () => {
       const db = req.result
       if (!db.objectStoreNames.contains(KEY_STORE)) {
         db.createObjectStore(KEY_STORE)
       }
     }
-    // An upgrade blocked by another tab's open connection fires neither success
-    // nor error — reject so callers aren't left pending forever.
-    req.onblocked = () => reject(new Error('key store upgrade blocked'))
-    req.onsuccess = () => resolve(req.result)
+    // A blocked upgrade fires neither success nor error — reject rather than hang.
+    let blocked = false
+    req.onblocked = () => {
+      blocked = true
+      reject(new Error('key store upgrade blocked'))
+    }
+    // Once the blocking tab closes, success fires on an already-settled promise —
+    // close that connection or the stray handle blocks the next upgrade in turn.
+    req.onsuccess = () => {
+      if (blocked) {
+        req.result.close()
+        return
+      }
+      resolve(req.result)
+    }
     req.onerror = () => reject(req.error)
   })
 }
@@ -245,21 +254,14 @@ export const loadDraft = async (
     )
     if (!raw) return null
     const stored = JSON.parse(raw) as StoredDraft
-    // TTL is checked before the version so an entry stranded by a version change
-    // is still reaped once it expires.
+    // Before the version check, so an entry stranded by a version change still expires.
     if (!stored.savedAt || Date.now() - stored.savedAt > DRAFT_TTL_MS) {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
       return null
     }
-    // Decline entries from a different format version, but leave them in place:
-    // deleting would make a DRAFT_VERSION bump — or a rollback past one, since
-    // this compares !== not < — destroy in-progress drafts irrecoverably. Rolling
-    // forward again makes the entry usable, and the TTL above reaps it otherwise.
+    // Declined, not deleted — deleting makes a bump or rollback destroy drafts (#683).
     if (stored.v !== DRAFT_VERSION) return null
-    // Key resolution is exempt from the eviction below: a key store we cannot
-    // reach (DB_VERSION change, a rollback past one, private browsing, storage
-    // pressure) says nothing about the stored entry, and a later load may well
-    // read it. Deleting on a transient failure is how drafts get lost.
+    // A key store we can't reach says nothing about the entry, so don't evict on it.
     let key: CryptoKey
     try {
       key = await getOrCreateDeviceKey(userid)
@@ -278,10 +280,8 @@ export const loadDraft = async (
     }
     return draft
   } catch {
-    // Reached only for an entry that is itself unreadable — unparseable JSON, or
-    // ciphertext that won't decrypt under a key we did resolve. Evict so it isn't
-    // retried on every question load for the remaining TTL. Ignore secondary
-    // storage failures.
+    // Only unreadable entries reach here — bad JSON, or ciphertext that won't
+    // decrypt under a key we did resolve. Evict so it isn't retried all TTL.
     try {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
     } catch {
