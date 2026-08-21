@@ -1,4 +1,4 @@
-// Coverage for the questionnaire modal (ztmf-ui#623): the load chain (latest
+// Coverage for the questionnaire modal: the load chain (latest
 // data call -> questions -> existing scores -> options), answering a question,
 // and saving on Next. A regression here fails to load or record answers.
 

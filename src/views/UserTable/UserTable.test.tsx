@@ -4,7 +4,7 @@
 // Decommissioned toggle would otherwise swap to the decommissioned-only
 // response. These lists are label sources; the picker's selectable options
 // come from a per-user /users/:id/assignablefismasystems read inside the modal
-// (ztmf-ui#614). See AssignSystemModal.test.tsx for the picker-rendering
+// See AssignSystemModal.test.tsx for the picker-rendering
 // assertions.
 
 jest.mock('@/router/router', () => ({
@@ -189,7 +189,7 @@ function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
     setFismaSystems: jest.fn(),
     fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
-    // OpDivs arrive on the shared Outlet context (ztmf-ui#701); UserTable reads
+    // OpDivs arrive on the shared Outlet context; UserTable reads
     // them for its OpDiv derivations, so an undefined value would throw.
     opdivs: [],
     opdivsLoaded: true,
@@ -297,7 +297,7 @@ test('decommissioned fetch failure degrades gracefully: active systems still pop
     if (url === '/fismasystems?decommissioned=true')
       return Promise.reject(new Error('backend 500'))
     // The picker's selectable options come from the per-user assignable
-    // endpoint (ztmf-ui#614); allSystems is only a label source now.
+    // endpoint; allSystems is only a label source now.
     if (url.includes('/assignablefismasystems'))
       return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
     if (url.includes('/assignedfismasystems'))
@@ -365,7 +365,7 @@ test('decommissioned fetch fulfilled with data:null still populates the picker f
       return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
     if (url === '/fismasystems?decommissioned=true')
       return Promise.resolve({ status: 200, data: { data: null } })
-    // Picker options come from the per-user assignable endpoint (ztmf-ui#614).
+    // Picker options come from the per-user assignable endpoint.
     if (url.includes('/assignablefismasystems'))
       return Promise.resolve({ status: 200, data: { data: ACTIVE_SYSTEMS } })
     if (url.includes('/assignedfismasystems'))
@@ -512,12 +512,12 @@ test('malformed response (data: null) does not crash the map build', async () =>
 })
 
 // ---------------------------------------------------------------------------
-// ztmf-ui#614: the global /fismasystems reads (active + decommissioned) are
+// The global /fismasystems reads (active + decommissioned) are
 // label sources fetched once on mount and held for the table's lifetime, not
 // re-issued when the Assign Systems modal opens. The picker's selectable
 // options come from a per-user /users/:id/assignablefismasystems read inside
 // the modal instead. So opening the modal must NOT add global reads - this
-// locks in the fetch-once-and-reuse contract that replaced the old #574
+// locks in the fetch-once-and-reuse contract that replaced the old
 // refetch-on-open behavior.
 // ---------------------------------------------------------------------------
 
@@ -564,7 +564,7 @@ test('opening the Assign Systems modal reuses the cached global reads (no refetc
 // ---------------------------------------------------------------------------
 // User mutation flows: delete (with the self-delete guard) and restore. These
 // churned under the delegates and OpDiv-scoping work and lost coverage when the
-// original suite was deleted in ztmf-ui#614. Create/edit run through the MUI
+// original suite was deleted. Create/edit run through the MUI
 // DataGrid inline-edit lifecycle (processRowUpdate), which the minimal grid
 // mock here does not drive - covered separately.
 // ---------------------------------------------------------------------------

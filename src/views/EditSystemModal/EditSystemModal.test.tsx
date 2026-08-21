@@ -243,7 +243,7 @@ test('clearing a free-text field saves an empty string, not null', async () => {
 })
 
 // ---------------------------------------------------------------------------
-// Core save paths (ztmf-ui#623): the existing tests above cover extended-
+// Core save paths: the existing tests above cover extended-
 // metadata diffing; these pin the core-field payload, the 400 field-error
 // routing, and the create-mode validation gate - the parts where a regression
 // silently corrupts or fails a system write.

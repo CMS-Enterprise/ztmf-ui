@@ -1,4 +1,4 @@
-// Decommission and reactivate flows on the System Details page (ztmf-ui#623).
+// Decommission and reactivate flows on the System Details page.
 // Both are state-changing writes reached only through the admin edit view - a
 // checkbox/button reveals a form, a confirm dialog gates the request, and the
 // handler issues a DELETE (decommission) or PUT /reactivate. These were
