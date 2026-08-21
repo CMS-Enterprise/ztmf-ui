@@ -18,6 +18,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import EditSystemModal from './EditSystemModal'
+import { EMPTY_SYSTEM } from './emptySystem'
 import axiosInstance from '@/axiosConfig'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, OpDiv } from '@/types'
@@ -239,4 +240,175 @@ test('clearing a free-text field saves an empty string, not null', async () => {
   // '' clears via blankToNil; null would read as "leave unchanged" and the
   // clear would silently no-op.
   expect(putBody).toHaveProperty('cloud_vendor', '')
+})
+
+// ---------------------------------------------------------------------------
+// Core save paths (ztmf-ui#623): the existing tests above cover extended-
+// metadata diffing; these pin the core-field payload, the 400 field-error
+// routing, and the create-mode validation gate - the parts where a regression
+// silently corrupts or fails a system write.
+// ---------------------------------------------------------------------------
+
+test('editing sends the core system fields in the PUT payload', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let putBody: Record<string, unknown> | undefined
+  mock.onPut(/fismasystems\/42$/).reply((config) => {
+    putBody = JSON.parse(config.data)
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={SYSTEM}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(putBody).toBeDefined())
+  // The full core record is sent as-is, so an unrelated edit never drops a field.
+  expect(putBody).toMatchObject({
+    fismaname: 'Executor',
+    fismaacronym: 'EXEC',
+    fismauid: 'UID-42',
+    component: 'CMS',
+    datacenterenvironment: 'CMS-Cloud-AWS',
+    issoemail: 'admiral.piett@executor.empire',
+    datacallcontact: 'captain.needa@executor.empire',
+    opdiv_id: 1,
+  })
+})
+
+test('a 400 with a field map routes the reason inline and does not close the modal', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  mock
+    .onPut(/fismasystems\/42$/)
+    .reply(400, { data: { fismaname: 'FISMA Name is already taken' } })
+  const onClose = jest.fn()
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={onClose}
+      system={SYSTEM}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.click(await screen.findByRole('button', { name: 'Save' }))
+
+  // The backend's per-field reason renders inline; the modal stays open so the
+  // user can fix it rather than losing their edits to a closed dialog.
+  expect(
+    await screen.findByText('FISMA Name is already taken')
+  ).toBeInTheDocument()
+  expect(onClose).not.toHaveBeenCalled()
+})
+
+test('Create is disabled until the required fields are filled', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Add"
+      open
+      onClose={jest.fn()}
+      system={EMPTY_SYSTEM as unknown as FismaSystemType}
+      mode="create"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  // An empty create form must not be submittable - guards against an empty POST.
+  expect(await screen.findByRole('button', { name: 'Create' })).toBeDisabled()
+})
+
+test('a completed create form POSTs the new system and reports success', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let postBody: Record<string, unknown> | undefined
+  mock.onPost('fismasystems').reply((config) => {
+    postBody = JSON.parse(config.data)
+    return [201, { data: { fismasystemid: 99 } }]
+  })
+  const onClose = jest.fn()
+  const user = userEvent.setup()
+  const DCE = [
+    {
+      datacenterenvironment: 'CMS-Cloud-AWS',
+      category: 'Cloud',
+      scoring_key: 'cloud',
+      selectable: true,
+      ordr: 1,
+    },
+  ]
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Add"
+      open
+      onClose={onClose}
+      system={EMPTY_SYSTEM as unknown as FismaSystemType}
+      mode="create"
+      datacenterEnvironments={DCE}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.type(
+    await screen.findByRole('textbox', { name: 'Fisma Name' }),
+    'New System'
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'Fisma Acronym' }),
+    'NS-1'
+  )
+  await user.type(screen.getByRole('textbox', { name: 'Fisma UID' }), 'UID-99')
+  await user.type(screen.getByRole('textbox', { name: 'Component' }), 'CMS')
+  await user.type(
+    screen.getByRole('textbox', { name: 'Data Call Contact' }),
+    'contact@agency.gov'
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'ISSO Email' }),
+    'isso@agency.gov'
+  )
+
+  // Two MUI selects: open, then pick the option.
+  await user.click(screen.getByRole('combobox', { name: 'OpDiv' }))
+  await user.click(await screen.findByRole('option', { name: /CMS/ }))
+  await user.click(
+    screen.getByRole('combobox', { name: 'Datacenter Environment' })
+  )
+  // The option label is the environment's category ("Cloud"); the saved value
+  // is the environment string ("CMS-Cloud-AWS").
+  await user.click(await screen.findByRole('option', { name: 'Cloud' }))
+
+  const create = screen.getByRole('button', { name: 'Create' })
+  await waitFor(() => expect(create).toBeEnabled())
+  await user.click(create)
+
+  await waitFor(() => expect(postBody).toBeDefined())
+  expect(postBody).toMatchObject({
+    fismaname: 'New System',
+    fismaacronym: 'NS-1',
+    fismauid: 'UID-99',
+    component: 'CMS',
+    datacallcontact: 'contact@agency.gov',
+    issoemail: 'isso@agency.gov',
+    datacenterenvironment: 'CMS-Cloud-AWS',
+    opdiv_id: 1,
+  })
+  expect(onClose).toHaveBeenCalled()
 })
