@@ -63,5 +63,7 @@ src/__generated__/**
 public/build/p-*
 CFACTS_ISSO_ACCESS.md
 
-# Serena MCP local tool dir (never commit)
-.serena/
+# Frostfall automated 508/accessibility scan output
+frostfall-report.html
+frostfall-artifacts/
+frostfall.sarif
