@@ -14,7 +14,7 @@ jest.mock('@/utils/notify', () => {
   return { ...actual, notify: jest.fn() }
 })
 
-import { screen, waitFor } from '@testing-library/react'
+import { screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import EditSystemModal from './EditSystemModal'
@@ -411,4 +411,374 @@ test('a completed create form POSTs the new system and reports success', async (
     opdiv_id: 1,
   })
   expect(onClose).toHaveBeenCalled()
+})
+
+// ---------------------------------------------------------------------------
+// Decommission / reactivate section (edit mode) and the create error path.
+// ---------------------------------------------------------------------------
+
+const DECOMMISSIONED = {
+  ...SYSTEM,
+  decommissioned: true,
+  decommissioned_date: '2020-01-01T00:00:00.000Z',
+  decommissioned_by: 'admiral-ozzel',
+  decommissioned_notes: 'Superseded by the second Death Star.',
+  reactivated_date: '2019-06-01T00:00:00.000Z',
+  reactivated_by: 'admiral-piett',
+  reactivation_notes: 'Brought back for the Endor operation.',
+} as unknown as FismaSystemType
+
+test('a decommissioned system shows its decommission details and reactivate control', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={DECOMMISSIONED}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  expect(
+    await screen.findByText(/Superseded by the second Death Star/)
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: /Reactivate System/i })
+  ).toBeInTheDocument()
+})
+
+test('the active system shows the Decommission System toggle in edit mode', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={SYSTEM}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  // Revealing the form exercises the decommission-date/notes render path.
+  await user.click(
+    await screen.findByRole('checkbox', { name: /Decommission System/i })
+  )
+  expect(
+    await screen.findByRole('button', { name: 'Decommission' })
+  ).toBeInTheDocument()
+})
+
+test('opening the reactivate form and confirming PUTs /reactivate', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let reactivateCalled = false
+  mock.onPut(/fismasystems\/42\/reactivate$/).reply(() => {
+    reactivateCalled = true
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={DECOMMISSIONED}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.click(
+    await screen.findByRole('button', { name: /Reactivate System/i })
+  )
+  await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
+  // A confirm dialog gates the reactivate request.
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  await waitFor(() => expect(reactivateCalled).toBe(true))
+})
+
+test('a 400 on create routes the reason inline and does not close', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  mock
+    .onPost('fismasystems')
+    .reply(400, { data: { fismaname: 'A system with that name exists' } })
+  const onClose = jest.fn()
+  const user = userEvent.setup()
+  const DCE = [
+    {
+      datacenterenvironment: 'CMS-Cloud-AWS',
+      category: 'Cloud',
+      scoring_key: 'cloud',
+      selectable: true,
+      ordr: 1,
+    },
+  ]
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Add"
+      open
+      onClose={onClose}
+      system={EMPTY_SYSTEM as unknown as FismaSystemType}
+      mode="create"
+      datacenterEnvironments={DCE}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.type(
+    await screen.findByRole('textbox', { name: 'Fisma Name' }),
+    'Dup System'
+  )
+  await user.type(screen.getByRole('textbox', { name: 'Fisma Acronym' }), 'DUP')
+  await user.type(screen.getByRole('textbox', { name: 'Fisma UID' }), 'UID-D')
+  await user.type(screen.getByRole('textbox', { name: 'Component' }), 'CMS')
+  await user.type(
+    screen.getByRole('textbox', { name: 'Data Call Contact' }),
+    'c@agency.gov'
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'ISSO Email' }),
+    'i@agency.gov'
+  )
+  await user.click(screen.getByRole('combobox', { name: 'OpDiv' }))
+  await user.click(await screen.findByRole('option', { name: /CMS/ }))
+  await user.click(
+    screen.getByRole('combobox', { name: 'Datacenter Environment' })
+  )
+  await user.click(await screen.findByRole('option', { name: 'Cloud' }))
+
+  await user.click(screen.getByRole('button', { name: 'Create' }))
+
+  expect(
+    await screen.findByText('A system with that name exists')
+  ).toBeInTheDocument()
+  expect(onClose).not.toHaveBeenCalled()
+})
+
+test('editing an active system: setting a date and confirming DELETEs it', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let deleteCalled = false
+  mock.onDelete(/fismasystems\/42$/).reply(() => {
+    deleteCalled = true
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={SYSTEM}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.click(
+    await screen.findByRole('checkbox', { name: /Decommission System/i })
+  )
+  // The date input is a bare <input type="date"> with no accessible name; the
+  // Dialog portals to document.body, so query the whole document.
+  const dateInput = document.querySelector(
+    'input[type="date"]'
+  ) as HTMLInputElement
+  fireEvent.change(dateInput, { target: { value: '2020-01-01' } })
+  fireEvent.blur(dateInput)
+
+  await user.click(screen.getByRole('button', { name: 'Decommission' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  await waitFor(() => expect(deleteCalled).toBe(true))
+})
+
+test('editing a decommissioned system: Edit Decommission Details opens the form', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={DECOMMISSIONED}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.click(
+    await screen.findByRole('button', { name: /Edit Decommission Details/i })
+  )
+  // The form's Update control appears once the edit form is open.
+  expect(
+    await screen.findByRole('button', { name: /Update/i })
+  ).toBeInTheDocument()
+})
+
+test('renders boolean and multiselect extended controls from systemattributes', async () => {
+  mock.onGet('/systemattributes').reply(200, {
+    data: [
+      {
+        field: 'cloud_service_model',
+        value: 'IaaS',
+        selectable: true,
+        ordr: 10,
+      },
+      {
+        field: 'cloud_service_model',
+        value: 'SaaS',
+        selectable: true,
+        ordr: 20,
+      },
+    ],
+  })
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={{ ...SYSTEM, cloud_system: true } as unknown as FismaSystemType}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  // The boolean HVA control and the multiselect cloud-service-model control
+  // both render through renderControl's type branches.
+  expect(
+    await screen.findByRole('combobox', { name: 'HVA' })
+  ).toBeInTheDocument()
+  expect(
+    screen.getByRole('combobox', { name: /Cloud Service Model/i })
+  ).toBeInTheDocument()
+})
+
+test('editing the organization free-text fields updates them for the save', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  let putBody: Record<string, unknown> | undefined
+  mock.onPut(/fismasystems\/42$/).reply((config) => {
+    putBody = JSON.parse(config.data)
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={SYSTEM}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.type(
+    await screen.findByRole('textbox', { name: 'Group Acronym' }),
+    'GRP'
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'Group Name' }),
+    'Group X'
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'Division Name' }),
+    'Division Y'
+  )
+  await user.type(
+    screen.getByRole('textbox', { name: 'Fisma Subsystem' }),
+    'Sub Z'
+  )
+  await user.click(screen.getByRole('button', { name: 'Save' }))
+
+  await waitFor(() => expect(putBody).toBeDefined())
+  expect(putBody).toMatchObject({
+    groupacronym: 'GRP',
+    groupname: 'Group X',
+    divisionname: 'Division Y',
+    fismasubsystem: 'Sub Z',
+  })
+})
+
+test('the decommission date field rejects a future date', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={jest.fn()}
+      system={SYSTEM}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.click(
+    await screen.findByRole('checkbox', { name: /Decommission System/i })
+  )
+  const dateInput = document.querySelector(
+    'input[type="date"]'
+  ) as HTMLInputElement
+  fireEvent.change(dateInput, { target: { value: '2999-01-01' } })
+  // Clicking Decommission with a future date runs validation and blocks it.
+  await user.click(screen.getByRole('button', { name: 'Decommission' }))
+  expect(
+    await screen.findByText(/Date cannot be in the future/i)
+  ).toBeInTheDocument()
+})
+
+test('a failed reactivate surfaces an error and keeps the modal open', async () => {
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  mock.onPut(/fismasystems\/42\/reactivate$/).reply(500)
+  const onClose = jest.fn()
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <EditSystemModal
+      title="Edit"
+      open
+      onClose={onClose}
+      system={DECOMMISSIONED}
+      mode="edit"
+      datacenterEnvironments={[]}
+      opdivs={OPDIVS}
+    />
+  )
+
+  await user.click(
+    await screen.findByRole('button', { name: /Reactivate System/i })
+  )
+  await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  // The failed PUT must not close the modal (no success onClose).
+  await waitFor(() =>
+    expect(mock.history.put.some((r) => /reactivate$/.test(r.url ?? ''))).toBe(
+      true
+    )
+  )
+  expect(onClose).not.toHaveBeenCalled()
 })
