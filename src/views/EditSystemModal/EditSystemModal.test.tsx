@@ -49,7 +49,10 @@ const SYSTEM = {
   datacallcontact: 'captain.needa@executor.empire',
   opdiv_id: 1,
   sdl_sync_enabled: false,
-  fips: 'Low',
+  // Extended selects default to null so tests that mock an empty attribute
+  // vocabulary don't render an out-of-range Select value. Tests exercising a
+  // specific field set both the value and its matching options.
+  fips: null,
   hva: null,
   cloud_system: null,
   cloud_service_model: null,
@@ -90,7 +93,7 @@ test('clearing an enum select to None saves an empty string, not null', async ()
       title="Edit"
       open
       onClose={jest.fn()}
-      system={SYSTEM}
+      system={{ ...SYSTEM, fips: 'Low' }}
       mode="edit"
       datacenterEnvironments={[]}
       opdivs={OPDIVS}

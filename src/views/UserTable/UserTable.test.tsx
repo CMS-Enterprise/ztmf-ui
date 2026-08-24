@@ -31,23 +31,38 @@ jest.mock('@mui/x-data-grid', () => {
       react.createElement('input', { 'aria-label': 'quick-filter' }),
     // GridActionsCellItem uses useGridRootProps and only works inside a
     // real DataGrid. Replace it with a plain button so it renders under
-    // our mocked DataGrid below.
-    GridActionsCellItem: (props: {
-      icon?: React.ReactNode
-      label?: string
-      onClick?: () => void
-      disabled?: boolean
-    }) =>
-      react.createElement(
-        'button',
-        {
-          type: 'button',
-          'aria-label': props.label,
-          onClick: props.onClick,
-          disabled: props.disabled,
+    // our mocked DataGrid below. forwardRef so the <Tooltip> wrappers in
+    // UserTable's columns can attach a ref without warning (the real
+    // GridActionsCellItem forwards refs too).
+    GridActionsCellItem: react.forwardRef(
+      (
+        props: {
+          icon?: React.ReactNode
+          label?: string
+          onClick?: () => void
+          disabled?: boolean
+          [key: string]: unknown
         },
-        props.label
-      ),
+        ref: React.Ref<HTMLButtonElement>
+      ) => {
+        // Drop the non-DOM props; spread the rest so the Tooltip's injected
+        // handlers/aria land on the node (otherwise MUI warns the child is not
+        // forwarding props).
+        const { icon: _icon, label, onClick, disabled, ...rest } = props
+        return react.createElement(
+          'button',
+          {
+            ...rest,
+            ref,
+            type: 'button',
+            'aria-label': label,
+            onClick,
+            disabled,
+          },
+          label
+        )
+      }
+    ),
     // Minimal DataGrid that renders the toolbar slot and each row's action
     // column, populates apiRef, and captures processRowUpdate so a test can
     // drive the create/edit save without simulating the inline-edit commit.
