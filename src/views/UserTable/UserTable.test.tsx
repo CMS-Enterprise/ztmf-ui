@@ -23,6 +23,12 @@ jest.mock('@mui/x-data-grid', () => {
   const react = require('react')
   return {
     ...actual,
+    // The toolbar internals call useGridRootProps, which only works inside a
+    // real DataGrid; stub them so EditToolbar renders under the mock.
+    GridToolbarContainer: ({ children }: { children: React.ReactNode }) =>
+      react.createElement('div', null, children),
+    GridToolbarQuickFilter: () =>
+      react.createElement('input', { 'aria-label': 'quick-filter' }),
     // GridActionsCellItem uses useGridRootProps and only works inside a
     // real DataGrid. Replace it with a plain button so it renders under
     // our mocked DataGrid below.
@@ -42,8 +48,9 @@ jest.mock('@mui/x-data-grid', () => {
         },
         props.label
       ),
-    // Minimal DataGrid that renders each row's action column so row-level
-    // buttons are clickable in tests.
+    // Minimal DataGrid that renders the toolbar slot and each row's action
+    // column, populates apiRef, and captures processRowUpdate so a test can
+    // drive the create/edit save without simulating the inline-edit commit.
     DataGrid: (props: {
       rows?: Array<Record<string, unknown>>
       columns?: Array<Record<string, unknown>>
@@ -51,21 +58,41 @@ jest.mock('@mui/x-data-grid', () => {
       apiRef?: {
         current: Record<string, unknown> | null
       }
+      processRowUpdate?: (row: Record<string, unknown>) => unknown
+      isCellEditable?: (p: {
+        field: string
+        row: Record<string, unknown>
+      }) => boolean
+      slots?: { toolbar?: (p: Record<string, unknown>) => React.ReactNode }
+      slotProps?: { toolbar?: Record<string, unknown> }
     }) => {
       const { rows = [], columns = [], getRowId } = props
-      // The real DataGrid populates apiRef.current; the row-action handlers
-      // (delete/restore) call apiRef.current.getRow(id), so the mock has to
-      // provide at least the API surface those handlers touch.
+      mockGrid.processRowUpdate = props.processRowUpdate
+      // Run the cell-editability gate so its predicate is exercised.
+      rows.forEach((row) =>
+        columns.forEach((col) =>
+          props.isCellEditable?.({ field: col.field as string, row })
+        )
+      )
       if (props.apiRef) {
         props.apiRef.current = {
           getRow: (id: string | number) =>
             rows.find((r) => (getRowId ? getRowId(r) : r.id) === id),
+          getRowWithUpdatedValues: (id: string | number) =>
+            rows.find((r) => (getRowId ? getRowId(r) : r.id) === id),
           updateRows: () => {},
         }
       }
+      const Toolbar = props.slots?.toolbar
       return react.createElement(
         'div',
         { 'data-testid': 'datagrid-mock' },
+        Toolbar
+          ? react.createElement(Toolbar, {
+              key: 'toolbar',
+              ...(props.slotProps?.toolbar ?? {}),
+            })
+          : null,
         rows.map((row) => {
           const id = getRowId ? getRowId(row) : (row.id as string | number)
           return react.createElement(
@@ -85,7 +112,23 @@ jest.mock('@mui/x-data-grid', () => {
                   getActions({ id, row })
                 )
               }
-              return null
+              // Exercise each column's valueGetter/renderCell so the column
+              // definitions (labels, OpDiv chips, last-seen formatting) run.
+              const field = col.field as string
+              const valueGetter = col.valueGetter as
+                | ((p: unknown) => unknown)
+                | undefined
+              const renderCell = col.renderCell as
+                | ((p: unknown) => React.ReactNode)
+                | undefined
+              const value = valueGetter
+                ? valueGetter({ row, id, value: row[field] })
+                : row[field]
+              return react.createElement(
+                'div',
+                { key: field },
+                renderCell ? renderCell({ row, id, value, field }) : null
+              )
             })
           )
         })
@@ -94,10 +137,25 @@ jest.mock('@mui/x-data-grid', () => {
   }
 })
 
+// Captures the live processRowUpdate handler from the mocked DataGrid so tests
+// can invoke the create/edit save path directly (the inline-edit commit that
+// would call it is not simulated by the minimal grid).
+const mockGrid: {
+  processRowUpdate?: (row: Record<string, unknown>) => unknown
+} = {}
+
 jest.mock('@/utils/config', () => ({
   __esModule: true,
   default: { IDP_ENABLED: false },
 }))
+
+// OpDiv grant writes/reads during create-with-grants and row refresh.
+jest.mock('@/utils/userOpdivs', () => ({
+  __esModule: true,
+  setUserOpDivs: jest.fn().mockResolvedValue(undefined),
+  fetchUserOpDivs: jest.fn().mockResolvedValue([]),
+}))
+const setUserOpDivs = require('@/utils/userOpdivs').setUserOpDivs as jest.Mock
 
 // notify drives the delete/restore snackbars; mock it to assert calls.
 // isAuthHandled must stay a real-ish predicate (false for ordinary errors) so
@@ -697,4 +755,248 @@ test('restoring a deleted user confirms, PUTs /restore, and notifies success', a
     'success',
     expect.anything()
   )
+})
+
+// ---------------------------------------------------------------------------
+// Create/edit save path (processRowUpdate) and the toolbar. These run through
+// the DataGrid inline-edit lifecycle in production; here the mock captures the
+// handler so the create POST, edit PUT, and error routing are exercised
+// directly, and renders the toolbar so Add User and the view toggles run.
+// ---------------------------------------------------------------------------
+
+import { act } from '@testing-library/react'
+
+test('the toolbar adds an editable row and toggles the view switches', async () => {
+  const user = userEvent.setup()
+  mockUsers([PIETT_ROW])
+
+  renderWithProviders(<UserTable />)
+
+  // Add User seeds a blank row in edit mode, which renders Save/Cancel actions.
+  await user.click(await screen.findByRole('button', { name: /Add User/i }))
+  expect(
+    await screen.findByRole('button', { name: 'Save' })
+  ).toBeInTheDocument()
+  expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+
+  // The view toggles drive their setters (and a refetch for Show Deleted).
+  await user.click(screen.getByRole('checkbox', { name: /Show Deleted/i }))
+  await user.click(screen.getByRole('checkbox', { name: /No Activity Only/i }))
+})
+
+test('Save on an incomplete new row shows the required-fields error', async () => {
+  const user = userEvent.setup()
+  mockUsers([PIETT_ROW])
+
+  renderWithProviders(<UserTable />)
+
+  await user.click(await screen.findByRole('button', { name: /Add User/i }))
+  // The new row is blank, so committing it fails validation rather than saving.
+  await user.click(await screen.findByRole('button', { name: 'Save' }))
+  expect(
+    await screen.findByText(/Please fill required fields/i)
+  ).toBeInTheDocument()
+})
+
+test('Cancel on a new row removes it', async () => {
+  const user = userEvent.setup()
+  mockUsers([PIETT_ROW])
+
+  renderWithProviders(<UserTable />)
+
+  await user.click(await screen.findByRole('button', { name: /Add User/i }))
+  await user.click(await screen.findByRole('button', { name: 'Cancel' }))
+  // The Save/Cancel pair is gone once the new row is discarded.
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'Save' })
+    ).not.toBeInTheDocument()
+  )
+})
+
+test('processRowUpdate creates a user (POST /users) for a new row', async () => {
+  mockUsers([])
+  let postBody: Record<string, unknown> | undefined
+  axios.post.mockImplementation(
+    (url: string, body: Record<string, unknown>) => {
+      if (url === '/users') {
+        postBody = body
+        return Promise.resolve({ data: { data: { userid: 'srv-1' } } })
+      }
+      return Promise.resolve({ data: {} })
+    }
+  )
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  await act(async () => {
+    await mockGrid.processRowUpdate?.({
+      userid: 500,
+      isNew: true,
+      fullname: 'New Admin',
+      email: 'new@agency.gov',
+      role: 'ISSO',
+    })
+  })
+
+  expect(postBody).toMatchObject({
+    fullname: 'New Admin',
+    email: 'new@agency.gov',
+    role: 'ISSO',
+  })
+})
+
+test('processRowUpdate edits a user (PUT /users/:id) for an existing row', async () => {
+  mockUsers([PIETT_ROW])
+  let putUrl: string | undefined
+  let putBody: Record<string, unknown> | undefined
+  axios.put.mockImplementation((url: string, body: Record<string, unknown>) => {
+    putUrl = url
+    putBody = body
+    return Promise.resolve({ data: {} })
+  })
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  await act(async () => {
+    await mockGrid.processRowUpdate?.({
+      userid: PIETT_ROW.userid,
+      isNew: false,
+      fullname: 'Admiral Firmus Piett',
+      email: 'piett@executor.empire',
+      role: 'ISSM',
+    })
+  })
+
+  expect(putUrl).toBe(`/users/${PIETT_ROW.userid}`)
+  expect(putBody).toMatchObject({
+    fullname: 'Admiral Firmus Piett',
+    role: 'ISSM',
+  })
+})
+
+test('processRowUpdate surfaces a 400 field error on a failed create', async () => {
+  mockUsers([])
+  axios.post.mockImplementation((url: string) => {
+    if (url === '/users') {
+      return Promise.reject({
+        isAxiosError: true,
+        response: {
+          status: 400,
+          data: { data: { email: 'Email already exists' } },
+        },
+      })
+    }
+    return Promise.resolve({ data: {} })
+  })
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  await act(async () => {
+    await mockGrid.processRowUpdate?.({
+      userid: 501,
+      isNew: true,
+      fullname: 'Dup',
+      email: 'dup@agency.gov',
+      role: 'ISSO',
+    })
+  })
+
+  expect(await screen.findByText(/Email already exists/i)).toBeInTheDocument()
+})
+
+test('backfills OpDiv grants per user when the list omits them inline', async () => {
+  // An older backend response without assignedopdivids on the row triggers the
+  // per-user fetchUserOpDivs backfill rather than the inline read.
+  const legacyRow = {
+    userid: '33333333-3333-3333-3333-333333333333',
+    email: 'legacy@agency.gov',
+    fullname: 'Legacy Admin',
+    role: 'ISSO',
+    assignedfismasystems: [],
+  } as unknown as users
+  const { fetchUserOpDivs } = require('@/utils/userOpdivs') as {
+    fetchUserOpDivs: jest.Mock
+  }
+  fetchUserOpDivs.mockResolvedValue([1])
+  mockUsers([legacyRow])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  // The row has no inline grants, so the component fetches them per user.
+  await waitFor(() =>
+    expect(fetchUserOpDivs).toHaveBeenCalledWith(legacyRow.userid)
+  )
+})
+
+test('processRowUpdate grants OpDivs when a new row carries them', async () => {
+  mockUsers([])
+  axios.post.mockImplementation((url: string) => {
+    if (url === '/users')
+      return Promise.resolve({ data: { data: { userid: 'srv-9' } } })
+    return Promise.resolve({ data: {} })
+  })
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  await act(async () => {
+    await mockGrid.processRowUpdate?.({
+      userid: 600,
+      isNew: true,
+      fullname: 'Granted Admin',
+      email: 'granted@agency.gov',
+      role: 'OPDIV_ADMIN',
+      opdivs: [1, 2],
+    })
+  })
+
+  // The created user's id is granted the selected OpDivs.
+  expect(setUserOpDivs).toHaveBeenCalledWith('srv-9', [1, 2])
+})
+
+test('editing an existing row and saving valid values leaves edit mode', async () => {
+  const user = userEvent.setup()
+  mockUsers([PIETT_ROW])
+
+  renderWithProviders(<UserTable />)
+
+  // Enter edit mode via the row Edit action, then Save. PIETT_ROW is complete,
+  // so validation passes and the row returns to view mode without an error.
+  await user.click(await screen.findByRole('button', { name: 'Edit' }))
+  await user.click(await screen.findByRole('button', { name: 'Save' }))
+
+  expect(
+    screen.queryByText(/Please fill required fields/i)
+  ).not.toBeInTheDocument()
+})
+
+test('processRowUpdate surfaces the error toast on a failed edit', async () => {
+  mockUsers([PIETT_ROW])
+  axios.put.mockRejectedValue({
+    isAxiosError: true,
+    response: {
+      status: 400,
+      data: { data: { email: 'Email already in use' } },
+    },
+  })
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  await act(async () => {
+    await mockGrid.processRowUpdate?.({
+      userid: PIETT_ROW.userid,
+      isNew: false,
+      fullname: 'Admiral Piett',
+      email: 'dup@executor.empire',
+      role: 'ISSO',
+    })
+  })
+
+  expect(await screen.findByText(/Email already in use/i)).toBeInTheDocument()
 })
