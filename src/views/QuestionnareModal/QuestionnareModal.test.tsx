@@ -148,3 +148,55 @@ test('the Close button calls onClose', async () => {
 
   expect(onClose).toHaveBeenCalled()
 })
+
+test('changing an existing answer and clicking Next PUTs the score', async () => {
+  // An existing score for the first question means selecting a different option
+  // is an edit (PUT scores/:id), not a create.
+  mock.onGet(/scores\?datacallid=/).reply(200, {
+    data: [
+      {
+        scoreid: 55,
+        fismasystemid: 42,
+        functionoptionid: 100,
+        notes: 'prior note',
+        datacallid: 5,
+      },
+    ],
+  })
+  mock.onGet(/scores\?fismasystemid=/).reply(200, { data: [] })
+  let putUrl: string | undefined
+  mock.onPut(/scores\/55$/).reply((config) => {
+    putUrl = config.url
+    return [200, {}]
+  })
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <QuestionnareModal open onClose={jest.fn()} system={SYSTEM} />
+  )
+
+  // The prior answer is pre-selected; switch it, then advance.
+  await user.click(await screen.findByLabelText('Continuous verification'))
+  await user.click(screen.getByRole('button', { name: /Next/ }))
+
+  await waitFor(() => expect(putUrl).toBe('scores/55'))
+})
+
+test('Back returns to the previous question', async () => {
+  const user = userEvent.setup()
+
+  renderWithProviders(
+    <QuestionnareModal open onClose={jest.fn()} system={SYSTEM} />
+  )
+
+  // Advance to the second question, then go Back to the first.
+  await screen.findByText('How is identity verified?')
+  await user.click(screen.getByRole('button', { name: /Next/ }))
+  expect(
+    await screen.findByText('How are devices managed?')
+  ).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /Back/ }))
+  expect(
+    await screen.findByText('How is identity verified?')
+  ).toBeInTheDocument()
+})
