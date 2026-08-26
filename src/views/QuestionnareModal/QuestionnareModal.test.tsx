@@ -116,8 +116,7 @@ test('selecting an option and clicking Next POSTs a new score', async () => {
     postBody = JSON.parse(config.data)
     return [201, { data: {} }]
   })
-  // handleQuestionnareNext refetches scores after saving.
-  mock.onGet(/scores\?fismasystemid=/).reply(200, { data: [] })
+  // The post-save refetch reuses the scores?datacallid=... handler above.
   const user = userEvent.setup()
 
   renderWithProviders(
@@ -163,7 +162,6 @@ test('changing an existing answer and clicking Next PUTs the score', async () =>
       },
     ],
   })
-  mock.onGet(/scores\?fismasystemid=/).reply(200, { data: [] })
   let putUrl: string | undefined
   mock.onPut(/scores\/55$/).reply((config) => {
     putUrl = config.url
@@ -183,14 +181,20 @@ test('changing an existing answer and clicking Next PUTs the score', async () =>
 })
 
 test('Back returns to the previous question', async () => {
+  // Answer the first question and mock its save, so advancing with Next is a
+  // clean save rather than a junk POST for an unselected option (which would
+  // 404 and log an error). The post-save refetch is served by the
+  // scores?datacallid=... handler in beforeEach.
+  mock.onPost('scores').reply(201, { data: {} })
+  const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
   const user = userEvent.setup()
 
   renderWithProviders(
     <QuestionnareModal open onClose={jest.fn()} system={SYSTEM} />
   )
 
+  await user.click(await screen.findByLabelText('Manual verification'))
   // Advance to the second question, then go Back to the first.
-  await screen.findByText('How is identity verified?')
   await user.click(screen.getByRole('button', { name: /Next/ }))
   expect(
     await screen.findByText('How are devices managed?')
@@ -199,4 +203,11 @@ test('Back returns to the previous question', async () => {
   expect(
     await screen.findByText('How is identity verified?')
   ).toBeInTheDocument()
+
+  // The advance saved cleanly - no "Error saving score" from a junk POST.
+  expect(errSpy).not.toHaveBeenCalledWith(
+    'Error saving score:',
+    expect.anything()
+  )
+  errSpy.mockRestore()
 })

@@ -19,16 +19,29 @@ jest.mock('../Title/Context', () => ({
   useContextProp: () => mockCtx,
 }))
 
-import { screen, waitFor, within } from '@testing-library/react'
+import { screen, waitFor, within, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import MockAdapter from 'axios-mock-adapter'
 import SystemDetailPage from './SystemDetailPage'
 import axiosInstance from '@/axiosConfig'
+import { STATUS_MESSAGES, ERROR_MESSAGES } from '@/constants'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, UserRole, userData } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
+const notify = require('@/utils/notify').notify as jest.Mock
+
+// Set the decommission date to an explicit past date. The form defaults it to
+// getTodayISO() (the LOCAL calendar date), which validateDecommissionDate then
+// parses as UTC midnight and compares against UTC-today; in a UTC+ timezone the
+// local date can be a day ahead in UTC and read as "in the future," so relying
+// on the default fails there. A fixed past date keeps these tests
+// timezone-independent.
+function setDecommissionDate(value = '2020-01-01') {
+  const input = document.querySelector('input[type="date"]') as HTMLInputElement
+  fireEvent.change(input, { target: { value } })
+}
 
 const BASE_SYSTEM = {
   fismasystemid: 42,
@@ -58,6 +71,7 @@ const BASE_SYSTEM = {
 
 beforeEach(() => {
   mock.reset()
+  notify.mockClear()
   mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
@@ -101,30 +115,56 @@ function clickEdit(user: ReturnType<typeof userEvent.setup>) {
   return user.click(editBtn)
 }
 
-test('decommissioning an active system DELETEs with the chosen date and notifies', async () => {
+test('decommissioning an active system DELETEs with the chosen date, notifies, and updates state', async () => {
   const captured: { body?: Record<string, unknown> } = {}
   mock.onDelete(/fismasystems\/42$/).reply((config) => {
     captured.body = config.data ? JSON.parse(config.data) : undefined
     return [200, {}]
   })
   const user = userEvent.setup()
-  renderPage(BASE_SYSTEM)
+  const system = BASE_SYSTEM
+  renderPage(system)
+  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System Identity')
   await clickEdit(user)
 
-  // Reveal the decommission form (date defaults to today, already valid).
   await user.click(
     await screen.findByRole('checkbox', { name: /Decommission System/i })
   )
+  setDecommissionDate('2020-01-01')
   await user.click(await screen.findByRole('button', { name: 'Decommission' }))
-
-  // Confirm dialog gates the destructive request.
   const dialog = await screen.findByRole('dialog')
   await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
-  expect(captured.body).toHaveProperty('decommissioned_date')
+  // The chosen date is sent.
+  expect(captured.body).toMatchObject({
+    decommissioned_date: '2020-01-01T00:00:00.000Z',
+  })
+  // The success outcome fires: toast + the system is flipped to
+  // decommissioned in shared state (guards against a handler that only calls
+  // the API and drops the state update).
+  await waitFor(() =>
+    expect(notify).toHaveBeenCalledWith(
+      STATUS_MESSAGES.systemDecommissioned,
+      'success',
+      expect.anything()
+    )
+  )
+  expect(setFismaSystems).toHaveBeenCalled()
+  const updater = setFismaSystems.mock.calls.at(-1)![0] as (
+    prev: FismaSystemType[]
+  ) => FismaSystemType[]
+  expect(
+    updater([system]).find((s) => s.fismasystemid === 42)?.decommissioned
+  ).toBe(true)
+  // The page leaves edit mode, so the form's Save control is gone.
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('button', { name: 'Save' })
+    ).not.toBeInTheDocument()
+  )
 })
 
 test('cancelling the decommission confirmation issues no DELETE', async () => {
@@ -141,12 +181,19 @@ test('cancelling the decommission confirmation issues no DELETE', async () => {
   await user.click(
     await screen.findByRole('checkbox', { name: /Decommission System/i })
   )
+  setDecommissionDate('2020-01-01')
   await user.click(await screen.findByRole('button', { name: 'Decommission' }))
 
   const dialog = await screen.findByRole('dialog')
   await user.click(within(dialog).getByRole('button', { name: /cancel/i }))
 
   expect(deleteCalled).toBe(false)
+  // Cancel is a no-op: no decommission toast either.
+  expect(notify).not.toHaveBeenCalledWith(
+    STATUS_MESSAGES.systemDecommissioned,
+    'success',
+    expect.anything()
+  )
 })
 
 test('reactivating a decommissioned system PUTs /reactivate and notifies', async () => {
@@ -162,6 +209,7 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
   })
   const user = userEvent.setup()
   renderPage(decommissioned)
+  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System Identity')
   await clickEdit(user)
@@ -176,6 +224,21 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
   await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
 
   await waitFor(() => expect(reactivateCalled).toBe(true))
+  // Success outcome: toast + the system is flipped back to active in state.
+  await waitFor(() =>
+    expect(notify).toHaveBeenCalledWith(
+      STATUS_MESSAGES.systemReactivated,
+      'success',
+      expect.anything()
+    )
+  )
+  const updater = setFismaSystems.mock.calls.at(-1)![0] as (
+    prev: FismaSystemType[]
+  ) => FismaSystemType[]
+  expect(
+    updater([decommissioned]).find((s) => s.fismasystemid === 42)
+      ?.decommissioned
+  ).toBe(false)
 })
 
 // ---------------------------------------------------------------------------
@@ -183,7 +246,7 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
 // single-system fetch fallback, and the save error path.
 // ---------------------------------------------------------------------------
 
-test('a decommissioned system resolves the decommissioned-by and reactivated-by names', async () => {
+test('resolves decommissioned-by (read view) and reactivated-by (edit view) UUIDs to names', async () => {
   const decommissioned = {
     ...BASE_SYSTEM,
     decommissioned: true,
@@ -198,11 +261,19 @@ test('a decommissioned system resolves the decommissioned-by and reactivated-by 
   mock
     .onGet('/users/user-piett')
     .reply(200, { data: { fullname: 'Admiral Piett' } })
+  const user = userEvent.setup()
 
   renderPage(decommissioned)
 
-  // The read view shows the resolved human name rather than the raw UUID.
+  // The read view resolves the decommissioned-by UUID to a name.
   expect(await screen.findByText('Admiral Ozzel')).toBeInTheDocument()
+  expect(screen.queryByText('user-ozzel')).not.toBeInTheDocument()
+
+  // The edit view additionally shows the reactivated-by name, so both
+  // resolution effects are exercised through their rendered output.
+  await clickEdit(user)
+  expect(await screen.findByText(/Admiral Piett/)).toBeInTheDocument()
+  expect(screen.queryByText(/user-piett/)).not.toBeInTheDocument()
 })
 
 test('falls back to a single-system fetch when the system is not in context', async () => {
@@ -268,21 +339,33 @@ test('a 404 on decommission surfaces the system-not-found error', async () => {
   mock.onDelete(/fismasystems\/42$/).reply(404, {})
   const user = userEvent.setup()
   renderPage(BASE_SYSTEM)
+  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System Identity')
   await clickEdit(user)
   await user.click(
     await screen.findByRole('checkbox', { name: /Decommission System/i })
   )
+  setDecommissionDate('2020-01-01')
   await user.click(await screen.findByRole('button', { name: 'Decommission' }))
   const dialog = await screen.findByRole('dialog')
   await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
 
-  // The DELETE was attempted; a 404 keeps the page in edit mode rather than
-  // reporting success.
+  // The 404 branch surfaces the specific not-found error, not a success or a
+  // generic message, and does not touch shared state.
   await waitFor(() =>
-    expect(mock.history.delete.some((r) => /42$/.test(r.url ?? ''))).toBe(true)
+    expect(notify).toHaveBeenCalledWith(
+      ERROR_MESSAGES.systemNotFound,
+      'error',
+      expect.anything()
+    )
   )
+  expect(notify).not.toHaveBeenCalledWith(
+    STATUS_MESSAGES.systemDecommissioned,
+    'success',
+    expect.anything()
+  )
+  expect(setFismaSystems).not.toHaveBeenCalled()
 })
 
 test('a failed reactivate does not exit the decommissioned state', async () => {
@@ -294,6 +377,7 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
   mock.onPut(/fismasystems\/42\/reactivate$/).reply(500, {})
   const user = userEvent.setup()
   renderPage(decommissioned)
+  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System Identity')
   await clickEdit(user)
@@ -309,6 +393,14 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
       true
     )
   )
+  // A 500 must not report success or flip the system back to active - the
+  // guard against a catch that treats failure as success.
+  expect(notify).not.toHaveBeenCalledWith(
+    STATUS_MESSAGES.systemReactivated,
+    'success',
+    expect.anything()
+  )
+  expect(setFismaSystems).not.toHaveBeenCalled()
 })
 
 test('toggling data-lake sync in edit mode updates the draft', async () => {

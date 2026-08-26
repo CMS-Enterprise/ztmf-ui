@@ -19,11 +19,13 @@ import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import EditSystemModal from './EditSystemModal'
 import { EMPTY_SYSTEM } from './emptySystem'
+import { STATUS_MESSAGES, ERROR_MESSAGES } from '@/constants'
 import axiosInstance from '@/axiosConfig'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, OpDiv } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
+const notify = require('@/utils/notify').notify as jest.Mock
 afterEach(() => mock.reset())
 // Arrives as a prop from Title, so the dropdown needs no request mock.
 const OPDIVS: OpDiv[] = [
@@ -777,11 +779,15 @@ test('a failed reactivate surfaces an error and keeps the modal open', async () 
   const dialog = await screen.findByRole('dialog')
   await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
 
-  // The failed PUT must not close the modal (no success onClose).
+  // The failure surfaces the reactivate error toast specifically (a bodyless
+  // 500 parses to the try-again message), not success, and does not close.
   await waitFor(() =>
-    expect(mock.history.put.some((r) => /reactivate$/.test(r.url ?? ''))).toBe(
-      true
-    )
+    expect(notify).toHaveBeenCalledWith(ERROR_MESSAGES.tryAgain, 'error')
+  )
+  expect(notify).not.toHaveBeenCalledWith(
+    STATUS_MESSAGES.systemReactivated,
+    'success',
+    expect.anything()
   )
   expect(onClose).not.toHaveBeenCalled()
 })

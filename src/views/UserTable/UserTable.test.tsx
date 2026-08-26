@@ -83,12 +83,7 @@ jest.mock('@mui/x-data-grid', () => {
     }) => {
       const { rows = [], columns = [], getRowId } = props
       mockGrid.processRowUpdate = props.processRowUpdate
-      // Run the cell-editability gate so its predicate is exercised.
-      rows.forEach((row) =>
-        columns.forEach((col) =>
-          props.isCellEditable?.({ field: col.field as string, row })
-        )
-      )
+      mockGrid.isCellEditable = props.isCellEditable
       if (props.apiRef) {
         props.apiRef.current = {
           getRow: (id: string | number) =>
@@ -157,6 +152,10 @@ jest.mock('@mui/x-data-grid', () => {
 // would call it is not simulated by the minimal grid).
 const mockGrid: {
   processRowUpdate?: (row: Record<string, unknown>) => unknown
+  isCellEditable?: (p: {
+    field: string
+    row: Record<string, unknown>
+  }) => boolean
 } = {}
 
 jest.mock('@/utils/config', () => ({
@@ -292,6 +291,16 @@ beforeEach(() => {
   axios.post.mockReset()
   axios.put.mockReset()
   axios.delete.mockReset()
+  // resetMocks: true (jest.config) wipes implementations set at mock-factory
+  // time, so re-establish the ones consumers depend on: ordinary errors are not
+  // auth-handled, and the OpDiv grant reads/writes resolve.
+  ;(require('@/utils/notify').isAuthHandled as jest.Mock).mockReturnValue(false)
+  ;(
+    require('@/utils/userOpdivs').fetchUserOpDivs as jest.Mock
+  ).mockResolvedValue([])
+  ;(require('@/utils/userOpdivs').setUserOpDivs as jest.Mock).mockResolvedValue(
+    undefined
+  )
 })
 
 test('fetches both /fismasystems and /fismasystems?decommissioned=true regardless of context', async () => {
@@ -781,7 +790,7 @@ test('restoring a deleted user confirms, PUTs /restore, and notifies success', a
 
 import { act } from '@testing-library/react'
 
-test('the toolbar adds an editable row and toggles the view switches', async () => {
+test('the Add User toolbar button seeds an editable row', async () => {
   const user = userEvent.setup()
   mockUsers([PIETT_ROW])
 
@@ -793,10 +802,31 @@ test('the toolbar adds an editable row and toggles the view switches', async () 
     await screen.findByRole('button', { name: 'Save' })
   ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: 'Cancel' })).toBeInTheDocument()
+})
 
-  // The view toggles drive their setters (and a refetch for Show Deleted).
+test('Show Deleted refetches users with the deleted flag; No Activity Only toggles state', async () => {
+  const user = userEvent.setup()
+  mockUsers([PIETT_ROW])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  // Show Deleted flips the users fetch to the deleted set.
   await user.click(screen.getByRole('checkbox', { name: /Show Deleted/i }))
-  await user.click(screen.getByRole('checkbox', { name: /No Activity Only/i }))
+  await waitFor(() =>
+    expect(
+      axios.get.mock.calls.some(
+        (c: unknown[]) =>
+          c[0] === '/users' &&
+          (c[1] as { params?: { deleted?: boolean } })?.params?.deleted === true
+      )
+    ).toBe(true)
+  )
+
+  // No Activity Only drives a client-side filter; its control reflects the state.
+  const noActivity = screen.getByRole('checkbox', { name: /No Activity Only/i })
+  await user.click(noActivity)
+  expect(noActivity).toBeChecked()
 })
 
 test('Save on an incomplete new row shows the required-fields error', async () => {
@@ -972,6 +1002,10 @@ test('processRowUpdate grants OpDivs when a new row carries them', async () => {
 
   // The created user's id is granted the selected OpDivs.
   expect(setUserOpDivs).toHaveBeenCalledWith('srv-9', [1, 2])
+  // The grant succeeds, so the success snackbar shows, NOT the
+  // "grants failed" fallback (which is what surfaced when the grant read threw).
+  expect(await screen.findByText('Saved')).toBeInTheDocument()
+  expect(screen.queryByText(/OpDiv grants failed/i)).not.toBeInTheDocument()
 })
 
 test('editing an existing row and saving valid values leaves edit mode', async () => {
@@ -980,14 +1014,21 @@ test('editing an existing row and saving valid values leaves edit mode', async (
 
   renderWithProviders(<UserTable />)
 
-  // Enter edit mode via the row Edit action, then Save. PIETT_ROW is complete,
-  // so validation passes and the row returns to view mode without an error.
+  // Enter edit mode via the row Edit action; Save/Cancel replace the view actions.
   await user.click(await screen.findByRole('button', { name: 'Edit' }))
-  await user.click(await screen.findByRole('button', { name: 'Save' }))
+  await screen.findByRole('button', { name: 'Save' })
 
+  // PIETT_ROW is complete, so Save validates and returns the row to view mode:
+  // the Edit action comes back and Save/Cancel are gone (a save that failed
+  // validation would keep the row in edit mode instead).
+  await user.click(screen.getByRole('button', { name: 'Save' }))
   expect(
     screen.queryByText(/Please fill required fields/i)
   ).not.toBeInTheDocument()
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: 'Edit' })).toBeInTheDocument()
+  )
+  expect(screen.queryByRole('button', { name: 'Save' })).not.toBeInTheDocument()
 })
 
 test('processRowUpdate surfaces the error toast on a failed edit', async () => {
@@ -1014,4 +1055,28 @@ test('processRowUpdate surfaces the error toast on a failed edit', async () => {
   })
 
   expect(await screen.findByText(/Email already in use/i)).toBeInTheDocument()
+})
+
+test('isCellEditable forwards the field, row, and caller context to the guard', async () => {
+  // Exercises the grid's isCellEditable wiring (the arrow that passes field/row
+  // plus assignableRoles + showIdpSelector into isUserCellEditable), with real
+  // assertions rather than an invoke-and-discard coverage loop. The predicate
+  // itself is covered in cellEditGuards.test.ts.
+  mockUsers([PIETT_ROW])
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  const isCellEditable = mockGrid.isCellEditable!
+  // role: editable when the caller (OWNER) can assign that role. This throws if
+  // assignableRoles was not wired through (undefined.includes), so a true here
+  // proves the context reached the guard.
+  expect(
+    isCellEditable({ field: 'role', row: { isNew: false, role: 'ISSO' } })
+  ).toBe(true)
+  // opdivs are only editable while creating a row, not on an existing one.
+  expect(isCellEditable({ field: 'opdivs', row: { isNew: false } })).toBe(false)
+  // A field with no special guard stays editable.
+  expect(
+    isCellEditable({ field: 'fullname', row: { isNew: false, role: 'ISSO' } })
+  ).toBe(true)
 })
