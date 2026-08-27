@@ -31,14 +31,16 @@ function prefersReducedMotion(): boolean {
  * Grow/Slide dialog transition) would otherwise capture it. useWorker is off so
  * this instance owns its animation state and the unmount reset() cannot cancel
  * an unrelated confetti animation sharing the library's singleton worker.
- * Honors the reduced-motion preference.
- * @returns {React.ReactPortal} A viewport overlay canvas portaled to the body.
+ * Honors the reduced-motion preference, rendering nothing in that case.
+ * @returns {React.ReactPortal | null} A viewport overlay canvas portaled to the
+ *   body, or null when the user prefers reduced motion.
  */
 export default function ConfettiBurst() {
   const canvasRef = useRef<HTMLCanvasElement>(null)
+  const reducedMotion = prefersReducedMotion()
 
   useEffect(() => {
-    if (prefersReducedMotion()) return
+    if (reducedMotion) return
     const canvas = canvasRef.current
     if (!canvas) return
     const fire = confetti.create(canvas, { resize: true, useWorker: false })
@@ -50,7 +52,10 @@ export default function ConfettiBurst() {
     return () => {
       fire.reset()
     }
-  }, [])
+  }, [reducedMotion])
+
+  // No overlay at all under reduced motion: skip the burst and the dead canvas.
+  if (reducedMotion) return null
 
   return createPortal(
     <canvas
