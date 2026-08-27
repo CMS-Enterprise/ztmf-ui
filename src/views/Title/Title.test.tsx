@@ -191,6 +191,37 @@ describe('Title logout affordance', () => {
     ).not.toBeInTheDocument()
   })
 
+  it.each(['OWNER', 'HHS_ADMIN', 'HHS_READONLY_ADMIN'] as UserRole[])(
+    'shows the Events entry for the unscoped-read tier %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /account menu/i })
+      )
+
+      expect(
+        await screen.findByRole('menuitem', { name: /^events$/i })
+      ).toBeInTheDocument()
+    }
+  )
+
+  it.each(['OPDIV_ADMIN', 'OPDIV_READONLY_ADMIN', 'ISSO'] as UserRole[])(
+    'hides the Events entry from the scoped tier %s the endpoint 403s',
+    async (role) => {
+      renderTitleFor(role)
+
+      await userEvent.click(
+        screen.getByRole('button', { name: /account menu/i })
+      )
+
+      await screen.findByRole('menuitem', { name: /log out/i })
+      expect(
+        screen.queryByRole('menuitem', { name: /^events$/i })
+      ).not.toBeInTheDocument()
+    }
+  )
+
   it('calls the logout endpoint and lands the user on the sign-in page', async () => {
     renderTitleFor('ISSO')
 
