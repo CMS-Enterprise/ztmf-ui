@@ -33,6 +33,9 @@ test('fires a confetti burst on mount', () => {
   setReducedMotion(false)
   render(<ConfettiBurst />)
   expect(confettiFireMock).toHaveBeenCalledTimes(1)
+  // The overlay is portaled to the body, so it lands outside the render
+  // container.
+  expect(document.body.querySelector('canvas')).toBeInTheDocument()
 })
 
 test('suppresses the burst when the user prefers reduced motion', () => {
@@ -40,4 +43,6 @@ test('suppresses the burst when the user prefers reduced motion', () => {
   render(<ConfettiBurst />)
   expect(confettiCreateMock).not.toHaveBeenCalled()
   expect(confettiFireMock).not.toHaveBeenCalled()
+  // Renders nothing at all: no burst and no dead canvas left in the body.
+  expect(document.body.querySelector('canvas')).not.toBeInTheDocument()
 })
