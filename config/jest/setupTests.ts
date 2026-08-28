@@ -21,3 +21,15 @@ Object.defineProperty(globalThis, 'crypto', {
   configurable: true,
   writable: true,
 })
+
+// canvas-confetti draws to a real <canvas>, and jsdom has no 2D context, so the
+// real library throws mid-animation whenever a completed questionnaire renders.
+// Default every suite to a no-op. Plain functions (not jest.fn) so resetMocks
+// leaves them intact; the dedicated confetti tests override this with a mock
+// they assert on.
+jest.mock('canvas-confetti', () => {
+  const fire = Object.assign(() => {}, { reset: () => {} })
+  const confetti = () => {}
+  ;(confetti as unknown as { create: unknown }).create = () => fire
+  return { __esModule: true, default: confetti }
+})
