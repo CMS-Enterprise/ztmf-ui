@@ -8,7 +8,6 @@ import jsxA11yPlugin from 'eslint-plugin-jsx-a11y'
 import jestPlugin from 'eslint-plugin-jest'
 import prettierPlugin from 'eslint-plugin-prettier'
 import prettierConfig from 'eslint-config-prettier'
-import storybookPlugin from 'eslint-plugin-storybook'
 
 export default tseslint.config(
   {
@@ -157,17 +156,6 @@ export default tseslint.config(
       globals: {
         ...globals.node,
       },
-    },
-  },
-
-  // Storybook files
-  {
-    files: ['**/*.stories.{ts,tsx}'],
-    plugins: {
-      storybook: storybookPlugin,
-    },
-    rules: {
-      ...storybookPlugin.configs.recommended.rules,
     },
   },
 

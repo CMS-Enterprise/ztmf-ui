@@ -25,6 +25,7 @@ jest.mock('./draftStore', () => ({
   saveDraft: jest.fn().mockResolvedValue(true),
   loadDraft: jest.fn().mockResolvedValue(null),
   clearDraft: jest.fn().mockResolvedValue(undefined),
+  hasDeclinedDraft: jest.fn().mockResolvedValue(false),
 }))
 
 // notify() reaches notistack's standalone enqueueSnackbar, which needs a
@@ -112,6 +113,8 @@ function makeCtx(role: userData['role'] | undefined) {
     setShowDecommissioned: jest.fn(),
     fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
+    opdivs: [],
+    opdivsLoaded: true,
   }
 }
 

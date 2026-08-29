@@ -9,6 +9,7 @@ import {
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
+import { COMPLETE_HINT_MSG, NEXT_HINT_MSG } from '@/constants'
 import type { userData } from '@/types'
 
 // Rendered-component coverage for three QuestionnairePage effect paths from
@@ -52,12 +53,16 @@ const clearDraftMock = jest
 const loadDraftMock = jest
   .fn<Promise<null>, unknown[]>()
   .mockResolvedValue(null)
+const hasDeclinedDraftMock = jest
+  .fn<Promise<boolean>, unknown[]>()
+  .mockResolvedValue(false)
 
 jest.mock('./draftStore', () => ({
   saveDraft: (...args: unknown[]) =>
     saveDraftMock(...(args as Parameters<typeof saveDraftMock>)),
   loadDraft: (...args: unknown[]) => loadDraftMock(...args),
   clearDraft: (...args: unknown[]) => clearDraftMock(...args),
+  hasDeclinedDraft: (...args: unknown[]) => hasDeclinedDraftMock(...args),
 }))
 
 const notifyMock = jest.fn()
@@ -192,6 +197,8 @@ function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
     setShowDecommissioned: jest.fn(),
     fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
+    opdivs: [],
+    opdivsLoaded: true,
     ...overrides,
   }
 }
@@ -220,6 +227,7 @@ beforeEach(() => {
   saveDraftMock.mockResolvedValue(true)
   clearDraftMock.mockResolvedValue(undefined)
   loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(false)
 })
 
 // ---------------------------------------------------------------------------
@@ -333,6 +341,76 @@ test('read-only session evicts the current-question draft on mount', async () =>
 
 const viewPings = () =>
   axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'events/view')
+
+// The store declines rather than deletes, but the no-edits clear fires
+// whenever on-screen values match the server's — exactly what a declined load
+// leaves behind. Without the guard, opening the question deletes the entry.
+test('does not clear a draft the store declined to read', async () => {
+  loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(true)
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // Let the debounce effect run its no-edits branch, where the clear happened.
+  await waitFor(() => expect(loadDraftMock).toHaveBeenCalled())
+  await waitFor(() => expect(hasDeclinedDraftMock).toHaveBeenCalled())
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(clearDraftMock).not.toHaveBeenCalled()
+})
+
+// The other decline path: unreachable key store, so the version is valid and a
+// version comparison would report false and let the clear below delete it.
+test('does not clear a draft the store kept when the key was unreachable', async () => {
+  loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(true)
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  await waitFor(() => expect(hasDeclinedDraftMock).toHaveBeenCalled())
+  await waitFor(() => expect(viewPings()).toHaveLength(1))
+  expect(clearDraftMock).not.toHaveBeenCalled()
+  // Asked for the question actually on screen, not a stale one.
+  expect(hasDeclinedDraftMock).toHaveBeenCalledWith('u-1', 1002, 7006, 5)
+})
+
+test('clears a draft-free question as before, when nothing was declined', async () => {
+  loadDraftMock.mockResolvedValue(null)
+  hasDeclinedDraftMock.mockResolvedValue(false)
+
+  axios.get.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+
+  renderAt(DEEP_LINK)
+
+  // Counterpart: the pre-existing cleanup must survive the guard.
+  await waitFor(() =>
+    expect(clearDraftMock).toHaveBeenCalledWith('u-1', 1002, 7006, 5)
+  )
+})
 
 test('records an events/view ping with the DB questionid when a question opens', async () => {
   axios.get.mockImplementation((url: string) => {
@@ -877,20 +955,19 @@ const OPDIV_ROWS = [
 describe('QuestionnairePage justification integration', () => {
   type InsightsResponse = { data: { data: unknown[] } }
 
+  // This block is the insights-enabled variant: SSD-EX's OpDiv (9) carries
+  // insights_enabled, so the layer is expected on unless a test says otherwise.
+  const insightsCtx = (overrides: Record<string, unknown> = {}) =>
+    makeCtx({ opdivs: OPDIV_ROWS, ...overrides })
+
   function installMocks({
     insightRows = [INSIGHT_ROW] as unknown[],
     insightsResponse,
-    opdivRows = OPDIV_ROWS as unknown[],
-    opdivsResponse,
   }: {
     insightRows?: unknown[]
     insightsResponse?: Promise<InsightsResponse>
-    opdivRows?: unknown[]
-    opdivsResponse?: Promise<InsightsResponse>
   } = {}) {
     axios.get.mockImplementation((url: string) => {
-      if (url === '/opdivs')
-        return opdivsResponse ?? Promise.resolve({ data: { data: opdivRows } })
       if (url === 'insights') {
         return (
           insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
@@ -911,7 +988,7 @@ describe('QuestionnairePage justification integration', () => {
   it('keeps the insights layer on an HHS-named call for an insights-enabled OpDiv, and persists an accepted prior response', async () => {
     installMocks()
     setMockCtx(
-      makeCtx({
+      insightsCtx({
         latestDataCallId: 6,
         latestDatacall: 'FY25 ZTM',
         selectedDatacall: HHS_ZTM,
@@ -974,7 +1051,7 @@ describe('QuestionnairePage justification integration', () => {
 
   it('shows the insights panel, option badges, and suggestion for a CMS data call', async () => {
     installMocks()
-    setMockCtx(makeCtx())
+    setMockCtx(insightsCtx())
 
     renderAt(DEEP_LINK)
 
@@ -991,10 +1068,12 @@ describe('QuestionnairePage justification integration', () => {
   })
 
   it('hides the insights layer when the system belongs to an insights-disabled OpDiv', async () => {
-    installMocks({
-      opdivRows: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
-    })
-    setMockCtx(makeCtx())
+    installMocks()
+    setMockCtx(
+      insightsCtx({
+        opdivs: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
+      })
+    )
 
     renderAt(DEEP_LINK)
 
@@ -1013,12 +1092,8 @@ describe('QuestionnairePage justification integration', () => {
   })
 
   it('keeps the gate closed and submission blocked until the OpDiv lookup settles', async () => {
-    let resolveOpdivs: ((value: InsightsResponse) => void) | null = null
-    const opdivsResponse = new Promise<InsightsResponse>((resolve) => {
-      resolveOpdivs = resolve
-    })
-    installMocks({ opdivsResponse })
-    setMockCtx(makeCtx())
+    installMocks()
+    setMockCtx(insightsCtx({ opdivs: [], opdivsLoaded: false }))
 
     renderAt(DEEP_LINK)
 
@@ -1033,7 +1108,7 @@ describe('QuestionnairePage justification integration', () => {
     expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
 
     await act(async () => {
-      resolveOpdivs?.({ data: { data: OPDIV_ROWS } })
+      setMockCtx(insightsCtx({ opdivsLoaded: true }))
     })
 
     expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
@@ -1048,7 +1123,7 @@ describe('QuestionnairePage justification integration', () => {
       resolveInsights = resolve
     })
     installMocks({ insightsResponse })
-    setMockCtx(makeCtx())
+    setMockCtx(insightsCtx())
 
     renderAt(DEEP_LINK)
 
@@ -1072,7 +1147,7 @@ describe('QuestionnairePage justification integration', () => {
 
   it('keeps the plain four-row notes field when the question has no justification context', async () => {
     installMocks({ insightRows: [] })
-    setMockCtx(makeCtx())
+    setMockCtx(insightsCtx())
 
     renderAt(DEEP_LINK)
 
@@ -1157,6 +1232,23 @@ describe('carried-forward confirmation', () => {
   const HELPER_COPY =
     'Review the carried-forward answer and confirm it, or write a new justification, before continuing.'
 
+  // A past-deadline cycle. OWNER stays writable past the deadline, so this
+  // isolates the open-call gate from the read-only one.
+  const closedCallCtx = () => {
+    const deadline = '2001-01-01T00:00:00Z'
+    const call = {
+      datacallid: 5,
+      datacall: 'FY2026 Q1',
+      datecreated: '',
+      deadline,
+    }
+    return {
+      latestDeadline: deadline,
+      selectedDatacall: call,
+      datacalls: [call],
+    }
+  }
+
   // Serves a mutable scores list and, like the real backend, flips the
   // targeted row to done when the confirm endpoint is hit — so the refetch
   // after a confirm returns the confirmed row instead of resurrecting the
@@ -1164,15 +1256,10 @@ describe('carried-forward confirmation', () => {
   // variant); pass them to exercise the prior-response card.
   function installScoreMocks(
     scores: Array<{ scoreid: number }>,
-    {
-      insightRows = [] as unknown[],
-      opdivRows = [] as unknown[],
-    }: { insightRows?: unknown[]; opdivRows?: unknown[] } = {}
+    { insightRows = [] as unknown[] }: { insightRows?: unknown[] } = {}
   ) {
     let rows = scores
     axios.get.mockImplementation((url: string) => {
-      if (url === '/opdivs')
-        return Promise.resolve({ data: { data: opdivRows } })
       if (url === 'insights')
         return Promise.resolve({ data: { data: insightRows } })
       if (url.includes('/questions'))
@@ -1299,7 +1386,6 @@ describe('carried-forward confirmation', () => {
           },
         },
       ],
-      opdivRows: [{ opdiv_id: 9, code: 'CMS', insights_enabled: true }],
     })
 
     renderAt(DEEP_LINK)
@@ -1388,7 +1474,6 @@ describe('carried-forward confirmation', () => {
           },
         },
       ],
-      opdivRows: [{ opdiv_id: 9, code: 'CMS', insights_enabled: true }],
     })
 
     renderAt(DEEP_LINK)
@@ -1403,28 +1488,7 @@ describe('carried-forward confirmation', () => {
 
   it('renders no carried-forward treatment on a closed data call', async () => {
     installScoreMocks([carried7006()])
-    const pastDeadline = '2001-01-01T00:00:00Z'
-    // OWNER stays writable past the deadline (isReadOnly false), isolating
-    // the open-call gate as the only thing hiding the treatment.
-    setMockCtx(
-      makeCtx({
-        latestDeadline: pastDeadline,
-        selectedDatacall: {
-          datacallid: 5,
-          datacall: 'FY2026 Q1',
-          datecreated: '',
-          deadline: pastDeadline,
-        },
-        datacalls: [
-          {
-            datacallid: 5,
-            datacall: 'FY2026 Q1',
-            datecreated: '',
-            deadline: pastDeadline,
-          },
-        ],
-      })
-    )
+    setMockCtx(makeCtx(closedCallCtx()))
 
     renderAt(DEEP_LINK)
 
@@ -1439,6 +1503,121 @@ describe('carried-forward confirmation', () => {
         name: 'Confirm this answer is still accurate',
       })
     ).not.toBeInTheDocument()
+  })
+
+  it('explains what Complete does on the last question, and describes the button with it', async () => {
+    // ISSOs read "Complete" as "submit the whole questionnaire" and asked
+    // whether the last question can be saved on its own at all.
+    installScoreMocks([carried7006()])
+
+    renderAt(DEVICES_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    // A hint, not standing text: nothing is drawn on the page until asked for.
+    // (The sr-only copy backing aria-describedby is in the DOM but not
+    // rendered, which is why this asserts on the tooltip and not on the text.)
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+
+    // It describes the action rather than renaming it.
+    expect(complete).toHaveAccessibleName('Complete')
+    expect(complete).toHaveAccessibleDescription(COMPLETE_HINT_MSG)
+
+    await userEvent.hover(complete)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      COMPLETE_HINT_MSG
+    )
+    // The Tooltip's own wiring lands on the span wrapper CmsButton forces (it
+    // cannot hold a ref). aria-label there would be prohibited — a roleless
+    // element must not be named — so describeChild has to stay on.
+    expect(complete.parentElement).not.toHaveAttribute('aria-label')
+
+    await userEvent.unhover(complete)
+    await waitFor(() =>
+      expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    )
+
+    // Keyboard users reach it too: the hint is not hover-only. MUI opens on
+    // focus only when the last input was a key, and it tracks that in
+    // module-level state (@mui/utils useIsFocusVisible) that any earlier
+    // mousedown in this file latches off — so model the real sequence, keydown
+    // then focus, rather than focusing alone.
+    fireEvent.keyDown(document.body, { key: 'Tab' })
+    act(() => complete.focus())
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      COMPLETE_HINT_MSG
+    )
+  })
+
+  it('explains what Next does on a question that is not last', async () => {
+    installScoreMocks([carried7006()])
+
+    // 7006 (Identity) is the first of the two questions, so the button is Next.
+    renderAt(DEEP_LINK)
+
+    const next = await screen.findByRole('button', { name: /Next/ })
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    expect(next).toHaveAccessibleDescription(NEXT_HINT_MSG)
+
+    await userEvent.hover(next)
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(NEXT_HINT_MSG)
+    // The two variants must not bleed into each other: Next makes no promise
+    // about a summary, which only Complete produces.
+    expect(screen.queryByText(COMPLETE_HINT_MSG)).not.toBeInTheDocument()
+  })
+
+  it('keeps the Next hint on a closed call, where Next still saves', async () => {
+    // Deliberately asymmetric with Complete below: the closed-call wrap-around
+    // only affects the last question, so Next's wording stays true. OWNER stays
+    // writable past the deadline, isolating the open-call gate from read-only.
+    installScoreMocks([carried7006()])
+    setMockCtx(makeCtx(closedCallCtx()))
+
+    renderAt(DEEP_LINK)
+
+    const next = await screen.findByRole('button', { name: /Next/ })
+    expect(next).toHaveAccessibleDescription(NEXT_HINT_MSG)
+  })
+
+  it('shows no navigation hint in a read-only session, which never saves', async () => {
+    installScoreMocks([carried7006()])
+    setMockCtx(
+      makeCtx({
+        userInfo: {
+          userid: 'u-2',
+          email: 'auditor@hhs.gov',
+          fullname: 'Read Only',
+          role: 'HHS_READONLY_ADMIN',
+        } as userData,
+      })
+    )
+
+    renderAt(DEEP_LINK)
+
+    const next = await screen.findByRole('button', { name: /Next/ })
+    await userEvent.hover(next)
+
+    expect(next).toHaveAccessibleDescription('')
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
+    // Suppressed means suppressed: no stray name on the wrapper either.
+    expect(next.parentElement).not.toHaveAttribute('aria-label')
+  })
+
+  it('omits the Complete explanation on a closed call, where it would misstate the behavior', async () => {
+    // A past-deadline call keeps the old wrap-around to question 1 rather than
+    // saving and summarizing, so the sentence must not appear.
+    installScoreMocks([carried7006()])
+    setMockCtx(makeCtx(closedCallCtx()))
+
+    renderAt(DEVICES_LINK)
+
+    const complete = await screen.findByRole('button', { name: 'Complete' })
+    await userEvent.hover(complete)
+
+    expect(screen.queryByText(COMPLETE_HINT_MSG)).not.toBeInTheDocument()
+    expect(screen.queryByRole('tooltip')).not.toBeInTheDocument()
   })
 
   it('Complete summarizes unconfirmed and unanswered questions with working jump links', async () => {

@@ -1,20 +1,13 @@
 import 'core-js/stable/atob'
-import { userData, UserRole } from '@/types'
+import { userData } from '@/types'
 import axiosInstance from '@/axiosConfig'
+import { EMPTY_USER } from '@/constants'
 import { AuthCodes, SignInReasons, type SignInReason } from '@/utils/authCodes'
 /**
  * Auth state loader for react-router data routes.
  * @module router/authLoader
  * @see {@link dashboard/Routes}
  */
-
-const emptyUser: userData = {
-  userid: '',
-  email: '',
-  fullname: '',
-  role: '' as UserRole,
-  assignedfismasystems: [],
-}
 
 /**
  * Loader return shape. Title.tsx and LoginPage.tsx both read this.
@@ -49,7 +42,7 @@ const authLoader = async (): Promise<AuthLoaderData> => {
       skipAuthHandling: true,
     })
     if (axiosUser.status != 200) {
-      return { ok: false, reason: SignInReasons.EXPIRED, response: emptyUser }
+      return { ok: false, reason: SignInReasons.EXPIRED, response: EMPTY_USER }
     }
     return { status: axiosUser.status, response: axiosUser.data.data }
   } catch (error: unknown) {
@@ -59,7 +52,7 @@ const authLoader = async (): Promise<AuthLoaderData> => {
     }
     const status = err?.response?.status || err?.status || 0
     if (status >= 500 || status === 0) {
-      return { status, serverError: true, response: emptyUser }
+      return { status, serverError: true, response: EMPTY_USER }
     }
     // BE middleware returns 403 with code=ACCOUNT_NOT_PROVISIONED for an
     // authenticated identity that has no ZTMF account or has been soft-
@@ -74,18 +67,18 @@ const authLoader = async (): Promise<AuthLoaderData> => {
         ok: false,
         reason: SignInReasons.NO_ACCOUNT,
         message: err?.response?.data?.error,
-        response: emptyUser,
+        response: EMPTY_USER,
       }
     }
     if (status === 401) {
       // A 401 here might be an expired session, or just a first-time
       // visit with no session yet. We can't tell which, so no message.
       // The interceptor handles the real "session expired" case.
-      return { ok: false, reason: SignInReasons.EXPIRED, response: emptyUser }
+      return { ok: false, reason: SignInReasons.EXPIRED, response: EMPTY_USER }
     }
     console.error('Error:', error)
   }
-  return { ok: false, reason: SignInReasons.EXPIRED, response: emptyUser }
+  return { ok: false, reason: SignInReasons.EXPIRED, response: EMPTY_USER }
 }
 
 export default authLoader

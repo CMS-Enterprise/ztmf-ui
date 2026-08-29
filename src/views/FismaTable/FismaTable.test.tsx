@@ -25,6 +25,8 @@ jest.mock('../Title/Context', () => ({
       },
     ],
     userInfo: { role: 'OWNER' },
+    // The OpDiv code column resolves ids against this shared context list.
+    opdivs: [{ opdiv_id: 5, code: 'CMS', name: 'CMS', active: true }],
     latestDataCallId: 5,
     selectedDatacall: null,
     activeDatacallIds: [],
@@ -35,10 +37,6 @@ jest.mock('../Title/Context', () => ({
     dashboardSearch: '',
     setDashboardSearch: jest.fn(),
   }),
-}))
-
-jest.mock('@/utils/opdivs', () => ({
-  fetchOpDivs: () => Promise.resolve([]),
 }))
 
 describe('FismaTable', () => {

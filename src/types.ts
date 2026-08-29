@@ -41,8 +41,6 @@ export type UserRole =
   | 'ISSO'
   | 'ISSM'
   | 'SYSTEM_DELEGATE'
-  | 'ADMIN'
-  | 'READONLY_ADMIN'
 
 export type OpDiv = {
   opdiv_id: number
@@ -126,6 +124,31 @@ export type RequestOptions = {
   headers: Headers
   redirect: 'follow' | 'error' | 'manual'
 }
+// One audit-trail row from GET /events. The backend serializes the resource
+// column as "type", and resolves the initiating user server-side (ztmf#565):
+// a soft-deleted user still resolves, with userdeleted true as the cue to
+// mark the retired account.
+export type EventWithUser = {
+  eventid: number
+  userid: string
+  action: string
+  type: string
+  createdat: string
+  payload: unknown
+  userfullname: string
+  useremail: string
+  userdeleted: boolean
+}
+
+// One page of the audit trail. limit/offset echo what the server actually
+// applied after defaulting and clamping; total counts every match.
+export type EventsPage = {
+  events: EventWithUser[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export type FismaSystemType = {
   fismasystemid: number
   fismauid: string
@@ -284,11 +307,11 @@ export type editSystemModalProps = {
   onClose: (data: FismaSystemType) => void
   system: FismaSystemType | null
   mode: string
-  // Datacenter-environment vocabulary for the dropdown. Passed from Title
-  // (the modal renders outside the outlet, so it can't read context).
-  // Optional so tests can omit it; production callers always pass it or
-  // the environment dropdown renders empty.
+  // Datacenter-environment and OpDiv vocabularies for the dropdowns. Passed
+  // from Title because the modal renders outside the Outlet and can't read
+  // context. Optional so tests can omit them; production callers pass both.
   datacenterEnvironments?: DataCenterEnvironment[]
+  opdivs?: OpDiv[]
 }
 
 export type datacallModalProps = {

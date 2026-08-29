@@ -27,6 +27,7 @@ jest.mock('./draftStore', () => ({
   saveDraft: jest.fn().mockResolvedValue(true),
   loadDraft: jest.fn().mockResolvedValue(null),
   clearDraft: jest.fn().mockResolvedValue(undefined),
+  hasDeclinedDraft: jest.fn().mockResolvedValue(false),
 }))
 
 // The page reads its shared state via useContextProp (useOutletContext).
@@ -106,6 +107,8 @@ beforeEach(() => {
     setShowDecommissioned: jest.fn(),
     fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
+    opdivs: [],
+    opdivsLoaded: true,
   }
 
   mockGet.mockImplementation((url: string) => {

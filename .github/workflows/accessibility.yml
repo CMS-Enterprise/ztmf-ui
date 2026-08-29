@@ -1,0 +1,85 @@
+name: Accessibility
+
+# Informational 508 scan on every PR. Frostfall runs in report-only mode
+# (exit 0) against the committed baseline, so this job going red means the
+# scan itself broke, not that violations were found; enforcement arrives
+# later as an `expect:` block under the ci profile in .frostfall.yml.
+# Deliberately NOT in the required checks.
+
+on:
+  pull_request:
+  # Code scanning alerts are keyed to the default branch: without a run on
+  # main, the Security tab never populates and fixed violations never
+  # auto-close. PR runs still annotate the PR itself.
+  push:
+    branches: [main]
+
+jobs:
+  frostfall:
+    name: Frostfall 508 scan
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      # For the SARIF upload to code scanning.
+      security-events: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          path: ui
+
+      # The isolated stack (compose-test.yml + Empire seed) lives in the
+      # backend repo; the Makefile reaches it at ../ztmf, same as local runs.
+      # Deliberately unpinned (tracks main): the stack and seed are meant to
+      # evolve with the backend, and this job is informational, so a breaking
+      # backend change showing up here is signal, not flake.
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          repository: CMS-Enterprise/ztmf
+          path: ztmf
+
+      - uses: actions/setup-node@820762786026740c76f36085b0efc47a31fe5020 # v7.0.0
+        with:
+          node-version-file: 'ui/.nvmrc'
+          cache: 'yarn'
+          cache-dependency-path: 'ui/yarn.lock'
+
+      - name: INSTALL - dependencies
+        working-directory: ui
+        run: yarn install --immutable
+
+      - name: INSTALL - frostfall (checksum-verified release binary)
+        working-directory: ui
+        run: |
+          make install-frostfall
+          echo "$HOME/.local/bin" >> "$GITHUB_PATH"
+
+      # Same lifecycle a developer runs locally: fresh Empire-seeded stack on
+      # :8090, vite on :5174 pointed at it, scan, tear down. One flow, no drift.
+      - name: SCAN - isolated stack
+        working-directory: ui
+        run: make frostfall-ci
+
+      # Every current violation lands as a code scanning alert (Security tab).
+      # The scan step generates frostfall.sarif with the baseline deliberately
+      # ignored - see the note on the frostfall-ci recipe in the Makefile.
+      - name: UPLOAD - code scanning alerts
+        if: always()
+        uses: github/codeql-action/upload-sarif@ff2f1c621b7f889edc0d3c761ac2e6a3f8cdb0dd # v4
+        with:
+          sarif_file: ui/frostfall.sarif
+          category: frostfall
+
+      - name: ARTIFACT - report and screenshots
+        if: always()
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: frostfall-report
+          path: |
+            ui/frostfall-report.html
+            ui/frostfall-artifacts/
+          if-no-files-found: ignore
+
+      # The Makefile tears down on exit; this is a backstop for hard kills.
+      - name: CLEANUP - test stack
+        if: always()
+        run: docker compose -f ztmf/backend/compose-test.yml down -v || true

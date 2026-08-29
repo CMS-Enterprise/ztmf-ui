@@ -7,10 +7,8 @@ import {
   FismaSystemType,
   FormValidType,
   FormValidHelperText,
-  OpDiv,
   ScoreAggregate,
 } from '@/types'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
@@ -58,6 +56,7 @@ export default function SystemDetailPage() {
     datacenterEnvironments,
     fetchFismaSystems,
     showDecommissioned,
+    opdivs,
   } = useContextProp()
 
   const isAdmin = checkIsAdmin(userInfo)
@@ -107,21 +106,6 @@ export default function SystemDetailPage() {
       controller.abort()
     }
   }, [fismaSystems, system, systemId, setFismaSystems])
-
-  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
-
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchOpDivs(true, controller.signal)
-      .then(setOpdivs)
-      .catch((error) => {
-        if (controller.signal.aborted || isAuthHandled(error)) return
-        notify('Failed to load OpDiv list.', 'error')
-      })
-    return () => {
-      controller.abort()
-    }
-  }, [])
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)

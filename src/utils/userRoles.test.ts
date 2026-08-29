@@ -17,15 +17,10 @@ import {
 } from '@/utils/userRoles'
 
 /**
- * Regression contract for the multi-OpDiv role taxonomy.
- *
- * Stage 1 of the migration kept the legacy `ADMIN` and `READONLY_ADMIN`
- * role values valid alongside the new tiers so the frontend can render
- * correctly against both the pre-migration backend and the paired
- * backend. These tests pin that contract until Stage D drops the legacy
- * values from the backend enum. When that work lands, the legacy rows
- * below should be removed in the same PR — failing tests are the signal
- * that an intentional decision is required, not an error to suppress.
+ * Regression contract for the multi-OpDiv role taxonomy. The legacy ADMIN and
+ * READONLY_ADMIN values are gone: the backend rejects them at the database
+ * (migration 0040) and no longer emits them, so the frontend union and these
+ * helpers recognize only the current tiers.
  */
 
 const roleUser = (role: UserRole) => ({ role })
@@ -36,10 +31,8 @@ const isAdminCases: Case[] = [
   ['OWNER', true],
   ['HHS_ADMIN', true],
   ['OPDIV_ADMIN', true],
-  ['ADMIN', true], // legacy, removed in Stage D
   ['HHS_READONLY_ADMIN', false],
   ['OPDIV_READONLY_ADMIN', false],
-  ['READONLY_ADMIN', false], // legacy, removed in Stage D
   ['ISSO', false],
   ['ISSM', false],
   ['SYSTEM_DELEGATE', false],
@@ -48,11 +41,9 @@ const isAdminCases: Case[] = [
 const isReadOnlyAdminCases: Case[] = [
   ['HHS_READONLY_ADMIN', true],
   ['OPDIV_READONLY_ADMIN', true],
-  ['READONLY_ADMIN', true], // legacy, removed in Stage D
   ['OWNER', false],
   ['HHS_ADMIN', false],
   ['OPDIV_ADMIN', false],
-  ['ADMIN', false],
   ['ISSO', false],
   ['ISSM', false],
   ['SYSTEM_DELEGATE', false],
@@ -62,8 +53,6 @@ const hasUnscopedReadCases: Case[] = [
   ['OWNER', true],
   ['HHS_ADMIN', true],
   ['HHS_READONLY_ADMIN', true],
-  ['ADMIN', true], // legacy, removed in Stage D
-  ['READONLY_ADMIN', true], // legacy, removed in Stage D
   ['OPDIV_ADMIN', false],
   ['OPDIV_READONLY_ADMIN', false],
   ['ISSO', false],
@@ -77,8 +66,6 @@ const hasSystemAccessCases: Case[] = [
   ['HHS_READONLY_ADMIN', true],
   ['OPDIV_ADMIN', true],
   ['OPDIV_READONLY_ADMIN', true],
-  ['ADMIN', true], // legacy, removed in Stage D
-  ['READONLY_ADMIN', true], // legacy, removed in Stage D
   ['ISSO', true],
   ['ISSM', true],
   ['SYSTEM_DELEGATE', true],
@@ -92,8 +79,6 @@ const isHHSTierCases: Case[] = [
   ['OPDIV_READONLY_ADMIN', false],
   ['ISSO', false],
   ['ISSM', false],
-  ['ADMIN', false], // legacy is CMS-tenant pre-migration, not HHS tier
-  ['READONLY_ADMIN', false],
   ['SYSTEM_DELEGATE', false],
 ]
 
@@ -105,8 +90,6 @@ const isOpDivTierCases: Case[] = [
   ['HHS_READONLY_ADMIN', false],
   ['ISSO', false],
   ['ISSM', false],
-  ['ADMIN', false],
-  ['READONLY_ADMIN', false],
   ['SYSTEM_DELEGATE', false],
 ]
 
@@ -132,8 +115,7 @@ test('hasAdminRead is the union of isAdmin and isReadOnlyAdmin', () => {
     'OPDIV_READONLY_ADMIN',
     'ISSO',
     'ISSM',
-    'ADMIN',
-    'READONLY_ADMIN',
+    'SYSTEM_DELEGATE',
   ]
   allRoles.forEach((role) => {
     const user = roleUser(role)
@@ -172,8 +154,7 @@ test('HHS and OpDiv tiers are mutually exclusive', () => {
     'OPDIV_READONLY_ADMIN',
     'ISSO',
     'ISSM',
-    'ADMIN',
-    'READONLY_ADMIN',
+    'SYSTEM_DELEGATE',
   ]
   allRoles.forEach((role) => {
     const user = roleUser(role)
@@ -188,8 +169,6 @@ test('isAdminTierRole returns true for every admin tier (write or read-only)', (
     'OPDIV_ADMIN',
     'HHS_READONLY_ADMIN',
     'OPDIV_READONLY_ADMIN',
-    'ADMIN', // legacy, removed in Stage D
-    'READONLY_ADMIN', // legacy, removed in Stage D
   ]
   adminTiers.forEach((role) => {
     expect(isAdminTierRole(role)).toBe(true)
@@ -261,12 +240,24 @@ test('isISSO and isSystemDelegate reject null, undefined, and placeholder', () =
 // The role dropdown when adding/editing a user is driven by selectableRoles,
 // narrowed to the acting admin's tier. A delegate must be assignable by every
 // admin tier that can assign the sibling ISSO/ISSM roles.
-test.each(['OWNER', 'ADMIN', 'HHS_ADMIN', 'OPDIV_ADMIN'])(
+test.each(['OWNER', 'HHS_ADMIN', 'OPDIV_ADMIN'])(
   'selectableRoles(%s) offers SYSTEM_DELEGATE',
   (actor) => {
     expect(selectableRoles(actor)).toContain('SYSTEM_DELEGATE')
   }
 )
+
+// The legacy values are rejected like any other unknown string now that the
+// backend no longer emits them - a stale session or crafted value gets no
+// admin surface and no assignable roles.
+test('retired legacy role strings are no longer recognized', () => {
+  ;['ADMIN', 'READONLY_ADMIN'].forEach((role) => {
+    expect(isWriteAdminRole(role)).toBe(false)
+    expect(isReadOnlyAdminRole(role)).toBe(false)
+    expect(isAdminTierRole(role)).toBe(false)
+    expect(selectableRoles(role)).toEqual([])
+  })
+})
 
 test('all helpers reject null, undefined, and empty-role placeholder users', () => {
   const placeholder = { role: '' as UserRole }

@@ -1,0 +1,168 @@
+{
+  "version": 1,
+  "axeVersion": "4.10.3",
+  "created": "2026-08-20T12:17:01.19593994Z",
+  "violations": [
+    {
+      "fingerprint": "84ce7c8b8e4493934c595f137d5c7d2d",
+      "testId": "dashboard",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": ".MuiDataGrid-root"
+    },
+    {
+      "fingerprint": "d31d568932503530eda4e403120dcf17",
+      "testId": "dashboard",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": ".MuiTypography-root"
+    },
+    {
+      "fingerprint": "47d2c244293c751c65e2bd14f8c5c219",
+      "testId": "dashboard",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": "div[data-id=\"1002\"] \u003e div[data-colindex=\"7\"][data-field=\"datacallprogress\"][aria-colindex=\"8\"] \u003e .MuiBox-root[aria-label=\"No \u003e updates \u003e this \u003e data \u003e call\"] \u003e .MuiChip-colorWarning.MuiChip-outlinedWarning.MuiChip-root \u003e .MuiChip-label.MuiChip-labelSmall"
+    },
+    {
+      "fingerprint": "762791ebe9a4dd28e593aa1f33a25d06",
+      "testId": "dashboard",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": "div[data-id=\"1003\"] \u003e div[data-colindex=\"7\"][data-field=\"datacallprogress\"][aria-colindex=\"8\"] \u003e .MuiBox-root[aria-label=\"No \u003e updates \u003e this \u003e data \u003e call\"] \u003e .MuiChip-colorWarning.MuiChip-outlinedWarning.MuiChip-root \u003e .MuiChip-label.MuiChip-labelSmall"
+    },
+    {
+      "fingerprint": "3fc35e93d2d8845b5c43b5f737e49325",
+      "testId": "dashboard",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": "div[data-id=\"1101\"] \u003e div[data-colindex=\"7\"][data-field=\"datacallprogress\"][aria-colindex=\"8\"] \u003e .MuiBox-root[aria-label=\"No \u003e updates \u003e this \u003e data \u003e call\"] \u003e .MuiChip-colorWarning.MuiChip-outlinedWarning.MuiChip-root \u003e .MuiChip-label.MuiChip-labelSmall"
+    },
+    {
+      "fingerprint": "63cddcf10d734f0076aac7bf6b109122",
+      "testId": "dashboard",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": "div[data-id=\"1102\"] \u003e div[data-colindex=\"7\"][data-field=\"datacallprogress\"][aria-colindex=\"8\"] \u003e .MuiBox-root[aria-label=\"No \u003e updates \u003e this \u003e data \u003e call\"] \u003e .MuiChip-colorWarning.MuiChip-outlinedWarning.MuiChip-root \u003e .MuiChip-label.MuiChip-labelSmall"
+    },
+    {
+      "fingerprint": "8be5957e3fcec8e9bb0e448ed69c7a7f",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": ".MuiDataGrid-root"
+    },
+    {
+      "fingerprint": "e0d8244522669ece3ee9853d3060ded1",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"0\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "15ce4b0f51f70fb2bd5b96e4cc6091d0",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"1\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "82a6f911ea2c54fc6d221c5470c3851d",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"2\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "aa305acea7a46ec437a589762f8019cb",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"3\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "1bb5a0f5c6bc4dd715908bff02abd183",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"4\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "e4de4281d38dcea3f81eada1033e47a8",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"5\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "3fb556a2b23e4e1c6623e141580930d6",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"6\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "891d81f60ff11fa3b1302f72b62a8911",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"7\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "a52ab2fbc6f3720a39f8f69e455ac59c",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"8\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "9f67164891856b3b1bfdb4e06f7b1a9b",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"9\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "8c95645b0c8d17d116a26eff33b23ec8",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"10\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "0bd7f67f7db471aab8cd7b16ee70990a",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": "div[data-rowindex=\"11\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+    },
+    {
+      "fingerprint": "8a28838a3806ad8c70a2a9afbc04b8f5",
+      "testId": "users",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": ".MuiTypography-root"
+    },
+    {
+      "fingerprint": "3b3da7bdad2d54c1e884f8a16abd8bc0",
+      "testId": "admin-opdivs",
+      "scanLabel": "initial",
+      "ruleId": "aria-required-children",
+      "stableTarget": ".MuiDataGrid-root"
+    },
+    {
+      "fingerprint": "2adfa191d6bef431b890d80cf84cb787",
+      "testId": "admin-opdivs",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": ".MuiTypography-root"
+    },
+    {
+      "fingerprint": "ada65cbfe27ce40db2b1d19cf8ff585e",
+      "testId": "pillar-scores-modal",
+      "scanLabel": "modal-open",
+      "ruleId": "aria-input-field-name",
+      "stableTarget": "div[aria-controls]"
+    }
+  ]
+}

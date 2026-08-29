@@ -5,7 +5,7 @@ export type QuestionDraft = {
 
 // Shape written to localStorage — callers only see QuestionDraft.
 type StoredDraft = {
-  v: number // format version — entries with a mismatched version are evicted
+  v: number // format version — entries with a mismatched version are ignored, not deleted
   iv: string
   ciphertext: string
   savedAt: number
@@ -19,6 +19,8 @@ const DRAFT_PREFIX = 'ztmf_draft_'
 // Non-extractable keys cannot be exported via JS API — an attacker needs a
 // live browser session, not just a disk dump of the profile directory.
 const DB_NAME = 'ztmf-draft-keys'
+// Bumping is safe on its own — openKeyDB's guard keeps the store and its keys.
+// Rolling back past a bump strands them (VersionError), so loadDraft declines.
 const DB_VERSION = 1
 const KEY_STORE = 'keys'
 
@@ -50,10 +52,29 @@ export function __setHashedIdForTesting(userid: string, hash: string): void {
 function openKeyDB(): Promise<IDBDatabase> {
   return new Promise((resolve, reject) => {
     const req = indexedDB.open(DB_NAME, DB_VERSION)
+    // Only when absent: on a DB_VERSION bump the store already exists and an
+    // unconditional createObjectStore would throw and abort the open.
     req.onupgradeneeded = () => {
-      req.result.createObjectStore(KEY_STORE)
+      const db = req.result
+      if (!db.objectStoreNames.contains(KEY_STORE)) {
+        db.createObjectStore(KEY_STORE)
+      }
     }
-    req.onsuccess = () => resolve(req.result)
+    // A blocked upgrade fires neither success nor error — reject rather than hang.
+    let blocked = false
+    req.onblocked = () => {
+      blocked = true
+      reject(new Error('key store upgrade blocked'))
+    }
+    // Once the blocking tab closes, success fires on an already-settled promise —
+    // close that connection or the stray handle blocks the next upgrade in turn.
+    req.onsuccess = () => {
+      if (blocked) {
+        req.result.close()
+        return
+      }
+      resolve(req.result)
+    }
     req.onerror = () => reject(req.error)
   })
 }
@@ -184,6 +205,19 @@ async function decryptDraft(
   return JSON.parse(new TextDecoder().decode(decrypted)) as QuestionDraft
 }
 
+// True when the stored entry declares a format version newer than this build's.
+// Absent or unparseable entries are not newer, so they stay overwritable.
+function storedVersionIsNewer(storageKey: string): boolean {
+  try {
+    const raw = localStorage.getItem(storageKey)
+    if (!raw) return false
+    const { v } = JSON.parse(raw) as StoredDraft
+    return typeof v === 'number' && v > DRAFT_VERSION
+  } catch {
+    return false
+  }
+}
+
 // Returns true when the draft was successfully persisted, false on any failure
 // (storage quota, private browsing, crypto unavailable). The caller uses the
 // return value to decide whether to show a "saved" or "not saved" indicator.
@@ -211,10 +245,13 @@ export const saveDraft = async (
       ciphertext,
       savedAt: Date.now(),
     }
-    localStorage.setItem(
-      draftKey(hashedId, fismasystemid, functionid, datacallid),
-      JSON.stringify(stored)
-    )
+    const storageKey = draftKey(hashedId, fismasystemid, functionid, datacallid)
+    // Never overwrite an entry from a newer format version. After a rollback this
+    // build declines to read such an entry, and clobbering it here would destroy
+    // the draft it deliberately preserved. Reports false, so the caller
+    // shows "not saved" rather than implying the text is safe.
+    if (storedVersionIsNewer(storageKey)) return false
+    localStorage.setItem(storageKey, JSON.stringify(stored))
     return true
   } catch {
     return false
@@ -234,16 +271,29 @@ export const loadDraft = async (
     )
     if (!raw) return null
     const stored = JSON.parse(raw) as StoredDraft
-    // Evict entries from a different format version before any other checks.
+    const expired =
+      typeof stored.savedAt === 'number' &&
+      Date.now() - stored.savedAt > DRAFT_TTL_MS
+    // Declined, not deleted — deleting makes a bump or rollback destroy drafts
+    // Expired ones still go, so declining isn't unbounded retention.
     if (stored.v !== DRAFT_VERSION) {
+      if (expired)
+        await clearDraft(userid, fismasystemid, functionid, datacallid)
+      return null
+    }
+    // savedAt is only trusted to justify eviction once the version matches: in a
+    // mismatched envelope a missing one may just be a shape this build predates.
+    if (expired || typeof stored.savedAt !== 'number') {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
       return null
     }
-    if (!stored.savedAt || Date.now() - stored.savedAt > DRAFT_TTL_MS) {
-      await clearDraft(userid, fismasystemid, functionid, datacallid)
+    // A key store we can't reach says nothing about the entry, so don't evict on it.
+    let key: CryptoKey
+    try {
+      key = await getOrCreateDeviceKey(userid)
+    } catch {
       return null
     }
-    const key = await getOrCreateDeviceKey(userid)
     const draft = await decryptDraft(key, stored.iv, stored.ciphertext)
     // Runtime shape guard — evict and ignore if the decrypted payload doesn't
     // match the expected structure (format migration, bit-flip, schema change).
@@ -256,14 +306,35 @@ export const loadDraft = async (
     }
     return draft
   } catch {
-    // Evict the corrupt entry so it isn't retried on every question load
-    // for the remaining TTL. Ignore secondary storage failures.
+    // Only unreadable entries reach here — bad JSON, or ciphertext that won't
+    // decrypt under a key we did resolve. Evict so it isn't retried all TTL.
     try {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
     } catch {
       // ignore
     }
     return null
+  }
+}
+
+// Call after loadDraft returned null: every other null path evicts, so a
+// surviving entry is one it declined and the caller must not clean up.
+// Presence, not version — the key-store decline has a valid version.
+export const hasDeclinedDraft = async (
+  userid: string,
+  fismasystemid: number,
+  functionid: number,
+  datacallid: number
+): Promise<boolean> => {
+  try {
+    const hashedId = await hashUserId(userid)
+    return (
+      localStorage.getItem(
+        draftKey(hashedId, fismasystemid, functionid, datacallid)
+      ) !== null
+    )
+  } catch {
+    return false
   }
 }
 

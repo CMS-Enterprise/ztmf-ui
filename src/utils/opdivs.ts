@@ -8,19 +8,22 @@ import type { OpDiv } from '@/types'
  * backend filters to active rows only; pass includeInactive to retrieve
  * deactivated rows as well (used by audit and historical-reference UI).
  *
- * Stage 1 publishes this helper so Stage 2+ work (OpDiv badges,
- * selectors, admin grant management) can consume it without each
- * caller hand-rolling the request. There is no production caller yet.
+ * Always resolves to an array: the backend serializes an empty result as JSON
+ * null on some endpoints (ztmf#346), and this response feeds the shared Outlet
+ * context, so a null would throw in every consumer at once.
  */
 export async function fetchOpDivs(
   includeInactive = false,
   signal?: AbortSignal
 ): Promise<OpDiv[]> {
-  const response = await axiosInstance.get<{ data: OpDiv[] }>('/opdivs', {
-    params: includeInactive ? { active_only: false } : undefined,
-    signal,
-  })
-  return response.data.data
+  const response = await axiosInstance.get<{ data: OpDiv[] | null }>(
+    '/opdivs',
+    {
+      params: includeInactive ? { active_only: false } : undefined,
+      signal,
+    }
+  )
+  return response.data.data ?? []
 }
 
 /**

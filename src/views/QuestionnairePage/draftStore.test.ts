@@ -6,6 +6,7 @@ import {
   __resetKeyCache,
   __setKeyForTesting,
   __setHashedIdForTesting,
+  hasDeclinedDraft,
   QuestionDraft,
   DRAFT_VERSION,
 } from './draftStore'
@@ -185,6 +186,57 @@ describe('saveDraft', () => {
     expect(savedAt).toBeLessThanOrEqual(after)
   })
 
+  // Declining to read is worthless if the next keystroke overwrites it anyway.
+  it('refuses to overwrite an entry from a newer format version', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    const newer = JSON.stringify({ ...raw, v: DRAFT_VERSION + 1 })
+    localStorage.setItem(EXPECTED_KEY, newer)
+
+    expect(
+      await saveDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid, {
+        selectQuestionOption: 9,
+        notes: 'typed after the rollback',
+      })
+    ).toBe(false)
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(newer)
+  })
+
+  it('overwrites an entry from an older format version', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: DRAFT_VERSION - 1 })
+    )
+    const newDraft = { selectQuestionOption: 3, notes: 'current build' }
+
+    expect(
+      await saveDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid,
+        newDraft
+      )
+    ).toBe(true)
+    await expect(
+      loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).resolves.toEqual(newDraft)
+  })
+
   it('does not expose savedAt in the decrypted QuestionDraft', async () => {
     await saveDraft(
       USER,
@@ -329,7 +381,7 @@ describe('loadDraft', () => {
     expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
   })
 
-  it('returns null and evicts when the version field is wrong', async () => {
+  it('returns null but keeps the entry when the version field is wrong', async () => {
     await saveDraft(
       USER,
       IDS.fismasystemid,
@@ -338,15 +390,16 @@ describe('loadDraft', () => {
       DRAFT
     )
     const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
-    localStorage.setItem(EXPECTED_KEY, JSON.stringify({ ...raw, v: 99 }))
+    const mismatched = JSON.stringify({ ...raw, v: 99 })
+    localStorage.setItem(EXPECTED_KEY, mismatched)
 
     expect(
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).toBeNull()
-    expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(mismatched)
   })
 
-  it('returns null and evicts when the version field is missing', async () => {
+  it('returns null but keeps the entry when the version field is missing', async () => {
     await saveDraft(
       USER,
       IDS.fismasystemid,
@@ -357,7 +410,101 @@ describe('loadDraft', () => {
     const { v: _, ...withoutV } = JSON.parse(
       localStorage.getItem(EXPECTED_KEY)!
     )
-    localStorage.setItem(EXPECTED_KEY, JSON.stringify(withoutV))
+    const withoutVRaw = JSON.stringify(withoutV)
+    localStorage.setItem(EXPECTED_KEY, withoutVRaw)
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(withoutVRaw)
+  })
+
+  // Survives a rollback, readable again once the newer version is redeployed.
+  it('recovers a version-mismatched draft when the version matches again', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+
+    // Rolled-back code sees a version it doesn't recognise and declines it.
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: DRAFT_VERSION + 1 })
+    )
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+
+    // From storage, not `raw` — a deleted entry must fail here, not be re-created.
+    const survived = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...survived, v: DRAFT_VERSION })
+    )
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toEqual(DRAFT)
+  })
+
+  it('evicts an expired entry even when the version does not match', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: 99, savedAt: 1000 })
+    )
+    jest.spyOn(Date, 'now').mockReturnValue(1000 + FOURTEEN_DAYS_MS + 1)
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toBeNull()
+  })
+
+  // A future version dropping savedAt must not make rolled-back code delete.
+  it('keeps a version-mismatched entry whose savedAt is unusable', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const { savedAt: _, ...envelope } = JSON.parse(
+      localStorage.getItem(EXPECTED_KEY)!
+    )
+    const future = JSON.stringify({ ...envelope, v: DRAFT_VERSION + 1 })
+    localStorage.setItem(EXPECTED_KEY, future)
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(future)
+  })
+
+  it('still evicts a matching-version entry whose savedAt is unusable', async () => {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, savedAt: 'not-a-number' })
+    )
 
     expect(
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
@@ -424,6 +571,78 @@ describe('loadDraft', () => {
     await expect(
       loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).resolves.toBeNull()
+  })
+})
+
+// Each case drives loadDraft first — the caller only asks in its null branch.
+describe('hasDeclinedDraft', () => {
+  const ask = () =>
+    hasDeclinedDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+  const load = () =>
+    loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+  const store = () =>
+    saveDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid, DRAFT)
+
+  it('is false when nothing is stored', async () => {
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(false)
+  })
+
+  it('is false once loadDraft has evicted a corrupt entry', async () => {
+    localStorage.setItem(EXPECTED_KEY, 'not-json{{{')
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(false)
+  })
+
+  it('is false once loadDraft has evicted an expired entry', async () => {
+    await store()
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, savedAt: 1000 })
+    )
+    jest.spyOn(Date, 'now').mockReturnValue(1000 + FOURTEEN_DAYS_MS + 1)
+
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(false)
+  })
+
+  it('is true for an entry declined over its format version', async () => {
+    await store()
+    const raw = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
+    localStorage.setItem(
+      EXPECTED_KEY,
+      JSON.stringify({ ...raw, v: DRAFT_VERSION + 1 })
+    )
+
+    expect(await load()).toBeNull()
+    expect(await ask()).toBe(true)
+  })
+
+  // The path a version comparison misses: valid version, unreachable key.
+  it('is true for an entry declined over an unreachable key store', async () => {
+    await store()
+    const raw = localStorage.getItem(EXPECTED_KEY)!
+    __resetKeyCache()
+    __setHashedIdForTesting(USER, H_USER)
+    const restore = installOpen((req) => {
+      req.error = new DOMException('VersionError')
+      req.onerror?.()
+    })
+    try {
+      expect(await load()).toBeNull()
+      expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+      expect(await ask()).toBe(true)
+    } finally {
+      restore()
+    }
+  })
+
+  it('is false when localStorage throws', async () => {
+    jest.spyOn(Storage.prototype, 'getItem').mockImplementation(() => {
+      throw new DOMException('SecurityError')
+    })
+    await expect(ask()).resolves.toBe(false)
   })
 })
 
@@ -542,6 +761,7 @@ function installMemoryIndexedDB(): () => void {
     }
   }
   const db = {
+    objectStoreNames: { contains: (name: string) => stores.has(name) },
     createObjectStore: (name: string) => storeFor(name),
     transaction: (name: string) => ({ objectStore: () => storeFor(name) }),
     close: () => {},
@@ -632,5 +852,156 @@ describe('device key persistence (IndexedDB)', () => {
     // Reload: cache cleared, the key read back from IndexedDB must decrypt.
     __resetKeyCache()
     await expect(loadDraft(IDB_USER, SYS, 1, DC)).resolves.toEqual(DRAFT)
+  })
+})
+
+// The ways a DB_VERSION change breaks the key store: an open that errors, and an
+// upgrade another tab blocks. None of them may delete a stored draft.
+type OpenRequest = {
+  result?: unknown
+  error?: DOMException | null
+  onsuccess?: () => void
+  onerror?: () => void
+  onupgradeneeded?: () => void
+  onblocked?: () => void
+}
+
+function installOpen(behave: (req: OpenRequest) => void): () => void {
+  const holder = globalThis as { indexedDB?: unknown }
+  const original = holder.indexedDB
+  holder.indexedDB = {
+    open() {
+      const req: OpenRequest = {}
+      queueMicrotask(() => behave(req))
+      return req
+    },
+  } as unknown as IDBFactory
+  return () => {
+    holder.indexedDB = original
+  }
+}
+
+describe('key store failures (IndexedDB)', () => {
+  let restore: (() => void) | undefined
+
+  afterEach(() => {
+    restore?.()
+    restore = undefined
+  })
+
+  // Writes a draft with a seeded key, then drops the key cache so the next read
+  // has to resolve the key through IndexedDB. The hash is re-seeded because
+  // __resetKeyCache clears it too, and it must stay stable for EXPECTED_KEY.
+  async function saveThenForgetKey(): Promise<string> {
+    await saveDraft(
+      USER,
+      IDS.fismasystemid,
+      IDS.functionid,
+      IDS.datacallid,
+      DRAFT
+    )
+    const raw = localStorage.getItem(EXPECTED_KEY)!
+    __resetKeyCache()
+    __setHashedIdForTesting(USER, H_USER)
+    return raw
+  }
+
+  it('declines but preserves the draft when the key store fails to open', async () => {
+    const raw = await saveThenForgetKey()
+    restore = installOpen((req) => {
+      req.error = new DOMException('VersionError')
+      req.onerror?.()
+    })
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+  })
+
+  it('declines but preserves the draft when the upgrade is blocked', async () => {
+    const raw = await saveThenForgetKey()
+    // A blocked upgrade fires neither success nor error; without the onblocked
+    // rejection this load never settles and the test times out.
+    const close = jest.fn()
+    restore = installOpen((req) => {
+      req.onblocked?.()
+      // Blocking tab closes: success fires on the rejected request. Must close,
+      // since a stray connection is what blocks the next upgrade.
+      req.result = { close }
+      req.onsuccess?.()
+    })
+
+    expect(
+      await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
+    ).toBeNull()
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+    expect(close).toHaveBeenCalled()
+  })
+
+  it('reports a failed save without touching the stored draft', async () => {
+    const raw = await saveThenForgetKey()
+    restore = installOpen((req) => {
+      req.error = new DOMException('VersionError')
+      req.onerror?.()
+    })
+
+    expect(
+      await saveDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid, {
+        selectQuestionOption: 9,
+        notes: 'newer text',
+      })
+    ).toBe(false)
+    expect(localStorage.getItem(EXPECTED_KEY)).toEqual(raw)
+  })
+
+  it('leaves an existing object store alone during an upgrade', async () => {
+    // What a DB_VERSION bump hits: the upgrade fires against a database that
+    // already has the store, so createObjectStore must not be called.
+    await saveThenForgetKey()
+    const data = new Map<IDBValidKey, unknown>()
+    const store = {
+      get(key: IDBValidKey) {
+        const req: FakeRequest = {}
+        queueMicrotask(() => {
+          req.result = data.get(key)
+          req.onsuccess?.({ target: req })
+        })
+        return req
+      },
+      put(value: unknown, key: IDBValidKey) {
+        data.set(key, value)
+        const req: FakeRequest = {}
+        queueMicrotask(() => {
+          req.result = key
+          req.onsuccess?.({ target: req })
+        })
+        return req
+      },
+    }
+    const createObjectStore = jest.fn(() => {
+      throw new DOMException('ConstraintError')
+    })
+    restore = installOpen((req) => {
+      req.result = {
+        objectStoreNames: { contains: () => true },
+        createObjectStore,
+        transaction: () => ({ objectStore: () => store }),
+        close: () => {},
+      }
+      req.onupgradeneeded?.()
+      req.onsuccess?.()
+    })
+
+    expect(
+      await saveDraft(
+        USER,
+        IDS.fismasystemid,
+        IDS.functionid,
+        IDS.datacallid,
+        DRAFT
+      )
+    ).toBe(true)
+    expect(createObjectStore).not.toHaveBeenCalled()
   })
 })

@@ -1,0 +1,55 @@
+version: 1
+
+# Frostfall accessibility config.
+#
+# Repeatable local scan (seeded data, matches the committed baseline):
+#   make frostfall-local
+#
+# Quick look at whatever dev stack is already running (counts drift with data):
+#   make dev-up && make frontend-env   (in ../ztmf)
+#   yarn dev                           (here)
+#   make frostfall-report
+
+server:
+  baseUrl: http://localhost:5174
+
+defaults:
+  standard: section508
+  # Report-only: violations are reported, the build is not failed.
+  # Uncomment to enforce once the baseline is committed:
+  # expect:
+  #   severity: serious
+
+baseline: .frostfall-baseline.json
+
+# NOTE: this app uses a hash router - routes live in the fragment (/#/users),
+# so plain paths like /users would all render the dashboard.
+tests:
+  - id: dashboard
+    path: /
+    waitFor: '.MuiDataGrid-root'
+
+  - id: users
+    path: '/#/users'
+
+  - id: admin-opdivs
+    path: '/#/admin/opdivs'
+
+  - id: pillar-scores-modal
+    path: /
+    scan: false
+    steps:
+      - waitFor: '.MuiDataGrid-root'
+      - click: '[aria-label^="View Pillar Scores"]'
+      # The title only exists once the modal is open AND scores have loaded.
+      - waitFor: '#pillar-scores-modal-title'
+      - scan:
+          label: modal-open
+          scope: '[role=dialog]'
+
+profiles:
+  # Placeholder; enforcement lands here after baseline burn-in:
+  #   defaults: { expect: { severity: serious } }
+  # CI attaches to a running vite server just like local runs do - the app
+  # needs the vite /api proxy, so a static dist serve would 404 every API call.
+  ci: {}

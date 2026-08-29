@@ -30,7 +30,6 @@ import BarChartIcon from '@mui/icons-material/BarChart'
 import { FismaTableProps } from '@/types'
 import type { OpDiv, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
 import { parseDatacallName } from '@/utils/datacallGrouping'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
@@ -357,6 +356,7 @@ export default function FismaTable({
     datacalls,
     userInfo,
     datacenterEnvironments,
+    opdivs,
     showDecommissioned,
     setShowDecommissioned,
     dashboardSearch,
@@ -365,7 +365,6 @@ export default function FismaTable({
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const navigate = useNavigate()
-  const [opdivs, setOpDivs] = useState<OpDiv[]>([])
   const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
   const [envFilter, setEnvFilter] = useState<string | 'all'>('all')
   const [notUpdatedOnly, setNotUpdatedOnly] = useState(false)
@@ -463,23 +462,6 @@ export default function FismaTable({
       },
     })
   }
-
-  // OpDiv reference list, for both the filter dropdown and the code badges.
-  // Include inactive OpDivs so a system tied to a since-deactivated OpDiv
-  // still shows a name, not a bare id.
-  useEffect(() => {
-    let active = true
-    fetchOpDivs(true)
-      .then((list) => {
-        if (active) setOpDivs(list)
-      })
-      .catch(() => {
-        if (active) setOpDivs([])
-      })
-    return () => {
-      active = false
-    }
-  }, [])
 
   const opdivCodeMap = useMemo(() => {
     const map: Record<number, string> = {}
