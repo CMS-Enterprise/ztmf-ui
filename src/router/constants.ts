@@ -12,6 +12,7 @@ export enum RouteIds {
   SYSTEM_DETAIL = 'system-detail',
   PILLAR_SCORES = 'pillar-scores',
   ADMIN_OPDIVS = 'admin-opdivs',
+  ADMIN_EVENTS = 'admin-events',
 }
 
 export enum RouteNames {
@@ -33,4 +34,5 @@ export enum Routes {
   SYSTEM_DETAIL = '/systems/:fismasystemid',
   PILLAR_SCORES = '/systems/:fismasystemid/pillar-scores',
   ADMIN_OPDIVS = '/admin/opdivs',
+  ADMIN_EVENTS = '/admin/events',
 }

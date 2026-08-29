@@ -13,7 +13,11 @@ jest.mock('react-router-dom', () => ({
   __esModule: true,
   useLoaderData: jest.fn(),
   useLocation: jest.fn(),
-  Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  // Render a real anchor so each nav label is its own element (a bare
+  // fragment collapses the sibling labels into one concatenated text node).
+  Link: ({ children, to }: { children: React.ReactNode; to?: string }) => (
+    <a href={typeof to === 'string' ? to : '/'}>{children}</a>
+  ),
   Outlet: () => <div>OUTLET</div>,
 }))
 
@@ -28,6 +32,13 @@ jest.mock('@/axiosConfig', () => ({
 jest.mock('@/utils/dataCenterEnvironments', () => ({
   __esModule: true,
   fetchDataCenterEnvironments: jest.fn(),
+}))
+
+// Without this the axios stub above returns undefined from get(), so every test
+// here would silently run Title's OpDiv error path.
+jest.mock('@/utils/opdivs', () => ({
+  __esModule: true,
+  fetchOpDivs: jest.fn(),
 }))
 
 jest.mock('@/views/QuestionnairePage/draftStore', () => ({
@@ -91,6 +102,7 @@ jest.mock('@/assets/ztmf-logo-color.png', () => 'ztmf-logo-color.png', {
 import { useLoaderData, useLocation } from 'react-router-dom'
 import axiosInstance from '@/axiosConfig'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
 import { notify } from '@/utils/notify'
 import { broadcastLogout } from '@/utils/sessionSync'
@@ -101,6 +113,7 @@ const mockedUseLocation = useLocation as jest.Mock
 const mockedGet = axiosInstance.get as jest.Mock
 const mockedPost = axiosInstance.post as jest.Mock
 const mockedFetchEnvs = fetchDataCenterEnvironments as jest.Mock
+const mockedFetchOpDivs = fetchOpDivs as jest.Mock
 const mockedClearDrafts = clearOtherUserDrafts as jest.Mock
 const mockedNotify = notify as jest.Mock
 const mockedBroadcastLogout = broadcastLogout as jest.Mock
@@ -133,6 +146,7 @@ beforeEach(() => {
   mockedGet.mockResolvedValue({ data: { data: [] } })
   mockedPost.mockResolvedValue({ status: 204 })
   mockedFetchEnvs.mockResolvedValue([])
+  mockedFetchOpDivs.mockResolvedValue([])
   mockedClearDrafts.mockResolvedValue(undefined)
   // jsdom forbids assigning window.location.hash / calling reload on the real
   // object; swap in a writable stub so the logout redirect is observable.
@@ -180,6 +194,32 @@ describe('Title logout affordance', () => {
       screen.queryByRole('menuitem', { name: /add fisma system/i })
     ).not.toBeInTheDocument()
   })
+
+  it.each(['OWNER', 'HHS_ADMIN', 'HHS_READONLY_ADMIN'] as UserRole[])(
+    'shows the Events nav link for the unscoped-read tier %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      // Events is a top-level nav link, gated on hasUnscopedRead.
+      expect(
+        await screen.findByRole('link', { name: 'Events' })
+      ).toBeInTheDocument()
+    }
+  )
+
+  it.each(['OPDIV_ADMIN', 'OPDIV_READONLY_ADMIN', 'ISSO'] as UserRole[])(
+    'hides the Events nav link from the scoped tier %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      // Wait for the header to settle, then confirm the link never rendered:
+      // the events endpoint 403s a scoped tier, so the tab is gated out.
+      await screen.findByRole('button', { name: /^account:/i })
+      expect(
+        screen.queryByRole('link', { name: 'Events' })
+      ).not.toBeInTheDocument()
+    }
+  )
 
   it('calls the logout endpoint and lands the user on the sign-in page', async () => {
     renderTitleFor('ISSO')

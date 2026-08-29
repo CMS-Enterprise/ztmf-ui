@@ -11,6 +11,8 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import TextField from '@mui/material/TextField'
+import Tooltip from '@mui/material/Tooltip'
+import { visuallyHidden } from '@mui/utils'
 import {
   FismaQuestion,
   FismaSystemType,
@@ -32,9 +34,10 @@ import {
   MAX_QUESTIONNAIRE_NOTES_LENGTH,
   CONFIRMATION_MESSAGE_QUESTION,
   NOTES_UPDATE_REQUIRED_MSG,
+  COMPLETE_HINT_MSG,
+  NEXT_HINT_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
@@ -75,7 +78,12 @@ import SectionRail from './components/SectionRail'
 import SubtitleLine from './components/SubtitleLine'
 import SaveIndicator from './components/SaveIndicator'
 import Card from './components/Card'
-import { saveDraft, loadDraft, clearDraft } from './draftStore'
+import {
+  saveDraft,
+  loadDraft,
+  clearDraft,
+  hasDeclinedDraft,
+} from './draftStore'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
   toSlug,
@@ -116,6 +124,10 @@ const CssTextField = styled(TextField)({
 // Ties the carried-forward guidance line to the Confirm button it explains, so
 // a screen reader hears the reason with the action.
 const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
+// Ties the forward button's hint (Next or Complete) to the button as a
+// description, so keyboard and screen-reader users get it on focus rather than
+// on hover only.
+const NAV_HINT_ID = 'questionnaire-nav-hint'
 
 export default function QuestionnarePage() {
   const {
@@ -126,6 +138,8 @@ export default function QuestionnarePage() {
     latestDeadline,
     fismaSystems,
     datacalls,
+    opdivs,
+    opdivsLoaded,
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
@@ -205,6 +219,10 @@ export default function QuestionnarePage() {
   // Incremented on every explicit draft clear so in-flight debounced saves
   // that fire after a clear don't resurrect the just-removed draft.
   const saveGenRef = React.useRef(0)
+  // True while the current question has a stored draft this build declined to
+  // read (unrecognised format version). Suppresses the no-edits clearDraft so
+  // the app doesn't delete what draftStore deliberately preserved.
+  const declinedDraftRef = React.useRef(false)
   // Mirrors the payload the debounced draft save would write, so unmount can
   // flush it. The debounce cleanup cancels its own pending timer, and a route
   // change away from this page (System Info, the Dashboard breadcrumb, browser
@@ -337,37 +355,20 @@ export default function QuestionnarePage() {
     FismaSystemType[] | null
   >(null)
   // OpDivs whose systems surface the internal ZTMF Insights layer
-  // (opdivs.insights_enabled - CMS today). Fetched once per page mount. The
-  // insights gate keys on the SYSTEM's OpDiv, not the viewed data call's
-  // name: the FY23-25 era used call tenant (CMS-named vs ZTM-named calls) as
-  // a proxy, which broke when FY2026 unified every OpDiv into one HHS-named
-  // call and silently hid the insights layer for every insights-enabled
-  // system. null = not loaded yet; the gate stays closed until it resolves,
-  // so the panel can appear late but never flashes for a disabled OpDiv.
-  const [insightsOpdivIds, setInsightsOpdivIds] =
-    React.useState<Set<number> | null>(null)
-  React.useEffect(() => {
-    const controller = new AbortController()
-    // includeInactive: the backend serves insights rows for any
-    // insights-enabled OpDiv regardless of its active flag, so the UI gate
-    // must see inactive rows too or the two would diverge.
-    fetchOpDivs(true, controller.signal)
-      .then((rows) =>
-        setInsightsOpdivIds(
-          new Set(
-            rows
-              .filter((o) => o.insights_enabled === true)
-              .map((o) => o.opdiv_id)
-          )
-        )
-      )
-      .catch(() => {
-        // Insights are additive and optional; a failed lookup leaves the
-        // gate closed rather than surfacing an error.
-        if (!controller.signal.aborted) setInsightsOpdivIds(new Set())
-      })
-    return () => controller.abort()
-  }, [])
+  // (opdivs.insights_enabled - CMS today). The gate keys on the SYSTEM's OpDiv,
+  // not the viewed data call's name: the FY23-25 era used call tenant (CMS-named
+  // vs ZTM-named calls) as a proxy, which broke when FY2026 unified every OpDiv
+  // into one HHS-named call and silently hid the layer for every
+  // insights-enabled system. Derived from the shared context list, which carries
+  // inactive rows - the backend serves insights for an insights-enabled OpDiv
+  // regardless of its active flag, so the UI gate must match.
+  const insightsOpdivIds = React.useMemo(
+    () =>
+      new Set(
+        opdivs.filter((o) => o.insights_enabled === true).map((o) => o.opdiv_id)
+      ),
+    [opdivs]
+  )
   const resolvedDecommissioned = React.useMemo(
     () => resolveSystemIdByAcronym(decommissionedSystems ?? [], fismaacronym),
     [decommissionedSystems, fismaacronym]
@@ -503,6 +504,9 @@ export default function QuestionnarePage() {
     if (system && questionId && datacallID > 0) {
       void clearDraft(userInfo.userid, system, questionId, datacallID)
     }
+    // An explicit clear (the answer is saved server-side now) is meant to remove
+    // the entry, declined or not, so nothing is left to suppress.
+    declinedDraftRef.current = false
     setDraftStatus('idle')
   }
 
@@ -524,7 +528,7 @@ export default function QuestionnarePage() {
     !!system &&
     (insightsLoadState.system !== system ||
       !insightsLoadState.settled ||
-      insightsOpdivIds === null)
+      !opdivsLoaded)
   const currentInsight =
     insightsLoadState.system === system && currentDatabaseQuestionId != null
       ? insightsByQuestion.get(currentDatabaseQuestionId)
@@ -538,7 +542,7 @@ export default function QuestionnarePage() {
   const systemOpdivId = systemInfo?.opdiv_id
   // Single source of truth for all internal insight UI gates.
   const showCmsInsights =
-    systemOpdivId != null && (insightsOpdivIds?.has(systemOpdivId) ?? false)
+    systemOpdivId != null && insightsOpdivIds.has(systemOpdivId)
   const showInsights = Boolean(currentInsight) && showCmsInsights
   const currentSuggestion = showCmsInsights
     ? buildInsightJustification(currentInsight)
@@ -1107,6 +1111,9 @@ export default function QuestionnarePage() {
           const sys = systemRef.current
           const uid = userInfo.userid
           if (controller.signal.aborted) return
+          // Reset per question — a declined entry belongs to one question, and a
+          // stale true here would suppress a legitimate clear on the next one.
+          declinedDraftRef.current = false
           // Read-only sessions never load the draft again, so evict any lingering
           // entry instead of letting it sit for the full TTL. Bump the save
           // generation first: an autosave that fired just before isReadOnly
@@ -1147,6 +1154,18 @@ export default function QuestionnarePage() {
               setDraftStatus('idle')
             }
           } else {
+            // Tell "none stored" from "one we declined" — the no-edits clear
+            // below would delete the latter. A ref, not draftStatus:
+            // that gets reset to 'idle' and 'error', re-arming the clear.
+            if (!isReadOnly && sys && questionId && datacallID > 0) {
+              declinedDraftRef.current = await hasDeclinedDraft(
+                uid,
+                sys,
+                questionId,
+                datacallID
+              )
+              if (controller.signal.aborted) return
+            }
             setDraftStatus('idle')
           }
           setOptions(choices)
@@ -1222,11 +1241,14 @@ export default function QuestionnarePage() {
       // values matching the server state does not mean the user reverted manually.
       // Clearing it here would delete a valid in-progress draft on every page load
       // when the server happens to be at the same state as the draft.
+      // A declined draft is skipped for the same reason: the entry is a real
+      // draft this build cannot read, and deleting it loses the user's text.
       if (
         system &&
         questionId &&
         datacallID > 0 &&
-        draftStatusRef.current !== 'restored'
+        draftStatusRef.current !== 'restored' &&
+        !declinedDraftRef.current
       )
         void clearDraft(userInfo.userid, system, questionId, datacallID)
       if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
@@ -1263,6 +1285,8 @@ export default function QuestionnarePage() {
         if (saved && pendingDraftRef.current === pending)
           pendingDraftRef.current = null
         if (saved) {
+          // The stored entry is this build's now, so it is no longer declined.
+          declinedDraftRef.current = false
           if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
         } else {
           setDraftStatus('error')
@@ -1567,6 +1591,26 @@ export default function QuestionnarePage() {
     notes,
     initNotes,
   })
+  // Hoisted so the button's label, its click handler, and the helper sentence
+  // below cannot disagree about which question is last.
+  const isLastQuestion =
+    selectedIndex === stepFunctionId[stepFunctionId.length - 1]
+  // The forward button's hint, empty wherever it would misstate the behavior.
+  // A read-only session never saves, so neither variant applies. Complete's
+  // wording holds only on an open call — a closed call keeps the old wrap-around
+  // to question 1 instead of saving and summarizing. Next is unconditional
+  // because it behaves the same on open and closed calls.
+  const navHintMsg = isReadOnly
+    ? ''
+    : !isLastQuestion
+      ? NEXT_HINT_MSG
+      : isOpenCall
+        ? COMPLETE_HINT_MSG
+        : ''
+  // The data call both header modals present as "current". Prefer the call this
+  // questionnaire actually resolved (datacallID covers every entry path,
+  // including URL deep links where no route state exists); fall back to the
+  // route/selected/latest chain during the pre-fetch window.
 
   // The questionnaire resolves its own call from route state / the URL, which
   // can differ from the global dashboard selection (e.g. opened on a system's
@@ -2070,55 +2114,64 @@ export default function QuestionnarePage() {
                   }
                   isReadOnly={isReadOnly}
                 />
-                <Button
-                  variant="contained"
-                  color="primary"
-                  disabled={
-                    needsNotesUpdate ||
-                    insightsPending ||
-                    priorReviewState === 'pending' ||
-                    priorReviewState === 'initializing'
-                  }
-                  onClick={() => {
-                    const isLastQuestion =
-                      selectedIndex ===
-                      stepFunctionId[stepFunctionId.length - 1]
-                    // Complete on the open call summarizes instead of
-                    // silently wrapping to question 1. A closed call keeps
-                    // the wrap-around - harmless paging for a historical
-                    // viewer.
-                    if (isLastQuestion && isOpenCall) {
-                      void handleCompleteClick()
-                      return
-                    }
-                    saveGenRef.current++
-                    const id = isLastQuestion
-                      ? stepFunctionId[0]
-                      : stepFunctionId[functionIdIdx[selectedIndex] + 1]
-                    if (questions[id]) {
-                      const q = questions[id]
-                      navigate(
-                        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
-                        {
-                          state: {
-                            fismasystemid: system,
-                            ...datacallStateRef.current,
-                          },
-                          replace: true,
+                {/* Tooltip states that the forward action saves this
+                    question on its own (#705). describeChild so MUI applies
+                    aria-description, not aria-label, over the button text;
+                    the visually-hidden span mirrors it for keyboard/SR users.
+                    Empty title (read-only, or last-on-closed-call) suppresses
+                    the tooltip. */}
+                <Tooltip title={navHintMsg} describeChild>
+                  <span>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      disabled={
+                        needsNotesUpdate ||
+                        insightsPending ||
+                        priorReviewState === 'pending' ||
+                        priorReviewState === 'initializing'
+                      }
+                      aria-describedby={navHintMsg ? NAV_HINT_ID : undefined}
+                      onClick={() => {
+                        // Complete on the open call summarizes instead of
+                        // silently wrapping to question 1. A closed call keeps
+                        // the wrap-around - harmless paging for a historical
+                        // viewer.
+                        if (isLastQuestion && isOpenCall) {
+                          void handleCompleteClick()
+                          return
                         }
-                      )
-                    }
-                    if (id !== questionId) setLoadingQuestion(true)
-                    setQuestionId(id)
-                    setSelectedIndex(id)
-                    if (!isReadOnly) saveResponse()
-                  }}
-                  sx={{ fontSize: 13 }}
-                >
-                  {selectedIndex === stepFunctionId[stepFunctionId.length - 1]
-                    ? 'Complete'
-                    : 'Next question >'}
-                </Button>
+                        saveGenRef.current++
+                        const id = isLastQuestion
+                          ? stepFunctionId[0]
+                          : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                        if (questions[id]) {
+                          const q = questions[id]
+                          navigate(
+                            `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                            {
+                              state: {
+                                fismasystemid: system,
+                                ...datacallStateRef.current,
+                              },
+                              replace: true,
+                            }
+                          )
+                        }
+                        if (id !== questionId) setLoadingQuestion(true)
+                        setQuestionId(id)
+                        setSelectedIndex(id)
+                        if (!isReadOnly) saveResponse()
+                      }}
+                      sx={{ fontSize: 13 }}
+                    >
+                      {isLastQuestion ? 'Complete' : 'Next question >'}
+                    </Button>
+                    <Box component="span" id={NAV_HINT_ID} sx={visuallyHidden}>
+                      {navHintMsg}
+                    </Box>
+                  </span>
+                </Tooltip>
               </Box>
             </>
           )}

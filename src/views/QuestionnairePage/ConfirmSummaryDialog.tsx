@@ -12,6 +12,7 @@ import ListItem from '@mui/material/ListItem'
 import Typography from '@mui/material/Typography'
 import CloseIcon from '@mui/icons-material/Close'
 import { Button as CmsButton } from '@cmsgov/design-system'
+import ConfettiBurst from './ConfettiBurst'
 import type { ConfirmSummary, ConfirmSummaryEntry } from './confirmState'
 
 type Props = {
@@ -82,11 +83,14 @@ const ConfirmSummaryDialog = ({ summary, onClose, onJump }: Props) => {
           </Typography>
         )}
         {complete ? (
-          <Alert severity="success" icon={false}>
-            Every question is answered
-            {summary.hasStatusData ? ' and counted as updated' : ''}. You are
-            done — no further action is needed.
-          </Alert>
+          <>
+            <ConfettiBurst />
+            <Alert severity="success" icon={false}>
+              Every question is answered
+              {summary.hasStatusData ? ' and counted as updated' : ''}. You are
+              done. No further action is needed.
+            </Alert>
+          </>
         ) : (
           <>
             {summary.unconfirmed.length > 0 && (

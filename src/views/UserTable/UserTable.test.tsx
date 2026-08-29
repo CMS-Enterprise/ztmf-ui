@@ -32,6 +32,12 @@ jest.mock('../Title/Context', () => ({
     },
     fismaSystems: [],
     setFismaSystems: jest.fn(),
+    // The OpDiv catalog hook derives its projections from this shared list
+    // (Title fetches /opdivs once), so the columns and filter read it here.
+    opdivs: [
+      { opdiv_id: 1, code: 'CDC', name: 'CDC', is_parent: false, active: true },
+      { opdiv_id: 2, code: 'NIH', name: 'NIH', is_parent: false, active: true },
+    ],
     latestDataCallId: 1,
     latestDatacall: 'FY2025',
     latestDeadline: '',
@@ -46,16 +52,6 @@ jest.mock('../Title/Context', () => ({
   }),
 }))
 
-// OpDivs lookup hits a separate utility, not axiosInstance directly; mock
-// the module so the loadOpDivs effect resolves without us having to register
-// a MockAdapter handler for it.
-jest.mock('@/utils/opdivs', () => ({
-  fetchOpDivs: () =>
-    Promise.resolve([
-      { opdiv_id: 1, code: 'CDC', name: 'CDC', is_parent: false, active: true },
-      { opdiv_id: 2, code: 'NIH', name: 'NIH', is_parent: false, active: true },
-    ]),
-}))
 jest.mock('@/utils/userOpdivs', () => ({
   fetchUserOpDivs: () => Promise.resolve([]),
   grantOpDiv: jest.fn().mockResolvedValue(undefined),

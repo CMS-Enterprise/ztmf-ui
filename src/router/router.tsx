@@ -15,6 +15,7 @@ import QuestionnarePage from '@/views/QuestionnairePage/QuestionnairePage'
 import SystemDetailPage from '@/views/SystemDetailPage/SystemDetailPage'
 import PillarScoresPage from '@/views/PillarScoresPage/PillarScoresPage'
 import OpDivAdmin from '@/views/OpDivAdmin/OpDivAdmin'
+import EventsTable from '@/views/EventsTable/EventsTable'
 /**
  * The hash router for the application that defines routes
  *  and specifies the loaders for routes with dynamic data.
@@ -63,6 +64,12 @@ const router = createHashRouter([
         path: Routes.ADMIN_OPDIVS,
         id: RouteIds.ADMIN_OPDIVS,
         element: <OpDivAdmin />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
+        path: Routes.ADMIN_EVENTS,
+        id: RouteIds.ADMIN_EVENTS,
+        element: <EventsTable />,
         errorElement: <ErrorBoundary />,
       },
       {

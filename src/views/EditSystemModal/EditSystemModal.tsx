@@ -22,12 +22,11 @@ import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
-import { fetchOpDivs } from '@/utils/opdivs'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { EXTENDED_METADATA_KEYS } from '@/views/SystemDetailPage/fieldConfig'
 import { buildExtendedDiff } from '@/utils/systemMetadataVocab'
-import type { FismaSystemType, OpDiv } from '@/types'
+import type { FismaSystemType } from '@/types'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -42,6 +41,7 @@ export default function EditSystemModal({
   system,
   mode,
   datacenterEnvironments = [],
+  opdivs: allOpdivs = [],
 }: editSystemModalProps) {
   const {
     editedFismaSystem,
@@ -93,27 +93,13 @@ export default function EditSystemModal({
     handleReactivate: runReactivate,
     resetReactivateForm,
   } = useReactivateFlow()
-  // Options for the required owning-OpDiv selector, loaded on open so the
-  // list is always current (an admin may have created an OpDiv since the
-  // last open). Failures surface: an empty list leaves Save stuck.
-  const [opdivs, setOpDivs] = React.useState<OpDiv[]>([])
-  React.useEffect(() => {
-    if (!open) return
-    const controller = new AbortController()
-    fetchOpDivs(false, controller.signal)
-      .then(setOpDivs)
-      .catch((error) => {
-        // Ignore the abort fired by cleanup on close; surface real failures
-        // so an empty OpDiv list (which leaves Save stuck) isn't silent.
-        if (controller.signal.aborted || isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        notify(
-          parsed.message || 'Failed to load the OpDiv list. Please try again.',
-          'error'
-        )
-      })
-    return () => controller.abort()
-  }, [open])
+  // Active OpDivs for the required owning-OpDiv selector. Sourced from the
+  // shared context list Title fetches (#701), filtered to active here so a
+  // since-deactivated OpDiv isn't offered as a new assignment.
+  const opdivs = React.useMemo(
+    () => allOpdivs.filter((o) => o.active),
+    [allOpdivs]
+  )
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)

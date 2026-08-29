@@ -6,7 +6,7 @@
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
-import type { FismaSystemType } from '@/types'
+import type { FismaSystemType, OpDiv } from '@/types'
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -37,6 +37,20 @@ import EditSystemModal from './EditSystemModal'
 
 const mock = new MockAdapter(axiosInstance)
 const notifyMock = notify as jest.Mock
+
+// The OpDiv reference list arrives as a prop from Title (it fetches /opdivs
+// once for every consumer), so the modal makes no request of its own.
+const OPDIVS: OpDiv[] = [
+  {
+    opdiv_id: 1,
+    code: 'CMS',
+    name: 'CMS',
+    is_parent: false,
+    active: true,
+    system_delegate_enabled: false,
+    insights_enabled: false,
+  },
+]
 
 const completeSystem: FismaSystemType = {
   fismasystemid: 7,
@@ -71,9 +85,8 @@ const decommissionedSystem: FismaSystemType = {
 beforeEach(() => {
   mock.reset()
   notifyMock.mockClear()
-  // The modal fetches the OpDiv reference list on open and the extended
-  // section fetches the attribute vocabulary; bare responses keep both quiet.
-  mock.onGet('/opdivs').reply(200, { data: [{ opdiv_id: 1, name: 'CMS' }] })
+  // The extended section fetches the attribute vocabulary on open; a bare
+  // response keeps it quiet. OpDivs now come in as a prop, not a fetch.
   mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
@@ -86,6 +99,7 @@ describe('EditSystemModal', () => {
         onClose={jest.fn()}
         system={completeSystem}
         mode="create"
+        opdivs={OPDIVS}
       />
     )
     expect(await screen.findByText('Extended Metadata')).toBeInTheDocument()
@@ -101,6 +115,7 @@ describe('EditSystemModal', () => {
         onClose={jest.fn()}
         system={null}
         mode="edit"
+        opdivs={OPDIVS}
       />
     )
     // No modal title visible - the early `open && system` guard returned
@@ -116,6 +131,7 @@ describe('EditSystemModal', () => {
         onClose={jest.fn()}
         system={completeSystem}
         mode="edit"
+        opdivs={OPDIVS}
       />
     )
     expect(await screen.findByText('Edit FISMA system')).toBeInTheDocument()
@@ -139,6 +155,7 @@ describe('EditSystemModal', () => {
         onClose={onClose}
         system={completeSystem}
         mode="edit"
+        opdivs={OPDIVS}
       />
     )
     await screen.findByText('Edit FISMA system')
@@ -168,6 +185,7 @@ describe('EditSystemModal', () => {
         onClose={jest.fn()}
         system={decommissionedSystem}
         mode="edit"
+        opdivs={OPDIVS}
       />
     )
     expect(await screen.findByText('System Decommissioned')).toBeInTheDocument()
@@ -189,6 +207,7 @@ describe('EditSystemModal', () => {
         onClose={jest.fn()}
         system={decommissionedSystem}
         mode="edit"
+        opdivs={OPDIVS}
       />
     )
     await screen.findByText('System Decommissioned')
@@ -213,6 +232,7 @@ describe('EditSystemModal', () => {
         onClose={jest.fn()}
         system={completeSystem}
         mode="edit"
+        opdivs={OPDIVS}
       />
     )
     await screen.findByText('Edit FISMA system')
@@ -286,6 +306,7 @@ describe('EditSystemModal extended-metadata clearing', () => {
         system={SYSTEM}
         mode="edit"
         datacenterEnvironments={[]}
+        opdivs={OPDIVS}
       />
     )
 
@@ -317,6 +338,7 @@ describe('EditSystemModal extended-metadata clearing', () => {
         system={SYSTEM}
         mode="edit"
         datacenterEnvironments={[]}
+        opdivs={OPDIVS}
       />
     )
 
@@ -342,6 +364,7 @@ describe('EditSystemModal extended-metadata clearing', () => {
         system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
         mode="edit"
         datacenterEnvironments={[]}
+        opdivs={OPDIVS}
       />
     )
 
@@ -366,6 +389,7 @@ describe('EditSystemModal extended-metadata clearing', () => {
         system={{ ...SYSTEM, isso_name: 'Conan Antonio Motti' }}
         mode="edit"
         datacenterEnvironments={[]}
+        opdivs={OPDIVS}
       />
     )
 
@@ -390,6 +414,7 @@ describe('EditSystemModal extended-metadata clearing', () => {
         system={{ ...SYSTEM, cloud_vendor: 'AWS' }}
         mode="edit"
         datacenterEnvironments={[]}
+        opdivs={OPDIVS}
       />
     )
 

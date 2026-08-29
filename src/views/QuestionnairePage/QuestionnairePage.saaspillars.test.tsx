@@ -26,6 +26,7 @@ jest.mock('./draftStore', () => ({
   saveDraft: jest.fn().mockResolvedValue(true),
   loadDraft: jest.fn().mockResolvedValue(null),
   clearDraft: jest.fn().mockResolvedValue(undefined),
+  hasDeclinedDraft: jest.fn().mockResolvedValue(false),
 }))
 
 jest.mock('@/utils/notify', () => {
@@ -153,6 +154,8 @@ function makeCtx(
         ordr: 60,
       },
     ],
+    opdivs: [],
+    opdivsLoaded: true,
   }
 }
 

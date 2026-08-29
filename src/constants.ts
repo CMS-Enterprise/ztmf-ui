@@ -14,8 +14,6 @@ export const COPYRIGHT_LABEL = `Copyright © ${new Date()
 // * Configuration Constants
 export const DEFAULT_ALERT_TIMEOUT = 3000
 
-export const ROLES = ['ISSO', 'ISSM', 'ADMIN', 'READONLY_ADMIN']
-
 export const ERROR_MESSAGES = {
   login: 'Please log in to continue.',
   expired: 'Your session has expired. Please log in again.',
@@ -58,6 +56,13 @@ export const CONFIRMATION_MESSAGE_QUESTION =
 
 export const NOTES_UPDATE_REQUIRED_MSG =
   'Please update your notes to reflect the changed answer.'
+
+// Tooltips on the questionnaire's forward button. "Saves changes", not "saves
+// this question": an untouched one is deliberately never written (#412/#413).
+export const NEXT_HINT_MSG =
+  'Saves changes on this question, then opens the next one.'
+export const COMPLETE_HINT_MSG =
+  'Saves changes on this question, then shows a summary of your progress.'
 
 // ---------
 

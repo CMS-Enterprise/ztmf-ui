@@ -4,21 +4,17 @@ const WRITE_ADMIN_ROLES = new Set<UserRole>([
   'OWNER',
   'HHS_ADMIN',
   'OPDIV_ADMIN',
-  'ADMIN', // legacy, removed in Stage D
 ])
 
 const READ_ONLY_ADMIN_ROLES = new Set<UserRole>([
   'HHS_READONLY_ADMIN',
   'OPDIV_READONLY_ADMIN',
-  'READONLY_ADMIN', // legacy, removed in Stage D
 ])
 
 const UNSCOPED_READ_ROLES = new Set<UserRole>([
   'OWNER',
   'HHS_ADMIN',
   'HHS_READONLY_ADMIN',
-  'ADMIN', // legacy, removed in Stage D
-  'READONLY_ADMIN', // legacy, removed in Stage D
 ])
 
 // Two distinct system concepts, deliberately kept separate:
@@ -37,9 +33,7 @@ const SYSTEM_ACCESS_ROLES = new Set<UserRole>([
 const SYSTEM_SCOPED_ROLES = new Set<UserRole>(['ISSO', 'ISSM'])
 
 // Roles an admin may assign, narrowed by the acting admin's own tier so the
-// dropdown can never offer a privilege escalation. Legacy ADMIN / READONLY_ADMIN
-// are excluded everywhere: the backend already dropped them (migration 0040 /
-// ztmf#314) and only accepts the new taxonomy.
+// dropdown can never offer a privilege escalation.
 //
 // These lists are display gating only. The backend SaveUser escalation guard is
 // the security boundary and must enforce the same matrix - only OWNER assigns
@@ -139,13 +133,12 @@ export const hasSystemAccess = (user: UserLike): boolean =>
 export const isHHSTier = (user: UserLike): boolean =>
   !!user && (user.role === 'HHS_ADMIN' || user.role === 'HHS_READONLY_ADMIN')
 
-// Unscoped write admins (OWNER / HHS_ADMIN, plus the legacy ADMIN that maps to
-// OWNER). These are the only tiers the backend lets act across all OpDivs for
-// privileged, non-scoped actions like mass email. OpDiv-scoped and read-only
-// admins are excluded and would get a 403.
+// Unscoped write admins (OWNER / HHS_ADMIN). These are the only tiers the
+// backend lets act across all OpDivs for privileged, non-scoped actions like
+// mass email. OpDiv-scoped and read-only admins are excluded and would get a
+// 403.
 export const isUnscopedWriteAdmin = (user: UserLike): boolean =>
-  !!user &&
-  (user.role === 'OWNER' || user.role === 'HHS_ADMIN' || user.role === 'ADMIN')
+  !!user && (user.role === 'OWNER' || user.role === 'HHS_ADMIN')
 
 export const isOpDivTier = (user: UserLike): boolean =>
   !!user &&
@@ -153,11 +146,9 @@ export const isOpDivTier = (user: UserLike): boolean =>
 
 // The set of roles the acting admin is allowed to grant, scoped to their tier:
 // OWNER -> any tier; HHS_ADMIN -> any except OWNER; OPDIV_ADMIN -> OpDiv tier and
-// below. The legacy ADMIN carryover mapped to OWNER, so it gets the OWNER set.
-// Read-only admins cannot assign at all.
+// below. Read-only admins cannot assign at all.
 export const selectableRoles = (actorRole: string): UserRole[] => {
-  if (actorRole === 'OWNER' || actorRole === 'ADMIN')
-    return [...OWNER_ASSIGNABLE_ROLES]
+  if (actorRole === 'OWNER') return [...OWNER_ASSIGNABLE_ROLES]
   if (actorRole === 'HHS_ADMIN') return [...HHS_ASSIGNABLE_ROLES]
   if (actorRole === 'OPDIV_ADMIN') return [...OPDIV_ASSIGNABLE_ROLES]
   return []
@@ -176,8 +167,6 @@ const ROLE_LABELS: Record<UserRole, string> = {
   ISSO: 'ISSO',
   ISSM: 'ISSM',
   SYSTEM_DELEGATE: 'System Delegate',
-  ADMIN: 'Admin',
-  READONLY_ADMIN: 'Read-only Admin',
 }
 
 /**

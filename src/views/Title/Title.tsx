@@ -3,11 +3,13 @@ import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import 'core-js/stable/atob'
-import { userData, UserRole, datacall, DataCenterEnvironment } from '@/types'
+import { userData, datacall, DataCenterEnvironment, OpDiv } from '@/types'
+import { EMPTY_USER } from '@/constants'
 import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
   isUnscopedWriteAdmin,
+  hasUnscopedRead,
 } from '@/utils/userRoles'
 import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
@@ -20,7 +22,8 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
-import { notify } from '@/utils/notify'
+import { notify, isAuthHandled } from '@/utils/notify'
+import { fetchOpDivs } from '@/utils/opdivs'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
@@ -40,20 +43,17 @@ import { clearOtherUserDrafts } from '../QuestionnairePage/draftStore'
  * @returns {JSX.Element} Component that renders the dashboard contents.
  */
 
-const emptyUser: userData = {
-  userid: '',
-  email: '',
-  fullname: '',
-  role: '' as UserRole,
-  assignedfismasystems: [],
-}
+// Fixed text, not parseApiError: this fires from the shell on any page, so a
+// generic "something went wrong" would give the user nothing to act on.
+const OPDIVS_LOAD_ERROR =
+  'Failed to load the OpDiv list. OpDiv names and pickers may be incomplete - please reload.'
 
 export default function Title() {
   const location = useLocation()
   const loaderData = useLoaderData() as AuthLoaderData
   const [openDataCallModal, setOpenDataCallModal] = useState<boolean>(false)
   const userInfo: userData =
-    loaderData.status != 200 ? emptyUser : loaderData.response
+    loaderData.status != 200 ? EMPTY_USER : loaderData.response
   // Determine wether we are on the sign-in page or not
   const normalizedPath = location.pathname.toLowerCase().replace(/\/$/, '')
   const isSignInRoute = normalizedPath === Routes.SIGNIN.toLowerCase()
@@ -77,6 +77,10 @@ export default function Title() {
   const [datacenterEnvironments, setDatacenterEnvironments] = useState<
     DataCenterEnvironment[]
   >([])
+  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
+  // Distinguishes "not fetched yet" from "fetched, and there are none" - both
+  // are an empty list. The questionnaire's insights gate needs the difference.
+  const [opdivsLoaded, setOpdivsLoaded] = useState(false)
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -188,6 +192,34 @@ export default function Title() {
       controller.abort()
     }
   }, [loaderData.status])
+  // Fetched once for the five pages that read OpDivs, and re-invoked by OpDiv
+  // admin after a write. Includes inactive rows so a system tied to a
+  // deactivated OpDiv still resolves its name. Unlike the sibling fetches
+  // above this notifies rather than logs: it is the only fetch site, so an
+  // empty list persists for the session and leaves the system form's Save stuck.
+  const refreshOpdivs = useCallback((signal?: AbortSignal) => {
+    fetchOpDivs(true, signal)
+      .then(setOpdivs)
+      .catch((error) => {
+        if (signal?.aborted || isAuthHandled(error)) return
+        notify(OPDIVS_LOAD_ERROR, 'error')
+      })
+      .finally(() => {
+        // Settled either way: a failure resolves to "no OpDivs" rather than
+        // leaving consumers blocked on a load that will never arrive.
+        if (!signal?.aborted) setOpdivsLoaded(true)
+      })
+  }, [])
+
+  useEffect(() => {
+    if (loaderData.status !== 200) return
+    const controller = new AbortController()
+    refreshOpdivs(controller.signal)
+    return () => {
+      controller.abort()
+    }
+  }, [loaderData.status, refreshOpdivs])
+
   const datacallsByYear = useMemo(
     () => groupDatacallsByYear(datacalls),
     [datacalls]
@@ -349,6 +381,14 @@ export default function Title() {
       // OWNER manages OpDivs fully; an HHS admin reaches the page only to
       // flip the per-OpDiv System Delegate toggle.
       show: isUnscopedWriteAdmin(userInfo),
+    },
+    {
+      label: 'Events',
+      to: Routes.ADMIN_EVENTS,
+      active: location.pathname.startsWith('/admin/events'),
+      // hasUnscopedRead, not hasAdminRead: the events endpoint 403s an
+      // OpDiv-scoped admin, so scoped tiers do not get the tab.
+      show: hasUnscopedRead(userInfo),
     },
   ].filter((item) => item.show)
   // Every logged-in user gets the account menu (the logout affordance must
@@ -675,6 +715,9 @@ export default function Title() {
               dashboardSearch,
               setDashboardSearch,
               datacenterEnvironments,
+              opdivs,
+              opdivsLoaded,
+              refreshOpdivs,
             }}
           />
         </Box>
@@ -687,6 +730,7 @@ export default function Title() {
         system={EMPTY_SYSTEM}
         mode={'create'}
         datacenterEnvironments={datacenterEnvironments}
+        opdivs={opdivs}
       />
       <EmailModal
         openModal={openEmailModal}
