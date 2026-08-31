@@ -1712,29 +1712,11 @@ export default function QuestionnarePage() {
             >
               Compare datacalls
             </Button>
-            <Button
-              variant="contained"
-              color="primary"
-              disabled={isReadOnly}
-              // Auto-save is the persistence mechanism (there is no submit
-              // endpoint), so this button closes the questionnaire and
-              // returns to the system detail view rather than firing a
-              // dedicated submit. Disabled while read-only so a user past
-              // the deadline cannot confuse "submit" with "reopen".
-              onClick={() => {
-                if (!system) return
-                notify(
-                  totalAnswered === totalQuestions
-                    ? 'All responses saved.'
-                    : `${totalAnswered} of ${totalQuestions} responses saved.`,
-                  'success',
-                  { autoHideDuration: 2000 }
-                )
-                navigate(`/systems/${system}`)
-              }}
-            >
-              Submit responses
-            </Button>
+            {/* No submit affordance: each answer persists on its own when the
+                user clicks Next or Complete (there is no submit endpoint), so
+                a header "Submit" would only navigate away - which System Info
+                already does. Leaving the questionnaire is that link or the
+                breadcrumb, not a button dressed up as a submission. */}
           </>
         }
       />
