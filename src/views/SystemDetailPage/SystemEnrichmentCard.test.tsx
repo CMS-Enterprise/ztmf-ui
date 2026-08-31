@@ -251,7 +251,8 @@ test('renders the full roster sorted by role order with unknown roles appended',
   renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText('Leia Organa')).toBeInTheDocument()
-  const roles = ['Primary ISSO', 'BO', 'CRA', 'Chief Droid']
+  // 'BO' renders under its friendly label; the rest keep the exact role code.
+  const roles = ['Primary ISSO', 'Business Owner', 'CRA', 'Chief Droid']
   const rendered = roles.map((r) => screen.getByText(r))
   // DOM order follows the canonical role order, unknown role last.
   for (let i = 1; i < rendered.length; i++) {

@@ -55,6 +55,12 @@ const CONTACT_ROLE_ORDER = [
   'CRA',
 ]
 
+// Friendly section labels for role codes that read poorly on their own.
+// Matching stays on the exact pipeline strings; this is display-only.
+const CONTACT_ROLE_LABELS: Record<string, string> = {
+  BO: 'Business Owner',
+}
+
 // The payload is pipeline-owned jsonb: coerce every field through this so an
 // absent/null/non-string value renders as nothing, never as "undefined".
 function asStr(value: unknown): string | null {
@@ -449,7 +455,7 @@ export default function SystemEnrichmentCard({
                       color="text.secondary"
                       component="div"
                     >
-                      {role}
+                      {CONTACT_ROLE_LABELS[role] ?? role}
                     </Typography>
                     {entries.map((contact, idx) => {
                       const name = asStr(contact.name)
