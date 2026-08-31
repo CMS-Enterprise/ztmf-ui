@@ -441,6 +441,14 @@ export type ThemeColor =
 
 export type ThemeSkin = 'filled' | 'light' | 'light-static'
 
+// One CFACTS roster entry (ztmf-ui#720). The pipeline drops null keys from
+// the payload, so any of the three fields can be absent on a given entry.
+export type EnrichmentContact = {
+  role?: string | null
+  name?: string | null
+  email?: string | null
+}
+
 export type SystemEnrichmentType = {
   fisma_uuid: string
   fisma_acronym: string
@@ -450,6 +458,10 @@ export type SystemEnrichmentType = {
   data_center_environment?: string | null
   primary_isso_name: string | null
   primary_isso_email: string | null
+  // Full CFACTS role-labeled roster (ztmf-ui#720). Absent on systems with no
+  // CFACTS roster and on payloads synced before the pipeline shipped the key,
+  // in which case the primary_isso_* pair above is the fallback display.
+  contacts?: EnrichmentContact[] | null
   is_active: boolean | null
   is_retired: boolean | null
   is_decommissioned: boolean | null

@@ -1,4 +1,5 @@
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { ERROR_MESSAGES } from '@/constants'
 
@@ -219,4 +220,211 @@ test('renders the placeholder when no ATO expiration date is present', async () 
 
   expect(await screen.findByText('Test Package')).toBeInTheDocument()
   expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
+})
+
+// Contacts roster + ISSO mismatch callout (ztmf-ui#720)
+
+function enrichmentReply(payload: Record<string, unknown>) {
+  mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(200, {
+    data: {
+      fisma_uuid: FISMA_UID,
+      payload,
+      synced_at: '2026-01-01T00:00:00Z',
+    },
+  })
+}
+
+test('renders the full roster sorted by role order with unknown roles appended', async () => {
+  enrichmentReply({
+    contacts: [
+      { role: 'CRA', name: 'Wedge Antilles', email: 'wedge@rebels.example' },
+      { role: 'Chief Droid', name: 'R2-D2' },
+      {
+        role: 'Primary ISSO',
+        name: 'Leia Organa',
+        email: 'leia@rebels.example',
+      },
+      { role: 'BO', email: 'ackbar@rebels.example' },
+    ],
+  })
+
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
+
+  expect(await screen.findByText('Leia Organa')).toBeInTheDocument()
+  const roles = ['Primary ISSO', 'BO', 'CRA', 'Chief Droid']
+  const rendered = roles.map((r) => screen.getByText(r))
+  // DOM order follows the canonical role order, unknown role last.
+  for (let i = 1; i < rendered.length; i++) {
+    expect(
+      rendered[i - 1].compareDocumentPosition(rendered[i]) &
+        Node.DOCUMENT_POSITION_FOLLOWING
+    ).toBeTruthy()
+  }
+  // Absent keys never leak as text.
+  expect(screen.queryByText(/undefined/)).not.toBeInTheDocument()
+  // Email-only entry renders its email as the value line.
+  expect(screen.getByText('ackbar@rebels.example')).toBeInTheDocument()
+})
+
+test('falls back to the primary ISSO pair when the payload has no contacts key', async () => {
+  enrichmentReply({
+    primary_isso_name: 'Leia Organa',
+    primary_isso_email: 'leia@rebels.example',
+  })
+
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
+
+  expect(await screen.findByText('Primary ISSO Name')).toBeInTheDocument()
+  expect(screen.getByText('Leia Organa')).toBeInTheDocument()
+  expect(screen.getByText('leia@rebels.example')).toBeInTheDocument()
+})
+
+test('flags a mismatch between the ZTMF ISSO and the CFACTS primary ISSO', async () => {
+  enrichmentReply({
+    contacts: [
+      {
+        role: 'Primary ISSO',
+        name: 'Leia Organa',
+        email: 'leia@rebels.example',
+      },
+    ],
+  })
+
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      ztmfIssoEmail="han@rebels.example"
+      ztmfIssoName="Han Solo"
+    />
+  )
+
+  const alert = await screen.findByText(/does not match CFACTS/i)
+  const box = alert.closest('.MuiAlert-root') as HTMLElement
+  expect(
+    within(box).getByText(/Han Solo \(han@rebels\.example\)/)
+  ).toBeInTheDocument()
+  expect(
+    within(box).getByText(/Leia Organa \(leia@rebels\.example\)/)
+  ).toBeInTheDocument()
+})
+
+test('does not flag when emails match case-insensitively', async () => {
+  enrichmentReply({
+    contacts: [
+      {
+        role: 'Primary ISSO',
+        name: 'Organa, Leia',
+        email: 'Leia@Rebels.example',
+      },
+    ],
+  })
+
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      ztmfIssoEmail="leia@rebels.example"
+      ztmfIssoName="Leia Organa"
+    />
+  )
+
+  expect(await screen.findByText('Contacts')).toBeInTheDocument()
+  expect(screen.queryByText(/does not match CFACTS/i)).not.toBeInTheDocument()
+})
+
+test('falls back to normalized name comparison only when an email is missing', async () => {
+  // CFACTS has a name but no email; names are the same person in the two
+  // formats, so no callout.
+  enrichmentReply({
+    contacts: [{ role: 'Primary ISSO', name: 'Organa, Leia' }],
+  })
+
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      ztmfIssoEmail="leia@rebels.example"
+      ztmfIssoName="Leia Organa"
+    />
+  )
+
+  expect(await screen.findByText('Contacts')).toBeInTheDocument()
+  expect(screen.queryByText(/does not match CFACTS/i)).not.toBeInTheDocument()
+})
+
+test('missing data on either side is unknown, not a mismatch', async () => {
+  enrichmentReply({
+    contacts: [
+      {
+        role: 'Primary ISSO',
+        name: 'Leia Organa',
+        email: 'leia@rebels.example',
+      },
+    ],
+  })
+
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
+
+  expect(await screen.findByText('Contacts')).toBeInTheDocument()
+  expect(screen.queryByText(/does not match CFACTS/i)).not.toBeInTheDocument()
+})
+
+test('admin sees the update action and it PUTs only the ISSO fields', async () => {
+  enrichmentReply({
+    contacts: [
+      {
+        role: 'Primary ISSO',
+        name: 'Leia Organa',
+        email: 'leia@rebels.example',
+      },
+    ],
+  })
+  mock.onPut('/fismasystems/42').reply(200)
+  const onIssoUpdated = jest.fn()
+
+  const user = userEvent.setup()
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      ztmfIssoEmail="han@rebels.example"
+      fismaSystemId={42}
+      isAdmin
+      onIssoUpdated={onIssoUpdated}
+    />
+  )
+
+  const button = await screen.findByRole('button', {
+    name: /update ztmf to match cfacts/i,
+  })
+  await user.click(button)
+
+  expect(mock.history.put).toHaveLength(1)
+  expect(JSON.parse(mock.history.put[0].data)).toEqual({
+    issoemail: 'leia@rebels.example',
+    isso_name: 'Leia Organa',
+  })
+  expect(onIssoUpdated).toHaveBeenCalled()
+})
+
+test('non-admins get the read-only callout with no update action', async () => {
+  enrichmentReply({
+    contacts: [
+      {
+        role: 'Primary ISSO',
+        name: 'Leia Organa',
+        email: 'leia@rebels.example',
+      },
+    ],
+  })
+
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      ztmfIssoEmail="han@rebels.example"
+      fismaSystemId={42}
+    />
+  )
+
+  expect(await screen.findByText(/does not match CFACTS/i)).toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: /update ztmf to match cfacts/i })
+  ).not.toBeInTheDocument()
 })
