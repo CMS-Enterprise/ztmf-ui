@@ -299,12 +299,16 @@ export default function SystemEnrichmentCard({
 
   // CFACTS primary ISSO: the exact 'Primary ISSO' roster entry, else the
   // legacy flat keys (which the pipeline derives from the same entry when a
-  // roster exists).
+  // roster exists). The pair is resolved atomically from ONE source - a roster
+  // entry missing its email must not borrow the flat email key, or a name and
+  // an email belonging to different people could be blended into one person.
   const primaryContact = contacts.find((c) => c.role === 'Primary ISSO')
-  const cfactsIssoName =
-    asStr(primaryContact?.name) ?? asStr(enrichment.primary_isso_name)
-  const cfactsIssoEmail =
-    asStr(primaryContact?.email) ?? asStr(enrichment.primary_isso_email)
+  const cfactsIssoName = primaryContact
+    ? asStr(primaryContact.name)
+    : asStr(enrichment.primary_isso_name)
+  const cfactsIssoEmail = primaryContact
+    ? asStr(primaryContact.email)
+    : asStr(enrichment.primary_isso_email)
 
   // Emails are the primary signal; names only when an email is missing on
   // either side. Missing data on a side means unknown, never a mismatch.
@@ -322,15 +326,16 @@ export default function SystemEnrichmentCard({
     name && email ? `${name} (${email})` : name ?? email ?? ''
 
   const handleAdoptCfactsIsso = async () => {
-    if (!fismaSystemId || !cfactsIssoEmail || updatingIsso) return
+    if (fismaSystemId == null || !cfactsIssoEmail || updatingIsso) return
     setUpdatingIsso(true)
     try {
-      // Omitted fields mean "leave unchanged" on this PUT, so send only the
-      // ISSO fields being adopted. isso_name is a stored override when sent;
-      // include it only when CFACTS actually has a name.
+      // Omitted fields mean "leave unchanged" on this PUT, so send only
+      // issoemail. Deliberately NOT sending isso_name: a written name becomes
+      // a permanent stored override (see FismaSystemType), and CFACTS names
+      // arrive in "Last, First" - let the backend resolve the display name
+      // from the new ISSO's user record instead.
       await axiosInstance.put(`fismasystems/${fismaSystemId}`, {
         issoemail: cfactsIssoEmail,
-        ...(cfactsIssoName ? { isso_name: cfactsIssoName } : {}),
       })
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       await onIssoUpdated?.()
@@ -502,33 +507,39 @@ export default function SystemEnrichmentCard({
                 </Grid>
               </Grid>
             )}
-            {issoMismatch && (
-              <Alert severity="warning" role="status" sx={{ mt: 2 }}>
-                <AlertTitle>
-                  ZTMF assigned ISSO does not match CFACTS
-                </AlertTitle>
-                <Typography variant="body2">
-                  ZTMF assigned ISSO: {formatPerson(ztmfName, ztmfEmail)}
-                </Typography>
-                <Typography variant="body2">
-                  CFACTS primary ISSO:{' '}
-                  {formatPerson(cfactsIssoName, cfactsIssoEmail)}
-                </Typography>
-                {isAdmin && fismaSystemId != null && cfactsIssoEmail && (
-                  <Button
-                    type="button"
-                    size="small"
-                    variant="outlined"
-                    color="inherit"
-                    onClick={handleAdoptCfactsIsso}
-                    disabled={updatingIsso}
-                    sx={{ mt: 1 }}
-                  >
-                    Update ZTMF to match CFACTS
-                  </Button>
-                )}
-              </Alert>
-            )}
+            {/* The live region stays mounted and only its contents change:
+                a region inserted into the DOM at the same moment as its text
+                is generally not announced (same pattern as FismaTable's
+                call-scope notice). */}
+            <Box role="status" aria-live="polite">
+              {issoMismatch && (
+                <Alert severity="warning" sx={{ mt: 2 }}>
+                  <AlertTitle>
+                    ZTMF assigned ISSO does not match CFACTS
+                  </AlertTitle>
+                  <Typography variant="body2">
+                    ZTMF assigned ISSO: {formatPerson(ztmfName, ztmfEmail)}
+                  </Typography>
+                  <Typography variant="body2">
+                    CFACTS primary ISSO:{' '}
+                    {formatPerson(cfactsIssoName, cfactsIssoEmail)}
+                  </Typography>
+                  {isAdmin && fismaSystemId != null && cfactsIssoEmail && (
+                    <Button
+                      type="button"
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      onClick={handleAdoptCfactsIsso}
+                      disabled={updatingIsso}
+                      sx={{ mt: 1 }}
+                    >
+                      Update ZTMF to match CFACTS
+                    </Button>
+                  )}
+                </Alert>
+              )}
+            </Box>
           </CardContent>
         </Card>
       </Grid>

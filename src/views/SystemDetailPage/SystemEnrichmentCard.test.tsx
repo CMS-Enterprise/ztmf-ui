@@ -421,11 +421,37 @@ test('admin sees the update action and it PUTs only the ISSO fields', async () =
   await user.click(button)
 
   expect(mock.history.put).toHaveLength(1)
+  // issoemail only: a written isso_name becomes a permanent stored override,
+  // so the backend resolves the display name from the new ISSO's user record.
   expect(JSON.parse(mock.history.put[0].data)).toEqual({
     issoemail: 'leia@rebels.example',
-    isso_name: 'Leia Organa',
   })
   expect(onIssoUpdated).toHaveBeenCalled()
+})
+
+test('a roster primary without an email never borrows the flat email key', async () => {
+  // The roster 'Primary ISSO' entry has a name only; the legacy flat keys
+  // name a different person. The pair must come from ONE source, so the
+  // comparison falls back to names (which match here) -> no callout, and no
+  // blended person is ever shown or written.
+  enrichmentReply({
+    contacts: [{ role: 'Primary ISSO', name: 'Organa, Leia' }],
+    primary_isso_name: 'Han Solo',
+    primary_isso_email: 'han@rebels.example',
+  })
+
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      ztmfIssoEmail="leia@rebels.example"
+      ztmfIssoName="Leia Organa"
+      fismaSystemId={42}
+      isAdmin
+    />
+  )
+
+  expect(await screen.findByText('Contacts')).toBeInTheDocument()
+  expect(screen.queryByText(/does not match CFACTS/i)).not.toBeInTheDocument()
 })
 
 test('non-admins get the read-only callout with no update action', async () => {
