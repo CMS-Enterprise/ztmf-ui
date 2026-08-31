@@ -1,12 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Autocomplete,
-  Box,
-  MenuItem,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Autocomplete, Box, TextField, Typography } from '@mui/material'
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
@@ -15,6 +9,10 @@ import { Routes } from '@/router/constants'
 import { EventWithUser, EventsPage, userData } from '@/types'
 import { notify, isAuthHandled } from '@/utils/notify'
 import { parseApiError } from '@/utils/apiErrors'
+import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ui/PageHeader'
+import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
+import { colors, radius } from '@/theme/tokens'
 import { endOfDayISO, maskUSDate, parseUSDate, startOfDayISO } from './dateMask'
 
 // The complete set of values that appear in events.action (see the backend's
@@ -26,6 +24,27 @@ const ACTIONS = ['created', 'updated', 'deleted', 'viewed', 'imported']
 // initial state agree without a round of re-fetching.
 const DEFAULT_PAGE_SIZE = 50
 
+// Compact 30px control height shared across the toolbar filters, matching the
+// Users / OpDivs table toolbars.
+const CONTROL_H = 30
+
+// Toolbar controls carry an aria-label instead of a floating label (the
+// redesign toolbars are placeholder-driven), sized down to the 30px row.
+const controlSx = {
+  '& .MuiInputBase-root': { height: CONTROL_H, fontSize: 13 },
+}
+
+// Autocomplete needs the height forced onto its inner input rows too.
+const autocompleteSx = (width: number) => ({
+  width,
+  '& .MuiInputBase-root': {
+    height: CONTROL_H,
+    fontSize: 13,
+    py: '0 !important',
+  },
+  '& .MuiAutocomplete-input': { py: '0 !important' },
+})
+
 type Filters = {
   user: userData | null
   action: string
@@ -34,11 +53,6 @@ type Filters = {
   from: string
   to: string
 }
-
-// The CMS design system's global stylesheet gives every bare label a
-// margin-block, which shoves MUI's absolutely-positioned floating labels down
-// through the field border; every labeled TextField in the app zeroes it.
-const LABEL_FIX = { sx: { marginTop: 0 } }
 
 const EMPTY_FILTERS: Filters = {
   user: null,
@@ -184,11 +198,13 @@ export default function EventsTable() {
         sortable: false,
         renderCell: ({ row }) => (
           <Box>
-            <Typography variant="body2">
+            <Typography
+              sx={{ fontSize: 14, fontWeight: 600, color: colors.ink }}
+            >
               {row.userfullname}
               {row.userdeleted ? ' (deleted)' : ''}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
               {row.useremail}
             </Typography>
           </Box>
@@ -203,121 +219,154 @@ export default function EventsTable() {
   if (!canAccess) return null
 
   return (
-    <Box sx={{ px: 3, py: 2 }}>
-      <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
-        Events
-      </Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
-        <Autocomplete
-          size="small"
-          sx={{ minWidth: 260 }}
-          options={users}
-          value={filters.user}
-          onChange={(_, value) => setFilter('user', value)}
-          getOptionLabel={(u) => `${u.fullname} (${u.email})`}
-          isOptionEqualToValue={(a, b) => a.userid === b.userid}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="User"
-              InputLabelProps={{ ...params.InputLabelProps, ...LABEL_FIX }}
-            />
-          )}
-        />
-        <TextField
-          select
-          size="small"
-          sx={{ minWidth: 140 }}
-          label="Action"
-          InputLabelProps={LABEL_FIX}
-          value={filters.action}
-          onChange={(e) => setFilter('action', e.target.value)}
-        >
-          <MenuItem value="">Any</MenuItem>
-          {ACTIONS.map((action) => (
-            <MenuItem key={action} value={action}>
-              {action}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          size="small"
-          sx={{ minWidth: 180 }}
-          label="Resource"
-          InputLabelProps={LABEL_FIX}
-          value={filters.resource}
-          onChange={(e) => setFilter('resource', e.target.value)}
-        />
-        <Autocomplete
-          size="small"
-          sx={{ minWidth: 240 }}
-          options={fismaSystems}
-          value={
-            fismaSystems.find((s) => s.fismasystemid === filters.system) ?? null
-          }
-          onChange={(_, value) =>
-            setFilter('system', value ? value.fismasystemid : null)
-          }
-          getOptionLabel={(s) => s.fismaacronym}
-          isOptionEqualToValue={(a, b) => a.fismasystemid === b.fismasystemid}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="System"
-              InputLabelProps={{ ...params.InputLabelProps, ...LABEL_FIX }}
-            />
-          )}
-        />
-        <TextField
-          size="small"
-          sx={{ width: 150 }}
-          label="From"
-          InputLabelProps={LABEL_FIX}
-          placeholder="MM/DD/YYYY"
-          value={filters.from}
-          error={fromField.invalid}
-          helperText={fromField.invalid ? 'Invalid date' : undefined}
-          onChange={(e) => setFilter('from', maskUSDate(e.target.value))}
-          inputProps={{ inputMode: 'numeric' }}
-        />
-        <TextField
-          size="small"
-          sx={{ width: 150 }}
-          label="To"
-          InputLabelProps={LABEL_FIX}
-          placeholder="MM/DD/YYYY"
-          value={filters.to}
-          error={toField.invalid}
-          helperText={toField.invalid ? 'Invalid date' : undefined}
-          onChange={(e) => setFilter('to', maskUSDate(e.target.value))}
-          inputProps={{ inputMode: 'numeric' }}
-        />
-      </Box>
-      <DataGrid
-        autoHeight
-        rows={rows}
-        columns={columns}
-        getRowId={(row) => row.eventid}
-        loading={loading}
-        // The endpoint owns ordering (createdat DESC, eventid tiebreaker) and
-        // filtering; the grid is display-only, so its client-side machinery
-        // is off across the board.
-        paginationMode="server"
-        rowCount={total}
-        paginationModel={paginationModel}
-        onPaginationModelChange={setPaginationModel}
-        pageSizeOptions={[25, 50, 100, 250]}
-        disableColumnFilter
-        disableColumnMenu
-        disableRowSelectionOnClick
-        sx={{
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: '#004297',
-            color: '#fff',
-          },
-          '& .MuiDataGrid-sortIcon': { color: '#fff' },
-        }}
+    <Box sx={{ pt: 3, pb: 4, boxSizing: 'border-box' }}>
+      <PageHeader
+        title="Events"
+        subtitle={total > 0 ? `${total.toLocaleString()} events` : undefined}
+        breadcrumbs={<BreadCrumbs />}
       />
+      <Box
+        sx={{
+          backgroundColor: colors.white,
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: `${radius.card}px`,
+          overflow: 'hidden',
+        }}
+      >
+        {/* Filter toolbar inside the card, mirroring the Users / OpDivs
+            toolbars. Six controls, so it wraps rather than right-aligning on
+            one row; each carries an aria-label instead of a floating label. */}
+        <Box
+          sx={{
+            display: 'flex',
+            flexWrap: 'wrap',
+            alignItems: 'center',
+            gap: 1.5,
+            px: 2.25,
+            py: 1.5,
+            borderBottom: `1px solid ${colors.neutral200}`,
+          }}
+        >
+          <Autocomplete
+            size="small"
+            sx={autocompleteSx(240)}
+            options={users}
+            value={filters.user}
+            onChange={(_, value) => setFilter('user', value)}
+            getOptionLabel={(u) => `${u.fullname} (${u.email})`}
+            isOptionEqualToValue={(a, b) => a.userid === b.userid}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="User"
+                inputProps={{ ...params.inputProps, 'aria-label': 'User' }}
+              />
+            )}
+          />
+          <Autocomplete
+            size="small"
+            sx={autocompleteSx(150)}
+            options={ACTIONS}
+            value={filters.action || null}
+            onChange={(_, value) => setFilter('action', value ?? '')}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="Action"
+                inputProps={{ ...params.inputProps, 'aria-label': 'Action' }}
+              />
+            )}
+          />
+          <TextField
+            size="small"
+            sx={{ width: 180, ...controlSx }}
+            placeholder="Resource"
+            value={filters.resource}
+            onChange={(e) => setFilter('resource', e.target.value)}
+            inputProps={{ 'aria-label': 'Resource' }}
+          />
+          <Autocomplete
+            size="small"
+            sx={autocompleteSx(200)}
+            options={fismaSystems}
+            value={
+              fismaSystems.find((s) => s.fismasystemid === filters.system) ??
+              null
+            }
+            onChange={(_, value) =>
+              setFilter('system', value ? value.fismasystemid : null)
+            }
+            getOptionLabel={(s) => s.fismaacronym}
+            isOptionEqualToValue={(a, b) => a.fismasystemid === b.fismasystemid}
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="System"
+                inputProps={{ ...params.inputProps, 'aria-label': 'System' }}
+              />
+            )}
+          />
+          <TextField
+            size="small"
+            sx={{ width: 150, ...controlSx }}
+            placeholder="From (MM/DD/YYYY)"
+            value={filters.from}
+            error={fromField.invalid}
+            helperText={fromField.invalid ? 'Invalid date' : undefined}
+            onChange={(e) => setFilter('from', maskUSDate(e.target.value))}
+            inputProps={{ inputMode: 'numeric', 'aria-label': 'From' }}
+          />
+          <TextField
+            size="small"
+            sx={{ width: 150, ...controlSx }}
+            placeholder="To (MM/DD/YYYY)"
+            value={filters.to}
+            error={toField.invalid}
+            helperText={toField.invalid ? 'Invalid date' : undefined}
+            onChange={(e) => setFilter('to', maskUSDate(e.target.value))}
+            inputProps={{ inputMode: 'numeric', 'aria-label': 'To' }}
+          />
+        </Box>
+        {/* Fixed grid height (parity with OpDivs): rows scroll inside the grid
+            while the page scrolls around the card. */}
+        <Box sx={{ height: 600, width: '100%' }}>
+          <DataGrid
+            aria-label="Events"
+            rows={rows}
+            columns={columns}
+            getRowId={(row) => row.eventid}
+            loading={loading}
+            // The endpoint owns ordering (createdat DESC, eventid tiebreaker)
+            // and filtering; the grid is display-only, so its client-side
+            // machinery is off across the board.
+            paginationMode="server"
+            rowCount={total}
+            paginationModel={paginationModel}
+            onPaginationModelChange={setPaginationModel}
+            pageSizeOptions={[25, 50, 100, 250]}
+            slots={{ footer: DataGridPaginationFooter }}
+            // Server mode: hand the footer the true total, since the grid only
+            // holds the current page's rows.
+            slotProps={{
+              footer: { rowCount: total, pageSizes: [25, 50, 100, 250] },
+            }}
+            disableColumnFilter
+            disableColumnMenu
+            disableRowSelectionOnClick
+            sx={{
+              height: '100%',
+              border: 'none',
+              backgroundColor: colors.white,
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: colors.neutral50,
+              },
+              '& .MuiDataGrid-cell': {
+                borderBottom: `1px solid ${colors.neutral100}`,
+              },
+            }}
+          />
+        </Box>
+      </Box>
     </Box>
   )
 }

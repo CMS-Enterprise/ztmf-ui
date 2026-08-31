@@ -8,12 +8,29 @@ import {
 } from '@mui/x-data-grid'
 import { colors, radius } from '@/theme/tokens'
 
+// Let a DataGrid pass these through `slotProps={{ footer: { ... } }}` with
+// type-checking; without the augmentation MUI types the footer slot as bare
+// div props and rejects them.
+declare module '@mui/x-data-grid' {
+  interface FooterPropsOverrides {
+    pageSizes?: number[]
+    rowCount?: number
+  }
+}
+
 const EN_DASH = '–'
 
 /** Props for {@link DataGridPaginationFooter}. */
 export type DataGridPaginationFooterProps = {
   /** Page-size options shown in the dropdown. Defaults to [25, 50, 100]. */
   pageSizes?: number[]
+  /**
+   * Total row count for a server-paginated grid. The grid only holds the
+   * current page's rows in server mode, so the client-side filtered selector
+   * would report the page length, not the total. Omit for client-paginated
+   * grids, where the filtered count is the right "of N".
+   */
+  rowCount?: number
 }
 
 /**
@@ -28,11 +45,18 @@ export type DataGridPaginationFooterProps = {
  */
 export function DataGridPaginationFooter({
   pageSizes = [25, 50, 100],
+  rowCount: rowCountProp,
 }: DataGridPaginationFooterProps) {
   const apiRef = useGridApiContext()
   const model = useGridSelector(apiRef, gridPaginationModelSelector)
   const pageCount = useGridSelector(apiRef, gridPageCountSelector)
-  const rowCount = useGridSelector(apiRef, gridFilteredTopLevelRowCountSelector)
+  const filteredCount = useGridSelector(
+    apiRef,
+    gridFilteredTopLevelRowCountSelector
+  )
+  // Server-paginated grids pass the true total; client-paginated grids fall
+  // back to the filtered count so search narrows the "of N" as expected.
+  const rowCount = rowCountProp ?? filteredCount
   const start = rowCount === 0 ? 0 : model.page * model.pageSize + 1
   const end = Math.min((model.page + 1) * model.pageSize, rowCount)
 
