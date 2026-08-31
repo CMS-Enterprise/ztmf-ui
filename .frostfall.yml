@@ -35,6 +35,17 @@ tests:
   - id: admin-opdivs
     path: '/#/admin/opdivs'
 
+  # System detail page incl. the ZTMF Insights enrichment cards (ztmf-ui#720).
+  # 1002 = the Executor in the Empire seed: active, sdl_sync_enabled, and has
+  # an enrichment row WITHOUT a contacts key, so this scans the legacy-fallback
+  # Contacts rendering. The waitFor anchor only renders once the enrichment
+  # payload has loaded. Note for dev-attach runs (make frostfall): this id only
+  # exists in the seeded stack, so the test times out against dev data - use
+  # 'make frostfall-local' for the full set.
+  - id: system-detail
+    path: '/#/systems/1002'
+    waitFor: '#enrichment-synced-at'
+
   - id: pillar-scores-modal
     path: /
     scan: false

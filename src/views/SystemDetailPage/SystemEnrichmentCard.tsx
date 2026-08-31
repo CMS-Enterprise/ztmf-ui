@@ -544,9 +544,14 @@ export default function SystemEnrichmentCard({
         </Card>
       </Grid>
 
-      {/* Footer: sync info */}
+      {/* Footer: sync info. The id anchors the frostfall system-detail scan's
+          waitFor - it only exists once the enrichment payload has rendered. */}
       <Grid item xs={12}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          id="enrichment-synced-at"
+          variant="caption"
+          color="text.secondary"
+        >
           Data as of: {new Date(enrichment.synced_at).toLocaleString()}
           {enrichment.last_modified_date &&
             ` · Last modified in CFACTS: ${formatDate(enrichment.last_modified_date)}`}
