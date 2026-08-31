@@ -640,6 +640,19 @@ theme = createTheme(theme, {
           borderRadius: radius.button,
           lineHeight: 1.715,
           padding: '0.4375rem 0.75rem',
+          // A Button rendered as a router link (component={RouterLink}) is a
+          // real <a>, so the browser would repaint its label with the visited
+          // color and make the button look like a followed link. Pin the
+          // visited color to each variant's own resting color. Scoped to the
+          // variant classes (specificity beats a bare a:visited) and harmless
+          // on plain <button> buttons, which never match :visited.
+          '&.MuiButton-outlinedPrimary:visited, &.MuiButton-textPrimary:visited':
+            {
+              color: theme.palette.primary.main,
+            },
+          '&.MuiButton-containedPrimary:visited': {
+            color: theme.palette.primary.contrastText,
+          },
           '&.MuiButton-textPrimary:hover': {
             backgroundColor: 'rgba(102, 108, 255, 0.08)',
           },
