@@ -277,6 +277,20 @@ export default function SystemEnrichmentCard({
     )
   )
 
+  // One section per role, in canonical order (contacts is already sorted), so
+  // multiple ISSOs/CRAs stack under a single role label instead of repeating
+  // it per person.
+  const contactSections: { role: string; entries: EnrichmentContact[] }[] = []
+  for (const contact of contacts) {
+    const role = asStr(contact.role) ?? 'Contact'
+    const section = contactSections.find((s) => s.role === role)
+    if (section) {
+      section.entries.push(contact)
+    } else {
+      contactSections.push({ role, entries: [contact] })
+    }
+  }
+
   // CFACTS primary ISSO: the exact 'Primary ISSO' roster entry, else the
   // legacy flat keys (which the pipeline derives from the same entry when a
   // roster exists).
@@ -426,34 +440,45 @@ export default function SystemEnrichmentCard({
             sx={{ pb: 0 }}
           />
           <CardContent>
-            {contacts.length > 0 ? (
+            {contactSections.length > 0 ? (
               <Grid container spacing={3}>
-                {contacts.map((contact, idx) => {
-                  const name = asStr(contact.name)
-                  const email = asStr(contact.email)
-                  return (
-                    <Grid item xs={12} sm={6} md={4} key={idx}>
-                      <Typography variant="caption" color="text.secondary">
-                        {asStr(contact.role) ?? 'Contact'}
-                      </Typography>
-                      <Typography
-                        variant="body1"
-                        sx={{ wordBreak: 'break-word' }}
-                      >
-                        {name ?? email ?? '—'}
-                      </Typography>
-                      {name && email && (
-                        <Typography
-                          variant="body2"
-                          color="text.secondary"
-                          sx={{ wordBreak: 'break-word' }}
+                {contactSections.map(({ role, entries }) => (
+                  <Grid item xs={12} sm={6} md={4} key={role}>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      component="div"
+                    >
+                      {role}
+                    </Typography>
+                    {entries.map((contact, idx) => {
+                      const name = asStr(contact.name)
+                      const email = asStr(contact.email)
+                      return (
+                        <Box
+                          key={idx}
+                          sx={idx < entries.length - 1 ? { mb: 1 } : undefined}
                         >
-                          {email}
-                        </Typography>
-                      )}
-                    </Grid>
-                  )
-                })}
+                          <Typography
+                            variant="body1"
+                            sx={{ wordBreak: 'break-word' }}
+                          >
+                            {name ?? email ?? '—'}
+                          </Typography>
+                          {name && email && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ wordBreak: 'break-word' }}
+                            >
+                              {email}
+                            </Typography>
+                          )}
+                        </Box>
+                      )
+                    })}
+                  </Grid>
+                ))}
               </Grid>
             ) : (
               <Grid container spacing={3}>

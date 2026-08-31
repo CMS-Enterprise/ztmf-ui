@@ -266,6 +266,29 @@ test('renders the full roster sorted by role order with unknown roles appended',
   expect(screen.getByText('ackbar@rebels.example')).toBeInTheDocument()
 })
 
+test('repeated roles stack under a single role section', async () => {
+  enrichmentReply({
+    contacts: [
+      {
+        role: 'Primary ISSO',
+        name: 'Leia Organa',
+        email: 'leia@rebels.example',
+      },
+      { role: 'ISSO', name: 'Han Solo', email: 'han@rebels.example' },
+      { role: 'ISSO', name: 'Chewbacca', email: 'chewie@rebels.example' },
+      { role: 'ISSO', name: 'Lando Calrissian' },
+    ],
+  })
+
+  renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
+
+  expect(await screen.findByText('Han Solo')).toBeInTheDocument()
+  // One section label for the three ISSOs, not one per person.
+  expect(screen.getAllByText('ISSO')).toHaveLength(1)
+  expect(screen.getByText('Chewbacca')).toBeInTheDocument()
+  expect(screen.getByText('Lando Calrissian')).toBeInTheDocument()
+})
+
 test('falls back to the primary ISSO pair when the payload has no contacts key', async () => {
   enrichmentReply({
     primary_isso_name: 'Leia Organa',
