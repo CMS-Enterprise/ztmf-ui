@@ -28,13 +28,14 @@ export type SaveIndicatorProps = {
 
 /**
  * Bottom-of-card save-status indicator. Shows the auto-save state to the
- * user as a small green check + "Saved <relative time>" line, and exposes
- * the underlying last-edited-by audit info via the hover tooltip. Switches
- * to a quiet "Read-only" tag when the user has no edit permissions.
+ * user as a small green check + "Saved <relative time> by <editor>" line.
+ * The editor name is shown inline (not just on hover) so the audit answers
+ * "who made this change", matching the pre-redesign footer; the hover
+ * tooltip carries the rest of the detail (role, email, exact time).
+ * Switches to a quiet "Read-only" tag when the user has no edit permissions.
  *
- * Keeps the tooltip body intentionally lightweight - all the audit detail
- * is in {@link LastEditedFooter}, which we reuse here so the questionnaire
- * page does not maintain two separate audit displays.
+ * The full audit detail lives in {@link LastEditedFooter}, which we reuse in
+ * the tooltip so the page does not maintain two separate audit displays.
  * @param {SaveIndicatorProps} props - Component props.
  * @returns {JSX.Element} The save indicator.
  */
@@ -51,9 +52,13 @@ export default function SaveIndicator({
       </Typography>
     )
   }
-  const text = lastSavedAt
+  const savedTime = lastSavedAt
     ? `Saved ${relativeTimeFrom(lastSavedAt)}`
     : 'Saved automatically'
+  // Surface the editor beside the timestamp when the server reports one, so
+  // the change is attributed at a glance rather than only on hover.
+  const editorName = lastEditedBy?.name?.trim()
+  const text = editorName ? `${savedTime} by ${editorName}` : savedTime
   const tooltipBody =
     lastEditedBy && lastEditedAt ? (
       <LastEditedFooter
