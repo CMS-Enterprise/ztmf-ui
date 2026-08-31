@@ -1487,7 +1487,13 @@ export default function QuestionnarePage() {
       size="small"
       component={RouterLink}
       to={`/systems/${system}`}
-      sx={{ whiteSpace: 'nowrap' }}
+      // Renders as a real <a>, so the CMS design system's global a:visited
+      // rule would repaint the label purple after a click and break the button
+      // look. Pin the link states to the button's own color.
+      sx={{
+        whiteSpace: 'nowrap',
+        '&:link, &:visited': { color: 'primary.main' },
+      }}
     >
       System Info
     </Button>

@@ -701,6 +701,10 @@ export default function SystemDetailPage() {
         component={RouterLink}
         to={`/questionnaire/${system.fismaacronym.toLowerCase()}`}
         state={{ fismasystemid: system.fismasystemid }}
+        // Renders as a real <a>, so the CMS design system's global a:visited
+        // rule would repaint the label purple after a click and break the
+        // button look. Pin the link states to the button's own color.
+        sx={{ '&:link, &:visited': { color: 'primary.main' } }}
       >
         View questionnaire
       </Button>
