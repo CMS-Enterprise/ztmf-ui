@@ -53,6 +53,7 @@
     "@mui/icons-material": "^5.15.10",
     "@mui/material": "^5.16.2",
     "@mui/x-data-grid": "^6.19.4",
+    "@mui/x-date-pickers": "^6.20.2",
     "axios": "^1.19.0",
     "canvas-confetti": "^1.9.4",
     "core-js": "^3.37.1",
