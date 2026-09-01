@@ -12,7 +12,11 @@ import {
   Grid,
   Typography,
 } from '@mui/material'
-import { EnrichmentContact, SystemEnrichmentType } from '@/types'
+import {
+  EnrichmentContact,
+  FismaSystemType,
+  SystemEnrichmentType,
+} from '@/types'
 import axiosInstance from '@/axiosConfig'
 import { STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -26,17 +30,15 @@ interface SystemEnrichmentCardProps {
    */
   systemDataCenterEnvironment?: string | null
   /**
-   * ZTMF's system-of-record ISSO (ztmf-ui#720), compared against the CFACTS
-   * primary ISSO from the enrichment roster. When either side is missing the
-   * comparison is skipped - absence is unknown, not disagreement.
+   * The fisma system this page shows (ztmf-ui#720). Its issoemail/isso_name
+   * are ZTMF's system-of-record ISSO, compared against the CFACTS primary
+   * from the enrichment roster; when either side is missing the comparison is
+   * skipped - absence is unknown, not disagreement. The full object is needed
+   * (not just the ISSO pair) because the admin "update ZTMF to match" action
+   * must echo every core field on the PUT - the backend zeroes omitted core
+   * fields rather than leaving them unchanged.
    */
-  ztmfIssoEmail?: string | null
-  ztmfIssoName?: string | null
-  /**
-   * Needed only for the admin "update ZTMF to match" action on the mismatch
-   * callout; the affordance is hidden without it (or without isAdmin).
-   */
-  fismaSystemId?: number
+  system?: FismaSystemType
   isAdmin?: boolean
   /** Called after a successful ISSO update so the parent can refetch. */
   onIssoUpdated?: () => void | Promise<void>
@@ -168,9 +170,7 @@ function normalizeDCE(value: string | null | undefined): string {
 export default function SystemEnrichmentCard({
   fismaUid,
   systemDataCenterEnvironment,
-  ztmfIssoEmail,
-  ztmfIssoName,
-  fismaSystemId,
+  system,
   isAdmin,
   onIssoUpdated,
 }: SystemEnrichmentCardProps) {
@@ -312,8 +312,8 @@ export default function SystemEnrichmentCard({
 
   // Emails are the primary signal; names only when an email is missing on
   // either side. Missing data on a side means unknown, never a mismatch.
-  const ztmfEmail = asStr(ztmfIssoEmail)
-  const ztmfName = asStr(ztmfIssoName)
+  const ztmfEmail = asStr(system?.issoemail)
+  const ztmfName = asStr(system?.isso_name)
   let issoMismatch = false
   if (ztmfEmail && cfactsIssoEmail) {
     issoMismatch =
@@ -326,16 +326,30 @@ export default function SystemEnrichmentCard({
     name && email ? `${name} (${email})` : name ?? email ?? ''
 
   const handleAdoptCfactsIsso = async () => {
-    if (fismaSystemId == null || !cfactsIssoEmail || updatingIsso) return
+    if (!system || !cfactsIssoEmail || updatingIsso) return
     setUpdatingIsso(true)
     try {
-      // Omitted fields mean "leave unchanged" on this PUT, so send only
-      // issoemail. Deliberately NOT sending isso_name: a written name becomes
-      // a permanent stored override (see FismaSystemType), and CFACTS names
-      // arrive in "Last, First" - let the backend resolve the display name
-      // from the new ISSO's user record instead.
-      await axiosInstance.put(`fismasystems/${fismaSystemId}`, {
+      // Echo EVERY core field, exactly like the page's handleSave. "Omitted
+      // means leave unchanged" only holds for the extended pointer fields on
+      // this PUT - omitted core fields are written back as zero values, so a
+      // partial payload silently blanks the system. Extended fields are all
+      // omitted (no diff to send). isso_name too: a written name becomes a
+      // permanent stored override (see FismaSystemType), and CFACTS names
+      // arrive in "Last, First" - the backend resolves the display name from
+      // the new ISSO's user record instead.
+      await axiosInstance.put(`fismasystems/${system.fismasystemid}`, {
+        fismauid: system.fismauid,
+        fismaacronym: system.fismaacronym,
+        fismaname: system.fismaname,
+        fismasubsystem: system.fismasubsystem,
+        component: system.component,
+        groupacronym: system.groupacronym,
+        groupname: system.groupname,
+        divisionname: system.divisionname,
+        datacenterenvironment: system.datacenterenvironment,
+        datacallcontact: system.datacallcontact,
         issoemail: cfactsIssoEmail,
+        sdl_sync_enabled: system.sdl_sync_enabled,
       })
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       await onIssoUpdated?.()
@@ -524,7 +538,7 @@ export default function SystemEnrichmentCard({
                     CFACTS primary ISSO:{' '}
                     {formatPerson(cfactsIssoName, cfactsIssoEmail)}
                   </Typography>
-                  {isAdmin && fismaSystemId != null && cfactsIssoEmail && (
+                  {isAdmin && system && cfactsIssoEmail && (
                     <Button
                       type="button"
                       size="small"

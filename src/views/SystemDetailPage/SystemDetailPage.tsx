@@ -673,9 +673,7 @@ export default function SystemDetailPage() {
           <SystemEnrichmentCard
             fismaUid={system.fismauid}
             systemDataCenterEnvironment={system.datacenterenvironment}
-            ztmfIssoEmail={system.issoemail}
-            ztmfIssoName={system.isso_name}
-            fismaSystemId={system.fismasystemid}
+            system={system}
             isAdmin={isAdmin}
             onIssoUpdated={async () => {
               // Same refetch-not-echo rationale as handleSave: the read is the

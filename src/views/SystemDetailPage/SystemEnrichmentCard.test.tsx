@@ -26,12 +26,35 @@ jest.mock('@/axiosConfig', () => {
 
 import axiosInstance from '@/axiosConfig'
 import router from '@/router/router'
+import { FismaSystemType } from '@/types'
 import SystemEnrichmentCard from './SystemEnrichmentCard'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 
 const mockedNavigate = (router as unknown as { navigate: jest.Mock }).navigate
 const mock = new MockAdapter(axiosInstance)
 const FISMA_UID = 'TEST-FISMA-UID'
+
+// Minimal fisma system for the ISSO-mismatch props (ztmf-ui#720). The core
+// fields matter: the adopt action must echo them all on the PUT.
+const makeSystem = (over: Partial<FismaSystemType>): FismaSystemType =>
+  ({
+    fismasystemid: 42,
+    fismauid: FISMA_UID,
+    fismaacronym: 'FALCON',
+    fismaname: 'Millennium Falcon Flight Ops',
+    fismasubsystem: 'YT-1300',
+    component: 'REBEL',
+    groupacronym: 'ALLIANCE',
+    groupname: 'Rebel Alliance',
+    divisionname: 'Starfighter Command',
+    datacenterenvironment: 'Space-Station',
+    datacallcontact: 'raddus@rebels.example',
+    issoemail: null,
+    isso_name: null,
+    sdl_sync_enabled: true,
+    decommissioned: false,
+    ...over,
+  }) as FismaSystemType
 
 beforeEach(() => {
   mock.reset()
@@ -317,8 +340,10 @@ test('flags a mismatch between the ZTMF ISSO and the CFACTS primary ISSO', async
   renderWithProviders(
     <SystemEnrichmentCard
       fismaUid={FISMA_UID}
-      ztmfIssoEmail="han@rebels.example"
-      ztmfIssoName="Han Solo"
+      system={makeSystem({
+        issoemail: 'han@rebels.example',
+        isso_name: 'Han Solo',
+      })}
     />
   )
 
@@ -346,8 +371,10 @@ test('does not flag when emails match case-insensitively', async () => {
   renderWithProviders(
     <SystemEnrichmentCard
       fismaUid={FISMA_UID}
-      ztmfIssoEmail="leia@rebels.example"
-      ztmfIssoName="Leia Organa"
+      system={makeSystem({
+        issoemail: 'leia@rebels.example',
+        isso_name: 'Leia Organa',
+      })}
     />
   )
 
@@ -365,8 +392,10 @@ test('falls back to normalized name comparison only when an email is missing', a
   renderWithProviders(
     <SystemEnrichmentCard
       fismaUid={FISMA_UID}
-      ztmfIssoEmail="leia@rebels.example"
-      ztmfIssoName="Leia Organa"
+      system={makeSystem({
+        issoemail: 'leia@rebels.example',
+        isso_name: 'Leia Organa',
+      })}
     />
   )
 
@@ -408,8 +437,7 @@ test('admin sees the update action and it PUTs only the ISSO fields', async () =
   renderWithProviders(
     <SystemEnrichmentCard
       fismaUid={FISMA_UID}
-      ztmfIssoEmail="han@rebels.example"
-      fismaSystemId={42}
+      system={makeSystem({ issoemail: 'han@rebels.example' })}
       isAdmin
       onIssoUpdated={onIssoUpdated}
     />
@@ -421,10 +449,24 @@ test('admin sees the update action and it PUTs only the ISSO fields', async () =
   await user.click(button)
 
   expect(mock.history.put).toHaveLength(1)
-  // issoemail only: a written isso_name becomes a permanent stored override,
-  // so the backend resolves the display name from the new ISSO's user record.
+  // Every core field is echoed back unchanged - the backend zeroes omitted
+  // core fields, so a partial payload silently blanks the system. Only
+  // issoemail changes. No isso_name: a written name becomes a permanent
+  // stored override, so the backend resolves the display name from the new
+  // ISSO's user record.
   expect(JSON.parse(mock.history.put[0].data)).toEqual({
+    fismauid: FISMA_UID,
+    fismaacronym: 'FALCON',
+    fismaname: 'Millennium Falcon Flight Ops',
+    fismasubsystem: 'YT-1300',
+    component: 'REBEL',
+    groupacronym: 'ALLIANCE',
+    groupname: 'Rebel Alliance',
+    divisionname: 'Starfighter Command',
+    datacenterenvironment: 'Space-Station',
+    datacallcontact: 'raddus@rebels.example',
     issoemail: 'leia@rebels.example',
+    sdl_sync_enabled: true,
   })
   expect(onIssoUpdated).toHaveBeenCalled()
 })
@@ -443,9 +485,10 @@ test('a roster primary without an email never borrows the flat email key', async
   renderWithProviders(
     <SystemEnrichmentCard
       fismaUid={FISMA_UID}
-      ztmfIssoEmail="leia@rebels.example"
-      ztmfIssoName="Leia Organa"
-      fismaSystemId={42}
+      system={makeSystem({
+        issoemail: 'leia@rebels.example',
+        isso_name: 'Leia Organa',
+      })}
       isAdmin
     />
   )
@@ -468,8 +511,7 @@ test('non-admins get the read-only callout with no update action', async () => {
   renderWithProviders(
     <SystemEnrichmentCard
       fismaUid={FISMA_UID}
-      ztmfIssoEmail="han@rebels.example"
-      fismaSystemId={42}
+      system={makeSystem({ issoemail: 'han@rebels.example' })}
     />
   )
 
