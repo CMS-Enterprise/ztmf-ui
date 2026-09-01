@@ -34,7 +34,7 @@ const mockedNavigate = (router as unknown as { navigate: jest.Mock }).navigate
 const mock = new MockAdapter(axiosInstance)
 const FISMA_UID = 'TEST-FISMA-UID'
 
-// Minimal fisma system for the ISSO-mismatch props (ztmf-ui#720). The core
+// Minimal fisma system for the ISSO-mismatch props. The core
 // fields matter: the adopt action must echo them all on the PUT.
 const makeSystem = (over: Partial<FismaSystemType>): FismaSystemType =>
   ({
@@ -245,7 +245,7 @@ test('renders the placeholder when no ATO expiration date is present', async () 
   expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
 })
 
-// Contacts roster + ISSO mismatch callout (ztmf-ui#720)
+// Contacts roster + ISSO mismatch callout
 
 function enrichmentReply(payload: Record<string, unknown>) {
   mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(200, {
@@ -519,4 +519,58 @@ test('non-admins get the read-only callout with no update action', async () => {
   expect(
     screen.queryByRole('button', { name: /update ztmf to match cfacts/i })
   ).not.toBeInTheDocument()
+})
+
+test('a role with stray whitespace still matches, sorts, and drives the comparison', async () => {
+  // ' Primary ISSO ' must behave exactly like 'Primary ISSO': recognized for
+  // the mismatch comparison (fresh roster data, not the stale flat keys) and
+  // rendered without the stray spaces.
+  enrichmentReply({
+    contacts: [
+      {
+        role: ' Primary ISSO ',
+        name: 'Leia Organa',
+        email: 'leia@rebels.example',
+      },
+    ],
+    primary_isso_name: 'Stale Person',
+    primary_isso_email: 'stale@rebels.example',
+  })
+
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      system={makeSystem({ issoemail: 'han@rebels.example' })}
+    />
+  )
+
+  const alert = await screen.findByText(/does not match CFACTS/i)
+  const box = alert.closest('.MuiAlert-root') as HTMLElement
+  // Comparison used the roster entry, not the flat fallback keys.
+  expect(
+    within(box).getByText(/Leia Organa \(leia@rebels\.example\)/)
+  ).toBeInTheDocument()
+  expect(within(box).queryByText(/Stale Person/)).not.toBeInTheDocument()
+  expect(screen.getByText('Primary ISSO')).toBeInTheDocument()
+})
+
+test('a middle name on one side is not a name mismatch', async () => {
+  // No CFACTS email -> name comparison. Word-set containment: "Leia B.
+  // Organa" vs "Organa, Leia" is the same person, not a mismatch.
+  enrichmentReply({
+    contacts: [{ role: 'Primary ISSO', name: 'Organa, Leia' }],
+  })
+
+  renderWithProviders(
+    <SystemEnrichmentCard
+      fismaUid={FISMA_UID}
+      system={makeSystem({
+        issoemail: 'leia@rebels.example',
+        isso_name: 'Leia B. Organa',
+      })}
+    />
+  )
+
+  expect(await screen.findByText('Contacts')).toBeInTheDocument()
+  expect(screen.queryByText(/does not match CFACTS/i)).not.toBeInTheDocument()
 })

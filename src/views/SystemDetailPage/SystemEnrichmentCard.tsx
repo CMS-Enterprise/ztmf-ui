@@ -30,7 +30,7 @@ interface SystemEnrichmentCardProps {
    */
   systemDataCenterEnvironment?: string | null
   /**
-   * The fisma system this page shows (ztmf-ui#720). Its issoemail/isso_name
+   * The fisma system this page shows. Its issoemail/isso_name
    * are ZTMF's system-of-record ISSO, compared against the CFACTS primary
    * from the enrichment roster; when either side is missing the comparison is
    * skipped - absence is unknown, not disagreement. The full object is needed
@@ -44,7 +44,7 @@ interface SystemEnrichmentCardProps {
   onIssoUpdated?: () => void | Promise<void>
 }
 
-// CFACTS role display order (ztmf-ui#720). The pipeline emits the array in
+// CFACTS role display order. The pipeline emits the array in
 // this order already, but sort defensively; unknown roles keep their arrival
 // order after the known ones rather than being dropped.
 const CONTACT_ROLE_ORDER = [
@@ -65,8 +65,12 @@ const CONTACT_ROLE_LABELS: Record<string, string> = {
 
 // The payload is pipeline-owned jsonb: coerce every field through this so an
 // absent/null/non-string value renders as nothing, never as "undefined".
+// Returns the TRIMMED value so downstream exact matches (role lookup, sort
+// ranking) tolerate stray whitespace in the data.
 function asStr(value: unknown): string | null {
-  return typeof value === 'string' && value.trim() !== '' ? value : null
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed !== '' ? trimmed : null
 }
 
 function sortContacts(contacts: EnrichmentContact[]): EnrichmentContact[] {
@@ -82,15 +86,21 @@ function sortContacts(contacts: EnrichmentContact[]): EnrichmentContact[] {
 
 // Name comparison is the fallback signal when an email is missing on either
 // side, and the two sources use different formats ("Last, First" vs
-// "First Last"), so compare as an order-insensitive word set.
-function normalizeName(value: string): string {
-  return value
-    .toLowerCase()
-    .replace(/[.,]/g, ' ')
-    .split(/\s+/)
-    .filter(Boolean)
-    .sort()
-    .join(' ')
+// "First Last"), so compare as order-insensitive word sets. Containment
+// rather than equality: "Leia B. Organa" vs "Organa, Leia" is the same
+// person with a middle name on one side, not a mismatch.
+function nameWords(value: string): Set<string> {
+  return new Set(
+    value.toLowerCase().replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean)
+  )
+}
+
+function namesDisagree(a: string, b: string): boolean {
+  const wa = nameWords(a)
+  const wb = nameWords(b)
+  const contains = (big: Set<string>, small: Set<string>) =>
+    [...small].every((w) => big.has(w))
+  return !(contains(wa, wb) || contains(wb, wa))
 }
 
 function FieldDisplay({
@@ -269,7 +279,7 @@ export default function SystemEnrichmentCard({
     normalizeDCE(cfactsDCE) !== '' &&
     normalizeDCE(cfactsDCE) !== normalizeDCE(systemDataCenterEnvironment)
 
-  // Full CFACTS roster (ztmf-ui#720). Absent on pre-rollout payloads and on
+  // Full CFACTS roster. Absent on pre-rollout payloads and on
   // systems with no CFACTS roster - the primary_isso_* pair is the fallback
   // display, not an edge case.
   const contacts = sortContacts(
@@ -302,7 +312,7 @@ export default function SystemEnrichmentCard({
   // roster exists). The pair is resolved atomically from ONE source - a roster
   // entry missing its email must not borrow the flat email key, or a name and
   // an email belonging to different people could be blended into one person.
-  const primaryContact = contacts.find((c) => c.role === 'Primary ISSO')
+  const primaryContact = contacts.find((c) => asStr(c.role) === 'Primary ISSO')
   const cfactsIssoName = primaryContact
     ? asStr(primaryContact.name)
     : asStr(enrichment.primary_isso_name)
@@ -319,7 +329,7 @@ export default function SystemEnrichmentCard({
     issoMismatch =
       ztmfEmail.trim().toLowerCase() !== cfactsIssoEmail.trim().toLowerCase()
   } else if (ztmfName && cfactsIssoName) {
-    issoMismatch = normalizeName(ztmfName) !== normalizeName(cfactsIssoName)
+    issoMismatch = namesDisagree(ztmfName, cfactsIssoName)
   }
 
   const formatPerson = (name: string | null, email: string | null) =>
@@ -527,7 +537,7 @@ export default function SystemEnrichmentCard({
                 call-scope notice). */}
             <Box role="status" aria-live="polite">
               {issoMismatch && (
-                <Alert severity="warning" sx={{ mt: 2 }}>
+                <Alert severity="warning" role="presentation" sx={{ mt: 2 }}>
                   <AlertTitle>
                     ZTMF assigned ISSO does not match CFACTS
                   </AlertTitle>

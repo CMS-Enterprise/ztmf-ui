@@ -35,7 +35,7 @@ tests:
   - id: admin-opdivs
     path: '/#/admin/opdivs'
 
-  # System detail page incl. the ZTMF Insights enrichment cards (ztmf-ui#720).
+  # System detail page incl. the ZTMF Insights enrichment cards.
   # 1002 = the Executor in the Empire seed: active, sdl_sync_enabled, and has
   # an enrichment row WITHOUT a contacts key, so this scans the legacy-fallback
   # Contacts rendering. The waitFor anchor only renders once the enrichment
