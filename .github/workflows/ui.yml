@@ -78,6 +78,12 @@ jobs:
           role-duration-seconds: 900
           aws-region: us-east-1
 
+      - name: Write empty runtime config
+        # public/config.js is gitignored (it carries the local auth-bypass
+        # token), so the build emits no config.js. Ship an empty stub so the
+        # index.html script tag resolves instead of 404ing on every load.
+        run: echo 'window.ZTMF_RUNTIME_CONFIG = {}' > ./dist/config.js
+
       - name: AWS Sync
         run: aws s3 sync ./dist s3://${{ secrets.BUCKET_NAME }}/ --delete
 
