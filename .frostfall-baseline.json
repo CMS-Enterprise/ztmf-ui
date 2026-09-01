@@ -1,7 +1,7 @@
 {
   "version": 1,
   "axeVersion": "4.10.3",
-  "created": "2026-08-20T12:17:01.19593994Z",
+  "created": "2026-08-31T22:49:26.087847672Z",
   "violations": [
     {
       "fingerprint": "84ce7c8b8e4493934c595f137d5c7d2d",
@@ -53,88 +53,88 @@
       "stableTarget": ".MuiDataGrid-root"
     },
     {
-      "fingerprint": "e0d8244522669ece3ee9853d3060ded1",
+      "fingerprint": "bf32b84d5e76586354d6b468c07a8598",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"0\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"0\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "15ce4b0f51f70fb2bd5b96e4cc6091d0",
+      "fingerprint": "faafb976319be5b720448af0dc5c170c",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"1\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"1\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "82a6f911ea2c54fc6d221c5470c3851d",
+      "fingerprint": "24ebc2471ee14a3a01c0dcbb62d828d6",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"2\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"2\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "aa305acea7a46ec437a589762f8019cb",
+      "fingerprint": "8617d21d9bf6a0f61036f485347c6ff5",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"3\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"3\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "1bb5a0f5c6bc4dd715908bff02abd183",
+      "fingerprint": "d3563fa59e23fb861df5576d881a26a4",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"4\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"4\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "e4de4281d38dcea3f81eada1033e47a8",
+      "fingerprint": "25adee7ec506758623fc4ff2ab76f989",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"5\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"5\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "3fb556a2b23e4e1c6623e141580930d6",
+      "fingerprint": "3bfe886276ed8102a4dad2b4fa90bcbb",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"6\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"6\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "891d81f60ff11fa3b1302f72b62a8911",
+      "fingerprint": "d75a6f47e50630aefd8d54ed2b949459",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"7\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"7\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "a52ab2fbc6f3720a39f8f69e455ac59c",
+      "fingerprint": "be38c03f37e67730e4c05c43776ca7ca",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"8\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"8\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "9f67164891856b3b1bfdb4e06f7b1a9b",
+      "fingerprint": "e1286efb4a493d9b275318df07edbe7f",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"9\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"9\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "8c95645b0c8d17d116a26eff33b23ec8",
+      "fingerprint": "71dafb699c20dfcd6412bae1287a350f",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"10\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"10\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
-      "fingerprint": "0bd7f67f7db471aab8cd7b16ee70990a",
+      "fingerprint": "d04fba03b94bb8c06c6947451e564f5c",
       "testId": "users",
       "scanLabel": "initial",
       "ruleId": "aria-required-children",
-      "stableTarget": "div[data-rowindex=\"11\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"5\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
+      "stableTarget": "div[data-rowindex=\"11\"] \u003e .actions.MuiDataGrid-cell--textCenter[data-colindex=\"6\"] \u003e .MuiDataGrid-actionsCell[role=\"menu\"]"
     },
     {
       "fingerprint": "8a28838a3806ad8c70a2a9afbc04b8f5",
@@ -153,6 +153,13 @@
     {
       "fingerprint": "2adfa191d6bef431b890d80cf84cb787",
       "testId": "admin-opdivs",
+      "scanLabel": "initial",
+      "ruleId": "color-contrast",
+      "stableTarget": ".MuiTypography-root"
+    },
+    {
+      "fingerprint": "073c0e76e1e9072de573fc4ade87051a",
+      "testId": "system-detail",
       "scanLabel": "initial",
       "ruleId": "color-contrast",
       "stableTarget": ".MuiTypography-root"
