@@ -48,4 +48,11 @@ module.exports = {
     'jest-watch-typeahead/testname',
   ],
   resetMocks: true,
+  // The default 5s per-test budget is fine locally but too tight in CI, where
+  // the full suite runs with coverage at --maxWorkers=100% on slower shared
+  // runners. The userEvent-driven modal tests (comboboxes, multi-step forms)
+  // do real per-event work that fits under 5s on a fast dev machine but not
+  // under that contention. Give every test more headroom rather than sprinkle
+  // per-test overrides.
+  testTimeout: 15000,
 }
