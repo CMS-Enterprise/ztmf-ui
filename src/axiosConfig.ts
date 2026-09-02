@@ -21,22 +21,32 @@ declare module 'axios' {
 }
 
 const axiosInstance: AxiosInstance = axios.create({
-  baseURL: '/api/v1/',
+  // Relative on purpose: the browser resolves it against the document URL,
+  // so the same bundle calls /api/v1/ when served at "/" and
+  // /pr/<repo>/<n>/api/v1/ when served under a PR-environment prefix
+  // (ztmf-misc#351). The hash router never changes the document path, so
+  // resolution is stable on every route.
+  baseURL: 'api/v1/',
   headers: {
     'Content-Type': 'application/json',
   },
-  // Same-origin requests to /api/v1/ already carry cookies, so this has no
+  // Same-origin requests to api/v1/ already carry cookies, so this has no
   // effect while the API shares the app's origin. It is set explicitly so
   // credentialed requests keep working if the API is served from a
   // separate origin.
   withCredentials: true,
 })
 
-// Local development only: bypass auth with token from .env
-// This will NOT run in AWS dev/prod builds - only when running `yarn dev` locally
-if (import.meta.env.VITE_LOCAL_DEV === 'true') {
+// Auth-bypass token for environments without OIDC (local dev, PR
+// environments). Read at runtime from config.js, a classic script loaded in
+// index.html before the module graph, so a prebuilt image can carry a
+// per-environment token without a rebuild. Locally `make frontend-env`
+// generates public/config.js; deployed dev/prod serve an empty stub, so no
+// token is present there and cookie auth applies as before.
+const runtimeToken = window.ZTMF_RUNTIME_CONFIG?.authToken
+if (runtimeToken) {
   axiosInstance.defaults.headers.common['Authorization'] =
-    `Bearer ${import.meta.env.VITE_AUTH_TOKEN3 || ''}`
+    `Bearer ${runtimeToken}`
 }
 
 /** Register a response interceptor on the instance. axios calls the

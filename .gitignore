@@ -2,6 +2,8 @@
 .env*
 !.env.example
 !.env.development.example
+# runtime config with the local auth-bypass token (make frontend-env)
+public/config.js
 
 # logs
 **/*.log

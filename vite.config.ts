@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import {
   defineConfig,
   transformWithEsbuild,
@@ -13,6 +14,11 @@ import sass from 'sass'
 export default defineConfig(({ mode }) => {
   process.env = { ...process.env, ...loadEnv(mode, process.cwd()) }
   return {
+    // Relative asset URLs so one build serves at "/" (dev/prod S3+CloudFront)
+    // and under a path prefix like /pr/<repo>/<n>/ in a PR environment
+    // (ztmf-misc#351). Safe with the hash router: the document path never
+    // changes after load, so relative resolution is stable on every route.
+    base: './',
     define: {
       'process.env': {},
       global: {},
@@ -35,9 +41,26 @@ export default defineConfig(({ mode }) => {
     },
     plugins: [
       react(),
-      EnvironmentPlugin('all'),
+      // Only NODE_ENV is read via process.env in src (main.tsx); app config
+      // comes through vite-native import.meta.env.VITE_*. 'all' would let a
+      // build bake arbitrary variables from the CI runner's environment into
+      // the bundle (ztmf-misc#351).
+      EnvironmentPlugin(['NODE_ENV']),
       // @ts-ignore-next-line
       visualizer() as PluginOption,
+      {
+        name: 'stub-runtime-config',
+        apply: 'build',
+        closeBundle() {
+          // public/config.js carries the local bypass token; never let a build
+          // ship it. Every dist gets the empty stub; real tokens are injected
+          // at serve time (make frontend-env locally, task-def in a PR env).
+          fs.writeFileSync(
+            'dist/config.js',
+            'window.ZTMF_RUNTIME_CONFIG = {}\n'
+          )
+        },
+      },
       {
         name: 'load+transform-js-files-as-jsx',
         async transform(code, id) {
