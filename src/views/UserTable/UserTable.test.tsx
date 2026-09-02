@@ -83,6 +83,7 @@ jest.mock('@mui/x-data-grid', () => {
     }) => {
       const { rows = [], columns = [], getRowId } = props
       mockGrid.processRowUpdate = props.processRowUpdate
+      mockGrid.columns = columns
       mockGrid.isCellEditable = props.isCellEditable
       if (props.apiRef) {
         props.apiRef.current = {
@@ -154,6 +155,7 @@ jest.mock('@mui/x-data-grid', () => {
 // can invoke the create/edit save path directly (the inline-edit commit that
 // would call it is not simulated by the minimal grid).
 const mockGrid: {
+  columns?: Array<Record<string, unknown>>
   processRowUpdate?: (row: Record<string, unknown>) => unknown
   isCellEditable?: (p: {
     field: string
@@ -224,7 +226,11 @@ import userEvent from '@testing-library/user-event'
 import UserTable from './UserTable'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, OpDiv, userData, users } from '@/types'
-import { LAST_SEEN_EMPTY_LABEL, formatLastSeenAbsolute } from './lastSeen'
+import {
+  LAST_SEEN_EMPTY_LABEL,
+  formatLastSeenAbsolute,
+  lastSeenSortComparator,
+} from './lastSeen'
 
 const ACTIVE_SYSTEMS: FismaSystemType[] = [
   {
@@ -1237,4 +1243,51 @@ test('threads the parsed date into the last-seen cell, not the raw timestamp', a
   expect(
     cell('never', 'last_seen').getByText(LAST_SEEN_EMPTY_LABEL)
   ).toBeInTheDocument()
+})
+
+/** The live column definition the component handed the grid. */
+function column(field: string) {
+  return mockGrid.columns?.find((col) => col.field === field)
+}
+
+test('prefers a refreshed OpDiv grant over the stale inline one on the row', async () => {
+  // refreshUserRow updates userOpDivMap but never patches row.assignedopdivids,
+  // so after a grant edit the inline field is stale and the map has to win.
+  // One row missing the key backfills every row (the check is data.some), which
+  // is how both sources end up populated and disagreeing for the same user.
+  const { fetchUserOpDivs } = require('@/utils/userOpdivs') as {
+    fetchUserOpDivs: jest.Mock
+  }
+  fetchUserOpDivs.mockImplementation((userid: string) =>
+    Promise.resolve(userid === PIETT_ROW.userid ? [2] : [])
+  )
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV, IHS_OPDIV] }))
+  const legacyRow = rowWith({ userid: 'legacy-user' } as Partial<users>)
+  delete (legacyRow as Record<string, unknown>).assignedopdivids
+  const staleRow = rowWith({ assignedopdivids: [1] } as Partial<users>)
+  mockUsers([legacyRow, staleRow])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  const opdivCell = () => cell(PIETT_ROW.userid, 'opdivs')
+  await waitFor(() => expect(opdivCell().getByText('IHS')).toBeInTheDocument())
+  expect(opdivCell().queryByText('CMS')).not.toBeInTheDocument()
+})
+
+test('wires the OpDiv editor, the IdP select options, and the last-seen comparator', async () => {
+  // The grid mock only calls valueGetter and renderCell, so these three
+  // properties are invisible to a rendering assertion. Read them off the
+  // column definition the component actually passed in.
+  mockUsers([PIETT_ROW])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  expect(column('opdivs')?.renderEditCell).toEqual(expect.any(Function))
+  expect(column('identity_provider')).toMatchObject({
+    type: 'singleSelect',
+    valueOptions: ['okta', 'entra'],
+  })
+  expect(column('last_seen')?.sortComparator).toBe(lastSeenSortComparator)
 })
