@@ -1,3 +1,4 @@
+import fs from 'node:fs'
 import {
   defineConfig,
   transformWithEsbuild,
@@ -47,6 +48,19 @@ export default defineConfig(({ mode }) => {
       EnvironmentPlugin(['NODE_ENV']),
       // @ts-ignore-next-line
       visualizer() as PluginOption,
+      {
+        name: 'stub-runtime-config',
+        apply: 'build',
+        closeBundle() {
+          // public/config.js carries the local bypass token; never let a build
+          // ship it. Every dist gets the empty stub; real tokens are injected
+          // at serve time (make frontend-env locally, task-def in a PR env).
+          fs.writeFileSync(
+            'dist/config.js',
+            'window.ZTMF_RUNTIME_CONFIG = {}\n'
+          )
+        },
+      },
       {
         name: 'load+transform-js-files-as-jsx',
         async transform(code, id) {
