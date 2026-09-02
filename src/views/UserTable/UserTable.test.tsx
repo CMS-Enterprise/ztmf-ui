@@ -118,7 +118,10 @@ jest.mock('@mui/x-data-grid', () => {
               if (col.type === 'actions' && getActions) {
                 return react.createElement(
                   'div',
-                  { key: String(col.field) },
+                  {
+                    key: String(col.field),
+                    'data-testid': `cell-${String(col.field)}`,
+                  },
                   getActions({ id, row })
                 )
               }
@@ -136,7 +139,7 @@ jest.mock('@mui/x-data-grid', () => {
                 : row[field]
               return react.createElement(
                 'div',
-                { key: field },
+                { key: field, 'data-testid': `cell-${field}` },
                 renderCell ? renderCell({ row, id, value, field }) : null
               )
             })
@@ -220,7 +223,8 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import UserTable from './UserTable'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import type { FismaSystemType, userData, users } from '@/types'
+import type { FismaSystemType, OpDiv, userData, users } from '@/types'
+import { LAST_SEEN_EMPTY_LABEL, formatLastSeenAbsolute } from './lastSeen'
 
 const ACTIVE_SYSTEMS: FismaSystemType[] = [
   {
@@ -1079,4 +1083,158 @@ test('isCellEditable forwards the field, row, and caller context to the guard', 
   expect(
     isCellEditable({ field: 'fullname', row: { isNew: false, role: 'ISSO' } })
   ).toBe(true)
+})
+
+// Column-definition rendering. The grid mock runs each column's valueGetter
+// and renderCell, but nothing asserted on the output, so a wrong map, an
+// inverted fallback, or the wrong value threaded into a cell component would
+// not have failed a test. These pin the wiring itself; the transforms behind
+// it are pinned in opdivDerivations.test.ts, lastSeen.test.ts, and
+// LastSeenCell.test.tsx.
+
+const CMS_OPDIV = {
+  opdiv_id: 1,
+  code: 'CMS',
+  name: 'Centers for Medicare & Medicaid Services',
+  is_parent: false,
+  active: true,
+  system_delegate_enabled: false,
+  insights_enabled: false,
+} as unknown as OpDiv
+
+const IHS_OPDIV = {
+  ...CMS_OPDIV,
+  opdiv_id: 2,
+  code: 'IHS',
+  name: 'Indian Health Service',
+} as unknown as OpDiv
+
+function rowWith(overrides: Partial<users>): users {
+  return { ...PIETT_ROW, ...overrides } as users
+}
+
+/** Scopes assertions to one column's rendered cell in one row. */
+function cell(userid: string, field: string) {
+  return within(
+    within(screen.getByTestId(`datagrid-row-${userid}`)).getByTestId(
+      `cell-${field}`
+    )
+  )
+}
+
+test('renders each OpDiv grant as its code, never its long name', async () => {
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV, IHS_OPDIV] }))
+  mockUsers([rowWith({ assignedopdivids: [1, 2] } as Partial<users>)])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  const row = cell(PIETT_ROW.userid, 'opdivs')
+  expect(row.getByText('CMS')).toBeInTheDocument()
+  expect(row.getByText('IHS')).toBeInTheDocument()
+  // The label map carries the same ids keyed to full names; using it here
+  // would render these instead.
+  expect(
+    row.queryByText('Centers for Medicare & Medicaid Services')
+  ).not.toBeInTheDocument()
+  expect(row.queryByText('Indian Health Service')).not.toBeInTheDocument()
+})
+
+test('falls back to the raw id when a grant has no matching OpDiv', async () => {
+  // A grant to an OpDiv missing from the list (inactive, or fetched before the
+  // list refreshed) still has to render something identifiable.
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV] }))
+  mockUsers([rowWith({ assignedopdivids: [999] } as Partial<users>)])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  expect(cell(PIETT_ROW.userid, 'opdivs').getByText('999')).toBeInTheDocument()
+})
+
+test('renders a placeholder for a user with no OpDiv grants', async () => {
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV] }))
+  mockUsers([rowWith({ assignedopdivids: [] } as Partial<users>)])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  const opdivCell = cell(PIETT_ROW.userid, 'opdivs')
+  expect(opdivCell.getByText('—')).toBeInTheDocument()
+  expect(opdivCell.queryByText('CMS')).not.toBeInTheDocument()
+})
+
+test('renders backfilled grants when the row omits them inline', async () => {
+  // No assignedopdivids on the row, so the per-user backfill populates the
+  // override map the cell reads before falling back to the row.
+  const { fetchUserOpDivs } = require('@/utils/userOpdivs') as {
+    fetchUserOpDivs: jest.Mock
+  }
+  fetchUserOpDivs.mockResolvedValue([2])
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV, IHS_OPDIV] }))
+  const legacyRow = { ...PIETT_ROW } as Partial<users>
+  delete (legacyRow as Record<string, unknown>).assignedopdivids
+  mockUsers([legacyRow as users])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  await waitFor(() =>
+    expect(
+      cell(PIETT_ROW.userid, 'opdivs').getByText('IHS')
+    ).toBeInTheDocument()
+  )
+})
+
+test('renders the identity provider, and a placeholder when it is unset', async () => {
+  const withIdp = rowWith({
+    userid: 'idp-set',
+    identity_provider: 'entra',
+  } as Partial<users>)
+  // Unset is undefined on the row, not null: the backend omits the key for
+  // users whose IdP it has not derived yet.
+  const withoutIdp = rowWith({
+    userid: 'idp-unset',
+    identity_provider: undefined,
+  } as Partial<users>)
+  mockUsers([withIdp, withoutIdp])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  expect(
+    cell('idp-set', 'identity_provider').getByText('entra')
+  ).toBeInTheDocument()
+  expect(
+    cell('idp-unset', 'identity_provider').getByText('—')
+  ).toBeInTheDocument()
+})
+
+test('threads the parsed date into the last-seen cell, not the raw timestamp', async () => {
+  const iso = '2026-03-04T15:30:00.000Z'
+  const seen = rowWith({ userid: 'seen', last_seen: iso } as Partial<users>)
+  const never = rowWith({ userid: 'never', last_seen: null } as Partial<users>)
+  mockUsers([seen, never])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  // The cell receives the valueGetter's Date, so it formats an absolute
+  // timestamp. Handing it the raw ISO string instead would render the string
+  // through, or fall to the empty state.
+  // Exact match on the cell's visually-hidden absolute timestamp. `exact:
+  // false` would also match case-insensitively, which is looser than this
+  // needs; the parenthesised form is the span's whole normalized text.
+  const absolute = formatLastSeenAbsolute(new Date(iso))
+  expect(
+    cell('seen', 'last_seen').getByText(`(${absolute})`)
+  ).toBeInTheDocument()
+  expect(cell('seen', 'last_seen').queryByText(iso)).not.toBeInTheDocument()
+  expect(
+    cell('seen', 'last_seen').queryByText(LAST_SEEN_EMPTY_LABEL)
+  ).not.toBeInTheDocument()
+
+  expect(
+    cell('never', 'last_seen').getByText(LAST_SEEN_EMPTY_LABEL)
+  ).toBeInTheDocument()
 })
