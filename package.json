@@ -23,7 +23,7 @@
   "scripts": {
     "start": "yarn run dev",
     "dev": "vite",
-    "build:prod": "tsc -p tsconfig.prod.json && vite build --mode production",
+    "build:prod": "tsc -p tsconfig.prod.json && vite build --mode production && node scripts/assert-prod-excludes-devtools.mjs",
     "build:dev": "tsc -p tsconfig.prod.json && vite build --mode development",
     "build:impl": "tsc -p tsconfig.prod.json && vite build --mode impl",
     "preview": "vite preview",
