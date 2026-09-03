@@ -18,11 +18,9 @@ type QueryValue = string | number | boolean | null | undefined
  * Appends encoded query values to an API path. Array values intentionally use
  * repeated parameters because the export endpoint expects `fsids=1&fsids=2`.
  *
- * Encoding note: URLSearchParams writes spaces as `+` where Axios's own params
- * serializer writes `%20`. No current parameter carries a space, so the two
- * agree today; a future free-text parameter (a search string, say) should
- * either stay in Axios `params` or be checked against what the backend
- * decodes.
+ * Encoding note: URLSearchParams uses form-style query encoding, including
+ * `+` for spaces. Keep free-text parameters in Axios `params` unless a path
+ * factory specifically needs to own their serialized representation.
  */
 function withQuery(
   path: string,
