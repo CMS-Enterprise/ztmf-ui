@@ -4,9 +4,12 @@
  */
 import * as React from 'react'
 import * as ReactDOMClient from 'react-dom/client'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { ReactQueryDevtools } from '@tanstack/react-query-devtools'
 import { RouterProvider } from 'react-router-dom'
 import CONFIG from '@/utils/config'
 import router from '@/router/router'
+import queryClient from '@/queryClient'
 import { SIGN_IN_GREETING } from '@/locales/en'
 import '@/sass/style.scss'
 import onPerfEntry from './utils/onPerfEntry'
@@ -23,9 +26,13 @@ import { SnackbarProvider } from 'notistack'
   // create the React root node and render the application
   ReactDOMClient.createRoot(rootElement).render(
     <React.StrictMode>
-      <SnackbarProvider>
-        <RouterProvider router={router} />
-      </SnackbarProvider>
+      <QueryClientProvider client={queryClient}>
+        <SnackbarProvider>
+          <RouterProvider router={router} />
+        </SnackbarProvider>
+        {/* Vite removes this branch from production builds. */}
+        {import.meta.env.DEV && <ReactQueryDevtools initialIsOpen={false} />}
+      </QueryClientProvider>
     </React.StrictMode>
   )
 
