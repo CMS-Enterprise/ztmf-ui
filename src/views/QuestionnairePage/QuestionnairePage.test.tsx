@@ -262,10 +262,14 @@ test('scores fetch 403 (auth-handled) still commits questions and opens the targ
       )
     ).toBe(true)
   )
-  // Sidebar/URL committed together with the content; not stuck loading.
-  await waitFor(() =>
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
-  )
+  // Sidebar/URL committed together with the content; not stuck loading. The
+  // header carries a persistent completion progressbar, so "not loading" means
+  // that bar is the only progressbar left - the loading spinner is gone.
+  await waitFor(() => {
+    const bars = screen.getAllByRole('progressbar')
+    expect(bars).toHaveLength(1)
+    expect(bars[0]).toHaveAccessibleName(/overall questionnaire completion/i)
+  })
   // Auth-handled path is silent - no "try again" toast fires.
   expect(
     notifyMock.mock.calls.some(
