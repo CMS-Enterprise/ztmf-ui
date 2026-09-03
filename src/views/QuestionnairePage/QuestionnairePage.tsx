@@ -30,6 +30,7 @@ import {
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
@@ -283,7 +284,7 @@ export default function QuestionnarePage() {
   ): Promise<questionScoreMap | undefined> => {
     try {
       const response = await axiosInstance.get(
-        `scores?datacallid=${datacallID}&fismasystemid=${systemId}&include=functionoption`
+        apiPaths.scores.list(datacallID, systemId, true)
       )
       const hashTable: questionScoreMap = Object.assign(
         {},
@@ -390,12 +391,9 @@ export default function QuestionnarePage() {
     const controller = new AbortController()
     const load = async () => {
       try {
-        const res = await axiosInstance.get(
-          'fismasystems?decommissioned=true',
-          {
-            signal: controller.signal,
-          }
-        )
+        const res = await axiosInstance.get(apiPaths.fismaSystems.list(true), {
+          signal: controller.signal,
+        })
         setDecommissionedSystems(res.data?.data ?? [])
       } catch (error) {
         if (controller.signal.aborted) return
@@ -460,10 +458,13 @@ export default function QuestionnarePage() {
     setInsightsLoadState({ system, settled: false })
     const load = async () => {
       try {
-        const res = await axiosInstance.get<{ data: Insight[] }>('insights', {
-          params: { fismasystemid: system },
-          signal: controller.signal,
-        })
+        const res = await axiosInstance.get<{ data: Insight[] }>(
+          apiPaths.insights,
+          {
+            params: { fismasystemid: system },
+            signal: controller.signal,
+          }
+        )
         const map = new Map<number, InsightPayload>()
         for (const row of res.data?.data ?? []) {
           if (row?.questionid != null && row.payload) {
@@ -522,7 +523,7 @@ export default function QuestionnarePage() {
   const handleOpenPillarScores = async () => {
     try {
       const res = await axiosInstance.get(
-        `/scores/aggregate?fismasystemid=${system}&include_pillars=true`
+        apiPaths.scores.aggregateBySystem(system)
       )
       setPillarScores({ open: true, scores: res.data?.data ?? [] })
     } catch (error) {
@@ -655,7 +656,7 @@ export default function QuestionnarePage() {
   // body (#412/#413). Shared with saveResponse's resolved-review path.
   const confirmScoreById = async (id: number): Promise<boolean> => {
     try {
-      await axiosInstance.put(`scores/${id}/confirm`)
+      await axiosInstance.put(apiPaths.scores.confirm(id))
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       clearCurrentDraft()
       setPriorReview((current) =>
@@ -785,7 +786,7 @@ export default function QuestionnarePage() {
     }
     try {
       if (scoreid) {
-        await axiosInstance.put(`scores/${scoreid}`, {
+        await axiosInstance.put(apiPaths.scores.detail(scoreid), {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
@@ -796,7 +797,7 @@ export default function QuestionnarePage() {
           notes_is_ai_summary: false,
         })
       } else {
-        await axiosInstance.post(`scores`, {
+        await axiosInstance.post(apiPaths.scores.root, {
           fismasystemid: system,
           notes: notes,
           functionoptionid: selectQuestionOption,
@@ -900,7 +901,7 @@ export default function QuestionnarePage() {
           let targetFuncId: number | undefined
           try {
             const response = await axiosInstance.get(
-              `/fismasystems/${system}/questions?datacallid=${activeDataCallId}`,
+              apiPaths.fismaSystems.questions(system, activeDataCallId),
               { signal: controller.signal }
             )
             // Decommissioned systems join to zero functions, so the questions
@@ -1002,7 +1003,7 @@ export default function QuestionnarePage() {
           let hashTable: questionScoreMap = {}
           try {
             const res = await axiosInstance.get(
-              `scores?datacallid=${activeDataCallId}&fismasystemid=${system}&include=functionoption`,
+              apiPaths.scores.list(activeDataCallId, system, true),
               { signal: controller.signal }
             )
             hashTable = Object.assign(
@@ -1061,6 +1062,7 @@ export default function QuestionnarePage() {
   ])
   React.useEffect(() => {
     if (questionId) {
+      const activeQuestionId = questionId
       const controller = new AbortController()
       // Clear saved-state markers before async load so the last-edited
       // footer does not flash the previous question's editor during the
@@ -1073,7 +1075,7 @@ export default function QuestionnarePage() {
       async function fetchOptions() {
         try {
           const res = await axiosInstance.get(
-            `functions/${questionId}/options`,
+            apiPaths.functionOptions(activeQuestionId),
             { signal: controller.signal }
           )
           res.data.data.forEach((item: QuestionOption) => {
@@ -1206,7 +1208,7 @@ export default function QuestionnarePage() {
     if (!system || datacallID <= 0 || !viewedQuestionId) return
     void (async () => {
       try {
-        await axiosInstance.post('events/view', {
+        await axiosInstance.post(apiPaths.events.view, {
           fismasystemid: system,
           datacallid: datacallID,
           questionid: viewedQuestionId,

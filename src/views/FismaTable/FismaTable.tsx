@@ -37,6 +37,7 @@ import FileDownloadSharpIcon from '@mui/icons-material/FileDownloadSharp'
 import QuestionnareModal from '../QuestionnareModal/QuestionnareModal'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
 import { useNavigate, Link } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
@@ -138,18 +139,10 @@ export function CustomFooterSaveComponent(
     props.selectedRows.length === 0 ||
     exportCallId === null
   const saveSystemAnswers = async () => {
-    let exportUrl = `/datacalls/${exportCallId}/export`
-    if (props.selectedRows && props.selectedRows.length > 0) {
-      exportUrl += '?'
-      let idString: string = ''
-      props.selectedRows.forEach((id, index) => {
-        idString += 'fsids=' + id
-        if (props.selectedRows && index < props.selectedRows.length - 1) {
-          idString += '&'
-        }
-      })
-      exportUrl += idString
-    }
+    const exportUrl = apiPaths.datacalls.export(
+      exportCallId ?? props.activeDataCallId,
+      props.selectedRows ?? []
+    )
     try {
       const response = await axiosInstance.get(exportUrl, {
         responseType: 'blob',
@@ -779,7 +772,7 @@ export default function FismaTable({
       } else {
         // Fetch fresh data
         const response = await axiosInstance.get(
-          `/scores/aggregate?fismasystemid=${row.fismasystemid}&include_pillars=true`
+          apiPaths.scores.aggregateBySystem(row.fismasystemid)
         )
         scoresData = response.data.data
 

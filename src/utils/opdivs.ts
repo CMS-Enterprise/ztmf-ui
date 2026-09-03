@@ -1,4 +1,5 @@
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import type { OpDiv } from '@/types'
 
 /**
@@ -17,7 +18,7 @@ export async function fetchOpDivs(
   signal?: AbortSignal
 ): Promise<OpDiv[]> {
   const response = await axiosInstance.get<{ data: OpDiv[] | null }>(
-    '/opdivs',
+    apiPaths.opdivs.root,
     {
       params: includeInactive ? { active_only: false } : undefined,
       signal,
@@ -43,7 +44,10 @@ export type OpDivInput = {
  * active code) - callers should surface it inline via parseApiError.
  */
 export async function createOpDiv(input: OpDivInput): Promise<OpDiv> {
-  const response = await axiosInstance.post<{ data: OpDiv }>('/opdivs', input)
+  const response = await axiosInstance.post<{ data: OpDiv }>(
+    apiPaths.opdivs.root,
+    input
+  )
   return response.data.data
 }
 
@@ -55,5 +59,5 @@ export async function updateOpDiv(
   opdivId: number,
   input: OpDivInput
 ): Promise<void> {
-  await axiosInstance.put(`/opdivs/${opdivId}`, input)
+  await axiosInstance.put(apiPaths.opdivs.detail(opdivId), input)
 }

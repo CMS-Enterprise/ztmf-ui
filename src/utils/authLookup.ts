@@ -1,4 +1,5 @@
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 
 /**
  * Identity provider routing values returned by the pre-auth lookup endpoint.
@@ -65,13 +66,16 @@ const LOOKUP_TIMEOUT_MS = 5000
  */
 export async function lookupIdpForEmail(email: string): Promise<LookupResult> {
   try {
-    const response = await axiosInstance.get<LookupResponse>('/auth/lookup', {
-      params: { email },
-      timeout: LOOKUP_TIMEOUT_MS,
-      // The lookup is unauthenticated; the interceptor's 401/403 redirect
-      // would be wrong here. Caller owns the failure handling below.
-      skipAuthHandling: true,
-    })
+    const response = await axiosInstance.get<LookupResponse>(
+      apiPaths.auth.lookup,
+      {
+        params: { email },
+        timeout: LOOKUP_TIMEOUT_MS,
+        // The lookup is unauthenticated; the interceptor's 401/403 redirect
+        // would be wrong here. Caller owns the failure handling below.
+        skipAuthHandling: true,
+      }
+    )
     const idp = response.data?.data?.idp
     // Only accept the known markers. A 2xx whose body is not one of these
     // (missing field, unexpected value) is a malformed response, not a

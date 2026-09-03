@@ -35,6 +35,7 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { notify, isAuthHandled } from '@/utils/notify'
 import { fetchOpDivs } from '@/utils/opdivs'
 import { broadcastLogout } from '@/utils/sessionSync'
@@ -95,11 +96,10 @@ export default function Title() {
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
-      const url = decommissioned
-        ? '/fismasystems?decommissioned=true'
-        : '/fismasystems'
       try {
-        const res = await axiosInstance.get(url)
+        const res = await axiosInstance.get(
+          apiPaths.fismaSystems.list(decommissioned)
+        )
         setFismaSystems(res.data.data)
       } catch (error) {
         console.error(
@@ -144,7 +144,7 @@ export default function Title() {
     async (signal?: AbortSignal, resetSelection: boolean = true) => {
       try {
         const res = await axiosInstance.get(
-          '/datacalls',
+          apiPaths.datacalls.root,
           signal ? { signal } : {}
         )
         if (signal?.aborted) return
@@ -300,7 +300,7 @@ export default function Title() {
     setAnchorEl(null)
     notify('Signing out...', 'info')
     try {
-      await axiosInstance.post('/auth/logout', null, {
+      await axiosInstance.post(apiPaths.auth.logout, null, {
         skipAuthHandling: true,
         timeout: 5000,
       })

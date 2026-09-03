@@ -18,6 +18,7 @@ import {
   SystemEnrichmentType,
 } from '@/types'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 
@@ -204,10 +205,13 @@ export default function SystemEnrichmentCard({
     // case.
     async function load() {
       try {
-        const res = await axiosInstance.get(`systemenrichment/${fismaUid}`, {
-          signal: controller.signal,
-          skipAuthHandling: true,
-        })
+        const res = await axiosInstance.get(
+          apiPaths.systemEnrichment(fismaUid),
+          {
+            signal: controller.signal,
+            skipAuthHandling: true,
+          }
+        )
         // The endpoint returns { data: { fisma_uuid, payload, synced_at } }.
         // The enrichment fields live in payload; fisma_uuid and synced_at are
         // top-level siblings. Flatten into the existing shape so the rendering
@@ -347,20 +351,23 @@ export default function SystemEnrichmentCard({
       // permanent stored override (see FismaSystemType), and CFACTS names
       // arrive in "Last, First" - the backend resolves the display name from
       // the new ISSO's user record instead.
-      await axiosInstance.put(`fismasystems/${system.fismasystemid}`, {
-        fismauid: system.fismauid,
-        fismaacronym: system.fismaacronym,
-        fismaname: system.fismaname,
-        fismasubsystem: system.fismasubsystem,
-        component: system.component,
-        groupacronym: system.groupacronym,
-        groupname: system.groupname,
-        divisionname: system.divisionname,
-        datacenterenvironment: system.datacenterenvironment,
-        datacallcontact: system.datacallcontact,
-        issoemail: cfactsIssoEmail,
-        sdl_sync_enabled: system.sdl_sync_enabled,
-      })
+      await axiosInstance.put(
+        apiPaths.fismaSystems.detail(system.fismasystemid),
+        {
+          fismauid: system.fismauid,
+          fismaacronym: system.fismaacronym,
+          fismaname: system.fismaname,
+          fismasubsystem: system.fismasubsystem,
+          component: system.component,
+          groupacronym: system.groupacronym,
+          groupname: system.groupname,
+          divisionname: system.divisionname,
+          datacenterenvironment: system.datacenterenvironment,
+          datacallcontact: system.datacallcontact,
+          issoemail: cfactsIssoEmail,
+          sdl_sync_enabled: system.sdl_sync_enabled,
+        }
+      )
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       await onIssoUpdated?.()
     } catch (error) {

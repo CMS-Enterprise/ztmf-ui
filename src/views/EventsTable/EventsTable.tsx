@@ -9,6 +9,7 @@ import {
 } from '@mui/material'
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
 import { hasUnscopedRead } from '@/utils/userRoles'
 import { Routes } from '@/router/constants'
@@ -102,7 +103,7 @@ export default function EventsTable() {
     if (!canAccess) return
     const controller = new AbortController()
     axiosInstance
-      .get('/users', { signal: controller.signal })
+      .get(apiPaths.users.root, { signal: controller.signal })
       .then((res) => setUsers(res.data.data ?? []))
       .catch((error) => {
         if (isAuthHandled(error) || controller.signal.aborted) return
@@ -131,7 +132,7 @@ export default function EventsTable() {
 
     setLoading(true)
     axiosInstance
-      .get('/events', { params, signal: controller.signal })
+      .get(apiPaths.events.root, { params, signal: controller.signal })
       .then((res) => {
         const page: EventsPage = res.data.data
         setRows(page.events)

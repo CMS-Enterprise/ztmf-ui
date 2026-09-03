@@ -12,6 +12,7 @@ import {
 } from '@mui/material'
 import { FismaSystemType } from '@/types'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import {
@@ -126,7 +127,7 @@ export default function TargetMaturityCard({
     setIsSaving(true)
     try {
       const res = await axiosInstance.put(
-        `fismasystems/${system.fismasystemid}/target-maturity`,
+        apiPaths.fismaSystems.targetMaturity(system.fismasystemid),
         {
           target_maturity_tier: tier,
           target_maturity_justification: trimmedJustification,

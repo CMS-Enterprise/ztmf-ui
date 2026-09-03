@@ -32,6 +32,7 @@ import QuestionnareModal from './QuestionnareModal'
 import axiosInstance from '@/axiosConfig'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType } from '@/types'
+import { apiPaths } from '@/api/keys'
 
 const mock = new MockAdapter(axiosInstance)
 
@@ -87,12 +88,12 @@ const LATEST = { datacallid: 5, deadline: '2099-12-31T00:00:00Z' }
 
 beforeEach(() => {
   mock.reset()
-  mock.onGet('/datacalls/latest').reply(200, { data: LATEST })
+  mock.onGet(apiPaths.datacalls.latest).reply(200, { data: LATEST })
   mock.onGet(/\/fismasystems\/42\/questions/).reply(200, { data: QUESTIONS })
   // No existing scores: the first save is a POST (scoreid 0).
   mock.onGet(/scores\?datacallid=/).reply(200, { data: [] })
-  mock.onGet('functions/10/options').reply(200, { data: OPTIONS_10 })
-  mock.onGet('functions/11/options').reply(200, { data: [] })
+  mock.onGet(apiPaths.functionOptions(10)).reply(200, { data: OPTIONS_10 })
+  mock.onGet(apiPaths.functionOptions(11)).reply(200, { data: [] })
 })
 
 test('loads the data-call chain and renders the first question with its options', async () => {
@@ -112,7 +113,7 @@ test('loads the data-call chain and renders the first question with its options'
 
 test('selecting an option and clicking Next POSTs a new score', async () => {
   let postBody: Record<string, unknown> | undefined
-  mock.onPost('scores').reply((config) => {
+  mock.onPost(apiPaths.scores.root).reply((config) => {
     postBody = JSON.parse(config.data)
     return [201, { data: {} }]
   })
@@ -177,7 +178,7 @@ test('changing an existing answer and clicking Next PUTs the score', async () =>
   await user.click(await screen.findByLabelText('Continuous verification'))
   await user.click(screen.getByRole('button', { name: /Next/ }))
 
-  await waitFor(() => expect(putUrl).toBe('scores/55'))
+  await waitFor(() => expect(putUrl).toBe(apiPaths.scores.detail(55)))
 })
 
 test('Back returns to the previous question', async () => {
@@ -185,7 +186,7 @@ test('Back returns to the previous question', async () => {
   // clean save rather than a junk POST for an unselected option (which would
   // 404 and log an error). The post-save refetch is served by the
   // scores?datacallid=... handler in beforeEach.
-  mock.onPost('scores').reply(201, { data: {} })
+  mock.onPost(apiPaths.scores.root).reply(201, { data: {} })
   const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
   const user = userEvent.setup()
 
