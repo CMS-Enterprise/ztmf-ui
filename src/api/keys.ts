@@ -17,6 +17,12 @@ type QueryValue = string | number | boolean | null | undefined
 /**
  * Appends encoded query values to an API path. Array values intentionally use
  * repeated parameters because the export endpoint expects `fsids=1&fsids=2`.
+ *
+ * Encoding note: URLSearchParams writes spaces as `+` where Axios's own params
+ * serializer writes `%20`. No current parameter carries a space, so the two
+ * agree today; a future free-text parameter (a search string, say) should
+ * either stay in Axios `params` or be checked against what the backend
+ * decodes.
  */
 function withQuery(
   path: string,
@@ -39,6 +45,12 @@ function withQuery(
 /**
  * Canonical API paths. Callers may continue using Axios directly, but endpoint
  * spelling and dynamic path construction live here instead of in each view.
+ *
+ * Every path starts with `/`, which is safe ONLY because Axios joins
+ * `baseURL: '/api/v1/'` and the path by string concatenation (trailing and
+ * leading slashes collapsed). Under `fetch` or `new URL` semantics a leading
+ * slash would resolve against the origin and silently drop `/api/v1`, so do
+ * not hand these paths to anything but the shared Axios instance.
  */
 export const apiPaths = {
   auth: {
