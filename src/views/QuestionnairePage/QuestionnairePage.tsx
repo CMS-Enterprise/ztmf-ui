@@ -75,7 +75,7 @@ import ClosedDatacallBanner from './components/ClosedDatacallBanner'
 import PillarRail from './components/PillarRail'
 import EyebrowLine from './components/EyebrowLine'
 import SectionRail from './components/SectionRail'
-import SubtitleLine from './components/SubtitleLine'
+import QuestionnaireProgress from './components/QuestionnaireProgress'
 import SaveIndicator from './components/SaveIndicator'
 import Card from './components/Card'
 import {
@@ -1689,13 +1689,6 @@ export default function QuestionnarePage() {
             </Box>
           </Box>
         }
-        subtitle={
-          <SubtitleLine
-            totalAnswered={totalAnswered}
-            totalQuestions={totalQuestions}
-            lastSavedAt={lastSavedAt}
-          />
-        }
         actions={
           <>
             {/* Cross-navigation back to the system detail page (ui#610);
@@ -1726,6 +1719,7 @@ export default function QuestionnarePage() {
           </>
         }
       />
+      <QuestionnaireProgress answered={totalAnswered} total={totalQuestions} />
       <DatacallContextCard
         viewedDatacall={viewedDatacall}
         onPick={handleDatacallPick}
