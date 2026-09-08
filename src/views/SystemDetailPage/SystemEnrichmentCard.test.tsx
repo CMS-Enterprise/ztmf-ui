@@ -1,7 +1,8 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import { ERROR_MESSAGES } from '@/constants'
+import { apiPaths } from '@/api/keys'
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -97,6 +98,8 @@ test('403 renders the quiet empty state and the interceptor stays out of the way
   expect(screen.queryByText(ERROR_MESSAGES.permission)).not.toBeInTheDocument()
   // And no redirect either - skipAuthHandling bypasses both branches.
   expect(mockedNavigate).not.toHaveBeenCalled()
+  expect(mock.history.get).toHaveLength(1)
+  expect(mock.history.get[0].skipAuthHandling).toBe(true)
 })
 
 test('404 renders the same quiet empty state', async () => {
@@ -117,6 +120,32 @@ test('500 renders the failed-to-load message', async () => {
   expect(
     await screen.findByText(/failed to load ztmf insights data/i)
   ).toBeInTheDocument()
+})
+
+test('passes the Query cancellation signal to Axios and aborts on unmount', async () => {
+  let requestSignal: AbortSignal | undefined
+  mock.onGet(apiPaths.systemEnrichment(FISMA_UID)).reply(
+    (config) =>
+      new Promise((resolve) => {
+        requestSignal = config.signal as AbortSignal
+        requestSignal.addEventListener(
+          'abort',
+          () => resolve([200, { data: null }]),
+          { once: true }
+        )
+      })
+  )
+
+  const { unmount } = renderWithProviders(
+    <SystemEnrichmentCard fismaUid={FISMA_UID} />
+  )
+
+  await waitFor(() => expect(requestSignal).toBeDefined())
+  expect(requestSignal?.aborted).toBe(false)
+
+  unmount()
+
+  expect(requestSignal?.aborted).toBe(true)
 })
 
 // Data center environment display + mismatch flag (ztmf#239)

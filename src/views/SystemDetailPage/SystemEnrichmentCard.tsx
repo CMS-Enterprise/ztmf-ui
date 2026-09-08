@@ -1,4 +1,6 @@
-import { useState, useEffect } from 'react'
+import { useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { isAxiosError } from 'axios'
 import {
   Alert,
   AlertTitle,
@@ -18,7 +20,7 @@ import {
   SystemEnrichmentType,
 } from '@/types'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
 import { STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 
@@ -43,6 +45,44 @@ interface SystemEnrichmentCardProps {
   isAdmin?: boolean
   /** Called after a successful ISSO update so the parent can refetch. */
   onIssoUpdated?: () => void | Promise<void>
+}
+
+type SystemEnrichmentRecord = {
+  fisma_uuid: SystemEnrichmentType['fisma_uuid']
+  payload: Omit<SystemEnrichmentType, 'fisma_uuid' | 'synced_at'>
+  synced_at: SystemEnrichmentType['synced_at']
+}
+
+/**
+ * Fetches and flattens the pipeline-owned enrichment envelope. Query owns
+ * cancellation through its signal; the auth bypass stays request-local because
+ * this surface deliberately renders 403 as an empty state.
+ */
+async function fetchSystemEnrichment(
+  fismaUid: string,
+  signal: AbortSignal
+): Promise<SystemEnrichmentType | null> {
+  try {
+    const res = await axiosInstance.get<{
+      data: SystemEnrichmentRecord | null
+    }>(apiPaths.systemEnrichment(fismaUid), {
+      signal,
+      skipAuthHandling: true,
+    })
+    const record = res.data?.data
+    return record
+      ? {
+          ...record.payload,
+          fisma_uuid: record.fisma_uuid,
+          synced_at: record.synced_at,
+        }
+      : null
+  } catch (error) {
+    if (isAxiosError(error) && error.response?.status === 403) {
+      console.warn('ZTMF Insights 403 for fismaUid:', fismaUid)
+    }
+    throw error
+  }
 }
 
 // CFACTS role display order. The pipeline emits the array in
@@ -185,71 +225,19 @@ export default function SystemEnrichmentCard({
   isAdmin,
   onIssoUpdated,
 }: SystemEnrichmentCardProps) {
-  const [enrichment, setEnrichment] = useState<SystemEnrichmentType | null>(
-    null
-  )
-  const [loading, setLoading] = useState(true)
-  const [notFound, setNotFound] = useState(false)
-  const [hasError, setHasError] = useState(false)
   const [updatingIsso, setUpdatingIsso] = useState(false)
+  const {
+    data: enrichment,
+    error,
+    isPending,
+  } = useQuery({
+    queryKey: queryKeys.systemEnrichment(fismaUid),
+    queryFn: ({ signal }) => fetchSystemEnrichment(fismaUid, signal),
+  })
+  const errorStatus = isAxiosError(error) ? error.response?.status : undefined
+  const notFound = errorStatus === 403 || errorStatus === 404
 
-  useEffect(() => {
-    const controller = new AbortController()
-    setLoading(true)
-    setNotFound(false)
-    setHasError(false)
-
-    // ZTMF Insights treats 403 as "no record for this OpDiv" and renders
-    // an empty state. Bypass the cross-cutting auth handler so it does
-    // not surface a permission snackbar over what is a normal absent-data
-    // case.
-    async function load() {
-      try {
-        const res = await axiosInstance.get(
-          apiPaths.systemEnrichment(fismaUid),
-          {
-            signal: controller.signal,
-            skipAuthHandling: true,
-          }
-        )
-        // The endpoint returns { data: { fisma_uuid, payload, synced_at } }.
-        // The enrichment fields live in payload; fisma_uuid and synced_at are
-        // top-level siblings. Flatten into the existing shape so the rendering
-        // below is unchanged.
-        const record = res.data?.data
-        setEnrichment(
-          record
-            ? {
-                ...record.payload,
-                fisma_uuid: record.fisma_uuid,
-                synced_at: record.synced_at,
-              }
-            : null
-        )
-      } catch (error) {
-        if (controller.signal.aborted) return
-        const status = (error as { response?: { status?: number } }).response
-          ?.status
-        if (status === 404 || status === 403) {
-          if (status === 403) {
-            console.warn('ZTMF Insights 403 for fismaUid:', fismaUid)
-          }
-          setNotFound(true)
-        } else {
-          setHasError(true)
-        }
-      } finally {
-        if (!controller.signal.aborted) setLoading(false)
-      }
-    }
-    load()
-
-    return () => {
-      controller.abort()
-    }
-  }, [fismaUid])
-
-  if (loading) {
+  if (isPending) {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 4 }}>
         <CircularProgress size={40} />
@@ -257,7 +245,7 @@ export default function SystemEnrichmentCard({
     )
   }
 
-  if (hasError) {
+  if (error && !notFound) {
     return (
       <Typography variant="body2" color="error" sx={{ mt: 1 }}>
         Failed to load ZTMF Insights data. Please try again.
