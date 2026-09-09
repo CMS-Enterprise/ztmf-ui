@@ -54,6 +54,4 @@ if (offenders.length > 0) {
   process.exit(1)
 }
 
-console.log(
-  `assert-prod-excludes-devtools: ${bundles.length} bundle(s) clean.`
-)
+console.log(`assert-prod-excludes-devtools: ${bundles.length} bundle(s) clean.`)

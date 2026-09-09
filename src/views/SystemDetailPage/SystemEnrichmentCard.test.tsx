@@ -120,6 +120,7 @@ test('500 renders the failed-to-load message', async () => {
   expect(
     await screen.findByText(/failed to load ztmf insights data/i)
   ).toBeInTheDocument()
+  expect(screen.queryByText(ERROR_MESSAGES.tryAgain)).not.toBeInTheDocument()
 })
 
 test('passes the Query cancellation signal to Axios and aborts on unmount', async () => {

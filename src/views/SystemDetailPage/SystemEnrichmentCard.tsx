@@ -233,6 +233,9 @@ export default function SystemEnrichmentCard({
   } = useQuery({
     queryKey: queryKeys.systemEnrichment(fismaUid),
     queryFn: ({ signal }) => fetchSystemEnrichment(fismaUid, signal),
+    // This card renders 403/404 and unexpected failures inline; a global query
+    // snackbar would duplicate those states.
+    meta: { suppressErrorNotification: true },
   })
   const errorStatus = isAxiosError(error) ? error.response?.status : undefined
   const notFound = errorStatus === 403 || errorStatus === 404

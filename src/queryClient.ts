@@ -1,5 +1,24 @@
-import { QueryClient } from '@tanstack/react-query'
-import { isAxiosError } from 'axios'
+import {
+  QueryCache,
+  QueryClient,
+  type Query,
+  type QueryClientConfig,
+} from '@tanstack/react-query'
+import { isAxiosError, isCancel } from 'axios'
+import { isAuthHandled, notify } from '@/utils/notify'
+import { parseApiError } from '@/utils/apiErrors'
+
+declare module '@tanstack/react-query' {
+  interface Register {
+    /**
+     * Set when a query renders its failure inline and a global snackbar would
+     * duplicate that error surface.
+     */
+    queryMeta: {
+      suppressErrorNotification?: boolean
+    }
+  }
+}
 
 /**
  * Retry transient failures once; never retry a definitive server answer.
@@ -24,6 +43,55 @@ export function retryOnlyTransientFailures(
 }
 
 /**
+ * Surfaces unhandled query failures once at the cache boundary. Authentication
+ * errors already handled by the Axios interceptor, cancellations, unobserved
+ * requests, and queries with an inline error surface stay silent.
+ */
+export function handleQueryError(
+  error: unknown,
+  query: Query<unknown, unknown>
+): void {
+  if (
+    isAuthHandled(error) ||
+    isCancel(error) ||
+    query.meta?.suppressErrorNotification === true ||
+    query.getObserversCount() === 0
+  ) {
+    return
+  }
+
+  notify(parseApiError(error).message, 'error', {
+    key: query.queryHash,
+    preventDuplicate: true,
+  })
+}
+
+/**
+ * Creates an application QueryClient. Tests use this factory with retry
+ * overrides so they retain production cache/error behavior without sharing
+ * cached state or waiting through retries.
+ */
+export function createQueryClient(config: QueryClientConfig = {}): QueryClient {
+  return new QueryClient({
+    ...config,
+    queryCache:
+      config.queryCache ??
+      new QueryCache({
+        onError: handleQueryError,
+      }),
+    defaultOptions: {
+      ...config.defaultOptions,
+      queries: {
+        staleTime: 60_000,
+        retry: retryOnlyTransientFailures,
+        refetchOnWindowFocus: false,
+        ...config.defaultOptions?.queries,
+      },
+    },
+  })
+}
+
+/**
  * Shared client for server state rendered by the application.
  *
  * A one-minute stale window deduplicates nearby reads while keeping admin data
@@ -34,14 +102,6 @@ export function retryOnlyTransientFailures(
  * writes, while the retry policy above covers a transient failure without
  * masking an outage.
  */
-const queryClient = new QueryClient({
-  defaultOptions: {
-    queries: {
-      staleTime: 60_000,
-      retry: retryOnlyTransientFailures,
-      refetchOnWindowFocus: false,
-    },
-  },
-})
+const queryClient = createQueryClient()
 
 export default queryClient
