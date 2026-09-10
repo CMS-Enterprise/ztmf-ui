@@ -57,6 +57,14 @@ describe('resolveSystemIdByAcronym', () => {
   it('resolves an acronym containing a slash, as useParams hands it back decoded', () => {
     expect(resolveSystemIdByAcronym([sys(3, 'TIE/LN')], 'tie/ln')).toBe(3)
   })
+
+  it('refuses to guess when more than one system shares the acronym', () => {
+    // Acronyms are not unique; picking the first match opened another
+    // system's questionnaire.
+    const dupes = [...systems, sys(3, 'Pending'), sys(4, 'PENDING')]
+    expect(resolveSystemIdByAcronym(dupes, 'pending')).toBeUndefined()
+    expect(resolveSystemIdByAcronym(dupes, 'aco-ms')).toBe(1)
+  })
 })
 
 describe('questionnairePath', () => {
@@ -102,14 +110,6 @@ describe('questionnairePath', () => {
     // a matched route always supplies the param. This pins the non-crashing
     // shape, not a supported URL — /questionnaire/ matches no route.
     expect(questionnairePath(undefined)).toBe('/questionnaire/')
-  })
-  
-  it('refuses to guess when more than one system shares the acronym', () => {
-    // Acronyms are not unique; picking the first match opened another
-    // system's questionnaire.
-    const dupes = [...systems, sys(3, 'Pending'), sys(4, 'PENDING')]
-    expect(resolveSystemIdByAcronym(dupes, 'pending')).toBeUndefined()
-    expect(resolveSystemIdByAcronym(dupes, 'aco-ms')).toBe(1)
   })
 })
 

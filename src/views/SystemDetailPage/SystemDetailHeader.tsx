@@ -42,9 +42,11 @@ export default function SystemDetailHeader({
   // cannot be composed in; useHref resolves the path the same way Link would
   // (under the app's hash router it yields `#/questionnaire/<acronym>`) instead
   // of hand-writing the fragment. (#640 review)
-  const questionnaireHref = useHref(questionnairePath(fismaacronym))
-  const questionnairePath = `/questionnaire/${fismaacronym.toLowerCase()}`
-  const questionnaireHref = useHref(questionnairePath)
+  // Percent-encoded (misc#382): a slash in the acronym would otherwise split
+  // into extra path segments and miss the route's :fismaacronym. One value
+  // feeds both the href and the click, so the two can never diverge.
+  const questionnaireTo = questionnairePath(fismaacronym)
+  const questionnaireHref = useHref(questionnaireTo)
   // A plain left click navigates in-app with the fismasystemid in route state,
   // which QuestionnairePage prefers over resolving the acronym. Modified
   // clicks fall through to the anchor so open-in-new-tab still works.
@@ -59,7 +61,7 @@ export default function SystemDetailHeader({
     )
       return
     e.preventDefault()
-    navigate(questionnairePath, { state: { fismasystemid } })
+    navigate(questionnaireTo, { state: { fismasystemid } })
   }
 
   return (

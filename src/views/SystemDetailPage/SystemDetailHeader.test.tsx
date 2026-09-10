@@ -65,12 +65,22 @@ it('targets the questionnaire keyed on the lowercased acronym', () => {
 
 it('percent-encodes an acronym containing a slash', () => {
   // "TIE/LN" unencoded splits into two path segments, so :fismaacronym
-  // captures only "tie" and the page reports the system as not found. This
-  // entry point carries no route state, so the URL is all resolution can use.
+  // captures only "tie" and the page reports the system as not found. The
+  // href is what a copied link or open-in-new-tab uses, and neither carries
+  // the route state a plain click does, so the URL has to stand on its own.
   renderHeader({ fismaacronym: 'TIE/LN' })
   expect(
     screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
   ).toBe('/questionnaire/tie%2Fln')
+})
+
+it('percent-encodes a slash-bearing acronym on a plain click too', () => {
+  // misc#386 added in-app navigation alongside the href; both read the same
+  // built path, so the encoding cannot apply to only one of them.
+  const router = renderHeader({ fismaacronym: 'TIE/LN' })
+  fireEvent.click(screen.getByRole('link', { name: 'Questionnaire' }))
+  expect(router.state.location.pathname).toBe('/questionnaire/tie%2Fln')
+  expect(router.state.location.state).toEqual({ fismasystemid: 1002 })
 })
 
 it('carries the fismasystemid in route state on a plain click', () => {
