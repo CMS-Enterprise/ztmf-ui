@@ -184,6 +184,8 @@ frostfall-ci:
 	@bash -euo pipefail -c ' \
 		cleanup() { \
 			if [ -n "$${VITE_PID:-}" ]; then kill "$$VITE_PID" 2>/dev/null || true; fi; \
+			if [ -n "$${CONFIG_BAK:-}" ]; then mv "$$CONFIG_BAK" public/config.js; \
+			elif [ -n "$${CONFIG_WRITTEN:-}" ]; then rm -f public/config.js; fi; \
 			docker compose -f $(COMPOSE_TEST) down -v >/dev/null 2>&1 || true; \
 		}; \
 		trap cleanup EXIT; \
@@ -201,8 +203,11 @@ frostfall-ci:
 		PAYLOAD=$$(printf %s "{\"email\":\"Test.User@nowhere.xyz\"}" | openssl base64 -A | tr "+/" "-_" | tr -d "="); \
 		SIG=$$(printf %s "$$HEADER.$$PAYLOAD" | openssl dgst -sha256 -hmac zeroTrust -binary | openssl base64 -A | tr "+/" "-_" | tr -d "="); \
 		JWT="$$HEADER.$$PAYLOAD.$$SIG"; \
+		if [ -f public/config.js ]; then CONFIG_BAK=$$(mktemp); cp public/config.js "$$CONFIG_BAK"; fi; \
+		echo "window.ZTMF_RUNTIME_CONFIG = { authToken: \"$$JWT\" }" > public/config.js; \
+		CONFIG_WRITTEN=1; \
 		echo "Starting vite against the isolated API..."; \
-		VITE_LOCAL_DEV=true VITE_CF_DOMAIN=http://localhost:8090 VITE_AUTH_TOKEN3="$$JWT" \
+		VITE_CF_DOMAIN=http://localhost:8090 \
 			./node_modules/.bin/vite --port 5174 --strictPort >/tmp/frostfall-vite.log 2>&1 & \
 		VITE_PID=$$!; \
 		echo "Waiting for vite on :5174..."; \
