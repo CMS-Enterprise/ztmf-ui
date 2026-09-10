@@ -7,6 +7,11 @@ on:
     types:
       - closed
 
+# One prod run at a time across merges; a later merge already includes earlier ones.
+concurrency:
+  group: orchestration-prod
+  cancel-in-progress: false
+
 jobs:
   analysis:
     name: Analysis
@@ -14,6 +19,10 @@ jobs:
     uses: ./.github/workflows/analysis.yml
     secrets: inherit     
   ui:
+    # One prod sync at a time; queue, do not cancel.
+    concurrency:
+      group: deploy-prod
+      cancel-in-progress: false
     if: ${{ github.event.pull_request.merged }}
     name: ui
     needs: 
