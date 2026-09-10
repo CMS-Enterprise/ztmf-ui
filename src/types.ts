@@ -124,6 +124,31 @@ export type RequestOptions = {
   headers: Headers
   redirect: 'follow' | 'error' | 'manual'
 }
+// One audit-trail row from GET /events. The backend serializes the resource
+// column as "type", and resolves the initiating user server-side (ztmf#565):
+// a soft-deleted user still resolves, with userdeleted true as the cue to
+// mark the retired account.
+export type EventWithUser = {
+  eventid: number
+  userid: string
+  action: string
+  type: string
+  createdat: string
+  payload: unknown
+  userfullname: string
+  useremail: string
+  userdeleted: boolean
+}
+
+// One page of the audit trail. limit/offset echo what the server actually
+// applied after defaulting and clamping; total counts every match.
+export type EventsPage = {
+  events: EventWithUser[]
+  total: number
+  limit: number
+  offset: number
+}
+
 export type FismaSystemType = {
   fismasystemid: number
   fismauid: string
@@ -416,6 +441,14 @@ export type ThemeColor =
 
 export type ThemeSkin = 'filled' | 'light' | 'light-static'
 
+// One CFACTS roster entry. The pipeline drops null keys from
+// the payload, so any of the three fields can be absent on a given entry.
+export type EnrichmentContact = {
+  role?: string | null
+  name?: string | null
+  email?: string | null
+}
+
 export type SystemEnrichmentType = {
   fisma_uuid: string
   fisma_acronym: string
@@ -425,6 +458,10 @@ export type SystemEnrichmentType = {
   data_center_environment?: string | null
   primary_isso_name: string | null
   primary_isso_email: string | null
+  // Full CFACTS role-labeled roster. Absent on systems with no
+  // CFACTS roster and on payloads synced before the pipeline shipped the key,
+  // in which case the primary_isso_* pair above is the fallback display.
+  contacts?: EnrichmentContact[] | null
   is_active: boolean | null
   is_retired: boolean | null
   is_decommissioned: boolean | null

@@ -18,6 +18,7 @@ import {
   isAdmin as checkIsAdmin,
   hasAdminRead as checkHasAdminRead,
   isUnscopedWriteAdmin,
+  hasUnscopedRead,
 } from '@/utils/userRoles'
 import { Box } from '@mui/material'
 import IconButton from '@mui/material/IconButton'
@@ -497,6 +498,17 @@ export default function Title() {
                       style={{ textDecoration: 'none', color: 'black' }}
                     >
                       <MenuItem onClick={() => handleOption()}>Users</MenuItem>
+                    </Link>
+                  )}
+                  {/* Unscoped read (OWNER / HHS admin / HHS read-only), not
+                      hasAdminRead: OpDiv-scoped admins get 403 from the
+                      cross-OpDiv audit endpoint, so they get no entry. */}
+                  {hasUnscopedRead(userInfo) && (
+                    <Link
+                      to={Routes.ADMIN_EVENTS}
+                      style={{ textDecoration: 'none', color: 'black' }}
+                    >
+                      <MenuItem onClick={() => handleOption()}>Events</MenuItem>
                     </Link>
                   )}
                   {/* OWNER manages OpDivs fully; HHS admin reaches the page

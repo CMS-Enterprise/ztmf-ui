@@ -507,8 +507,15 @@ export function QuickSearchToolbar(props: {
           itself on the condition would have made it silent in exactly the
           cases it exists to cover. */}
       <Box role="status" aria-live="polite">
+        {/* role="presentation" strips MUI Alert's default role="alert" so the
+            assertive region does not nest inside (and double-announce with)
+            the polite wrapper above. */}
         {!openCallInView && (
-          <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>
+          <Alert
+            severity="info"
+            role="presentation"
+            sx={{ borderRadius: 0, py: 0 }}
+          >
             {hasOpenCall
               ? 'The open data call is not in the selected view'
               : "No open data call; showing each system's most recently updated call"}
