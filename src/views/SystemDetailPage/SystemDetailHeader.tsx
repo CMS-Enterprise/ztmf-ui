@@ -2,6 +2,7 @@ import { Box, Typography, IconButton } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { useHref, useNavigate } from 'react-router-dom'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 
 interface SystemDetailHeaderProps {
   systemName: string
@@ -36,9 +37,7 @@ export default function SystemDetailHeader({
   // cannot be composed in; useHref resolves the path the same way Link would
   // (under the app's hash router it yields `#/questionnaire/<acronym>`) instead
   // of hand-writing the fragment. (#640 review)
-  const questionnaireHref = useHref(
-    `/questionnaire/${fismaacronym.toLowerCase()}`
-  )
+  const questionnaireHref = useHref(questionnairePath(fismaacronym))
 
   return (
     <Box

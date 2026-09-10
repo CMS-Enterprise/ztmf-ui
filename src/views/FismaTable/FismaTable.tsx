@@ -39,7 +39,7 @@ import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { useNavigate, Link } from 'react-router-dom'
-import { RouteNames } from '@/router/constants'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import { ERROR_MESSAGES } from '../../constants'
 import { isAuthHandled } from '@/utils/notify'
 import VisibilityIcon from '@mui/icons-material/Visibility'
@@ -629,7 +629,7 @@ export default function FismaTable({
     fismaacronym: string,
     call: datacall | undefined
   ) => {
-    navigate(`/${RouteNames.QUESTIONNAIRE}/${fismaacronym.toLowerCase()}`, {
+    navigate(questionnairePath(fismaacronym), {
       state: {
         fismasystemid,
         datacallid: call?.datacallid ?? activeDataCallId,

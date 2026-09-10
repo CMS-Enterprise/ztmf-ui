@@ -31,7 +31,6 @@ import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
-import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
@@ -85,6 +84,7 @@ import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
   toSlug,
   encodeDatacallSlug,
+  questionnairePath,
   resolveSystemIdByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
@@ -734,7 +734,12 @@ export default function QuestionnarePage() {
     const q = questions[entry.functionid]
     if (q) {
       navigate(
-        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+        questionnairePath(
+          fismaacronym,
+          datacall,
+          toSlug(q.pillar),
+          toSlug(q.function)
+        ),
         {
           state: { fismasystemid: system, ...datacallStateRef.current },
           replace: true,
@@ -978,7 +983,12 @@ export default function QuestionnarePage() {
               setStepFunctionId(sortedFuncId)
               setCategories(categoriesData)
               navigate(
-                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(targetPillarName)}/${toSlug(targetFunctionName)}`,
+                questionnairePath(
+                  fismaacronym,
+                  datacall,
+                  toSlug(targetPillarName),
+                  toSlug(targetFunctionName)
+                ),
                 {
                   state: { fismasystemid: system, ...datacallStateRef.current },
                   replace: true,
@@ -1654,7 +1664,12 @@ export default function QuestionnarePage() {
                                   setOpenAlert(true)
                                 } else {
                                   navigate(
-                                    `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
+                                    questionnairePath(
+                                      fismaacronym,
+                                      datacall,
+                                      toSlug(pillar.name),
+                                      toSlug(func.function.function)
+                                    ),
                                     {
                                       state: {
                                         fismasystemid: system,
@@ -1928,7 +1943,12 @@ export default function QuestionnarePage() {
                           if (questions[id]) {
                             const q = questions[id]
                             navigate(
-                              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                              questionnairePath(
+                                fismaacronym,
+                                datacall,
+                                toSlug(q.pillar),
+                                toSlug(q.function)
+                              ),
                               {
                                 state: {
                                   fismasystemid: system,
@@ -1973,7 +1993,12 @@ export default function QuestionnarePage() {
                             if (questions[id]) {
                               const q = questions[id]
                               navigate(
-                                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                                questionnairePath(
+                                  fismaacronym,
+                                  datacall,
+                                  toSlug(q.pillar),
+                                  toSlug(q.function)
+                                ),
                                 {
                                   state: {
                                     fismasystemid: system,

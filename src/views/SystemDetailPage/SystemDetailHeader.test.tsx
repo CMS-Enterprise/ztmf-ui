@@ -60,6 +60,16 @@ it('targets the questionnaire keyed on the lowercased acronym', () => {
   ).toBe('/questionnaire/ssd-ex')
 })
 
+it('percent-encodes an acronym containing a slash', () => {
+  // "TIE/LN" unencoded splits into two path segments, so :fismaacronym
+  // captures only "tie" and the page reports the system as not found. This
+  // entry point carries no route state, so the URL is all resolution can use.
+  renderHeader({ fismaacronym: 'TIE/LN' })
+  expect(
+    screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
+  ).toBe('/questionnaire/tie%2Fln')
+})
+
 it('shows Questionnaire alongside Edit for an editor', () => {
   renderHeader({ canEdit: true })
   expect(

@@ -101,6 +101,13 @@ beforeEach(() => {
         fismaname: 'Super Star Destroyer Executor Command Systems',
         datacenterenvironment: 'Imperial-Fleet',
       },
+      // Slash-bearing acronym (misc#382).
+      {
+        fismasystemid: 1003,
+        fismaacronym: 'TIE/LN',
+        fismaname: 'TIE Line Fighter Avionics',
+        datacenterenvironment: 'Imperial-Fleet',
+      },
     ],
     setFismaSystems: jest.fn(),
     showDecommissioned: false,
@@ -131,7 +138,8 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
     { initialEntries: [entry] }
   )
-  return render(<RouterProvider router={router} />)
+  render(<RouterProvider router={router} />)
+  return router
 }
 
 const optionsCalls = () =>
@@ -317,4 +325,58 @@ it('still warns not-found when the acronym is in neither the active nor the deco
   )
   // The decommissioned list was actually consulted before concluding.
   expect(callsTo('fismasystems?decommissioned=true')).toHaveLength(1)
+})
+
+// misc#382: an acronym containing a slash must survive the round trip through
+// the URL. Unencoded, "TIE/LN" splits :fismaacronym into "tie" and shifts every
+// later segment left, so resolution missed and the page warned not-found.
+describe('slash-bearing acronym (misc#382)', () => {
+  it('resolves the system from a percent-encoded acronym on a cold load', async () => {
+    renderAt(
+      '/questionnaire/tie%2Fln/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+    )
+
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(
+        expect.stringContaining('/fismasystems/1003/questions'),
+        expect.anything()
+      )
+    )
+    expect(
+      screen.queryByText(/Could not find a system/i)
+    ).not.toBeInTheDocument()
+  })
+
+  it('resolves the bare acronym URL with no route state (System Details entry / refresh)', async () => {
+    // The System Details button is a plain anchor and carries no location.state,
+    // so the URL is the only thing resolution can use. This is also what a
+    // refresh or a pasted link hands the page.
+    renderAt('/questionnaire/tie%2Fln')
+
+    await waitFor(() =>
+      expect(mockGet).toHaveBeenCalledWith(
+        expect.stringContaining('/fismasystems/1003/questions'),
+        expect.anything()
+      )
+    )
+    expect(
+      screen.queryByText(/Could not find a system/i)
+    ).not.toBeInTheDocument()
+  })
+
+  it('keeps the acronym encoded through the canonical redirect, so in-page navigation stays resolvable', async () => {
+    const router = renderAt('/questionnaire/tie%2Fln')
+
+    // The page rewrites the URL to the fully-qualified deep link once the
+    // cycle and first function are known. That rewrite must not re-split the
+    // acronym, or the next render drops to the not-found state.
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        '/questionnaire/tie%2Fln/Audit_Fields_Smoke_Cycle/identity/imperial-identity-verification'
+      )
+    )
+    expect(
+      screen.queryByText(/Could not find a system/i)
+    ).not.toBeInTheDocument()
+  })
 })

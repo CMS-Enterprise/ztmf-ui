@@ -1,6 +1,7 @@
 import {
   toSlug,
   encodeDatacallSlug,
+  questionnairePath,
   resolveSystemIdByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
@@ -50,6 +51,41 @@ describe('resolveSystemIdByAcronym', () => {
 
   it('returns undefined when systems have not loaded yet', () => {
     expect(resolveSystemIdByAcronym([], 'aco-ms')).toBeUndefined()
+  })
+
+  it('resolves an acronym containing a slash, as useParams hands it back decoded', () => {
+    expect(resolveSystemIdByAcronym([sys(3, 'TIE/LN')], 'tie/ln')).toBe(3)
+  })
+})
+
+describe('questionnairePath', () => {
+  it('builds the bare acronym path', () => {
+    expect(questionnairePath('SSD-EX')).toBe('/questionnaire/ssd-ex')
+  })
+
+  it('appends the datacall, pillar and function segments', () => {
+    expect(questionnairePath('SSD-EX', 'FY2026_Q1', 'identity', 'auth')).toBe(
+      '/questionnaire/ssd-ex/FY2026_Q1/identity/auth'
+    )
+  })
+
+  it('percent-encodes a slash in the acronym instead of splitting the path', () => {
+    // Unencoded, "tie/ln" makes :fismaacronym capture "tie" and shifts every
+    // later segment one place left.
+    expect(questionnairePath('TIE/LN')).toBe('/questionnaire/tie%2Fln')
+    expect(questionnairePath('TIE/LN', 'FY2026_Q1', 'identity', 'auth')).toBe(
+      '/questionnaire/tie%2Fln/FY2026_Q1/identity/auth'
+    )
+  })
+
+  it('encodes the datacall segment too, so a slash in a call name cannot split it', () => {
+    expect(questionnairePath('ssd-ex', encodeDatacallSlug('FY26 A/B'))).toBe(
+      '/questionnaire/ssd-ex/FY26_A%2FB'
+    )
+  })
+
+  it('tolerates a missing acronym rather than emitting "undefined"', () => {
+    expect(questionnairePath(undefined)).toBe('/questionnaire/')
   })
 })
 

@@ -49,4 +49,12 @@ describe('BreadCrumbs', () => {
     renderAt('/questionnaire/acumen%20gss', { 'acumen gss': 'ACUMEN-GSS' })
     expect(screen.getByText('ACUMEN-GSS')).toBeInTheDocument()
   })
+
+  it('shows a slash-bearing acronym as one crumb, not percent-encoded or split (misc#382)', () => {
+    renderAt('/questionnaire/tie%2Fln', { 'tie/ln': 'TIE/LN' })
+    expect(screen.getByText('TIE/LN')).toBeInTheDocument()
+    expect(screen.queryByText(/%2F/)).not.toBeInTheDocument()
+    // The pre-fix URL produced a second crumb for the tail of the acronym.
+    expect(screen.queryByText('Ln')).not.toBeInTheDocument()
+  })
 })
