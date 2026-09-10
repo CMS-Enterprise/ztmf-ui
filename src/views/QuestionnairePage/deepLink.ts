@@ -33,19 +33,27 @@ export function resolveSystemIdByAcronym(
 export const encodeDatacallSlug = (name: string) =>
   name.replaceAll('_', '__').replaceAll(' ', '_')
 
+// The deep-link tail of a questionnaire URL. Taken as one object rather than
+// three optional positionals so a caller cannot pass a pillar without a
+// datacall: that would silently shift the pillar into the :datacallid slot,
+// which is the same class of bug as the unencoded slash below.
+type QuestionnaireDeepLink = {
+  datacall: string
+  pillar: string
+  function: string
+}
+
 // Build a questionnaire URL. Every segment is percent-encoded: acronyms like
 // "TIE/LN" would otherwise split into extra path segments and miss the route's
 // :fismaacronym. useParams decodes, so the resolvers above match unchanged.
 export function questionnairePath(
   acronym: string | undefined,
-  datacallSlug?: string,
-  pillarSlug?: string,
-  functionSlug?: string
+  deepLink?: QuestionnaireDeepLink
 ): string {
   const segments = [acronym?.toLowerCase() ?? '']
-  if (datacallSlug !== undefined) segments.push(datacallSlug)
-  if (pillarSlug !== undefined) segments.push(pillarSlug)
-  if (functionSlug !== undefined) segments.push(functionSlug)
+  if (deepLink) {
+    segments.push(deepLink.datacall, deepLink.pillar, deepLink.function)
+  }
   return `/${RouteIds.QUESTIONNAIRE}/${segments.map(encodeURIComponent).join('/')}`
 }
 

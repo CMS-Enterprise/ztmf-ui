@@ -64,27 +64,42 @@ describe('questionnairePath', () => {
   })
 
   it('appends the datacall, pillar and function segments', () => {
-    expect(questionnairePath('SSD-EX', 'FY2026_Q1', 'identity', 'auth')).toBe(
-      '/questionnaire/ssd-ex/FY2026_Q1/identity/auth'
-    )
+    expect(
+      questionnairePath('SSD-EX', {
+        datacall: 'FY2026_Q1',
+        pillar: 'identity',
+        function: 'auth',
+      })
+    ).toBe('/questionnaire/ssd-ex/FY2026_Q1/identity/auth')
   })
 
   it('percent-encodes a slash in the acronym instead of splitting the path', () => {
     // Unencoded, "tie/ln" makes :fismaacronym capture "tie" and shifts every
     // later segment one place left.
     expect(questionnairePath('TIE/LN')).toBe('/questionnaire/tie%2Fln')
-    expect(questionnairePath('TIE/LN', 'FY2026_Q1', 'identity', 'auth')).toBe(
-      '/questionnaire/tie%2Fln/FY2026_Q1/identity/auth'
-    )
+    expect(
+      questionnairePath('TIE/LN', {
+        datacall: 'FY2026_Q1',
+        pillar: 'identity',
+        function: 'auth',
+      })
+    ).toBe('/questionnaire/tie%2Fln/FY2026_Q1/identity/auth')
   })
 
   it('encodes the datacall segment too, so a slash in a call name cannot split it', () => {
-    expect(questionnairePath('ssd-ex', encodeDatacallSlug('FY26 A/B'))).toBe(
-      '/questionnaire/ssd-ex/FY26_A%2FB'
-    )
+    expect(
+      questionnairePath('ssd-ex', {
+        datacall: encodeDatacallSlug('FY26 A/B'),
+        pillar: 'identity',
+        function: 'auth',
+      })
+    ).toBe('/questionnaire/ssd-ex/FY26_A%2FB/identity/auth')
   })
 
-  it('tolerates a missing acronym rather than emitting "undefined"', () => {
+  it('emits an empty segment rather than "undefined" for a missing acronym', () => {
+    // Unreachable in practice: fismaacronym is required on FismaSystemType and
+    // a matched route always supplies the param. This pins the non-crashing
+    // shape, not a supported URL — /questionnaire/ matches no route.
     expect(questionnairePath(undefined)).toBe('/questionnaire/')
   })
 })

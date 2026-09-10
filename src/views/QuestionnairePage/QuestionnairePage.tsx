@@ -734,12 +734,11 @@ export default function QuestionnarePage() {
     const q = questions[entry.functionid]
     if (q) {
       navigate(
-        questionnairePath(
-          fismaacronym,
+        questionnairePath(fismaacronym, {
           datacall,
-          toSlug(q.pillar),
-          toSlug(q.function)
-        ),
+          pillar: toSlug(q.pillar),
+          function: toSlug(q.function),
+        }),
         {
           state: { fismasystemid: system, ...datacallStateRef.current },
           replace: true,
@@ -983,12 +982,11 @@ export default function QuestionnarePage() {
               setStepFunctionId(sortedFuncId)
               setCategories(categoriesData)
               navigate(
-                questionnairePath(
-                  fismaacronym,
+                questionnairePath(fismaacronym, {
                   datacall,
-                  toSlug(targetPillarName),
-                  toSlug(targetFunctionName)
-                ),
+                  pillar: toSlug(targetPillarName),
+                  function: toSlug(targetFunctionName),
+                }),
                 {
                   state: { fismasystemid: system, ...datacallStateRef.current },
                   replace: true,
@@ -1664,12 +1662,11 @@ export default function QuestionnarePage() {
                                   setOpenAlert(true)
                                 } else {
                                   navigate(
-                                    questionnairePath(
-                                      fismaacronym,
+                                    questionnairePath(fismaacronym, {
                                       datacall,
-                                      toSlug(pillar.name),
-                                      toSlug(func.function.function)
-                                    ),
+                                      pillar: toSlug(pillar.name),
+                                      function: toSlug(func.function.function),
+                                    }),
                                     {
                                       state: {
                                         fismasystemid: system,
@@ -1943,12 +1940,11 @@ export default function QuestionnarePage() {
                           if (questions[id]) {
                             const q = questions[id]
                             navigate(
-                              questionnairePath(
-                                fismaacronym,
+                              questionnairePath(fismaacronym, {
                                 datacall,
-                                toSlug(q.pillar),
-                                toSlug(q.function)
-                              ),
+                                pillar: toSlug(q.pillar),
+                                function: toSlug(q.function),
+                              }),
                               {
                                 state: {
                                   fismasystemid: system,
@@ -1993,12 +1989,11 @@ export default function QuestionnarePage() {
                             if (questions[id]) {
                               const q = questions[id]
                               navigate(
-                                questionnairePath(
-                                  fismaacronym,
+                                questionnairePath(fismaacronym, {
                                   datacall,
-                                  toSlug(q.pillar),
-                                  toSlug(q.function)
-                                ),
+                                  pillar: toSlug(q.pillar),
+                                  function: toSlug(q.function),
+                                }),
                                 {
                                   state: {
                                     fismasystemid: system,

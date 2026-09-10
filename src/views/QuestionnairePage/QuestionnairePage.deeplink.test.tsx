@@ -138,8 +138,7 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
     { initialEntries: [entry] }
   )
-  render(<RouterProvider router={router} />)
-  return router
+  return { router, ...render(<RouterProvider router={router} />) }
 }
 
 const optionsCalls = () =>
@@ -365,7 +364,7 @@ describe('slash-bearing acronym (misc#382)', () => {
   })
 
   it('keeps the acronym encoded through the canonical redirect, so in-page navigation stays resolvable', async () => {
-    const router = renderAt('/questionnaire/tie%2Fln')
+    const { router } = renderAt('/questionnaire/tie%2Fln')
 
     // The page rewrites the URL to the fully-qualified deep link once the
     // cycle and first function are known. That rewrite must not re-split the
