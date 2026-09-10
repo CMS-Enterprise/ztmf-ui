@@ -673,6 +673,14 @@ export default function SystemDetailPage() {
           <SystemEnrichmentCard
             fismaUid={system.fismauid}
             systemDataCenterEnvironment={system.datacenterenvironment}
+            system={system}
+            isAdmin={isAdmin}
+            onIssoUpdated={async () => {
+              // Same refetch-not-echo rationale as handleSave: the read is the
+              // source of truth for resolved fields like isso_name.
+              triedFetch.current = false
+              await fetchFismaSystems(showDecommissioned)
+            }}
           />
         </>
       )}

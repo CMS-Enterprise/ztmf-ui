@@ -1,6 +1,9 @@
 import { useState, useEffect } from 'react'
 import {
+  Alert,
+  AlertTitle,
   Box,
+  Button,
   Card,
   CardContent,
   CardHeader,
@@ -9,8 +12,14 @@ import {
   Grid,
   Typography,
 } from '@mui/material'
-import { SystemEnrichmentType } from '@/types'
+import {
+  EnrichmentContact,
+  FismaSystemType,
+  SystemEnrichmentType,
+} from '@/types'
 import axiosInstance from '@/axiosConfig'
+import { STATUS_MESSAGES } from '@/constants'
+import { isAuthHandled, notify } from '@/utils/notify'
 
 interface SystemEnrichmentCardProps {
   fismaUid: string
@@ -20,6 +29,78 @@ interface SystemEnrichmentCardProps {
    * disagree, the card flags the difference.
    */
   systemDataCenterEnvironment?: string | null
+  /**
+   * The fisma system this page shows. Its issoemail/isso_name
+   * are ZTMF's system-of-record ISSO, compared against the CFACTS primary
+   * from the enrichment roster; when either side is missing the comparison is
+   * skipped - absence is unknown, not disagreement. The full object is needed
+   * (not just the ISSO pair) because the admin "update ZTMF to match" action
+   * must echo every core field on the PUT - the backend zeroes omitted core
+   * fields rather than leaving them unchanged.
+   */
+  system?: FismaSystemType
+  isAdmin?: boolean
+  /** Called after a successful ISSO update so the parent can refetch. */
+  onIssoUpdated?: () => void | Promise<void>
+}
+
+// CFACTS role display order. The pipeline emits the array in
+// this order already, but sort defensively; unknown roles keep their arrival
+// order after the known ones rather than being dropped.
+const CONTACT_ROLE_ORDER = [
+  'Primary ISSO',
+  'ISSO',
+  'ISSOCS',
+  'BO',
+  'SDM',
+  'Primary CRA',
+  'CRA',
+]
+
+// Friendly section labels for role codes that read poorly on their own.
+// Matching stays on the exact pipeline strings; this is display-only.
+const CONTACT_ROLE_LABELS: Record<string, string> = {
+  BO: 'Business Owner',
+}
+
+// The payload is pipeline-owned jsonb: coerce every field through this so an
+// absent/null/non-string value renders as nothing, never as "undefined".
+// Returns the TRIMMED value so downstream exact matches (role lookup, sort
+// ranking) tolerate stray whitespace in the data.
+function asStr(value: unknown): string | null {
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  return trimmed !== '' ? trimmed : null
+}
+
+function sortContacts(contacts: EnrichmentContact[]): EnrichmentContact[] {
+  const rank = (c: EnrichmentContact) => {
+    const idx = CONTACT_ROLE_ORDER.indexOf(asStr(c.role) ?? '')
+    return idx === -1 ? CONTACT_ROLE_ORDER.length : idx
+  }
+  return contacts
+    .map((c, i) => ({ c, i }))
+    .sort((a, b) => rank(a.c) - rank(b.c) || a.i - b.i)
+    .map((x) => x.c)
+}
+
+// Name comparison is the fallback signal when an email is missing on either
+// side, and the two sources use different formats ("Last, First" vs
+// "First Last"), so compare as order-insensitive word sets. Containment
+// rather than equality: "Leia B. Organa" vs "Organa, Leia" is the same
+// person with a middle name on one side, not a mismatch.
+function nameWords(value: string): Set<string> {
+  return new Set(
+    value.toLowerCase().replace(/[.,]/g, ' ').split(/\s+/).filter(Boolean)
+  )
+}
+
+function namesDisagree(a: string, b: string): boolean {
+  const wa = nameWords(a)
+  const wb = nameWords(b)
+  const contains = (big: Set<string>, small: Set<string>) =>
+    [...small].every((w) => big.has(w))
+  return !(contains(wa, wb) || contains(wb, wa))
 }
 
 function FieldDisplay({
@@ -99,6 +180,9 @@ function normalizeDCE(value: string | null | undefined): string {
 export default function SystemEnrichmentCard({
   fismaUid,
   systemDataCenterEnvironment,
+  system,
+  isAdmin,
+  onIssoUpdated,
 }: SystemEnrichmentCardProps) {
   const [enrichment, setEnrichment] = useState<SystemEnrichmentType | null>(
     null
@@ -106,6 +190,7 @@ export default function SystemEnrichmentCard({
   const [loading, setLoading] = useState(true)
   const [notFound, setNotFound] = useState(false)
   const [hasError, setHasError] = useState(false)
+  const [updatingIsso, setUpdatingIsso] = useState(false)
 
   useEffect(() => {
     const controller = new AbortController()
@@ -193,6 +278,98 @@ export default function SystemEnrichmentCard({
   const dceMismatch =
     normalizeDCE(cfactsDCE) !== '' &&
     normalizeDCE(cfactsDCE) !== normalizeDCE(systemDataCenterEnvironment)
+
+  // Full CFACTS roster. Absent on pre-rollout payloads and on
+  // systems with no CFACTS roster - the primary_isso_* pair is the fallback
+  // display, not an edge case.
+  const contacts = sortContacts(
+    (Array.isArray(enrichment.contacts) ? enrichment.contacts : []).filter(
+      (c): c is EnrichmentContact =>
+        !!c &&
+        typeof c === 'object' &&
+        (asStr(c.role) !== null ||
+          asStr(c.name) !== null ||
+          asStr(c.email) !== null)
+    )
+  )
+
+  // One section per role, in canonical order (contacts is already sorted), so
+  // multiple ISSOs/CRAs stack under a single role label instead of repeating
+  // it per person.
+  const contactSections: { role: string; entries: EnrichmentContact[] }[] = []
+  for (const contact of contacts) {
+    const role = asStr(contact.role) ?? 'Contact'
+    const section = contactSections.find((s) => s.role === role)
+    if (section) {
+      section.entries.push(contact)
+    } else {
+      contactSections.push({ role, entries: [contact] })
+    }
+  }
+
+  // CFACTS primary ISSO: the exact 'Primary ISSO' roster entry, else the
+  // legacy flat keys (which the pipeline derives from the same entry when a
+  // roster exists). The pair is resolved atomically from ONE source - a roster
+  // entry missing its email must not borrow the flat email key, or a name and
+  // an email belonging to different people could be blended into one person.
+  const primaryContact = contacts.find((c) => asStr(c.role) === 'Primary ISSO')
+  const cfactsIssoName = primaryContact
+    ? asStr(primaryContact.name)
+    : asStr(enrichment.primary_isso_name)
+  const cfactsIssoEmail = primaryContact
+    ? asStr(primaryContact.email)
+    : asStr(enrichment.primary_isso_email)
+
+  // Emails are the primary signal; names only when an email is missing on
+  // either side. Missing data on a side means unknown, never a mismatch.
+  const ztmfEmail = asStr(system?.issoemail)
+  const ztmfName = asStr(system?.isso_name)
+  let issoMismatch = false
+  if (ztmfEmail && cfactsIssoEmail) {
+    issoMismatch =
+      ztmfEmail.trim().toLowerCase() !== cfactsIssoEmail.trim().toLowerCase()
+  } else if (ztmfName && cfactsIssoName) {
+    issoMismatch = namesDisagree(ztmfName, cfactsIssoName)
+  }
+
+  const formatPerson = (name: string | null, email: string | null) =>
+    name && email ? `${name} (${email})` : name ?? email ?? ''
+
+  const handleAdoptCfactsIsso = async () => {
+    if (!system || !cfactsIssoEmail || updatingIsso) return
+    setUpdatingIsso(true)
+    try {
+      // Echo EVERY core field, exactly like the page's handleSave. "Omitted
+      // means leave unchanged" only holds for the extended pointer fields on
+      // this PUT - omitted core fields are written back as zero values, so a
+      // partial payload silently blanks the system. Extended fields are all
+      // omitted (no diff to send). isso_name too: a written name becomes a
+      // permanent stored override (see FismaSystemType), and CFACTS names
+      // arrive in "Last, First" - the backend resolves the display name from
+      // the new ISSO's user record instead.
+      await axiosInstance.put(`fismasystems/${system.fismasystemid}`, {
+        fismauid: system.fismauid,
+        fismaacronym: system.fismaacronym,
+        fismaname: system.fismaname,
+        fismasubsystem: system.fismasubsystem,
+        component: system.component,
+        groupacronym: system.groupacronym,
+        groupname: system.groupname,
+        divisionname: system.divisionname,
+        datacenterenvironment: system.datacenterenvironment,
+        datacallcontact: system.datacallcontact,
+        issoemail: cfactsIssoEmail,
+        sdl_sync_enabled: system.sdl_sync_enabled,
+      })
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      await onIssoUpdated?.()
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
+    } finally {
+      setUpdatingIsso(false)
+    }
+  }
 
   return (
     <Grid container spacing={3}>
@@ -298,27 +475,107 @@ export default function SystemEnrichmentCard({
             sx={{ pb: 0 }}
           />
           <CardContent>
-            <Grid container spacing={3}>
-              <Grid item xs={12} sm={6}>
-                <FieldDisplay
-                  label="Primary ISSO Name"
-                  value={enrichment.primary_isso_name}
-                />
+            {contactSections.length > 0 ? (
+              <Grid container spacing={3}>
+                {contactSections.map(({ role, entries }) => (
+                  <Grid item xs={12} sm={6} md={4} key={role}>
+                    <Typography
+                      variant="caption"
+                      color="text.secondary"
+                      component="div"
+                    >
+                      {CONTACT_ROLE_LABELS[role] ?? role}
+                    </Typography>
+                    {entries.map((contact, idx) => {
+                      const name = asStr(contact.name)
+                      const email = asStr(contact.email)
+                      return (
+                        <Box
+                          key={idx}
+                          sx={idx < entries.length - 1 ? { mb: 1 } : undefined}
+                        >
+                          <Typography
+                            variant="body1"
+                            sx={{ wordBreak: 'break-word' }}
+                          >
+                            {name ?? email ?? '—'}
+                          </Typography>
+                          {name && email && (
+                            <Typography
+                              variant="body2"
+                              color="text.secondary"
+                              sx={{ wordBreak: 'break-word' }}
+                            >
+                              {email}
+                            </Typography>
+                          )}
+                        </Box>
+                      )
+                    })}
+                  </Grid>
+                ))}
               </Grid>
-              <Grid item xs={12} sm={6}>
-                <FieldDisplay
-                  label="Primary ISSO Email"
-                  value={enrichment.primary_isso_email}
-                />
+            ) : (
+              <Grid container spacing={3}>
+                <Grid item xs={12} sm={6}>
+                  <FieldDisplay
+                    label="Primary ISSO Name"
+                    value={enrichment.primary_isso_name}
+                  />
+                </Grid>
+                <Grid item xs={12} sm={6}>
+                  <FieldDisplay
+                    label="Primary ISSO Email"
+                    value={enrichment.primary_isso_email}
+                  />
+                </Grid>
               </Grid>
-            </Grid>
+            )}
+            {/* The live region stays mounted and only its contents change:
+                a region inserted into the DOM at the same moment as its text
+                is generally not announced (same pattern as FismaTable's
+                call-scope notice). */}
+            <Box role="status" aria-live="polite">
+              {issoMismatch && (
+                <Alert severity="warning" role="presentation" sx={{ mt: 2 }}>
+                  <AlertTitle>
+                    ZTMF assigned ISSO does not match CFACTS
+                  </AlertTitle>
+                  <Typography variant="body2">
+                    ZTMF assigned ISSO: {formatPerson(ztmfName, ztmfEmail)}
+                  </Typography>
+                  <Typography variant="body2">
+                    CFACTS primary ISSO:{' '}
+                    {formatPerson(cfactsIssoName, cfactsIssoEmail)}
+                  </Typography>
+                  {isAdmin && system && cfactsIssoEmail && (
+                    <Button
+                      type="button"
+                      size="small"
+                      variant="outlined"
+                      color="warning"
+                      onClick={handleAdoptCfactsIsso}
+                      disabled={updatingIsso}
+                      sx={{ mt: 1 }}
+                    >
+                      Update ZTMF to match CFACTS
+                    </Button>
+                  )}
+                </Alert>
+              )}
+            </Box>
           </CardContent>
         </Card>
       </Grid>
 
-      {/* Footer: sync info */}
+      {/* Footer: sync info. The id anchors the frostfall system-detail scan's
+          waitFor - it only exists once the enrichment payload has rendered. */}
       <Grid item xs={12}>
-        <Typography variant="caption" color="text.secondary">
+        <Typography
+          id="enrichment-synced-at"
+          variant="caption"
+          color="text.secondary"
+        >
           Data as of: {new Date(enrichment.synced_at).toLocaleString()}
           {enrichment.last_modified_date &&
             ` · Last modified in CFACTS: ${formatDate(enrichment.last_modified_date)}`}
