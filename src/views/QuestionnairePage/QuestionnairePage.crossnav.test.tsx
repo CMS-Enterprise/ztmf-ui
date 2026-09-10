@@ -142,7 +142,7 @@ function renderPage() {
       { path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> },
       { path: '/systems/:fismasystemid', element: <div>system detail</div> },
     ],
-    { initialEntries: ['/questionnaire/ssd-ex'] }
+    { initialEntries: ['/systems/1002/questionnaire'] }
   )
   const { unmount } = render(<RouterProvider router={router} />)
   return { router, unmount }

@@ -2,16 +2,13 @@ import { Box, Typography, IconButton } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { useHref, useNavigate } from 'react-router-dom'
-import type { MouseEvent } from 'react'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 
 interface SystemDetailHeaderProps {
   systemName: string
-  /** Carried in route state by the Questionnaire link so the questionnaire
-   * opens this exact system; acronyms are not unique. */
+  /** Keys the Questionnaire link; the questionnaire route is on the system id,
+   * the same key this page is routed by (ui#609, ztmf-misc#386). */
   fismasystemid: number
-  /** Drives the Questionnaire link's URL; the questionnaire route is keyed on
-   * the acronym, not the fismasystemid this page is routed by (ui#609). */
-  fismaacronym: string
   /** Admins edit the whole form; an assigned ISSO gets the same Edit button
    * but only the target-maturity card unlocks for them (ztmf#398). */
   canEdit: boolean
@@ -26,7 +23,6 @@ interface SystemDetailHeaderProps {
 export default function SystemDetailHeader({
   systemName,
   fismasystemid,
-  fismaacronym,
   canEdit,
   isEditing,
   isSaving,
@@ -39,26 +35,9 @@ export default function SystemDetailHeader({
   // Rendered as an <a> via CmsButton's href so open-in-new-tab and copy-link
   // work. CmsButton has no polymorphic `component` prop, so react-router's Link
   // cannot be composed in; useHref resolves the path the same way Link would
-  // (under the app's hash router it yields `#/questionnaire/<acronym>`) instead
-  // of hand-writing the fragment. (#640 review)
-  const questionnairePath = `/questionnaire/${fismaacronym.toLowerCase()}`
-  const questionnaireHref = useHref(questionnairePath)
-  // A plain left click navigates in-app with the fismasystemid in route state,
-  // which QuestionnairePage prefers over resolving the acronym. Modified
-  // clicks fall through to the anchor so open-in-new-tab still works.
-  const openQuestionnaire = (e: MouseEvent<HTMLAnchorElement>) => {
-    if (
-      e.defaultPrevented ||
-      e.button !== 0 ||
-      e.metaKey ||
-      e.ctrlKey ||
-      e.shiftKey ||
-      e.altKey
-    )
-      return
-    e.preventDefault()
-    navigate(questionnairePath, { state: { fismasystemid } })
-  }
+  // (under the app's hash router it yields `#/systems/<id>/questionnaire`)
+  // instead of hand-writing the fragment. (#640 review)
+  const questionnaireHref = useHref(questionnairePath(fismasystemid))
 
   return (
     <Box
@@ -95,17 +74,14 @@ export default function SystemDetailHeader({
         ) : (
           <>
             {/* Cross-navigation to this system's questionnaire (ui#609). The
-                route state carries only the fismasystemid: QuestionnairePage
-                falls back to the selected/latest data call when location.state
-                has no datacallid, which is the right default arriving from
-                here, and the href stays plainly shareable. Rendered only
-                outside edit mode so a dirty form keeps Save/Cancel as its only
-                actions. A decommissioned system links too and the
-                questionnaire's own "no questionnaire is available" alert
-                explains the outcome. */}
-            <CmsButton href={questionnaireHref} onClick={openQuestionnaire}>
-              Questionnaire
-            </CmsButton>
+                target carries no route state: QuestionnairePage falls back to
+                the selected/latest data call when location.state has no
+                datacallid, which is the right default arriving from here, and it
+                keeps the link plainly shareable. Rendered only outside edit mode
+                so a dirty form keeps Save/Cancel as its only actions. A
+                decommissioned system links too and the questionnaire's own
+                "no questionnaire is available" alert explains the outcome. */}
+            <CmsButton href={questionnaireHref}>Questionnaire</CmsButton>
             {canEdit && (
               <CmsButton variation="solid" onClick={onEdit}>
                 Edit

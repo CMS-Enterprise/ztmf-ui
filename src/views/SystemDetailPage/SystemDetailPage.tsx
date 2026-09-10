@@ -610,7 +610,6 @@ export default function SystemDetailPage() {
       <SystemDetailHeader
         systemName={system.fismaname}
         fismasystemid={system.fismasystemid}
-        fismaacronym={system.fismaacronym}
         canEdit={isAdmin}
         isEditing={isEditing}
         isSaving={isSaving}

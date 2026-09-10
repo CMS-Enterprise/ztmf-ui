@@ -1,4 +1,36 @@
 import { FismaSystemType, datacall } from '@/types'
+import { RouteIds } from '@/router/constants'
+
+// Optional deep-link tail of a questionnaire URL. Segments are appended in
+// order and stop at the first missing one, so a pillar can never shift into
+// the :datacallid slot.
+export type QuestionnaireDeepLink = {
+  datacall?: string
+  pillar?: string
+  function?: string
+}
+
+// The one builder for questionnaire URLs. Keyed on fismasystemid, which is
+// unique and URL-safe, unlike the acronym the route used to carry. Every
+// segment is percent-encoded so a data call or function name with a slash
+// stays one segment.
+export function questionnairePath(
+  fismasystemid: number,
+  deepLink?: QuestionnaireDeepLink
+): string {
+  const tail: string[] = []
+  for (const seg of [
+    deepLink?.datacall,
+    deepLink?.pillar,
+    deepLink?.function,
+  ]) {
+    if (!seg) break
+    tail.push(encodeURIComponent(seg))
+  }
+  return [`/systems/${fismasystemid}/${RouteIds.QUESTIONNAIRE}`, ...tail].join(
+    '/'
+  )
+}
 
 // Slugify a pillar/function name for the questionnaire URL. Kept here (rather
 // than inline in QuestionnairePage) so the deep-link resolvers below and the

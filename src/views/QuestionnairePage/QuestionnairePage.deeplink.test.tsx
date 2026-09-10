@@ -128,11 +128,18 @@ beforeEach(() => {
 // exact-count assertions lie about production behavior.
 function renderAt(entry: string | { pathname: string; state: unknown }) {
   const router = createMemoryRouter(
-    [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
+    [
+      { path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> },
+      // Pre-#386 acronym URLs still resolve, by redirecting to the id URL.
+      { path: AppRoutes.QUESTIONNAIRE_LEGACY, element: <QuestionnairePage /> },
+    ],
     { initialEntries: [entry] }
   )
-  return render(<RouterProvider router={router} />)
+  return { ...render(<RouterProvider router={router} />), router }
 }
+
+const CANONICAL_DEEP_LINK =
+  '/systems/1002/questionnaire/FY2025_Death_Star_Assessment/networks/imperial-network-security'
 
 const optionsCalls = () =>
   mockGet.mock.calls
@@ -144,11 +151,30 @@ const callsTo = (fragment: string) =>
     .map((c) => c[0] as string)
     .filter((u) => u.includes(fragment))
 
-it('resolves the system from :fismaacronym on a cold load (no location.state)', async () => {
-  renderAt(
+it('loads the system from :fismasystemid on a cold load (no location.state)', async () => {
+  renderAt(CANONICAL_DEEP_LINK)
+
+  await waitFor(() =>
+    expect(mockGet).toHaveBeenCalledWith(
+      expect.stringContaining('/fismasystems/1002/questions'),
+      expect.anything()
+    )
+  )
+  expect(screen.queryByText(/Could not find a system/i)).not.toBeInTheDocument()
+  // The id is the identity; the acronym is never consulted.
+  expect(
+    screen.getByText('Super Star Destroyer Executor Command Systems')
+  ).toBeInTheDocument()
+})
+
+it('redirects a legacy acronym URL to the id URL, keeping the deep-link tail', async () => {
+  const { router } = renderAt(
     '/questionnaire/ssd-ex/FY2025_Death_Star_Assessment/networks/imperial-network-security'
   )
 
+  await waitFor(() =>
+    expect(router.state.location.pathname).toBe(CANONICAL_DEEP_LINK)
+  )
   // The old failure mode was this warning; it must not appear now.
   await waitFor(() =>
     expect(mockGet).toHaveBeenCalledWith(
@@ -157,6 +183,16 @@ it('resolves the system from :fismaacronym on a cold load (no location.state)', 
     )
   )
   expect(screen.queryByText(/Could not find a system/i)).not.toBeInTheDocument()
+})
+
+it('warns not-found for an id that is in neither the active nor the decommissioned list', async () => {
+  renderAt('/systems/4242/questionnaire')
+
+  await waitFor(() =>
+    expect(screen.getByText(/Could not find a system/i)).toBeInTheDocument()
+  )
+  expect(callsTo('fismasystems?decommissioned=true')).toHaveLength(1)
+  expect(callsTo('/questions')).toHaveLength(0)
 })
 
 it('resolves the cycle from the URL datacall segment (not the latest/selected call)', async () => {
@@ -260,13 +296,21 @@ describe('ambiguous acronym', () => {
       screen.queryByText(/Could not find a system/i)
     ).not.toBeInTheDocument()
     expect(callsTo('/questions')).toHaveLength(0)
+    // Nothing in the decommissioned list can change the outcome (ui#734 review).
+    expect(callsTo('fismasystems?decommissioned=true')).toHaveLength(0)
   })
 
   it('opens the exact system when route state carries its fismasystemid', async () => {
-    renderAt({
+    const { router } = renderAt({
       pathname: '/questionnaire/pending',
       state: { fismasystemid: PENDING_B.fismasystemid },
     })
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toBe(
+        `/systems/${PENDING_B.fismasystemid}/questionnaire`
+      )
+    )
 
     await waitFor(() =>
       expect(

@@ -337,9 +337,13 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
-  const isSystemDetail = location.pathname.startsWith('/systems/')
+  // The questionnaire now nests under /systems/:id, so System Detail has to be
+  // matched exactly or the questionnaire would lose the data call picker.
+  const isSystemDetail = /^\/systems\/[^/]+\/?$/.test(location.pathname)
   const isHomeRoute = location.pathname === '/'
-  const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
+  const isQuestionnaireRoute =
+    location.pathname.startsWith('/questionnaire/') ||
+    /^\/systems\/[^/]+\/questionnaire(\/|$)/.test(location.pathname)
   const datacallContextNeeded =
     isHomeRoute || isQuestionnaireRoute || isSystemDetail
   // Single source of truth for header logo sizing; divider scales with it

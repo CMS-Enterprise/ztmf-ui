@@ -39,7 +39,7 @@ import CustomSnackbar from '../Snackbar/Snackbar'
 import axiosInstance from '@/axiosConfig'
 import { useContextProp } from '../Title/Context'
 import { useNavigate, Link } from 'react-router-dom'
-import { RouteNames } from '@/router/constants'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import { ERROR_MESSAGES } from '../../constants'
 import { isAuthHandled } from '@/utils/notify'
 import VisibilityIcon from '@mui/icons-material/Visibility'
@@ -626,10 +626,9 @@ export default function FismaTable({
   } | null>(null)
   const openQuestionnaire = (
     fismasystemid: number,
-    fismaacronym: string,
     call: datacall | undefined
   ) => {
-    navigate(`/${RouteNames.QUESTIONNAIRE}/${fismaacronym.toLowerCase()}`, {
+    navigate(questionnairePath(fismasystemid), {
       state: {
         fismasystemid,
         datacallid: call?.datacallid ?? activeDataCallId,
@@ -967,7 +966,6 @@ export default function FismaTable({
                     }
                     openQuestionnaire(
                       params.row.fismasystemid,
-                      params.row.fismaacronym,
                       resolveQuestionnaireCall(
                         params.row.fismasystemid,
                         chosenCallMap,
@@ -1150,11 +1148,7 @@ export default function FismaTable({
             <MenuItem
               key={call.datacallid}
               onClick={() => {
-                openQuestionnaire(
-                  callPicker.fismasystemid,
-                  callPicker.fismaacronym,
-                  call
-                )
+                openQuestionnaire(callPicker.fismasystemid, call)
                 setCallPicker(null)
               }}
             >

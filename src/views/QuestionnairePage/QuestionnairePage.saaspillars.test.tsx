@@ -178,10 +178,10 @@ beforeEach(() => {
   })
 })
 
-function renderPage(slug = 'saas-ex') {
+function renderPage(fismasystemid = SAAS_SYSTEM.fismasystemid) {
   const router = createMemoryRouter(
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
-    { initialEntries: [`/questionnaire/${slug}`] }
+    { initialEntries: [`/systems/${fismasystemid}/questionnaire`] }
   )
   return render(<RouterProvider router={router} />)
 }
@@ -248,7 +248,7 @@ it.each([
     // a filter that keyed on something other than the environment - or reduced
     // everything on an in-scope cycle - would pass every other test here.
     mockCtx = makeCtx(call, call, NON_SAAS_SYSTEM)
-    renderPage('aws-ex')
+    renderPage(NON_SAAS_SYSTEM.fismasystemid)
 
     await screen.findByText('IDENTITY')
     await waitFor(() => {
