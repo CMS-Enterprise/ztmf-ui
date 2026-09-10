@@ -23,9 +23,12 @@ jobs:
     secrets: inherit
 
   ui:
-    # One dev sync at a time across all PRs; queue, do not cancel.
+    # One dev sync at a time across all PRs. queue: max keeps every waiter
+    # (default single evicts the pending one, leaving that PR with no dev
+    # deployment and therefore unmergeable); never cancel a sync mid-flight.
     concurrency:
       group: deploy-dev
+      queue: max
       cancel-in-progress: false
     name: ui
     if: github.event.pull_request.draft == false

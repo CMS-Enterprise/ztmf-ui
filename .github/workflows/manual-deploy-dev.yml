@@ -22,6 +22,7 @@ jobs:
     # Shares the dev sync queue with orchestration-dev.
     concurrency:
       group: deploy-dev
+      queue: max
       cancel-in-progress: false
     name: ui
     needs:

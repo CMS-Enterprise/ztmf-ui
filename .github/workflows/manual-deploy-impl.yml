@@ -24,6 +24,7 @@ jobs:
     # Shares the impl sync queue with orchestration-impl.
     concurrency:
       group: deploy-impl
+      queue: max
       cancel-in-progress: false
     name: ui
     needs:
