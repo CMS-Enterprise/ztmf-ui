@@ -3,11 +3,15 @@ import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { useHref, useNavigate } from 'react-router-dom'
 import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
+import type { MouseEvent } from 'react'
 
 interface SystemDetailHeaderProps {
   systemName: string
-  /** Drives the Questionnaire link; the questionnaire route is keyed on the
-   * acronym, not the fismasystemid this page is routed by (ui#609). */
+  /** Carried in route state by the Questionnaire link so the questionnaire
+   * opens this exact system; acronyms are not unique. */
+  fismasystemid: number
+  /** Drives the Questionnaire link's URL; the questionnaire route is keyed on
+   * the acronym, not the fismasystemid this page is routed by (ui#609). */
   fismaacronym: string
   /** Admins edit the whole form; an assigned ISSO gets the same Edit button
    * but only the target-maturity card unlocks for them (ztmf#398). */
@@ -22,6 +26,7 @@ interface SystemDetailHeaderProps {
 
 export default function SystemDetailHeader({
   systemName,
+  fismasystemid,
   fismaacronym,
   canEdit,
   isEditing,
@@ -38,6 +43,24 @@ export default function SystemDetailHeader({
   // (under the app's hash router it yields `#/questionnaire/<acronym>`) instead
   // of hand-writing the fragment. (#640 review)
   const questionnaireHref = useHref(questionnairePath(fismaacronym))
+  const questionnairePath = `/questionnaire/${fismaacronym.toLowerCase()}`
+  const questionnaireHref = useHref(questionnairePath)
+  // A plain left click navigates in-app with the fismasystemid in route state,
+  // which QuestionnairePage prefers over resolving the acronym. Modified
+  // clicks fall through to the anchor so open-in-new-tab still works.
+  const openQuestionnaire = (e: MouseEvent<HTMLAnchorElement>) => {
+    if (
+      e.defaultPrevented ||
+      e.button !== 0 ||
+      e.metaKey ||
+      e.ctrlKey ||
+      e.shiftKey ||
+      e.altKey
+    )
+      return
+    e.preventDefault()
+    navigate(questionnairePath, { state: { fismasystemid } })
+  }
 
   return (
     <Box
@@ -74,14 +97,17 @@ export default function SystemDetailHeader({
         ) : (
           <>
             {/* Cross-navigation to this system's questionnaire (ui#609). The
-                target carries no route state: QuestionnairePage falls back to
-                the selected/latest data call when location.state has no
-                datacallid, which is the right default arriving from here, and it
-                keeps the link plainly shareable. Rendered only outside edit mode
-                so a dirty form keeps Save/Cancel as its only actions. A
-                decommissioned system links too and the questionnaire's own
-                "no questionnaire is available" alert explains the outcome. */}
-            <CmsButton href={questionnaireHref}>Questionnaire</CmsButton>
+                route state carries only the fismasystemid: QuestionnairePage
+                falls back to the selected/latest data call when location.state
+                has no datacallid, which is the right default arriving from
+                here, and the href stays plainly shareable. Rendered only
+                outside edit mode so a dirty form keeps Save/Cancel as its only
+                actions. A decommissioned system links too and the
+                questionnaire's own "no questionnaire is available" alert
+                explains the outcome. */}
+            <CmsButton href={questionnaireHref} onClick={openQuestionnaire}>
+              Questionnaire
+            </CmsButton>
             {canEdit && (
               <CmsButton variation="solid" onClick={onEdit}>
                 Edit

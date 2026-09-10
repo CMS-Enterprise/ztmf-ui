@@ -10,17 +10,29 @@ export const toSlug = (str: string) =>
     .toLowerCase()
     .replaceAll(' ', '-')
 
+// Every system whose acronym matches the :fismaacronym URL param,
+// case-insensitively. fismasystems.fismaacronym is not unique, so a slug can
+// name more than one system.
+export function findSystemsByAcronym(
+  systems: FismaSystemType[],
+  acronym: string | undefined
+): FismaSystemType[] {
+  if (!acronym) return []
+  const target = acronym.toLowerCase()
+  return systems.filter((s) => s.fismaacronym?.toLowerCase() === target)
+}
+
 // Resolve the :fismaacronym URL param to a fismasystemid using the systems list
 // the app already loads. Enables cold loads (paste / refresh / bookmark) where
-// router location.state is empty. Case-insensitive; undefined when unresolved.
+// router location.state is empty. Case-insensitive; undefined when unresolved
+// or ambiguous: taking the first of several matches opened another system's
+// questionnaire, and answers were saved against it.
 export function resolveSystemIdByAcronym(
   systems: FismaSystemType[],
   acronym: string | undefined
 ): number | undefined {
-  if (!acronym) return undefined
-  const target = acronym.toLowerCase()
-  return systems.find((s) => s.fismaacronym?.toLowerCase() === target)
-    ?.fismasystemid
+  const matches = findSystemsByAcronym(systems, acronym)
+  return matches.length === 1 ? matches[0].fismasystemid : undefined
 }
 
 // Encode a datacall name for its URL segment. Spaces become underscores (the

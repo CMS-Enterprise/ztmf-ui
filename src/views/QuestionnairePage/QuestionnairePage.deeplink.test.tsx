@@ -230,6 +230,65 @@ it('shows a not-found warning once systems are loaded and the acronym is unknown
   )
 })
 
+// Acronyms are not unique. Several production systems shared one, and the
+// bare-acronym System Info link opened the first match: the client answered
+// another system's questionnaire while the dashboard showed their own as not
+// scored.
+describe('ambiguous acronym', () => {
+  const PENDING_A = {
+    fismasystemid: 2001,
+    fismaacronym: 'Pending',
+    fismaname: 'First Pending System',
+    datacenterenvironment: 'Imperial-Fleet',
+  }
+  const PENDING_B = {
+    fismasystemid: 2002,
+    fismaacronym: 'Pending',
+    fismaname: 'Second Pending System',
+    datacenterenvironment: 'Imperial-Fleet',
+  }
+  beforeEach(() => {
+    mockCtx.fismaSystems = [
+      ...(mockCtx.fismaSystems as unknown[]),
+      PENDING_A,
+      PENDING_B,
+    ]
+  })
+
+  it('refuses to guess on a bare acronym deep link and says why', async () => {
+    renderAt('/questionnaire/pending')
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/More than one system uses the acronym/i)
+      ).toBeInTheDocument()
+    )
+    expect(
+      screen.queryByText(/Could not find a system/i)
+    ).not.toBeInTheDocument()
+    expect(callsTo('/questions')).toHaveLength(0)
+  })
+
+  it('opens the exact system when route state carries its fismasystemid', async () => {
+    renderAt({
+      pathname: '/questionnaire/pending',
+      state: { fismasystemid: PENDING_B.fismasystemid },
+    })
+
+    await waitFor(() =>
+      expect(
+        callsTo(`/fismasystems/${PENDING_B.fismasystemid}/questions`)
+      ).toHaveLength(1)
+    )
+    expect(
+      callsTo(`/fismasystems/${PENDING_A.fismasystemid}/questions`)
+    ).toHaveLength(0)
+    expect(
+      screen.queryByText(/More than one system uses the acronym/i)
+    ).not.toBeInTheDocument()
+  })
+})
+
 it('shows a spinner (not the not-found warning) while the systems list is still loading', () => {
   mockCtx.fismaSystems = []
   renderAt(
