@@ -86,6 +86,7 @@ import {
   toSlug,
   encodeDatacallSlug,
   resolveSystemIdByAcronym,
+  findSystemsByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
 } from './deepLink'
@@ -1445,12 +1446,21 @@ export default function QuestionnarePage() {
     ? { [fismaacronym]: fismaacronym.toUpperCase() }
     : undefined
   if (!system) {
+    // Acronyms are not unique. A bare acronym link that matches several
+    // systems is refused rather than guessed, so the wrong questionnaire is
+    // never opened (or answered) by accident.
+    const ambiguous =
+      findSystemsByAcronym(fismaSystems, fismaacronym).length > 1 ||
+      findSystemsByAcronym(decommissionedSystems ?? [], fismaacronym).length > 1
     // Cold load (paste / refresh / bookmark): the systems list may still be in
     // flight, so :fismaacronym can't be resolved yet — and if it missed the
     // active list, the decommissioned list is being checked before concluding
     // not-found. Show a spinner until both have answered; only then is the
     // link genuinely unresolvable. (#500 / #524 review)
-    if (fismaSystems.length === 0 || decommissionedSystems === null) {
+    if (
+      !ambiguous &&
+      (fismaSystems.length === 0 || decommissionedSystems === null)
+    ) {
       return (
         <>
           <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
@@ -1467,8 +1477,18 @@ export default function QuestionnarePage() {
         <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
         <Container maxWidth={false} disableGutters>
           <Alert severity="warning" sx={{ mt: 2 }}>
-            Could not find a system matching “{fismaacronym}”. It may not exist,
-            or you may not have access to it.
+            {ambiguous ? (
+              <>
+                More than one system uses the acronym “{fismaacronym}”, so this
+                link cannot tell which questionnaire to open. Open it from the
+                Dashboard or from the system&apos;s System Info page instead.
+              </>
+            ) : (
+              <>
+                Could not find a system matching “{fismaacronym}”. It may not
+                exist, or you may not have access to it.
+              </>
+            )}
           </Alert>
         </Container>
       </>
