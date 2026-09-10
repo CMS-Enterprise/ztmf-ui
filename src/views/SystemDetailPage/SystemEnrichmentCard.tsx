@@ -248,7 +248,10 @@ export default function SystemEnrichmentCard({
     )
   }
 
-  if (error && !notFound) {
+  // A background refetch can fail while Query retains the last successful
+  // result. Keep rendering that usable data; this state is only a full-page
+  // failure when the query has never produced enrichment.
+  if (error && !notFound && !enrichment) {
     return (
       <Typography variant="body2" color="error" sx={{ mt: 1 }}>
         Failed to load ZTMF Insights data. Please try again.

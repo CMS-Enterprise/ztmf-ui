@@ -1,5 +1,5 @@
 /**
- * Fails a production build that bundles the TanStack Query devtools.
+ * Fails a deployable build that bundles the TanStack Query devtools.
  *
  * Two layers already keep the devtools out of production: the
  * `import.meta.env.DEV` gate in main.tsx, and the package's own main entry,
@@ -30,7 +30,7 @@ try {
   bundles = readdirSync(assetsDir).filter((name) => name.endsWith('.js'))
 } catch {
   console.error(
-    `assert-prod-excludes-devtools: ${assetsDir} not found — run this after "vite build --mode production".`
+    `assert-prod-excludes-devtools: ${assetsDir} not found — run this after "vite build".`
   )
   process.exit(1)
 }
@@ -48,8 +48,8 @@ const offenders = bundles.filter((name) => {
 
 if (offenders.length > 0) {
   console.error(
-    `assert-prod-excludes-devtools: devtools code found in production bundle(s): ${offenders.join(', ')}.\n` +
-      'The import.meta.env.DEV gate in main.tsx has stopped eliminating the devtools branch.'
+    `assert-prod-excludes-devtools: devtools code found in deployable bundle(s): ${offenders.join(', ')}.\n` +
+      'Check for use of the always-on /production entry or a devtools packaging/tree-shaking change.'
   )
   process.exit(1)
 }

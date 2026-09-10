@@ -32,7 +32,7 @@ jest.mock('@/utils/notify', () => {
 jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
   const { handleAuthError } = require('@/utils/authInterceptor')
-  const instance = axios.create({ baseURL: '/api/v1/' })
+  const instance = axios.create({ baseURL: 'api/v1/' })
   instance.interceptors.response.use(
     (response: unknown) => response,
     handleAuthError

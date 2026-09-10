@@ -137,10 +137,13 @@ export function CustomFooterSaveComponent(
   const exportBlocked =
     !props.selectedRows ||
     props.selectedRows.length === 0 ||
-    exportCallId === null
+    exportCallId == null
   const saveSystemAnswers = async () => {
+    // The disabled button is the normal guard, but keep the handler safe if it
+    // is invoked programmatically or its wiring changes.
+    if (exportCallId == null) return
     const exportUrl = apiPaths.datacalls.export(
-      exportCallId ?? props.activeDataCallId,
+      exportCallId,
       props.selectedRows ?? []
     )
     try {

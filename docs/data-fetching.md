@@ -81,6 +81,20 @@ const { data, error, isPending } = useQuery({
 })
 ```
 
+TanStack Query retains the last successful `data` when a background refetch
+fails, while also setting `error`. A component that replaces its content with
+an error state must therefore check that no usable data exists:
+
+```ts
+if (error && !data) {
+  return <ErrorState />
+}
+```
+
+Use `isRefetchError` when the UI needs to distinguish a failed background
+refresh from an initial-load failure explicitly. Do not discard successfully
+rendered data solely because `error` is set.
+
 Do not create a component-local `AbortController`; TanStack Query cancels the
 request when the query becomes unused or is superseded.
 

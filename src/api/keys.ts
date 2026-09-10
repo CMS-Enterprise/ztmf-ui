@@ -44,11 +44,13 @@ function withQuery(
  * Canonical API paths. Callers may continue using Axios directly, but endpoint
  * spelling and dynamic path construction live here instead of in each view.
  *
- * Every path starts with `/`, which is safe ONLY because Axios joins
- * `baseURL: '/api/v1/'` and the path by string concatenation (trailing and
- * leading slashes collapsed). Under `fetch` or `new URL` semantics a leading
- * slash would resolve against the origin and silently drop `/api/v1`, so do
- * not hand these paths to anything but the shared Axios instance.
+ * Every path starts with `/`, which is safe ONLY because Axios combines it
+ * with the deliberately relative `baseURL: 'api/v1/'` by trimming the
+ * boundary slashes and concatenating the strings. The resulting request stays
+ * relative to the document path, including under `/pr/<repo>/<n>/`. Under
+ * `fetch` or `new URL` semantics a leading slash would instead resolve against
+ * the origin and silently drop the PR prefix, so do not hand these paths to
+ * anything but the shared Axios instance.
  */
 export const apiPaths = {
   auth: {
@@ -58,7 +60,7 @@ export const apiPaths = {
   datacalls: {
     root: '/datacalls',
     latest: '/datacalls/latest',
-    export: (datacallId: ApiId | undefined, systemIds: readonly ApiId[] = []) =>
+    export: (datacallId: ApiId, systemIds: readonly ApiId[] = []) =>
       withQuery(`/datacalls/${datacallId}/export`, { fsids: systemIds }),
   },
   dataCenterEnvironments: '/datacenterenvironments',
@@ -106,7 +108,9 @@ export const apiPaths = {
     ) =>
       withQuery('/scores', {
         datacallid: datacallId,
-        fismasystemid: systemId,
+        // Preserve the pre-factory URL contract: an unexpectedly missing
+        // system id must be rejected by the API, not broaden into all systems.
+        fismasystemid: String(systemId),
         include: includeFunctionOption ? 'functionoption' : undefined,
       }),
     aggregateByDatacall: (datacallId: ApiId) =>
@@ -147,8 +151,28 @@ export const apiPaths = {
 } as const
 
 /**
+ * Normalizes an id for use inside a cache key.
+ *
+ * `hashKey` stringifies keys, so the number 42 and the string '42' hash to
+ * different entries for the same URL and an invalidation of one would miss the
+ * other. Route params arrive as strings while most callers hold numbers, so
+ * both spellings exist in the codebase. Collapsing to a string here keeps one
+ * resource on one cache entry.
+ *
+ * @param id - The identifier to normalize, or undefined for an absent one.
+ * @returns The id as a string, or undefined when no id was given.
+ */
+function keyId(id: ApiId): string
+function keyId(id: ApiId | undefined): string | undefined
+function keyId(id: ApiId | undefined): string | undefined {
+  return id === undefined ? undefined : String(id)
+}
+
+/**
  * Hierarchical TanStack Query keys. Parameters that affect a response remain
  * structured values so broad prefixes can invalidate related cached reads.
+ * Identifiers pass through `keyId` so a numeric and a string spelling of the
+ * same id share one cache entry.
  */
 export const queryKeys = {
   datacalls: {
@@ -170,29 +194,31 @@ export const queryKeys = {
     list: (decommissioned = false) =>
       ['fisma-systems', 'list', { decommissioned }] as const,
     details: () => ['fisma-systems', 'detail'] as const,
-    detail: (systemId: ApiId) => ['fisma-systems', 'detail', systemId] as const,
+    detail: (systemId: ApiId) =>
+      ['fisma-systems', 'detail', keyId(systemId)] as const,
     questions: (systemId: ApiId, datacallId?: ApiId) =>
       [
         'fisma-systems',
         'detail',
-        systemId,
+        keyId(systemId),
         'questions',
-        { datacallId },
+        { datacallId: keyId(datacallId) },
       ] as const,
     delegates: (systemId: ApiId) =>
-      ['fisma-systems', 'detail', systemId, 'delegates'] as const,
+      ['fisma-systems', 'detail', keyId(systemId), 'delegates'] as const,
     delegateCandidates: (systemId: ApiId, search = '') =>
       [
         'fisma-systems',
         'detail',
-        systemId,
+        keyId(systemId),
         'delegate-candidates',
         { search },
       ] as const,
   },
   functionOptions: (questionId: ApiId) =>
-    ['functions', questionId, 'options'] as const,
-  insights: (systemId: ApiId) => ['insights', { systemId }] as const,
+    ['functions', keyId(questionId), 'options'] as const,
+  insights: (systemId: ApiId) =>
+    ['insights', { systemId: keyId(systemId) }] as const,
   opdivs: {
     all: ['opdivs'] as const,
     list: (includeInactive = false) =>
@@ -204,30 +230,46 @@ export const queryKeys = {
       [
         'scores',
         'list',
-        { datacallId, systemId, includeFunctionOption },
+        {
+          datacallId: keyId(datacallId),
+          systemId: keyId(systemId),
+          includeFunctionOption,
+        },
       ] as const,
     aggregateByDatacall: (datacallId: ApiId) =>
-      ['scores', 'aggregate', { datacallId }] as const,
+      ['scores', 'aggregate', { datacallId: keyId(datacallId) }] as const,
     aggregateBySystem: (systemId: ApiId) =>
-      ['scores', 'aggregate', { systemId, includePillars: true }] as const,
+      [
+        'scores',
+        'aggregate',
+        { systemId: keyId(systemId), includePillars: true },
+      ] as const,
     progress: (datacallId: ApiId) =>
-      ['scores', 'progress', { datacallId }] as const,
+      ['scores', 'progress', { datacallId: keyId(datacallId) }] as const,
     diff: (fromDatacallId: ApiId, toDatacallId: ApiId, systemId: ApiId) =>
-      ['scores', 'diff', { fromDatacallId, toDatacallId, systemId }] as const,
+      [
+        'scores',
+        'diff',
+        {
+          fromDatacallId: keyId(fromDatacallId),
+          toDatacallId: keyId(toDatacallId),
+          systemId: keyId(systemId),
+        },
+      ] as const,
   },
   systemAttributes: (selectableOnly = true) =>
     ['system-attributes', { selectableOnly }] as const,
   systemEnrichment: (fismaUid: ApiId) =>
-    ['system-enrichment', fismaUid] as const,
+    ['system-enrichment', keyId(fismaUid)] as const,
   users: {
     all: ['users'] as const,
     list: (deleted = false) => ['users', 'list', { deleted }] as const,
-    detail: (userId: ApiId) => ['users', 'detail', userId] as const,
+    detail: (userId: ApiId) => ['users', 'detail', keyId(userId)] as const,
     assignedOpdivs: (userId: ApiId) =>
-      ['users', 'detail', userId, 'assigned-opdivs'] as const,
+      ['users', 'detail', keyId(userId), 'assigned-opdivs'] as const,
     assignedFismaSystems: (userId: ApiId) =>
-      ['users', 'detail', userId, 'assigned-fisma-systems'] as const,
+      ['users', 'detail', keyId(userId), 'assigned-fisma-systems'] as const,
     assignableFismaSystems: (userId: ApiId) =>
-      ['users', 'detail', userId, 'assignable-fisma-systems'] as const,
+      ['users', 'detail', keyId(userId), 'assignable-fisma-systems'] as const,
   },
 } as const

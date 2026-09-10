@@ -1,8 +1,9 @@
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { act } from 'react'
 import MockAdapter from 'axios-mock-adapter'
 import { ERROR_MESSAGES } from '@/constants'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -17,7 +18,7 @@ jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
 
   const { handleAuthError } = require('@/utils/authInterceptor')
-  const instance = axios.create({ baseURL: '/api/v1/' })
+  const instance = axios.create({ baseURL: 'api/v1/' })
   instance.interceptors.response.use(
     (response: unknown) => response,
     handleAuthError
@@ -81,6 +82,36 @@ test('200 response renders the enrichment cards with payload fields', async () =
 
   expect(await screen.findByText('Test Package')).toBeInTheDocument()
   expect(screen.getByText('Test ISSO')).toBeInTheDocument()
+})
+
+test('keeps successful enrichment visible when a background refetch fails', async () => {
+  mock.onGet(apiPaths.systemEnrichment(FISMA_UID)).reply(200, {
+    data: {
+      fisma_uuid: FISMA_UID,
+      payload: {
+        authorization_package_name: 'Retained Package',
+      },
+      synced_at: '2026-01-01T00:00:00Z',
+    },
+  })
+
+  const { queryClient } = renderWithProviders(
+    <SystemEnrichmentCard fismaUid={FISMA_UID} />
+  )
+  expect(await screen.findByText('Retained Package')).toBeInTheDocument()
+
+  mock.resetHandlers()
+  mock.onGet(apiPaths.systemEnrichment(FISMA_UID)).reply(500)
+  await act(async () => {
+    await queryClient.refetchQueries({
+      queryKey: queryKeys.systemEnrichment(FISMA_UID),
+    })
+  })
+
+  expect(screen.getByText('Retained Package')).toBeInTheDocument()
+  expect(
+    screen.queryByText(/failed to load ztmf insights data/i)
+  ).not.toBeInTheDocument()
 })
 
 // This is the key skipAuthHandling integration test: a 403 must produce

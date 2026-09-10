@@ -42,7 +42,7 @@ export function renderWithProviders(
     },
   })
 
-  return render(ui, {
+  const result = render(ui, {
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>
         <SnackbarProvider>
@@ -54,4 +54,6 @@ export function renderWithProviders(
     ),
     ...renderOptions,
   })
+
+  return { ...result, queryClient }
 }
