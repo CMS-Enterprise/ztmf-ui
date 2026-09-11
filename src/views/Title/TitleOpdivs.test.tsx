@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import type { userData, OpDiv } from '@/types'
 
 // Title-level coverage for #558. The consumer suites inject opdivs into a
@@ -34,16 +34,6 @@ jest.mock('react-router-dom', () => ({
 jest.mock('@/axiosConfig', () => ({
   __esModule: true,
   default: { get: jest.fn(), post: jest.fn() },
-}))
-
-jest.mock('@/utils/dataCenterEnvironments', () => ({
-  __esModule: true,
-  fetchDataCenterEnvironments: jest.fn(),
-}))
-
-jest.mock('@/utils/opdivs', () => ({
-  __esModule: true,
-  fetchOpDivs: jest.fn(),
 }))
 
 jest.mock('@/views/QuestionnairePage/draftStore', () => ({
@@ -92,18 +82,16 @@ jest.mock('@/assets/ztmf-logo-color.png', () => 'ztmf-logo-color.png', {
 
 import { useLoaderData, useLocation } from 'react-router-dom'
 import axiosInstance from '@/axiosConfig'
-import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
-import { fetchOpDivs } from '@/utils/opdivs'
+import { apiPaths } from '@/api/keys'
 import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
 import { notify } from '@/utils/notify'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import Title from './Title'
 
 const mockedUseLoaderData = useLoaderData as jest.Mock
 const mockedUseLocation = useLocation as jest.Mock
 const mockedGet = axiosInstance.get as jest.Mock
 const mockedPost = axiosInstance.post as jest.Mock
-const mockedFetchEnvs = fetchDataCenterEnvironments as jest.Mock
-const mockedFetchOpDivs = fetchOpDivs as jest.Mock
 const mockedClearDrafts = clearOtherUserDrafts as jest.Mock
 const mockedNotify = notify as jest.Mock
 
@@ -133,6 +121,22 @@ const RETIRED: OpDiv = {
   system_delegate_enabled: false,
 }
 
+// The OpDiv list is read through a query hook that calls the real fetcher, so
+// the stub sits at the axios boundary: the OpDiv path answers with rows (or
+// fails), every other mount fetch resolves empty.
+function respondWithOpdivs(rows: OpDiv[] | Error) {
+  return async (url: string) => {
+    if (url === apiPaths.opdivs.root) {
+      if (rows instanceof Error) throw rows
+      return { data: { data: rows } }
+    }
+    return { data: { data: [] } }
+  }
+}
+
+const opdivFetches = () =>
+  mockedGet.mock.calls.filter(([url]) => url === apiPaths.opdivs.root)
+
 const originalLocation = window.location
 
 beforeEach(() => {
@@ -140,10 +144,8 @@ beforeEach(() => {
   mockedUseLocation.mockReset()
   mockedUseLoaderData.mockReturnValue({ status: 200, response: USER })
   mockedUseLocation.mockReturnValue({ pathname: '/' })
-  mockedGet.mockResolvedValue({ data: { data: [] } })
+  mockedGet.mockImplementation(respondWithOpdivs([CMS, RETIRED]))
   mockedPost.mockResolvedValue({ status: 204 })
-  mockedFetchEnvs.mockResolvedValue([])
-  mockedFetchOpDivs.mockResolvedValue([CMS, RETIRED])
   mockedClearDrafts.mockResolvedValue(undefined)
 
   Object.defineProperty(window, 'location', {
@@ -163,59 +165,67 @@ afterEach(() => {
 
 describe('Title — shared OpDiv context (#558)', () => {
   it('fetches the inactive-inclusive list once and puts it on the Outlet context', async () => {
-    render(<Title />)
+    renderWithQueryClient(<Title />)
 
     expect(await screen.findByText('CMS')).toBeInTheDocument()
     expect(screen.getByText('RETIRED')).toBeInTheDocument()
     // One fetch for the whole layout - the point of the issue.
-    expect(mockedFetchOpDivs).toHaveBeenCalledTimes(1)
-    expect(mockedFetchOpDivs).toHaveBeenCalledWith(true, expect.anything())
+    expect(opdivFetches()).toHaveLength(1)
+    expect(opdivFetches()[0][1]).toEqual(
+      expect.objectContaining({
+        params: { active_only: false },
+        signal: expect.anything(),
+      })
+    )
   })
 
   it('does not fetch when the session loader did not authenticate', () => {
     mockedUseLoaderData.mockReturnValue({ status: 401, response: undefined })
 
-    render(<Title />)
+    renderWithQueryClient(<Title />)
 
-    expect(mockedFetchOpDivs).not.toHaveBeenCalled()
+    expect(opdivFetches()).toHaveLength(0)
   })
 
   it('refreshOpdivs refetches so a mutation is reflected in the shared copy', async () => {
-    render(<Title />)
+    renderWithQueryClient(<Title />)
     expect(await screen.findByText('CMS')).toBeInTheDocument()
 
-    mockedFetchOpDivs.mockResolvedValue([
-      CMS,
-      RETIRED,
-      { ...CMS, opdiv_id: 3, code: 'NEWLY_CREATED' },
-    ])
+    mockedGet.mockImplementation(
+      respondWithOpdivs([
+        CMS,
+        RETIRED,
+        { ...CMS, opdiv_id: 3, code: 'NEWLY_CREATED' },
+      ])
+    )
     fireEvent.click(screen.getByRole('button', { name: 'refresh-opdivs' }))
 
     expect(await screen.findByText('NEWLY_CREATED')).toBeInTheDocument()
-    expect(mockedFetchOpDivs).toHaveBeenCalledTimes(2)
+    expect(opdivFetches()).toHaveLength(2)
   })
 
   it('surfaces a failed load rather than leaving consumers silently empty', async () => {
-    mockedFetchOpDivs.mockRejectedValue(new Error('network'))
+    mockedGet.mockImplementation(respondWithOpdivs(new Error('network')))
 
-    render(<Title />)
+    renderWithQueryClient(<Title />)
 
     // No second fetch site to recover on, so the user has to be told to reload.
     await waitFor(() =>
       expect(mockedNotify).toHaveBeenCalledWith(
         expect.stringMatching(/opdiv/i),
-        'error'
+        'error',
+        expect.objectContaining({ preventDuplicate: true })
       )
     )
-    expect(mockedFetchOpDivs).toHaveBeenCalledTimes(1)
+    expect(opdivFetches()).toHaveLength(1)
   })
 
   it('marks the list loaded once the fetch settles, including on failure', async () => {
     // The questionnaire's insights gate blocks Next/Complete while this is
     // false, so a failure has to settle it or the user is stuck for good.
-    mockedFetchOpDivs.mockRejectedValue(new Error('network'))
+    mockedGet.mockImplementation(respondWithOpdivs(new Error('network')))
 
-    render(<Title />)
+    renderWithQueryClient(<Title />)
 
     expect(screen.getByText('loaded:false')).toBeInTheDocument()
     expect(await screen.findByText('loaded:true')).toBeInTheDocument()

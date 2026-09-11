@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import { vocabularyQueryOptions } from '@/queryClient'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import type { SystemAttribute, FismaSystemType } from '@/types'
 
 /**
@@ -56,13 +57,8 @@ export function useSystemAttributes(selectableOnly = true): SystemAttribute[] {
     queryFn: ({ signal }) => fetchSystemAttributes(signal, selectableOnly),
     ...vocabularyQueryOptions,
   })
-  return data ?? NO_ATTRIBUTES
+  return data ?? EMPTY_LIST
 }
-
-// One shared instance rather than a fresh `[]` per render, so a consumer that
-// lists the rows in a memo or effect dependency does not re-run on every
-// render while the load is pending or has failed.
-const NO_ATTRIBUTES: SystemAttribute[] = []
 
 export type SelectOption = { value: string; label: string }
 

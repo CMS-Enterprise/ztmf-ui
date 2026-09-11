@@ -98,6 +98,17 @@ rendered data solely because `error` is set.
 Do not create a component-local `AbortController`; TanStack Query cancels the
 request when the query becomes unused or is superseded.
 
+### Reference vocabularies
+
+System attributes, datacenter environments, and OpDivs change a few times a
+year. Their hooks spread `vocabularyQueryOptions` from `src/queryClient.ts`,
+which caches for the session (`staleTime` and `gcTime` both `Infinity`) and
+keeps a failed load silent, since every consumer already renders around an
+empty list. Read those lists through the existing hooks or Outlet context
+rather than calling `useQuery` with the same key elsewhere. A write that
+changes one must invalidate its key explicitly, as the OpDiv mutations do;
+nothing under this policy refreshes on its own.
+
 ### `useMutation`
 
 Use `useMutation` for server writes initiated by React. On success, invalidate

@@ -126,4 +126,10 @@ export const vocabularyQueryOptions = {
   meta: { suppressErrorNotification: true },
 } satisfies Pick<UseQueryOptions, 'staleTime' | 'gcTime' | 'meta'>
 
+/**
+ * Options accepted by the vocabulary hooks. `enabled` defers the request, for
+ * the layout that must not fetch before the session loader has authenticated.
+ */
+export type VocabularyQueryHookOptions = { enabled?: boolean }
+
 export default queryClient

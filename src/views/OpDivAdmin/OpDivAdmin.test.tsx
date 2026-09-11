@@ -95,8 +95,10 @@ jest.mock('@mui/x-data-grid', () => {
   }
 })
 
+// Fetchers are stubbed; the mutation hooks built on them run for real.
 jest.mock('@/utils/opdivs', () => ({
   __esModule: true,
+  ...jest.requireActual('@/utils/opdivs'),
   fetchOpDivs: jest.fn(),
   createOpDiv: jest.fn(),
   updateOpDiv: jest.fn(),

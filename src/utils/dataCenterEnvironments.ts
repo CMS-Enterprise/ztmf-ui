@@ -1,5 +1,11 @@
+import { useQuery } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import {
+  vocabularyQueryOptions,
+  type VocabularyQueryHookOptions,
+} from '@/queryClient'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import type { DataCenterEnvironment } from '@/types'
 
 /**
@@ -21,6 +27,27 @@ export async function fetchDataCenterEnvironments(
     { signal }
   )
   return response.data.data
+}
+
+/**
+ * Reads the datacenter-environment vocabulary for a component: empty until
+ * the fetch resolves, then the served rows. Cached for the session under
+ * `vocabularyQueryOptions`, which also keeps a failed load silent; consumers
+ * already fall back to raw values when the list is empty.
+ *
+ * @param options - See VocabularyQueryHookOptions.
+ * @returns The current environment rows.
+ */
+export function useDataCenterEnvironments(
+  options: VocabularyQueryHookOptions = {}
+): DataCenterEnvironment[] {
+  const { data } = useQuery({
+    queryKey: queryKeys.dataCenterEnvironments.list(),
+    queryFn: ({ signal }) => fetchDataCenterEnvironments(signal),
+    enabled: options.enabled,
+    ...vocabularyQueryOptions,
+  })
+  return data ?? EMPTY_LIST
 }
 
 export type DataCenterEnvironmentOption = {

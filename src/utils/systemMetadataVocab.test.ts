@@ -14,10 +14,9 @@ jest.mock('@/utils/notify', () => {
   return { ...actual, notify: jest.fn() }
 })
 
-import { createElement, type ReactNode } from 'react'
 import { renderHook, waitFor } from '@testing-library/react'
-import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
+import { queryWrapper } from '@/test-utils/queryWrapper'
 import { queryKeys } from '@/api/keys'
 import { notify } from '@/utils/notify'
 import axiosInstance from '@/axiosConfig'
@@ -344,19 +343,12 @@ describe('isCrossFieldHidden', () => {
 })
 
 describe('useSystemAttributes', () => {
-  // createElement rather than JSX so this stays a .ts file alongside the
-  // pure-function tests it shares fixtures with.
-  const wrapper = (client: QueryClient) =>
-    function Wrapper({ children }: { children: ReactNode }) {
-      return createElement(QueryClientProvider, { client }, children)
-    }
-
   it('returns the served rows and forwards the cancellation signal', async () => {
     mock.onGet('/systemattributes').reply(200, { data: ROWS })
     const client = createTestQueryClient()
 
     const { result } = renderHook(() => useSystemAttributes(), {
-      wrapper: wrapper(client),
+      wrapper: queryWrapper(client),
     })
 
     await waitFor(() => expect(result.current).toEqual(ROWS))
@@ -369,7 +361,7 @@ describe('useSystemAttributes', () => {
     const client = createTestQueryClient()
 
     const { result } = renderHook(() => useSystemAttributes(), {
-      wrapper: wrapper(client),
+      wrapper: queryWrapper(client),
     })
 
     await waitFor(() =>
@@ -386,13 +378,13 @@ describe('useSystemAttributes', () => {
     const client = createTestQueryClient()
 
     const first = renderHook(() => useSystemAttributes(), {
-      wrapper: wrapper(client),
+      wrapper: queryWrapper(client),
     })
     await waitFor(() => expect(first.result.current).toEqual(ROWS))
     first.unmount()
 
     const second = renderHook(() => useSystemAttributes(), {
-      wrapper: wrapper(client),
+      wrapper: queryWrapper(client),
     })
     await waitFor(() => expect(second.result.current).toEqual(ROWS))
 
