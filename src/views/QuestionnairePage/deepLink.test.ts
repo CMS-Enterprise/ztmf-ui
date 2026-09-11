@@ -5,6 +5,8 @@ import {
   resolveSystemIdByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
+  parseSystemIdParam,
+  questionnairePath,
 } from './deepLink'
 import { FismaSystemType, datacall } from '@/types'
 
@@ -33,6 +35,51 @@ describe('toSlug', () => {
   })
 })
 
+describe('parseSystemIdParam', () => {
+  it('reads a purely numeric segment as a fismasystemid', () => {
+    expect(parseSystemIdParam('1002')).toBe(1002)
+  })
+
+  it('treats anything else as a legacy acronym segment', () => {
+    // Acronyms may be all-caps, hyphenated, or even numeric-looking with a
+    // suffix; none of these are ids.
+    expect(parseSystemIdParam('ssd-ex')).toBeUndefined()
+    expect(parseSystemIdParam('1002a')).toBeUndefined()
+    expect(parseSystemIdParam('-1')).toBeUndefined()
+    expect(parseSystemIdParam('')).toBeUndefined()
+    expect(parseSystemIdParam(undefined)).toBeUndefined()
+  })
+})
+
+describe('questionnairePath', () => {
+  it('builds the bare id form', () => {
+    expect(questionnairePath(1002)).toBe('/questionnaire/1002')
+  })
+
+  it('appends datacall / pillar / function segments, skipping absent ones', () => {
+    expect(
+      questionnairePath(1002, 'FY2026_Q1', 'identity', 'imperial-id')
+    ).toBe('/questionnaire/1002/FY2026_Q1/identity/imperial-id')
+    expect(questionnairePath(1002, 'FY2026_Q1')).toBe(
+      '/questionnaire/1002/FY2026_Q1'
+    )
+    expect(questionnairePath(1002, undefined, undefined, undefined)).toBe(
+      '/questionnaire/1002'
+    )
+  })
+
+  it('does not depend on the acronym, so a slash in it cannot split the path', () => {
+    // misc#382: "/questionnaire/alliance/fleet" used to parse as acronym
+    // "alliance" + datacall "fleet". The id form has no such segment.
+    const slashed = sys(7, 'ALLIANCE/FLEET')
+    expect(questionnairePath(slashed.fismasystemid, 'FY2026_Q1')).toBe(
+      '/questionnaire/7/FY2026_Q1'
+    )
+    expect(questionnairePath(slashed.fismasystemid).split('/')).toHaveLength(3)
+  })
+})
+
+// Legacy-link resolution (pre-#732 acronym bookmarks redirect to the id form).
 describe('resolveSystemIdByAcronym', () => {
   const systems = [sys(1, 'ACO-MS'), sys(2, 'ACUMEN-GSS')]
 

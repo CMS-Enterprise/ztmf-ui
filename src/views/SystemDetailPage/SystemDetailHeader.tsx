@@ -2,16 +2,13 @@ import { Box, Typography, IconButton } from '@mui/material'
 import ArrowBackIcon from '@mui/icons-material/ArrowBack'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { useHref, useNavigate } from 'react-router-dom'
-import type { MouseEvent } from 'react'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 
 interface SystemDetailHeaderProps {
   systemName: string
-  /** Carried in route state by the Questionnaire link so the questionnaire
-   * opens this exact system; acronyms are not unique. */
+  /** Keys the Questionnaire link; the questionnaire route is addressed by
+   * fismasystemid, same as this page (ui#609, #732). */
   fismasystemid: number
-  /** Drives the Questionnaire link's URL; the questionnaire route is keyed on
-   * the acronym, not the fismasystemid this page is routed by (ui#609). */
-  fismaacronym: string
   /** Admins edit the whole form; an assigned ISSO gets the same Edit button
    * but only the target-maturity card unlocks for them (ztmf#398). */
   canEdit: boolean
@@ -26,7 +23,6 @@ interface SystemDetailHeaderProps {
 export default function SystemDetailHeader({
   systemName,
   fismasystemid,
-  fismaacronym,
   canEdit,
   isEditing,
   isSaving,
@@ -39,26 +35,11 @@ export default function SystemDetailHeader({
   // Rendered as an <a> via CmsButton's href so open-in-new-tab and copy-link
   // work. CmsButton has no polymorphic `component` prop, so react-router's Link
   // cannot be composed in; useHref resolves the path the same way Link would
-  // (under the app's hash router it yields `#/questionnaire/<acronym>`) instead
-  // of hand-writing the fragment. (#640 review)
-  const questionnairePath = `/questionnaire/${fismaacronym.toLowerCase()}`
-  const questionnaireHref = useHref(questionnairePath)
-  // A plain left click navigates in-app with the fismasystemid in route state,
-  // which QuestionnairePage prefers over resolving the acronym. Modified
-  // clicks fall through to the anchor so open-in-new-tab still works.
-  const openQuestionnaire = (e: MouseEvent<HTMLAnchorElement>) => {
-    if (
-      e.defaultPrevented ||
-      e.button !== 0 ||
-      e.metaKey ||
-      e.ctrlKey ||
-      e.shiftKey ||
-      e.altKey
-    )
-      return
-    e.preventDefault()
-    navigate(questionnairePath, { state: { fismasystemid } })
-  }
+  // (under the app's hash router it yields `#/questionnaire/<id>`) instead of
+  // hand-writing the fragment. (#640 review) The id in the URL is the whole
+  // address, so no route state is needed and every click shape (plain,
+  // modified, copy-link) opens this exact system.
+  const questionnaireHref = useHref(questionnairePath(fismasystemid))
 
   return (
     <Box
@@ -103,9 +84,7 @@ export default function SystemDetailHeader({
                 actions. A decommissioned system links too and the
                 questionnaire's own "no questionnaire is available" alert
                 explains the outcome. */}
-            <CmsButton href={questionnaireHref} onClick={openQuestionnaire}>
-              Questionnaire
-            </CmsButton>
+            <CmsButton href={questionnaireHref}>Questionnaire</CmsButton>
             {canEdit && (
               <CmsButton variation="solid" onClick={onEdit}>
                 Edit
