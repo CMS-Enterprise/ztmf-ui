@@ -1,4 +1,5 @@
 import { FismaSystemType, datacall } from '@/types'
+import { RouteIds } from '@/router/constants'
 
 // Slugify a pillar/function name for the questionnaire URL. Kept here (rather
 // than inline in QuestionnairePage) so the deep-link resolvers below and the
@@ -29,7 +30,7 @@ export function questionnairePath(
   ...segments: (string | undefined)[]
 ): string {
   const tail = segments.filter((s): s is string => !!s).join('/')
-  return `/questionnaire/${fismasystemid}${tail ? `/${tail}` : ''}`
+  return `/${RouteIds.QUESTIONNAIRE}/${fismasystemid}${tail ? `/${tail}` : ''}`
 }
 
 // Every system whose acronym matches the legacy acronym URL segment,
@@ -42,19 +43,6 @@ export function findSystemsByAcronym(
   if (!acronym) return []
   const target = acronym.toLowerCase()
   return systems.filter((s) => s.fismaacronym?.toLowerCase() === target)
-}
-
-// Resolve a legacy acronym URL segment to a fismasystemid using the systems
-// list the app already loads, so pre-#732 bookmarks can redirect to the id
-// form. Case-insensitive; undefined when unresolved or ambiguous: taking the
-// first of several matches opened another system's questionnaire, and answers
-// were saved against it.
-export function resolveSystemIdByAcronym(
-  systems: FismaSystemType[],
-  acronym: string | undefined
-): number | undefined {
-  const matches = findSystemsByAcronym(systems, acronym)
-  return matches.length === 1 ? matches[0].fismasystemid : undefined
 }
 
 // Encode a datacall name for its URL segment. Spaces become underscores (the

@@ -2,7 +2,6 @@ import {
   toSlug,
   encodeDatacallSlug,
   findSystemsByAcronym,
-  resolveSystemIdByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
   parseSystemIdParam,
@@ -80,35 +79,6 @@ describe('questionnairePath', () => {
 })
 
 // Legacy-link resolution (pre-#732 acronym bookmarks redirect to the id form).
-describe('resolveSystemIdByAcronym', () => {
-  const systems = [sys(1, 'ACO-MS'), sys(2, 'ACUMEN-GSS')]
-
-  it('resolves case-insensitively', () => {
-    expect(resolveSystemIdByAcronym(systems, 'aco-ms')).toBe(1)
-    expect(resolveSystemIdByAcronym(systems, 'ACUMEN-GSS')).toBe(2)
-  })
-
-  it('returns undefined for an unknown acronym', () => {
-    expect(resolveSystemIdByAcronym(systems, 'nope')).toBeUndefined()
-  })
-
-  it('returns undefined when the acronym is missing', () => {
-    expect(resolveSystemIdByAcronym(systems, undefined)).toBeUndefined()
-  })
-
-  it('returns undefined when systems have not loaded yet', () => {
-    expect(resolveSystemIdByAcronym([], 'aco-ms')).toBeUndefined()
-  })
-
-  it('refuses to guess when more than one system shares the acronym', () => {
-    // Acronyms are not unique; picking the first match opened another
-    // system's questionnaire.
-    const dupes = [...systems, sys(3, 'Pending'), sys(4, 'PENDING')]
-    expect(resolveSystemIdByAcronym(dupes, 'pending')).toBeUndefined()
-    expect(resolveSystemIdByAcronym(dupes, 'aco-ms')).toBe(1)
-  })
-})
-
 describe('findSystemsByAcronym', () => {
   const systems = [sys(1, 'ACO-MS'), sys(3, 'Pending'), sys(4, 'PENDING')]
 
