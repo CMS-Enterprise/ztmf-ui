@@ -3,6 +3,7 @@ import {
   QueryClient,
   type Query,
   type QueryClientConfig,
+  type UseQueryOptions,
 } from '@tanstack/react-query'
 import { isAxiosError, isCancel } from 'axios'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -103,5 +104,26 @@ export function createQueryClient(config: QueryClientConfig = {}): QueryClient {
  * masking an outage.
  */
 const queryClient = createQueryClient()
+
+/**
+ * Cache policy for reference vocabularies: system attributes, datacenter
+ * environments, and OpDivs. They change a few times a year, so one load per
+ * session is the right amount of network.
+ *
+ * `gcTime` matters as much as `staleTime`. Several consumers live inside
+ * modals that unmount, and the default five-minute collection would drop the
+ * entry and refetch on the next open, which is the re-request on navigation
+ * this policy exists to prevent. A failed load stays silent at the cache
+ * boundary because every consumer already renders around an empty list, and
+ * a query with no data is always stale, so the next mount retries anyway.
+ *
+ * Writes that change a vocabulary must invalidate its key explicitly; nothing
+ * here will pick the change up on its own.
+ */
+export const vocabularyQueryOptions = {
+  staleTime: Infinity,
+  gcTime: Infinity,
+  meta: { suppressErrorNotification: true },
+} satisfies Pick<UseQueryOptions, 'staleTime' | 'gcTime' | 'meta'>
 
 export default queryClient

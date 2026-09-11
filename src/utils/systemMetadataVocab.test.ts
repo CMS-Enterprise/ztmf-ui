@@ -7,9 +7,23 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
 })
 
+// Spy on the snackbar so the vocab hook's silent-failure contract is asserted,
+// not just implied by the empty list it returns.
+jest.mock('@/utils/notify', () => {
+  const actual = jest.requireActual('@/utils/notify')
+  return { ...actual, notify: jest.fn() }
+})
+
+import { createElement, type ReactNode } from 'react'
+import { renderHook, waitFor } from '@testing-library/react'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
+import { queryKeys } from '@/api/keys'
+import { notify } from '@/utils/notify'
 import axiosInstance from '@/axiosConfig'
 import {
   fetchSystemAttributes,
+  useSystemAttributes,
   optionsForField,
   booleanOptions,
   boolToSelectValue,
@@ -326,5 +340,64 @@ describe('isCrossFieldHidden', () => {
 
   it('never hides unrelated fields', () => {
     expect(isCrossFieldHidden('fips', { cloud_system: false })).toBe(false)
+  })
+})
+
+describe('useSystemAttributes', () => {
+  // createElement rather than JSX so this stays a .ts file alongside the
+  // pure-function tests it shares fixtures with.
+  const wrapper = (client: QueryClient) =>
+    function Wrapper({ children }: { children: ReactNode }) {
+      return createElement(QueryClientProvider, { client }, children)
+    }
+
+  it('returns the served rows and forwards the cancellation signal', async () => {
+    mock.onGet('/systemattributes').reply(200, { data: ROWS })
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useSystemAttributes(), {
+      wrapper: wrapper(client),
+    })
+
+    await waitFor(() => expect(result.current).toEqual(ROWS))
+    expect(mock.history.get[0].signal).toBeDefined()
+    expect(mock.history.get[0].params).toEqual({ selectable_only: true })
+  })
+
+  it('resolves a failure to an empty list without an error surface', async () => {
+    mock.onGet('/systemattributes').reply(500)
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useSystemAttributes(), {
+      wrapper: wrapper(client),
+    })
+
+    await waitFor(() =>
+      expect(client.getQueryState(queryKeys.systemAttributes())?.status).toBe(
+        'error'
+      )
+    )
+    expect(result.current).toEqual([])
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('serves a remount from cache rather than refetching', async () => {
+    mock.onGet('/systemattributes').reply(200, { data: ROWS })
+    const client = createTestQueryClient()
+
+    const first = renderHook(() => useSystemAttributes(), {
+      wrapper: wrapper(client),
+    })
+    await waitFor(() => expect(first.result.current).toEqual(ROWS))
+    first.unmount()
+
+    const second = renderHook(() => useSystemAttributes(), {
+      wrapper: wrapper(client),
+    })
+    await waitFor(() => expect(second.result.current).toEqual(ROWS))
+
+    // The modals that consume this unmount between openings; an Infinity
+    // gcTime is what keeps the second open off the network.
+    expect(mock.history.get).toHaveLength(1)
   })
 })

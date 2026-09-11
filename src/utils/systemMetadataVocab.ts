@@ -1,6 +1,7 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import { vocabularyQueryOptions } from '@/queryClient'
 import type { SystemAttribute, FismaSystemType } from '@/types'
 
 /**
@@ -40,23 +41,28 @@ export async function fetchSystemAttributes(
  * fetch resolves (selects render their current value in the meantime), then
  * the served rows. Kept as a hook so each consumer gets it without threading.
  *
+ * Cached for the session under `vocabularyQueryOptions`, which also keeps a
+ * failed load silent. The hook resolves that failure to an empty list: no
+ * vocabulary means no dropdown options, which every select already renders
+ * around by showing its current value.
+ *
+ * @param selectableOnly - When true, asks the backend for dropdown options
+ *   only (hides any non-selectable rows).
  * @returns The current attribute rows.
  */
-export function useSystemAttributes(): SystemAttribute[] {
-  const [rows, setRows] = useState<SystemAttribute[]>([])
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchSystemAttributes(controller.signal)
-      .then((r) => {
-        if (!controller.signal.aborted) setRows(r)
-      })
-      .catch(() => {
-        // Non-fatal: an empty vocab just means no dropdown options yet.
-      })
-    return () => controller.abort()
-  }, [])
-  return rows
+export function useSystemAttributes(selectableOnly = true): SystemAttribute[] {
+  const { data } = useQuery({
+    queryKey: queryKeys.systemAttributes(selectableOnly),
+    queryFn: ({ signal }) => fetchSystemAttributes(signal, selectableOnly),
+    ...vocabularyQueryOptions,
+  })
+  return data ?? NO_ATTRIBUTES
 }
+
+// One shared instance rather than a fresh `[]` per render, so a consumer that
+// lists the rows in a memo or effect dependency does not re-run on every
+// render while the load is pending or has failed.
+const NO_ATTRIBUTES: SystemAttribute[] = []
 
 export type SelectOption = { value: string; label: string }
 
