@@ -31,6 +31,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import {
   TEXTFIELD_HELPER_TEXT,
   EXTENDED_METADATA_TITLE,
@@ -317,7 +318,7 @@ export default function EditSystemModal({
       const userId = system.decommissioned_by
       async function load() {
         try {
-          const res = await axiosInstance.get(`users/${userId}`, {
+          const res = await axiosInstance.get(apiPaths.users.detail(userId), {
             signal: controller.signal,
           })
           if (system?.decommissioned_by === userId) {
@@ -344,7 +345,7 @@ export default function EditSystemModal({
       const userId = system.reactivated_by
       async function load() {
         try {
-          const res = await axiosInstance.get(`users/${userId}`, {
+          const res = await axiosInstance.get(apiPaths.users.detail(userId), {
             signal: controller.signal,
           })
           if (system?.reactivated_by === userId) {
@@ -399,7 +400,7 @@ export default function EditSystemModal({
           buildExtendedDiff(editedFismaSystem, system, EXTENDED_METADATA_KEYS)
         )
         await axiosInstance.put(
-          `fismasystems/${editedFismaSystem.fismasystemid}`,
+          apiPaths.fismaSystems.detail(editedFismaSystem.fismasystemid),
           editBody
         )
         notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
@@ -450,7 +451,7 @@ export default function EditSystemModal({
             EXTENDED_METADATA_KEYS
           )
         )
-        await axiosInstance.post(`fismasystems`, body)
+        await axiosInstance.post(apiPaths.fismaSystems.root, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
       } catch (error) {
@@ -520,7 +521,7 @@ export default function EditSystemModal({
     }
     try {
       const res = await axiosInstance.delete(
-        `fismasystems/${editedFismaSystem.fismasystemid}`,
+        apiPaths.fismaSystems.detail(editedFismaSystem.fismasystemid),
         { data: body }
       )
       if (res.status === 200 || res.status === 204) {
@@ -560,7 +561,7 @@ export default function EditSystemModal({
     const body = trimmedNotes ? { notes: trimmedNotes } : undefined
     try {
       const res = await axiosInstance.put(
-        `fismasystems/${editedFismaSystem.fismasystemid}/reactivate`,
+        apiPaths.fismaSystems.reactivate(editedFismaSystem.fismasystemid),
         body
       )
       if (res.status === 200) {

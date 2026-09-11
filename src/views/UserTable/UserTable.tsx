@@ -30,6 +30,7 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import Tooltip from '@mui/material/Tooltip'
 import './UserTable.css'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { users, FismaSystemType } from '@/types'
 import {
   isAdmin as checkIsAdmin,
@@ -334,7 +335,7 @@ export default function UserTable() {
         notify(ERROR_MESSAGES.refresh, 'warning')
       })
     axiosInstance
-      .get(`/users/${userid}`)
+      .get(apiPaths.users.detail(userid))
       .then((res) => {
         const idp = res.data?.data?.identity_provider
         setRows((prev) =>
@@ -382,7 +383,7 @@ export default function UserTable() {
             }),
         }
 
-        const res = await axiosInstance.post('/users', body)
+        const res = await axiosInstance.post(apiPaths.users.root, body)
         const createdUser = res.data.data
         updatedRow.userid = createdUser.userid
 
@@ -430,7 +431,7 @@ export default function UserTable() {
       }
     } else {
       try {
-        await axiosInstance.put(`/users/${updatedRow?.userid}`, {
+        await axiosInstance.put(apiPaths.users.detail(updatedRow?.userid), {
           email: updatedRow?.email,
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
@@ -485,7 +486,7 @@ export default function UserTable() {
       return
     }
     try {
-      await axiosInstance.delete(`/users/${target.userid}`)
+      await axiosInstance.delete(apiPaths.users.detail(target.userid))
       setRows((prev) => prev.filter((row) => row.userid !== target.userid))
       notify(`Saved - Delete User ${target.fullname}`, 'success', {
         autoHideDuration: 2000,
@@ -505,7 +506,7 @@ export default function UserTable() {
     setPendingRestoreRow(null)
     if (!confirm || !target) return
     try {
-      await axiosInstance.put(`/users/${target.userid}/restore`)
+      await axiosInstance.put(apiPaths.users.restore(target.userid))
       setRows((prev) => prev.filter((row) => row.userid !== target.userid))
       notify(`Saved - Restore User ${target.fullname}`, 'success', {
         autoHideDuration: 2000,
@@ -524,7 +525,7 @@ export default function UserTable() {
     let backfillAborted = false
     async function load() {
       try {
-        const res = await axiosInstance.get('/users', {
+        const res = await axiosInstance.get(apiPaths.users.root, {
           params: { deleted: showDeleted },
           signal: controller.signal,
         })
@@ -596,11 +597,14 @@ export default function UserTable() {
     const controller = new AbortController()
     async function loadFismaSystems() {
       const [activeRes, decommRes] = await Promise.allSettled([
-        axiosInstance.get<{ data: FismaSystemType[] | null }>('/fismasystems', {
-          signal: controller.signal,
-        }),
         axiosInstance.get<{ data: FismaSystemType[] | null }>(
-          '/fismasystems?decommissioned=true',
+          apiPaths.fismaSystems.root,
+          {
+            signal: controller.signal,
+          }
+        ),
+        axiosInstance.get<{ data: FismaSystemType[] | null }>(
+          apiPaths.fismaSystems.list(true),
           { signal: controller.signal }
         ),
       ])

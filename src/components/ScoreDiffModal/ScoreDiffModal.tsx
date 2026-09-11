@@ -25,6 +25,7 @@ import CloseIcon from '@mui/icons-material/Close'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import { Button as CmsButton } from '@cmsgov/design-system'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { PILLAR_ORDER, PILLAR_FUNCTION_MAP } from '@/constants'
@@ -112,7 +113,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
         ) {
           sorted = datacallsCache.data
         } else {
-          const res = await axiosInstance.get('/datacalls')
+          const res = await axiosInstance.get(apiPaths.datacalls.root)
           // Order by deadline (furthest-out first), datacallid only as a
           // tiebreak: historical loads can out-id the real current call (#393).
           sorted = sortDatacallsByDeadline(res.data.data as datacall[])
@@ -151,7 +152,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
           questions = cached.data
         } else {
           const res = await axiosInstance.get(
-            `/fismasystems/${fismasystemid}/questions`
+            apiPaths.fismaSystems.questions(fismasystemid)
           )
           questions = res.data?.data ?? []
           questionsCache.set(fismasystemid, { data: questions, timestamp: now })
@@ -232,7 +233,11 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
 
     axiosInstance
       .get(
-        `/scores/diff?from=${fromDatacall.datacallid}&to=${toDatacall.datacallid}&fismasystemid=${fismasystemid}`,
+        apiPaths.scores.diff(
+          fromDatacall.datacallid,
+          toDatacall.datacallid,
+          fismasystemid
+        ),
         { signal: controller.signal }
       )
       .then((res) => {

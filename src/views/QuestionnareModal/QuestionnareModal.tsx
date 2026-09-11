@@ -26,6 +26,7 @@ import {
 } from '@/types'
 import LastEditedFooter from '../QuestionnairePage/LastEditedFooter'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import CircularProgress from '@mui/material/CircularProgress'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import IconButton from '@mui/material/IconButton'
@@ -121,7 +122,7 @@ export default function QuestionnareModal({
   ) => {
     try {
       const response = await axiosInstance.get(
-        `scores?datacallid=${datacallID}&fismasystemid=${systemId}`
+        apiPaths.scores.list(datacallID, systemId)
       )
       const hashTable: questionScoreMap = Object.assign(
         {},
@@ -153,7 +154,7 @@ export default function QuestionnareModal({
       async function saveScore() {
         try {
           if (scoreid) {
-            await axiosInstance.put(`scores/${scoreid}`, {
+            await axiosInstance.put(apiPaths.scores.detail(scoreid), {
               fismasystemid: system?.fismasystemid,
               notes: notes,
               functionoptionid: selectQuestionOption,
@@ -165,7 +166,7 @@ export default function QuestionnareModal({
             })
             notify(STATUS_MESSAGES.saved, 'success')
           } else {
-            await axiosInstance.post(`scores`, {
+            await axiosInstance.post(apiPaths.scores.root, {
               fismasystemid: system?.fismasystemid,
               notes: notes,
               functionoptionid: selectQuestionOption,
@@ -264,7 +265,7 @@ export default function QuestionnareModal({
       const controller = new AbortController()
       const fetchData = async () => {
         try {
-          const latestRes = await axiosInstance.get(`/datacalls/latest`, {
+          const latestRes = await axiosInstance.get(apiPaths.datacalls.latest, {
             signal: controller.signal,
           })
           const latestDataCallId = latestRes.data.data.datacallid
@@ -274,7 +275,10 @@ export default function QuestionnareModal({
           }
 
           const questionsRes = await axiosInstance.get(
-            `/fismasystems/${system.fismasystemid}/questions?datacallid=${latestDataCallId}`,
+            apiPaths.fismaSystems.questions(
+              system.fismasystemid,
+              latestDataCallId
+            ),
             { signal: controller.signal }
           )
           const data = questionsRes.data.data
@@ -298,7 +302,7 @@ export default function QuestionnareModal({
           }
 
           const scoresRes = await axiosInstance.get(
-            `scores?datacallid=${latestDataCallId}&fismasystemid=${system.fismasystemid}`,
+            apiPaths.scores.list(latestDataCallId, system.fismasystemid),
             { signal: controller.signal }
           )
           const hashTable: questionScoreMap = Object.assign(
@@ -320,11 +324,12 @@ export default function QuestionnareModal({
   }, [open, system])
   React.useEffect(() => {
     if (questionId) {
+      const activeQuestionId = questionId
       const controller = new AbortController()
       async function fetchOptions() {
         try {
           const res = await axiosInstance.get(
-            `functions/${questionId}/options`,
+            apiPaths.functionOptions(activeQuestionId),
             { signal: controller.signal }
           )
           setOptions(res.data.data)

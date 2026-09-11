@@ -5403,6 +5403,43 @@ __metadata:
   languageName: node
   linkType: hard
 
+"@tanstack/query-core@npm:5.102.8":
+  version: 5.102.8
+  resolution: "@tanstack/query-core@npm:5.102.8"
+  checksum: 10/4e3e72281e54dc5c00157d42ba662c75640d1109b5f087c447ca40ed22af643fb442ab3d5c46a878db96e72f85a883866d7c662e98ae5100ac5d1e91d9c9a299
+  languageName: node
+  linkType: hard
+
+"@tanstack/query-devtools@npm:5.102.8":
+  version: 5.102.8
+  resolution: "@tanstack/query-devtools@npm:5.102.8"
+  checksum: 10/d2534f81f76a16679f209bf5330c56aad738d6801c23d8280387aa11cdc72051710ea92c699a03a0098ea42e120604b0bb4c34d32f4a21baa64ca3c5e9c0141f
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-query-devtools@npm:^5.102.8":
+  version: 5.102.8
+  resolution: "@tanstack/react-query-devtools@npm:5.102.8"
+  dependencies:
+    "@tanstack/query-devtools": "npm:5.102.8"
+  peerDependencies:
+    "@tanstack/react-query": ^5.102.8
+    react: ^18 || ^19
+  checksum: 10/57d0d5777adb87e4eb6c3d1d8b111e2fa7255f47d6f6c09ec7636db6a613689519aa1e9e3c9b133464538e863316ddc1166d2492328643d902d99590d4144893
+  languageName: node
+  linkType: hard
+
+"@tanstack/react-query@npm:^5.102.8":
+  version: 5.102.8
+  resolution: "@tanstack/react-query@npm:5.102.8"
+  dependencies:
+    "@tanstack/query-core": "npm:5.102.8"
+  peerDependencies:
+    react: ^18 || ^19
+  checksum: 10/b778fbc43c2d3276195e76582430dedf74687c23fcf904f96a2e4da8d22af497a46c7b5bb185a7b7d22cb1ed8c4476eb137ed581e2f929de71745e140c9b5909
+  languageName: node
+  linkType: hard
+
 "@testing-library/dom@npm:^9.0.0, @testing-library/dom@npm:^9.3.4":
   version: 9.3.4
   resolution: "@testing-library/dom@npm:9.3.4"
@@ -17278,6 +17315,8 @@ __metadata:
     "@semantic-release/release-notes-generator": "npm:^12.1.0"
     "@swc/core": "npm:^1.7.6"
     "@swc/jest": "npm:^0.2.36"
+    "@tanstack/react-query": "npm:^5.102.8"
+    "@tanstack/react-query-devtools": "npm:^5.102.8"
     "@testing-library/dom": "npm:^9.3.4"
     "@testing-library/jest-dom": "npm:^6.4.2"
     "@testing-library/react": "npm:^14.2.1"

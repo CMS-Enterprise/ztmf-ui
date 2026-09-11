@@ -1,7 +1,9 @@
 import { render, type RenderOptions } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, type MemoryRouterProps } from 'react-router-dom'
 import { SnackbarProvider } from 'notistack'
 import { ReactElement } from 'react'
+import { createQueryClient } from '@/queryClient'
 
 /**
  * Wraps a view in the providers it needs at runtime so component tests
@@ -27,14 +29,31 @@ export function renderWithProviders(
   } & Omit<RenderOptions, 'wrapper'> = {}
 ) {
   const { initialEntries, ...renderOptions } = options
-  return render(ui, {
+  // A client per render prevents cached server state from leaking between
+  // tests. Retries are disabled so expected failures settle immediately.
+  const queryClient = createQueryClient({
+    defaultOptions: {
+      queries: {
+        retry: false,
+      },
+      mutations: {
+        retry: false,
+      },
+    },
+  })
+
+  const result = render(ui, {
     wrapper: ({ children }) => (
-      <SnackbarProvider>
-        <MemoryRouter initialEntries={initialEntries ?? ['/']}>
-          {children}
-        </MemoryRouter>
-      </SnackbarProvider>
+      <QueryClientProvider client={queryClient}>
+        <SnackbarProvider>
+          <MemoryRouter initialEntries={initialEntries ?? ['/']}>
+            {children}
+          </MemoryRouter>
+        </SnackbarProvider>
+      </QueryClientProvider>
     ),
     ...renderOptions,
   })
+
+  return { ...result, queryClient }
 }

@@ -19,6 +19,7 @@ import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
 import { datacallModalProps } from '@/types'
 import './DatacallModal.css'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 
@@ -148,7 +149,7 @@ export default function DataCallModal({
     if (submitting) return
     setSubmitting(true)
     try {
-      await axiosInstance.post(`/datacalls`, {
+      await axiosInstance.post(apiPaths.datacalls.root, {
         datacall: datacall.toUpperCase(),
         deadline: new Date(deadline).toISOString(),
       })
