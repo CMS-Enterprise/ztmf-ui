@@ -103,9 +103,13 @@ export default function OpDivGrantModal({
   // edit, and every open starts from the server again. Empty while a read is
   // in flight so a previous open's grants never flash in the picker.
   const [edits, setEdits] = React.useState<number[] | null>(null)
+  // Dropped on open and on close, and on a change of target: the current
+  // caller closes before switching users, but nothing in the type stops a
+  // future one from swapping userid in place, and staged selections must
+  // never follow the dialog onto a different person.
   React.useEffect(() => {
-    if (!open) setEdits(null)
-  }, [open])
+    setEdits(null)
+  }, [open, targetId])
   const localOpDivs: number[] = React.useMemo(
     () => (loading ? EMPTY_LIST : edits ?? targetQuery.data ?? EMPTY_LIST),
     [loading, edits, targetQuery.data]

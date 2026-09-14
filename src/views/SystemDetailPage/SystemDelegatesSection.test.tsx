@@ -198,6 +198,55 @@ test('attaching an existing candidate POSTs just the email, bypassing the auth i
   await waitFor(() => expect(rosterGets()).toHaveLength(2))
 })
 
+test('attaching runs one candidate search, not one per key change', async () => {
+  const user = userEvent.setup()
+  renderSection()
+  await screen.findByText('Active Delegate')
+  await waitFor(() => expect(candidateGets()).toHaveLength(1))
+
+  // Type a term so a search other than the empty one is the active query when
+  // the write invalidates the candidate lists.
+  await user.type(
+    screen.getByRole('combobox', { name: /attach an existing delegate/i }),
+    'tar'
+  )
+  await waitFor(() => expect(candidateGets()).toHaveLength(2))
+
+  await user.click(
+    await screen.findByText(/Wilhuff Tarkin \(tarkin@empire\.gov\)/i)
+  )
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+
+  // The cleared search refetches once. Clearing after the write instead would
+  // refresh the typed term first and throw that result away.
+  await waitFor(() => expect(rosterGets()).toHaveLength(2))
+  await waitFor(() => expect(candidateGets()).toHaveLength(3))
+  // The empty search sends no params at all, so the one post-write refresh is
+  // the cleared picker rather than another pass at 'tar'.
+  expect(candidateGets()[2].params).toBeUndefined()
+  expect(candidateGets()).toHaveLength(3)
+})
+
+test('a failed attach puts the search term back so the person can be retried', async () => {
+  const user = userEvent.setup()
+  mock.onPost(ROSTER_URL).reply(400, { data: { email: 'not attachable' } })
+  renderSection()
+  await screen.findByText('Active Delegate')
+
+  const picker = screen.getByRole('combobox', {
+    name: /attach an existing delegate/i,
+  })
+  await user.type(picker, 'tar')
+  await user.click(
+    await screen.findByText(/Wilhuff Tarkin \(tarkin@empire\.gov\)/i)
+  )
+
+  // The POST is recorded when it is sent, so wait for the rejection to reach
+  // the restore rather than asserting off the request log.
+  await waitFor(() => expect(picker).toHaveValue('tar'))
+  expect(await screen.findByText(/not attachable/i)).toBeInTheDocument()
+})
+
 test('a field-map error on attach is surfaced rather than swallowed', async () => {
   const user = userEvent.setup()
   mock.onPost(ROSTER_URL).reply(400, { data: { email: 'not attachable' } })

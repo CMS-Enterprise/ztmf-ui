@@ -179,11 +179,21 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
 
   const handleAttach = async (candidate: DelegateCandidate) => {
     setGuardMessage('')
+    // Clear the search before the write rather than after it, and clear the
+    // debounced copy with it. The write invalidates every candidate list, and
+    // whichever term is active at that moment is the one that refetches, so
+    // clearing afterwards refetched the typed term and then the empty one.
+    // Restored below if the attach fails, so a guard message still leaves the
+    // person on screen to retry.
+    const searched = candidateInput
+    setCandidateInput('')
+    setDebouncedInput('')
     try {
       await attachMutation.mutateAsync({ email: candidate.email })
-      setCandidateInput('')
       notify('Saved - delegate added', 'success', { autoHideDuration: 1500 })
     } catch (error) {
+      setCandidateInput(searched)
+      setDebouncedInput(searched)
       const c = classifyAddError(error)
       if (c?.guard) setGuardMessage(c.guard)
       // The attach call sends only a validated email, so a 400 field map is

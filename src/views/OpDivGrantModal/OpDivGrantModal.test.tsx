@@ -600,6 +600,46 @@ test('401 on the initial grant fetch redirects to sign-in without a generic erro
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
+test('staged edits do not follow the dialog to a different user', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1] })
+  mock.onGet(`/users/${USER_ID_B}/assignedopdivs`).reply(200, { data: [2] })
+  mock.onPut(`/users/${USER_ID_B}/opdivs`).reply(204)
+
+  const { rerender } = renderModal({ enforceCallerScope: false })
+  await waitForReady()
+
+  // Stage an edit for user A without saving it.
+  await user.click(screen.getByRole('combobox'))
+  await user.click(await screen.findByRole('option', { name: /BBB/ }))
+  await user.keyboard('{Escape}')
+  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
+
+  // Point the same open dialog at user B.
+  rerender(
+    <OpDivGrantModal
+      open={true}
+      handleClose={jest.fn()}
+      userid={USER_ID_B}
+      userName="Test User B"
+      assignableOpDivs={assignableOpDivs}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={false}
+      callerUserId={CALLER_ID}
+      onChanged={jest.fn()}
+    />
+  )
+  await waitForReady()
+
+  // User B's own grant renders, and user A's staged pick is gone. Saving here
+  // would otherwise write A's selection onto B.
+  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
+  expect(screen.queryByText('AAA - Division A')).not.toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  expect(JSON.parse(mock.history.put[0].data)).toEqual({ opdiv_ids: [2] })
+})
+
 test('stale fetch from a prior user is discarded when userid changes', async () => {
   // User A's fetch is intentionally slow — held until we manually release it.
   let resolveUserA!: () => void
