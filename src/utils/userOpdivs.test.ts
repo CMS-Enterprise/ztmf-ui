@@ -11,6 +11,7 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import axiosInstance from '@/axiosConfig'
+import { queryKeys } from '@/api/keys'
 import {
   fetchUserOpDivs,
   setUserOpDivs,
@@ -74,19 +75,23 @@ describe('useUserOpDivs', () => {
 })
 
 describe('useSetUserOpDivs', () => {
-  it('seeds the cache with the saved set so a disabled reader repaints without a request', async () => {
+  it('invalidates the user grant entry on save rather than seeding it', async () => {
     mock.onPut(`/users/${USER}/opdivs`).reply(204)
-    const wrapper = queryWrapper(createTestQueryClient())
-    const reader = renderHook(() => useUserOpDivs(USER, { enabled: false }), {
-      wrapper,
-    })
+    const client = createTestQueryClient()
+    const key = queryKeys.users.assignedOpdivs(USER)
+    client.setQueryData(key, [1, 5])
 
-    const { result } = renderHook(() => useSetUserOpDivs(), { wrapper })
+    const { result } = renderHook(() => useSetUserOpDivs(), {
+      wrapper: queryWrapper(client),
+    })
     await act(async () => {
-      await result.current.mutateAsync({ userid: USER, opdivIds: [3, 4] })
+      await result.current.mutateAsync({ userid: USER, opdivIds: [1] })
     })
 
-    await waitFor(() => expect(reader.result.current.data).toEqual([3, 4]))
-    expect(mock.history.get).toHaveLength(0)
+    // A scoped admin's body carries only the OpDivs they hold, and the backend
+    // keeps the target's other grants, so the body is not the stored set. The
+    // entry must be marked for refetch, not overwritten with the subset.
+    expect(client.getQueryData(key)).toEqual([1, 5])
+    expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
 })

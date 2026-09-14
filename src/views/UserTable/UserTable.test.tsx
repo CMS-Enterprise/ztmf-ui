@@ -649,8 +649,8 @@ const PIETT_ROW: users = {
 
 function mockUsers(list: users[]) {
   axios.get.mockImplementation((url: string) => {
-    // A per-user grant read (only a row without inline grants makes one) must
-    // not be answered with the users list.
+    // The grant modal's on-open read must not be answered with the users
+    // list.
     if (url.endsWith('/assignedopdivs'))
       return Promise.resolve({ status: 200, data: { data: [] } })
     if (url.startsWith('/users'))
@@ -943,19 +943,11 @@ test('processRowUpdate surfaces a 400 field error on a failed create', async () 
   expect(await screen.findByText(/Email already exists/i)).toBeInTheDocument()
 })
 
-test('backfills OpDiv grants per user when the list omits them inline', async () => {
-  // An older backend response without assignedopdivids on the row makes that
-  // row's OpDivs cell read its grants for itself rather than use the inline
-  // value.
-  const legacyRow = {
-    userid: '33333333-3333-3333-3333-333333333333',
-    email: 'legacy@agency.gov',
-    fullname: 'Legacy Admin',
-    role: 'ISSO',
-    assignedfismasystems: [],
-  } as unknown as users
-  // The chip labels from the shared OpDiv list, so give the context the one
-  // OpDiv the fetched grant resolves to.
+test('the OpDivs column repaints from the user detail after the grant modal saves', async () => {
+  // The row is refreshed from GET /users/{id} after a save rather than from
+  // the request body. A scoped admin's body omits grants they cannot touch and
+  // the backend keeps those, so only the detail response is the true set.
+  const user = userEvent.setup()
   setMockCtx(
     makeCtx({
       opdivs: [
@@ -967,28 +959,46 @@ test('backfills OpDiv grants per user when the list omits them inline', async ()
           active: true,
           system_delegate_enabled: false,
         },
+        {
+          opdiv_id: 5,
+          code: 'FDA',
+          name: 'Food and Drug Administration',
+          is_parent: false,
+          active: true,
+          system_delegate_enabled: false,
+        },
       ],
     })
   )
-  mockUsers([legacyRow])
-  const grantsUrl = `/users/${legacyRow.userid}/assignedopdivs`
+  const detailUrl = `/users/${PIETT_ROW.userid}`
   axios.get.mockImplementation((url: string) => {
-    if (url === grantsUrl)
+    // The modal's on-open read sees one grant; the detail after save sees two.
+    if (url === `${detailUrl}/assignedopdivs`)
       return Promise.resolve({ status: 200, data: { data: [1] } })
+    if (url === detailUrl)
+      return Promise.resolve({
+        status: 200,
+        data: { data: { ...PIETT_ROW, assignedopdivids: [1, 5] } },
+      })
     if (url.startsWith('/users'))
-      return Promise.resolve({ status: 200, data: { data: [legacyRow] } })
+      return Promise.resolve({ status: 200, data: { data: [PIETT_ROW] } })
     return Promise.resolve({ status: 200, data: { data: [] } })
   })
+  axios.put.mockResolvedValue({ status: 204 })
 
   renderWithProviders(<UserTable />)
-  await screen.findByTestId('datagrid-mock')
+  const row = await screen.findByTestId(`datagrid-row-${PIETT_ROW.userid}`)
+  expect(within(row).queryByText('FDA')).not.toBeInTheDocument()
 
-  // The row has no inline grants, so its cell fetches them and renders the
-  // result.
+  await user.click(within(row).getByRole('button', { name: 'assignedOpDivs' }))
   await waitFor(() =>
-    expect(axios.get).toHaveBeenCalledWith(grantsUrl, expect.anything())
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
   )
-  expect(await screen.findByText('CMS')).toBeInTheDocument()
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(axios.get).toHaveBeenCalledWith(detailUrl))
+  expect(await within(row).findByText('FDA')).toBeInTheDocument()
+  expect(within(row).getByText('CMS')).toBeInTheDocument()
 })
 
 test('processRowUpdate grants OpDivs when a new row carries them', async () => {

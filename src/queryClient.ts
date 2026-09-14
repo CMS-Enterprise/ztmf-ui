@@ -129,15 +129,10 @@ export const vocabularyQueryOptions = {
 /**
  * Options a resource hook forwards to its query. `enabled` defers the request,
  * for a layout that must not fetch before the session loader has
- * authenticated or a modal that only reads while open. `staleTime` and
- * `gcTime` let a caller override the hook's defaults for its own lifetime,
- * such as a table cell that wants one read and needs the entry to outlive its
- * own unmount.
+ * authenticated or a modal that only reads while open.
  */
 export type QueryHookOptions = {
   enabled?: boolean
-  staleTime?: number
-  gcTime?: number
 }
 
 export default queryClient

@@ -50,19 +50,18 @@ export async function setUserOpDivs(
 }
 
 /**
- * Reads a user's OpDiv grants for a component.
+ * Reads a user's OpDiv grants for the grant modal.
  *
  * Grants decide what an admin may grant, so a read is only trustworthy when it
- * is current: the default stale time is zero, which makes every enable a fresh
- * request rather than a cache hit. A caller that wants one read for the life
- * of a mount, such as a table cell, passes `staleTime: Infinity`.
+ * is current: the stale time is zero, which makes every enable a fresh
+ * request rather than a cache hit. The users table does not read this key; it
+ * renders the grants the list returns inline on each row.
  *
- * Callers own the error surface. The grant modal shows one toast for its two
- * reads, and the table cell renders as empty, so the cache boundary stays
- * silent for this key.
+ * The caller owns the error surface. The modal shows one toast for its two
+ * reads, so the cache boundary stays silent for this key.
  *
  * @param userid - The user to read grants for.
- * @param options - `enabled` and `staleTime`, per QueryHookOptions.
+ * @param options - `enabled`, per QueryHookOptions.
  * @returns The query result; `data` is the granted opdiv ids.
  */
 export function useUserOpDivs(userid: string, options: QueryHookOptions = {}) {
@@ -78,11 +77,12 @@ export function useUserOpDivs(userid: string, options: QueryHookOptions = {}) {
 /**
  * Mutation that replaces a user's grant set.
  *
- * On success the user's cache entry is seeded from the request rather than
- * refetched. The PUT replaces the full set and the backend rejects a set it
- * will not honor outright, so on a 2xx the stored set is exactly what was
- * sent. Any reader of that key repaints without a second request, including
- * one that is not enabled. Error handling stays with the caller.
+ * On success the user's cache entry is invalidated rather than seeded from the
+ * request. The body is not the stored set for every caller: a scoped admin
+ * sends only the OpDivs they hold, and the backend preserves the target's
+ * other grants, so writing the body into the cache would drop chips the user
+ * still has. The modal refetches on its next open. Error handling stays with
+ * the caller.
  *
  * @returns The mutation, taking the user id and the complete desired set.
  */
@@ -96,8 +96,10 @@ export function useSetUserOpDivs() {
       userid: string
       opdivIds: number[]
     }) => setUserOpDivs(userid, opdivIds),
-    onSuccess: (_data, { userid, opdivIds }) => {
-      queryClient.setQueryData(queryKeys.users.assignedOpdivs(userid), opdivIds)
+    onSuccess: (_data, { userid }) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.users.assignedOpdivs(userid),
+      })
     },
   })
 }

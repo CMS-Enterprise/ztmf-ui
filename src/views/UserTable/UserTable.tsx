@@ -39,7 +39,7 @@ import {
   isUnscopedWriteAdmin,
   selectableRoles,
 } from '@/utils/userRoles'
-import { useSetUserOpDivs, useUserOpDivs } from '@/utils/userOpdivs'
+import { useSetUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import EditOpDivCell from './EditOpDivCell'
 import { isUserCellEditable } from './cellEditGuards'
@@ -188,48 +188,6 @@ function validateEmail(email: string) {
   return /^[a-zA-Z0-9._:$!%-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]+$/.test(email)
 }
 
-/**
- * OpDivs column cell. Renders the grants the users list returned inline on the
- * row. A row from an older backend that omits them enables a per-user read. A
- * grant save seeds the same cache entry, and the cache takes precedence over
- * the inline value, so the cell repaints on its own after the modal saves.
- *
- * The entry is held for the table's lifetime rather than the cell's. The grid
- * virtualizes rows, so a cell scrolled out of view unmounts; if its entry were
- * collected, scrolling back would fall through to the row's pre-save inline
- * grants. A draft row has no id yet and registers nothing.
- */
-function UserOpDivsCell({
-  userid,
-  inlineIds,
-  opdivCodeMap,
-}: {
-  userid: string
-  inlineIds: number[] | null | undefined
-  opdivCodeMap: ReturnType<typeof buildOpDivCodeMap>
-}) {
-  const { data } = useUserOpDivs(userid, {
-    enabled: Boolean(userid) && inlineIds === undefined,
-    staleTime: Infinity,
-    gcTime: Infinity,
-  })
-  const ids = data ?? inlineIds ?? []
-  if (!ids.length) {
-    return (
-      <Typography variant="body2" color="text.secondary">
-        —
-      </Typography>
-    )
-  }
-  return (
-    <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', py: 0.5 }}>
-      {ids.map((id) => (
-        <Chip key={id} size="small" label={opdivCodeMap[id] ?? id} />
-      ))}
-    </Box>
-  )
-}
-
 export default function UserTable() {
   const apiRef = useGridApiRef()
   const navigate = useNavigate()
@@ -292,8 +250,8 @@ export default function UserTable() {
     () => narrowToCallerScope(allAssignableOpDivs, userInfo),
     [allAssignableOpDivs, userInfo]
   )
-  // Seeds the saved grant set into that user's cache entry on success, so the
-  // OpDivs cell repaints without a refetch and no local override map is needed.
+  // Grants for a newly created row. Existing rows are edited through the
+  // grant modal, which refreshes the row on save.
   const grantMutation = useSetUserOpDivs()
   // Global fisma-system metadata for the Assign Systems modal. Fetched once
   // per page load and passed down so the modal doesn't re-fetch on every
@@ -356,21 +314,29 @@ export default function UserTable() {
     setOpDivModalUserName(row?.fullname ?? '')
     setOpenOpDivModal(true)
   }
-  // Pull a single user's derived identity_provider and patch it onto the row.
-  // Called after a confirmed grant/revoke (the backend recomputes it, which can
-  // flip okta <-> entra) and again on modal close as a backstop. The grants
-  // themselves need no refresh: the save mutation seeds that user's cache entry
-  // and the OpDivs cell reads it. Each call targets its own row, so a late
-  // response can't contaminate a different user.
+  // Pull a single user's grants and derived identity_provider and patch both
+  // onto the row. Called after a confirmed grant/revoke (the backend recomputes
+  // identity_provider, which can flip okta <-> entra) and again on modal close
+  // as a backstop. The detail response is the authoritative post-save set: a
+  // scoped admin's save omits grants they cannot touch, and the backend keeps
+  // those, so the request body is not what the row should show. Each call
+  // targets its own row, so a late response can't contaminate a different
+  // user.
   const refreshUserRow = (userid: string) => {
     if (!userid) return
     axiosInstance
       .get(apiPaths.users.detail(userid))
       .then((res) => {
-        const idp = res.data?.data?.identity_provider
+        const user = res.data?.data
         setRows((prev) =>
           prev.map((row) =>
-            row.userid === userid ? { ...row, identity_provider: idp } : row
+            row.userid === userid
+              ? {
+                  ...row,
+                  identity_provider: user?.identity_provider,
+                  assignedopdivids: user?.assignedopdivids ?? [],
+                }
+              : row
           )
         )
       })
@@ -561,9 +527,8 @@ export default function UserTable() {
           role: row.role.trim(),
         }))
         setRows(data)
-        // Grants arrive inline on each list row (assignedopdivids). A row from
-        // an older backend that omits them is handled by its own OpDivs cell,
-        // which reads for itself when the field is absent.
+        // Grants arrive inline on each list row (assignedopdivids); the OpDivs
+        // column reads them straight off the row.
       } catch (error) {
         if (controller.signal.aborted) return
         if (isAuthHandled(error)) return
@@ -683,13 +648,23 @@ export default function UserTable() {
       renderEditCell: (params) => (
         <EditOpDivCell {...params} opdivOptions={opdivOptions} />
       ),
-      renderCell: (params) => (
-        <UserOpDivsCell
-          userid={params.row.userid}
-          inlineIds={params.row.assignedopdivids}
-          opdivCodeMap={opdivCodeMap}
-        />
-      ),
+      renderCell: (params) => {
+        const ids: number[] = params.row.assignedopdivids ?? []
+        if (!ids.length) {
+          return (
+            <Typography variant="body2" color="text.secondary">
+              —
+            </Typography>
+          )
+        }
+        return (
+          <Box sx={{ display: 'flex', gap: 0.5, flexWrap: 'wrap', py: 0.5 }}>
+            {ids.map((id) => (
+              <Chip key={id} size="small" label={opdivCodeMap[id] ?? id} />
+            ))}
+          </Box>
+        )
+      },
     },
     {
       field: 'identity_provider',
