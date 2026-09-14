@@ -3,6 +3,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import QuestionnairePage from './QuestionnairePage'
 import type { userData } from '@/types'
+import { apiPaths } from '@/api/keys'
 
 // Deep-link integration test for #500: a questionnaire URL reached by paste /
 // refresh / bookmark (no router location.state) must resolve the system from
@@ -114,7 +115,8 @@ beforeEach(() => {
   mockGet.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options')) return Promise.resolve({ data: { data: [] } })
     if (url.includes('insights')) return Promise.resolve({ data: { data: [] } })
     return Promise.resolve({ data: { data: [] } })
@@ -169,7 +171,7 @@ it('resolves the cycle from the URL datacall segment (not the latest/selected ca
       mockGet.mock.calls.some(
         (c) =>
           typeof c[0] === 'string' &&
-          c[0].startsWith('scores') &&
+          c[0].startsWith(apiPaths.scores.root) &&
           c[0].includes('datacallid=4')
       )
     ).toBe(true)
@@ -179,7 +181,7 @@ it('resolves the cycle from the URL datacall segment (not the latest/selected ca
     mockGet.mock.calls.some(
       (c) =>
         typeof c[0] === 'string' &&
-        c[0].startsWith('scores') &&
+        c[0].startsWith(apiPaths.scores.root) &&
         c[0].includes('datacallid=5')
     )
   ).toBe(false)
@@ -223,6 +225,65 @@ it('shows a not-found warning once systems are loaded and the acronym is unknown
   )
 })
 
+// Acronyms are not unique. Several production systems shared one, and the
+// bare-acronym System Info link opened the first match: the client answered
+// another system's questionnaire while the dashboard showed their own as not
+// scored.
+describe('ambiguous acronym', () => {
+  const PENDING_A = {
+    fismasystemid: 2001,
+    fismaacronym: 'Pending',
+    fismaname: 'First Pending System',
+    datacenterenvironment: 'Imperial-Fleet',
+  }
+  const PENDING_B = {
+    fismasystemid: 2002,
+    fismaacronym: 'Pending',
+    fismaname: 'Second Pending System',
+    datacenterenvironment: 'Imperial-Fleet',
+  }
+  beforeEach(() => {
+    mockCtx.fismaSystems = [
+      ...(mockCtx.fismaSystems as unknown[]),
+      PENDING_A,
+      PENDING_B,
+    ]
+  })
+
+  it('refuses to guess on a bare acronym deep link and says why', async () => {
+    renderAt('/questionnaire/pending')
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/More than one system uses the acronym/i)
+      ).toBeInTheDocument()
+    )
+    expect(
+      screen.queryByText(/Could not find a system/i)
+    ).not.toBeInTheDocument()
+    expect(callsTo('/questions')).toHaveLength(0)
+  })
+
+  it('opens the exact system when route state carries its fismasystemid', async () => {
+    renderAt({
+      pathname: '/questionnaire/pending',
+      state: { fismasystemid: PENDING_B.fismasystemid },
+    })
+
+    await waitFor(() =>
+      expect(
+        callsTo(`/fismasystems/${PENDING_B.fismasystemid}/questions`)
+      ).toHaveLength(1)
+    )
+    expect(
+      callsTo(`/fismasystems/${PENDING_A.fismasystemid}/questions`)
+    ).toHaveLength(0)
+    expect(
+      screen.queryByText(/More than one system uses the acronym/i)
+    ).not.toBeInTheDocument()
+  })
+})
+
 it('shows a spinner (not the not-found warning) while the systems list is still loading', () => {
   mockCtx.fismaSystems = []
   renderAt(
@@ -249,7 +310,7 @@ it('runs the fetch exactly once per cold deep-link mount (no self-triggered reru
   })
 
   expect(callsTo('/fismasystems/1002/questions')).toHaveLength(1)
-  expect(callsTo('scores?')).toHaveLength(1)
+  expect(callsTo(`${apiPaths.scores.root}?`)).toHaveLength(1)
   expect(optionsCalls()).toHaveLength(1)
 })
 
@@ -270,8 +331,8 @@ it('runs the fetch exactly once for the dashboard flow too (route state present)
   })
 
   // Route state wins (#467/#501): scores queried for the opened call, once.
-  expect(callsTo('scores?')).toHaveLength(1)
-  expect(callsTo('scores?')[0]).toContain('datacallid=5')
+  expect(callsTo(`${apiPaths.scores.root}?`)).toHaveLength(1)
+  expect(callsTo(`${apiPaths.scores.root}?`)[0]).toContain('datacallid=5')
   expect(callsTo('/fismasystems/1002/questions')).toHaveLength(1)
 })
 
@@ -294,7 +355,8 @@ it('resolves a decommissioned system and shows its no-questionnaire state, not t
     // Decommissioned systems join to zero functions; backend serializes null.
     if (url.includes('/fismasystems/1099/questions'))
       return Promise.resolve({ data: { data: null } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('insights')) return Promise.resolve({ data: { data: [] } })
     return Promise.resolve({ data: { data: [] } })
   })

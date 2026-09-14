@@ -10,6 +10,7 @@ import {
 import { Button as CmsButton } from '@cmsgov/design-system'
 import { GridRowId } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import Checkbox from '@mui/material/Checkbox'
 import TextField from '@mui/material/TextField'
@@ -74,11 +75,11 @@ export default function AssignSystemModal({
       // existing assignment.
       const [assignedRes, assignableRes] = await Promise.allSettled([
         axiosInstance.get<{ data: number[] | null }>(
-          `/users/${userid}/assignedfismasystems`,
+          apiPaths.users.assignedFismaSystems(userid),
           { signal: controller.signal }
         ),
         axiosInstance.get<{ data: FismaSystemType[] | null }>(
-          `/users/${userid}/assignablefismasystems`,
+          apiPaths.users.assignableFismaSystems(userid),
           { signal: controller.signal }
         ),
       ])
@@ -189,7 +190,7 @@ export default function AssignSystemModal({
     if (!confirm || !target) return
     try {
       await axiosInstance.delete(
-        `/users/${userid}/assignedfismasystems/${target.systemid}`
+        apiPaths.users.assignedFismaSystem(userid, target.systemid)
       )
       setAssignedSystems(target.nextValue)
       notify('Saved - unassigned system', 'success')
@@ -276,7 +277,7 @@ export default function AssignSystemModal({
               if (added.length) {
                 try {
                   await axiosInstance.post(
-                    `/users/${userid}/assignedfismasystems`,
+                    apiPaths.users.assignedFismaSystems(userid),
                     { fismasystemid: added[0] }
                   )
                   setAssignedSystems(newValue)

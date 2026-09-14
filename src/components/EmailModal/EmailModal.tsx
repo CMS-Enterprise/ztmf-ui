@@ -21,6 +21,7 @@ import { EmailModalProps } from '@/types'
 import './EmailModal.css'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 
@@ -76,7 +77,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     e.preventDefault()
     const formData = new FormData(e.currentTarget)
     try {
-      const res = await axiosInstance.post('/massemails', {
+      const res = await axiosInstance.post(apiPaths.massEmails, {
         group: formData.get('email_group'),
         subject: formData.get('email_subject'),
         body: formData.get('email_body'),

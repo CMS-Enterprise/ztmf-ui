@@ -1,13 +1,16 @@
-import { render, screen } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import SystemDetailHeader from './SystemDetailHeader'
 
 // Cross-navigation coverage for ui#609: System Info needs a link to the
 // system's questionnaire. The questionnaire route is keyed on :fismaacronym
 // while this page is routed by :fismasystemid, so the acronym is passed in.
+// Acronyms are not unique, so an in-app click also carries the fismasystemid
+// in route state and the questionnaire opens this exact system.
 
 const BASE_PROPS = {
   systemName: 'Super Star Destroyer Executor Command Systems',
+  fismasystemid: 1002,
   fismaacronym: 'SSD-EX',
   canEdit: false,
   isEditing: false,
@@ -58,6 +61,27 @@ it('targets the questionnaire keyed on the lowercased acronym', () => {
   expect(
     screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
   ).toBe('/questionnaire/ssd-ex')
+})
+
+it('carries the fismasystemid in route state on a plain click', () => {
+  const router = renderHeader()
+  fireEvent.click(screen.getByRole('link', { name: 'Questionnaire' }))
+  expect(router.state.location.pathname).toBe('/questionnaire/ssd-ex')
+  // The id, not the acronym, is what QuestionnairePage keys the system on
+  // when several systems share an acronym.
+  expect(router.state.location.state).toEqual({ fismasystemid: 1002 })
+})
+
+it('leaves a modified click to the anchor so open-in-new-tab still works', () => {
+  const router = renderHeader()
+  const link = screen.getByRole('link', { name: 'Questionnaire' })
+  // jsdom has no navigation; swallow the anchor default so the un-intercepted
+  // click is observable only as the router NOT moving.
+  link.addEventListener('click', (e) => e.preventDefault())
+  fireEvent.click(link, { metaKey: true })
+  fireEvent.click(link, { ctrlKey: true })
+  fireEvent.click(link, { button: 1 })
+  expect(router.state.location.pathname).toBe('/systems/1002')
 })
 
 it('shows Questionnaire alongside Edit for an editor', () => {

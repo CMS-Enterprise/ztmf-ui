@@ -1,7 +1,9 @@
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { act } from 'react'
 import MockAdapter from 'axios-mock-adapter'
 import { ERROR_MESSAGES } from '@/constants'
+import { apiPaths, queryKeys } from '@/api/keys'
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -16,7 +18,7 @@ jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
 
   const { handleAuthError } = require('@/utils/authInterceptor')
-  const instance = axios.create({ baseURL: '/api/v1/' })
+  const instance = axios.create({ baseURL: 'api/v1/' })
   instance.interceptors.response.use(
     (response: unknown) => response,
     handleAuthError
@@ -82,6 +84,36 @@ test('200 response renders the enrichment cards with payload fields', async () =
   expect(screen.getByText('Test ISSO')).toBeInTheDocument()
 })
 
+test('keeps successful enrichment visible when a background refetch fails', async () => {
+  mock.onGet(apiPaths.systemEnrichment(FISMA_UID)).reply(200, {
+    data: {
+      fisma_uuid: FISMA_UID,
+      payload: {
+        authorization_package_name: 'Retained Package',
+      },
+      synced_at: '2026-01-01T00:00:00Z',
+    },
+  })
+
+  const { queryClient } = renderWithProviders(
+    <SystemEnrichmentCard fismaUid={FISMA_UID} />
+  )
+  expect(await screen.findByText('Retained Package')).toBeInTheDocument()
+
+  mock.resetHandlers()
+  mock.onGet(apiPaths.systemEnrichment(FISMA_UID)).reply(500)
+  await act(async () => {
+    await queryClient.refetchQueries({
+      queryKey: queryKeys.systemEnrichment(FISMA_UID),
+    })
+  })
+
+  expect(screen.getByText('Retained Package')).toBeInTheDocument()
+  expect(
+    screen.queryByText(/failed to load ztmf insights data/i)
+  ).not.toBeInTheDocument()
+})
+
 // This is the key skipAuthHandling integration test: a 403 must produce
 // the muted empty state, NOT the centralized permission snackbar. If
 // the opt-out flag stops being honored upstream, this test fails.
@@ -97,6 +129,8 @@ test('403 renders the quiet empty state and the interceptor stays out of the way
   expect(screen.queryByText(ERROR_MESSAGES.permission)).not.toBeInTheDocument()
   // And no redirect either - skipAuthHandling bypasses both branches.
   expect(mockedNavigate).not.toHaveBeenCalled()
+  expect(mock.history.get).toHaveLength(1)
+  expect(mock.history.get[0].skipAuthHandling).toBe(true)
 })
 
 test('404 renders the same quiet empty state', async () => {
@@ -117,6 +151,33 @@ test('500 renders the failed-to-load message', async () => {
   expect(
     await screen.findByText(/failed to load ztmf insights data/i)
   ).toBeInTheDocument()
+  expect(screen.queryByText(ERROR_MESSAGES.tryAgain)).not.toBeInTheDocument()
+})
+
+test('passes the Query cancellation signal to Axios and aborts on unmount', async () => {
+  let requestSignal: AbortSignal | undefined
+  mock.onGet(apiPaths.systemEnrichment(FISMA_UID)).reply(
+    (config) =>
+      new Promise((resolve) => {
+        requestSignal = config.signal as AbortSignal
+        requestSignal.addEventListener(
+          'abort',
+          () => resolve([200, { data: null }]),
+          { once: true }
+        )
+      })
+  )
+
+  const { unmount } = renderWithProviders(
+    <SystemEnrichmentCard fismaUid={FISMA_UID} />
+  )
+
+  await waitFor(() => expect(requestSignal).toBeDefined())
+  expect(requestSignal?.aborted).toBe(false)
+
+  unmount()
+
+  expect(requestSignal?.aborted).toBe(true)
 })
 
 // Data center environment display + mismatch flag (ztmf#239)

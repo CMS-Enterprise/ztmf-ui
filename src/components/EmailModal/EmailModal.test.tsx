@@ -117,6 +117,41 @@ test('offers System Delegate as a targetable email group and posts its key', asy
   })
 })
 
+test('offers READONLY_ADMIN as a targetable email group and posts its key', async () => {
+  // The backend accepts a READONLY_ADMIN group key on /massemails
+  // (ztmf-misc#297), covering the HHS_READONLY_ADMIN and OPDIV_READONLY_ADMIN
+  // tiers. Pin the option so the read-only cohort stays reachable.
+  let posted: Record<string, unknown> = {}
+  mock.onPost('/massemails').reply((config) => {
+    posted = JSON.parse(config.data as string)
+    return [200, { data: ['readonly@example.com'] }]
+  })
+
+  renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
+
+  const group = document.querySelector(
+    'select[name="email_group"]'
+  ) as HTMLSelectElement
+  expect(group.querySelector('option[value="READONLY_ADMIN"]')).not.toBeNull()
+
+  await userEvent.selectOptions(group, 'READONLY_ADMIN')
+  await userEvent.type(
+    document.querySelector('input[name="email_subject"]') as HTMLInputElement,
+    'hello'
+  )
+  await userEvent.type(
+    document.querySelector(
+      'textarea[name="email_body"]'
+    ) as HTMLTextAreaElement,
+    'world'
+  )
+  await userEvent.click(screen.getByRole('button', { name: /^send$/i }))
+
+  await waitFor(() => {
+    expect(posted.group).toBe('READONLY_ADMIN')
+  })
+})
+
 test('401 redirects to sign-in with the expired-session message and reason', async () => {
   mock.onPost('/massemails').reply(401)
 

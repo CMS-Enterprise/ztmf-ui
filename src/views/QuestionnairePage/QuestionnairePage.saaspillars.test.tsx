@@ -173,7 +173,8 @@ beforeEach(() => {
         (reduced && id ? QUESTIONS_BY_DATACALL[id] : undefined) ?? ALL_PILLARS
       return Promise.resolve({ data: { data: questionsFor(pillars) } })
     }
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith('/scores'))
+      return Promise.resolve({ data: { data: [] } })
     return Promise.resolve({ data: { data: [] } })
   })
 })
@@ -266,7 +267,8 @@ it('never re-filters the response client-side', async () => {
   mockGet.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: questionsFor(ALL_PILLARS) } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith('/scores'))
+      return Promise.resolve({ data: { data: [] } })
     return Promise.resolve({ data: { data: [] } })
   })
   renderPage()
