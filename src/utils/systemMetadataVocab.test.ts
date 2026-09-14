@@ -14,7 +14,7 @@ jest.mock('@/utils/notify', () => {
   return { ...actual, notify: jest.fn() }
 })
 
-import { renderHook, waitFor } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import { queryKeys } from '@/api/keys'
@@ -373,23 +373,34 @@ describe('useSystemAttributes', () => {
     expect(notify).not.toHaveBeenCalled()
   })
 
-  it('serves a remount from cache rather than refetching', async () => {
-    mock.onGet('/systemattributes').reply(200, { data: ROWS })
-    const client = createTestQueryClient()
+  it('serves a remount from cache long after the default collection window', async () => {
+    jest.useFakeTimers()
+    try {
+      mock.onGet('/systemattributes').reply(200, { data: ROWS })
+      const client = createTestQueryClient()
 
-    const first = renderHook(() => useSystemAttributes(), {
-      wrapper: queryWrapper(client),
-    })
-    await waitFor(() => expect(first.result.current).toEqual(ROWS))
-    first.unmount()
+      const first = renderHook(() => useSystemAttributes(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(first.result.current).toEqual(ROWS))
+      first.unmount()
 
-    const second = renderHook(() => useSystemAttributes(), {
-      wrapper: queryWrapper(client),
-    })
-    await waitFor(() => expect(second.result.current).toEqual(ROWS))
+      // The modals that consume this unmount between openings, and the
+      // client's default five-minute collection would drop the unobserved
+      // entry in between. Advancing past it is what makes this a test of
+      // gcTime rather than only of staleTime.
+      act(() => {
+        jest.advanceTimersByTime(30 * 60 * 1000)
+      })
 
-    // The modals that consume this unmount between openings; an Infinity
-    // gcTime is what keeps the second open off the network.
-    expect(mock.history.get).toHaveLength(1)
+      const second = renderHook(() => useSystemAttributes(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(second.result.current).toEqual(ROWS))
+
+      expect(mock.history.get).toHaveLength(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

@@ -27,6 +27,7 @@ import {
   useDelegateCandidates,
   useRemoveSystemDelegate,
   useSetOpDivDelegateEnabled,
+  useSystemDelegates,
 } from './delegates'
 
 const mock = new MockAdapter(axiosInstance)
@@ -100,6 +101,36 @@ describe('delegate writes', () => {
     expect(stale(queryKeys.fismaSystems.delegateCandidates(42, 'ta'))).toBe(
       true
     )
+  })
+
+  it('resolve only once the roster has refetched, not merely started to', async () => {
+    const rosterUrl = apiPaths.fismaSystems.delegates(42)
+    // The roster still lists the delegate on the first read and is empty on
+    // the refetch, so the cache contents say which one the write waited for.
+    mock
+      .onGet(rosterUrl)
+      .replyOnce(200, { data: [{ userid: 'd-1', fullname: 'Tarkin' }] })
+      .onGet(rosterUrl)
+      .replyOnce(200, { data: [] })
+    mock.onDelete(apiPaths.fismaSystems.delegate(42, 'd-1')).reply(204)
+    const client = createTestQueryClient()
+    const wrapper = queryWrapper(client)
+
+    const roster = renderHook(() => useSystemDelegates(42), { wrapper })
+    await waitFor(() => expect(roster.result.current.data).toHaveLength(1))
+
+    const { result } = renderHook(() => useRemoveSystemDelegate(42), {
+      wrapper,
+    })
+    await act(async () => {
+      await result.current.mutateAsync('d-1')
+      // Asserted at the moment the write resolves, with no waitFor to paper
+      // over the ordering. The section closes its dialog and toasts here, and
+      // it has to be over the refreshed roster.
+      expect(client.getQueryData(queryKeys.fismaSystems.delegates(42))).toEqual(
+        []
+      )
+    })
   })
 
   it('the OpDiv delegate toggle invalidates the shared OpDiv list', async () => {

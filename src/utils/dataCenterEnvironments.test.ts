@@ -153,21 +153,34 @@ describe('useDataCenterEnvironments', () => {
     expect(result.current).toEqual([])
   })
 
-  it('serves a remount from cache rather than refetching', async () => {
-    mock.onGet('/datacenterenvironments').reply(200, { data: ROWS })
-    const client = createTestQueryClient()
+  it('serves a remount from cache long after the default collection window', async () => {
+    jest.useFakeTimers()
+    try {
+      mock.onGet('/datacenterenvironments').reply(200, { data: ROWS })
+      const client = createTestQueryClient()
 
-    const first = renderHook(() => useDataCenterEnvironments(), {
-      wrapper: queryWrapper(client),
-    })
-    await waitFor(() => expect(first.result.current).toEqual(ROWS))
-    first.unmount()
+      const first = renderHook(() => useDataCenterEnvironments(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(first.result.current).toEqual(ROWS))
+      first.unmount()
 
-    const second = renderHook(() => useDataCenterEnvironments(), {
-      wrapper: queryWrapper(client),
-    })
-    await waitFor(() => expect(second.result.current).toEqual(ROWS))
+      // Nothing observes the entry now. The client's default five-minute
+      // collection would drop it here and put the next mount back on the
+      // network, so advance well past that: surviving this is gcTime, and
+      // skipping the request on arrival is staleTime.
+      act(() => {
+        jest.advanceTimersByTime(30 * 60 * 1000)
+      })
 
-    expect(mock.history.get).toHaveLength(1)
+      const second = renderHook(() => useDataCenterEnvironments(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(second.result.current).toEqual(ROWS))
+
+      expect(mock.history.get).toHaveLength(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

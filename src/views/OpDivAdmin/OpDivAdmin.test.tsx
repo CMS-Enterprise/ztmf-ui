@@ -95,14 +95,6 @@ jest.mock('@mui/x-data-grid', () => {
   }
 })
 
-// Fetchers are stubbed; the mutation hooks built on them run for real.
-jest.mock('@/utils/opdivs', () => ({
-  __esModule: true,
-  ...jest.requireActual('@/utils/opdivs'),
-  fetchOpDivs: jest.fn(),
-  createOpDiv: jest.fn(),
-  updateOpDiv: jest.fn(),
-}))
 jest.mock('@/utils/notify', () => {
   const actual = jest.requireActual('@/utils/notify')
   return { ...actual, notify: jest.fn() }
@@ -140,6 +132,7 @@ import type { OpDiv, UserRole, userData } from '@/types'
 // boundary.
 const mock = new MockAdapter(axiosInstance)
 const TOGGLE_URL = apiPaths.opdivs.systemDelegateEnabled(3)
+const OPDIVS_URL = apiPaths.opdivs.root
 
 const EMPIRE: OpDiv = {
   opdiv_id: 3,
@@ -174,6 +167,50 @@ beforeEach(() => {
   mock
     .onPut(TOGGLE_URL)
     .reply(200, { data: { ...EMPIRE, system_delegate_enabled: true } })
+  mock.onPost(OPDIVS_URL).reply(201, { data: EMPIRE })
+  mock.onPut(apiPaths.opdivs.detail(3)).reply(204)
+  mock.onGet(OPDIVS_URL).reply(200, { data: [EMPIRE] })
+})
+
+test('creating an OpDiv POSTs the trimmed form and closes the dialog', async () => {
+  const user = userEvent.setup()
+  renderAs('OWNER')
+
+  await user.click(screen.getByRole('button', { name: /create opdiv/i }))
+  await user.type(await screen.findByLabelText(/code/i), '  NEWOP  ')
+  await user.type(screen.getByLabelText(/^name/i), '  New Division  ')
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  expect(mock.history.post[0].url).toBe(OPDIVS_URL)
+  expect(JSON.parse(mock.history.post[0].data)).toEqual({
+    code: 'NEWOP',
+    name: 'New Division',
+    is_parent: false,
+  })
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: /create opdiv/i })
+    ).not.toBeInTheDocument()
+  )
+})
+
+test('a backend field error on create stays inline and keeps the dialog open', async () => {
+  const user = userEvent.setup()
+  mock.onPost(OPDIVS_URL).reply(400, { data: { code: 'code already exists' } })
+  renderAs('OWNER')
+
+  await user.click(screen.getByRole('button', { name: /create opdiv/i }))
+  await user.type(await screen.findByLabelText(/code/i), 'EMPIRE')
+  await user.type(screen.getByLabelText(/^name/i), 'Duplicate')
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  // Routed to the Code field rather than a toast, so the admin can correct it
+  // in place.
+  expect(await screen.findByText(/code already exists/i)).toBeInTheDocument()
+  expect(
+    screen.getByRole('dialog', { name: /create opdiv/i })
+  ).toBeInTheDocument()
 })
 
 test('OWNER sees the delegate toggle plus Create and row actions', async () => {
