@@ -104,7 +104,7 @@ yarn build
 
 ### PR environment image
 
-`Dockerfile` builds the frontend for per-PR environments ([ztmf-misc#343](https://github.com/CMS-Enterprise/ztmf-misc/issues/343)): an nginx container that serves the path-agnostic bundle under a prefix, proxies its `api/` calls to the API container, and writes `config.js` at start with a test-mode bearer token. The bundle is built with `VITE_IDP_ENABLED=false`, so this image is never what dev or prod serve.
+`Dockerfile` builds the frontend for per-PR environments ([ztmf-misc#343](https://github.com/CMS-Enterprise/ztmf-misc/issues/343)): an nginx container that serves the path-agnostic bundle under a prefix, proxies its `api/` calls to the API container, and writes `config.js` at start with a test-mode bearer token. The bundle is built with `VITE_IDP_ENABLED=false`, so this image is never what dev or prod serve, and a PR that changes the IdP login path or the `showIdpSelector` branch is not exercised by its PR environment.
 
 | Variable            | Default                       | Purpose                                                                  |
 | ------------------- | ----------------------------- | ------------------------------------------------------------------------ |

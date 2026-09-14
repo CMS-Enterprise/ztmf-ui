@@ -5,6 +5,7 @@
 set -eu
 
 : "${AUTH_HS256_SECRET:?AUTH_HS256_SECRET is required}"
+: "${PR_PATH_PREFIX?PR_PATH_PREFIX must be set, empty for the root}"
 : "${TEST_USER_EMAIL:=Grand.Moff@DeathStar.Empire}"
 
 b64url() { openssl base64 -A | tr '+/' '-_' | tr -d '='; }
