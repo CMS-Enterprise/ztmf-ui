@@ -163,14 +163,6 @@ jest.mock('@/utils/config', () => ({
   default: { IDP_ENABLED: false },
 }))
 
-// OpDiv grant writes/reads during create-with-grants and row refresh.
-jest.mock('@/utils/userOpdivs', () => ({
-  __esModule: true,
-  setUserOpDivs: jest.fn().mockResolvedValue(undefined),
-  fetchUserOpDivs: jest.fn().mockResolvedValue([]),
-}))
-const setUserOpDivs = require('@/utils/userOpdivs').setUserOpDivs as jest.Mock
-
 // notify drives the delete/restore snackbars; mock it to assert calls.
 // isAuthHandled must stay a real-ish predicate (false for ordinary errors) so
 // the fetch tests' catch branches still log rather than short-circuit.
@@ -292,15 +284,9 @@ beforeEach(() => {
   axios.put.mockReset()
   axios.delete.mockReset()
   // resetMocks: true (jest.config) wipes implementations set at mock-factory
-  // time, so re-establish the ones consumers depend on: ordinary errors are not
-  // auth-handled, and the OpDiv grant reads/writes resolve.
+  // time, so re-establish the one consumers depend on: ordinary errors are not
+  // auth-handled.
   ;(require('@/utils/notify').isAuthHandled as jest.Mock).mockReturnValue(false)
-  ;(
-    require('@/utils/userOpdivs').fetchUserOpDivs as jest.Mock
-  ).mockResolvedValue([])
-  ;(require('@/utils/userOpdivs').setUserOpDivs as jest.Mock).mockResolvedValue(
-    undefined
-  )
 })
 
 test('fetches both /fismasystems and /fismasystems?decommissioned=true regardless of context', async () => {
@@ -663,6 +649,10 @@ const PIETT_ROW: users = {
 
 function mockUsers(list: users[]) {
   axios.get.mockImplementation((url: string) => {
+    // A per-user grant read (only a row without inline grants makes one) must
+    // not be answered with the users list.
+    if (url.endsWith('/assignedopdivs'))
+      return Promise.resolve({ status: 200, data: { data: [] } })
     if (url.startsWith('/users'))
       return Promise.resolve({ status: 200, data: { data: list } })
     if (url.startsWith('/fismasystems'))
@@ -954,8 +944,9 @@ test('processRowUpdate surfaces a 400 field error on a failed create', async () 
 })
 
 test('backfills OpDiv grants per user when the list omits them inline', async () => {
-  // An older backend response without assignedopdivids on the row triggers the
-  // per-user fetchUserOpDivs backfill rather than the inline read.
+  // An older backend response without assignedopdivids on the row makes that
+  // row's OpDivs cell read its grants for itself rather than use the inline
+  // value.
   const legacyRow = {
     userid: '33333333-3333-3333-3333-333333333333',
     email: 'legacy@agency.gov',
@@ -963,19 +954,41 @@ test('backfills OpDiv grants per user when the list omits them inline', async ()
     role: 'ISSO',
     assignedfismasystems: [],
   } as unknown as users
-  const { fetchUserOpDivs } = require('@/utils/userOpdivs') as {
-    fetchUserOpDivs: jest.Mock
-  }
-  fetchUserOpDivs.mockResolvedValue([1])
+  // The chip labels from the shared OpDiv list, so give the context the one
+  // OpDiv the fetched grant resolves to.
+  setMockCtx(
+    makeCtx({
+      opdivs: [
+        {
+          opdiv_id: 1,
+          code: 'CMS',
+          name: 'Centers for Medicare & Medicaid Services',
+          is_parent: false,
+          active: true,
+          system_delegate_enabled: false,
+        },
+      ],
+    })
+  )
   mockUsers([legacyRow])
+  const grantsUrl = `/users/${legacyRow.userid}/assignedopdivs`
+  axios.get.mockImplementation((url: string) => {
+    if (url === grantsUrl)
+      return Promise.resolve({ status: 200, data: { data: [1] } })
+    if (url.startsWith('/users'))
+      return Promise.resolve({ status: 200, data: { data: [legacyRow] } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
 
   renderWithProviders(<UserTable />)
   await screen.findByTestId('datagrid-mock')
 
-  // The row has no inline grants, so the component fetches them per user.
+  // The row has no inline grants, so its cell fetches them and renders the
+  // result.
   await waitFor(() =>
-    expect(fetchUserOpDivs).toHaveBeenCalledWith(legacyRow.userid)
+    expect(axios.get).toHaveBeenCalledWith(grantsUrl, expect.anything())
   )
+  expect(await screen.findByText('CMS')).toBeInTheDocument()
 })
 
 test('processRowUpdate grants OpDivs when a new row carries them', async () => {
@@ -1001,7 +1014,9 @@ test('processRowUpdate grants OpDivs when a new row carries them', async () => {
   })
 
   // The created user's id is granted the selected OpDivs.
-  expect(setUserOpDivs).toHaveBeenCalledWith('srv-9', [1, 2])
+  expect(axios.put).toHaveBeenCalledWith('/users/srv-9/opdivs', {
+    opdiv_ids: [1, 2],
+  })
   // The grant succeeds, so the success snackbar shows, NOT the
   // "grants failed" fallback (which is what surfaced when the grant read threw).
   expect(await screen.findByText('Saved')).toBeInTheDocument()

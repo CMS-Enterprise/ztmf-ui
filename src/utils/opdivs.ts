@@ -1,10 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
-import {
-  vocabularyQueryOptions,
-  type VocabularyQueryHookOptions,
-} from '@/queryClient'
+import { vocabularyQueryOptions, type QueryHookOptions } from '@/queryClient'
 import { EMPTY_LIST } from '@/utils/emptyList'
 import type { OpDiv } from '@/types'
 
@@ -50,13 +47,13 @@ export async function fetchOpDivs(
  * a second request for the same reference data.
  *
  * @param includeInactive - Pass true to include deactivated rows.
- * @param options - See VocabularyQueryHookOptions.
+ * @param options - See QueryHookOptions.
  * @returns The rows, whether the load has settled (on failure too), and the
  *   error when it failed.
  */
 export function useOpDivs(
   includeInactive = false,
-  options: VocabularyQueryHookOptions = {}
+  options: QueryHookOptions = {}
 ): { opdivs: OpDiv[]; opdivsLoaded: boolean; error: Error | null } {
   const { data, isPending, error } = useQuery({
     queryKey: queryKeys.opdivs.list(includeInactive),

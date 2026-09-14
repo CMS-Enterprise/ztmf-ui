@@ -12,7 +12,8 @@ import { GridRowId } from '@mui/x-data-grid'
 import Checkbox from '@mui/material/Checkbox'
 import TextField from '@mui/material/TextField'
 import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete'
-import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
+import { useSetUserOpDivs, useUserOpDivs } from '@/utils/userOpdivs'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import type { OpDiv } from '@/types'
@@ -74,18 +75,50 @@ export default function OpDivGrantModal({
   callerUserId,
   onChanged,
 }: Props) {
-  const [localOpDivs, setLocalOpDivs] = React.useState<number[]>([])
-  // The caller's own current grants, fetched fresh on open (scoped callers
-  // only). The backend's true add/remove scope (IsAssignedOpDiv), used for both
-  // the dropdown narrowing and the save-time preserve boundary.
-  const [callerGrantIds, setCallerGrantIds] = React.useState<number[]>([])
-  const [saving, setSaving] = React.useState(false)
-  const [loading, setLoading] = React.useState(false)
-  const [fetchFailed, setFetchFailed] = React.useState(false)
+  const targetId = String(userid)
+  const active = open && Boolean(userid)
+  // Both reads are fresh on every open (zero stale time in the hook). Fetching
+  // the caller's scope fresh, rather than reading the session-old userInfo, is
+  // what closes the staleness gap: an admin whose own grants changed
+  // mid-session gets the current scope on open. A seconds-wide open-to-save
+  // TOCTOU remains by design - a concurrent change to the caller's OWN grants
+  // during an active edit isn't caught until the next open. That's unclosable
+  // client-side (a save-time refetch only narrows it) and the backend's
+  // grant-membership gate is the final authority; don't move this to
+  // save-time to chase it. When the caller opens their own row both hooks
+  // share one cache key, so one request serves both.
+  const targetQuery = useUserOpDivs(targetId, { enabled: active })
+  const callerQuery = useUserOpDivs(callerUserId, {
+    enabled: active && enforceCallerScope,
+  })
+  const loading =
+    targetQuery.isFetching || (enforceCallerScope && callerQuery.isFetching)
+  const fetchFailed =
+    targetQuery.isError || (enforceCallerScope && callerQuery.isError)
+  const grantMutation = useSetUserOpDivs()
+  const saving = grantMutation.isPending
 
-  // The caller's raw backend scope (IsAssignedOpDiv). Superset of assignableIds
-  // - it also covers grants to OpDivs since re-parented/deactivated. Gates the
-  // scoped save and the chip lock, so both agree with what the backend acts on.
+  // Only the user's edits live in state. Until the picker is touched the
+  // fetched grants render directly, so a background refresh cannot clobber an
+  // edit, and every open starts from the server again. Empty while a read is
+  // in flight so a previous open's grants never flash in the picker.
+  const [edits, setEdits] = React.useState<number[] | null>(null)
+  React.useEffect(() => {
+    if (!open) setEdits(null)
+  }, [open])
+  const localOpDivs: number[] = React.useMemo(
+    () => (loading ? EMPTY_LIST : edits ?? targetQuery.data ?? EMPTY_LIST),
+    [loading, edits, targetQuery.data]
+  )
+
+  // The caller's own current grants (scoped callers only): the backend's true
+  // add/remove scope (IsAssignedOpDiv), used for both the dropdown narrowing
+  // and the save-time preserve boundary. Superset of assignableIds - it also
+  // covers grants to OpDivs since re-parented/deactivated. Gates the scoped
+  // save and the chip lock, so both agree with what the backend acts on.
+  const callerGrantIds: number[] = enforceCallerScope
+    ? callerQuery.data ?? EMPTY_LIST
+    : EMPTY_LIST
   const callerScope = React.useMemo(
     () => new Set(callerGrantIds),
     [callerGrantIds]
@@ -139,69 +172,23 @@ export default function OpDivGrantModal({
     notify(parsed.message, 'error')
   }, [])
 
+  // One toast per open, even when both reads fail: a second identical message
+  // adds nothing, and any 401 redirect is handled by the axios interceptor
+  // regardless. Waits for the reads to settle so a reopen does not re-report
+  // the previous open's error while the fresh request is still in flight.
+  const failure =
+    targetQuery.error ?? (enforceCallerScope ? callerQuery.error : null)
+  const toastedRef = React.useRef(false)
   React.useEffect(() => {
-    if (open && userid) {
-      let cancelled = false
-      setLoading(true)
-      setFetchFailed(false)
-      setLocalOpDivs([])
-      setCallerGrantIds([])
-      // Fetch the target's grants and, for a scoped caller, the caller's own
-      // current grants. Fetching the caller's scope fresh (rather than reading
-      // the session-old userInfo) is what closes the staleness gap: an admin
-      // whose own grants changed mid-session gets the current scope on open.
-      // A seconds-wide open-to-save TOCTOU remains by design - a concurrent
-      // change to the caller's OWN grants during an active edit isn't caught
-      // until the next open. That's unclosable client-side (a save-time refetch
-      // only narrows it) and the backend's grant-membership gate is the final
-      // authority; don't move this to save-time to chase it.
-      // When the caller opens the modal on their OWN row the two are the same
-      // request, so reuse the one promise instead of an identical second GET.
-      const targetPromise = fetchUserOpDivs(String(userid))
-      const callerScopePromise = !enforceCallerScope
-        ? Promise.resolve<number[]>([])
-        : callerUserId === String(userid)
-          ? targetPromise
-          : fetchUserOpDivs(callerUserId)
-      Promise.allSettled([targetPromise, callerScopePromise])
-        .then(([targetRes, callerRes]) => {
-          if (cancelled) return
-          if (targetRes.status === 'fulfilled') setLocalOpDivs(targetRes.value)
-          if (callerRes.status === 'fulfilled')
-            setCallerGrantIds(callerRes.value)
-          // Either fetch failing blocks the save: a missing target list, or
-          // (worse) a missing caller scope, could revoke grants - fetchFailed
-          // disables the picker and Save so the empty fallback scope is never
-          // acted on. Surface a single error; a second identical toast when both
-          // fail adds nothing, and any 401 redirect is handled by the axios
-          // interceptor regardless of which reason we pass here.
-          const failure =
-            targetRes.status === 'rejected'
-              ? targetRes.reason
-              : callerRes.status === 'rejected'
-                ? callerRes.reason
-                : null
-          if (failure) {
-            handleError(failure)
-            setFetchFailed(true)
-          }
-        })
-        .finally(() => {
-          if (!cancelled) setLoading(false)
-        })
-      return () => {
-        cancelled = true
-      }
-    } else {
-      setFetchFailed(false)
-      setLoading(false)
-      setLocalOpDivs([])
-      setCallerGrantIds([])
-    }
-  }, [open, userid, callerUserId, enforceCallerScope, handleError])
+    if (!open) toastedRef.current = false
+  }, [open])
+  React.useEffect(() => {
+    if (!open || loading || !failure || toastedRef.current) return
+    toastedRef.current = true
+    handleError(failure)
+  }, [open, loading, failure, handleError])
 
-  const handleSave = () => {
-    setSaving(true)
+  const handleSave = async () => {
     // Scoped caller (OPDIV_ADMIN): keep only grants within the caller's own
     // backend scope (callerScope), so the batch request never includes ids the
     // target holds from another admin - the backend rejects a desired set
@@ -215,14 +202,14 @@ export default function OpDivGrantModal({
     const idsToSave = enforceCallerScope
       ? localOpDivs.filter((id) => callerScope.has(id))
       : localOpDivs
-    setUserOpDivs(String(userid), idsToSave)
-      .then(() => {
-        notify('Saved', 'success')
-        onChanged?.(String(userid))
-        handleClose()
-      })
-      .catch((error) => handleError(error))
-      .finally(() => setSaving(false))
+    try {
+      await grantMutation.mutateAsync({ userid: targetId, opdivIds: idsToSave })
+      notify('Saved', 'success')
+      onChanged?.(targetId)
+      handleClose()
+    } catch (error) {
+      handleError(error)
+    }
   }
 
   return (
@@ -280,7 +267,7 @@ export default function OpDivGrantModal({
             </li>
           )}
           value={localOpDivs}
-          onChange={(_event, newValue) => setLocalOpDivs(newValue)}
+          onChange={(_event, newValue) => setEdits(newValue)}
           renderInput={(params) => (
             <TextField
               {...params}
