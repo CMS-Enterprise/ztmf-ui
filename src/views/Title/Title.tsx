@@ -26,7 +26,6 @@ import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import MoreVertIcon from '@mui/icons-material/MoreVert'
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import { useQueryClient } from '@tanstack/react-query'
 import {
   groupDatacallsByYear,
   parseDatacallName,
@@ -36,7 +35,7 @@ import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths, queryKeys } from '@/api/keys'
+import { apiPaths } from '@/api/keys'
 import { notify, isAuthHandled } from '@/utils/notify'
 import { useOpDivs } from '@/utils/opdivs'
 import { broadcastLogout } from '@/utils/sessionSync'
@@ -88,7 +87,6 @@ export default function Title() {
   const [latestDatacall, setLatestDatacall] = useState<string>('')
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
   const authenticated = loaderData.status === 200
-  const queryClient = useQueryClient()
   // Datacenter-environment vocabulary is reference data shared by the system
   // form (dropdown) and the questionnaire pillar filter, so it is fetched
   // once here and passed down via context. Failure is non-fatal: consumers
@@ -198,12 +196,6 @@ export default function Title() {
       controller.abort()
     }
   }, [loaderData.status, fetchDatacalls])
-
-  // Invalidation rather than a refetch callback: every observer of the OpDiv
-  // list refetches, so a write in OpDiv admin reaches each consumer at once.
-  const refreshOpdivs = useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.opdivs.all })
-  }, [queryClient])
 
   // Notifies rather than logs, unlike the environments fetch: this is the only
   // OpDiv fetch site, so an empty list persists for the session and leaves the
@@ -679,7 +671,6 @@ export default function Title() {
                   datacenterEnvironments,
                   opdivs,
                   opdivsLoaded,
-                  refreshOpdivs,
                 }}
               />
             </Box>

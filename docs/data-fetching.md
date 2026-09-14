@@ -130,6 +130,13 @@ const mutation = useMutation({
 })
 ```
 
+Return the invalidation promise from `onSuccess` only when the caller acts
+on the refreshed data, such as closing a dialog over the updated list;
+`mutateAsync` then resolves after the refetch. Otherwise fire it with `void`
+so the write resolves on its own and the list catches up behind it. Both
+styles are in use, and the reason for the choice belongs in a comment next to
+it.
+
 Mutations retain local error handling because forms may need field-level
 errors from `parseApiError`. Do not add a global `MutationCache.onError` while
 mutation callers also notify locally; doing both would produce duplicate

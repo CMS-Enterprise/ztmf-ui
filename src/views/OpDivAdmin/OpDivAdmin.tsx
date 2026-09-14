@@ -30,7 +30,7 @@ import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { Routes } from '@/router/constants'
 import { useCreateOpDiv, useUpdateOpDiv, type OpDivInput } from '@/utils/opdivs'
-import { setOpDivDelegateEnabled } from '@/utils/delegates'
+import { useSetOpDivDelegateEnabled } from '@/utils/delegates'
 import { isUnscopedWriteAdmin } from '@/utils/userRoles'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -68,12 +68,7 @@ function CreateToolbar({
 
 export default function OpDivAdmin() {
   const navigate = useNavigate()
-  const {
-    userInfo,
-    opdivs: rows,
-    opdivsLoaded,
-    refreshOpdivs,
-  } = useContextProp()
+  const { userInfo, opdivs: rows, opdivsLoaded } = useContextProp()
   // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
   // the page only to flip the per-OpDiv System Delegate toggle - every other
   // control stays OWNER-only. The backend enforces both boundaries (OpDiv
@@ -90,10 +85,18 @@ export default function OpDivAdmin() {
   const [pendingToggle, setPendingToggle] = useState<OpDiv | null>(null)
   const [pendingDelegateToggle, setPendingDelegateToggle] =
     useState<OpDiv | null>(null)
-  // Both invalidate the shared OpDiv list on success, so the grid and every
-  // other consumer refetch without an explicit refreshOpdivs call.
+  // All three invalidate the shared OpDiv list on success, so the grid and
+  // every other consumer refetch on their own.
   const createMutation = useCreateOpDiv()
   const updateMutation = useUpdateOpDiv()
+  const delegateToggleMutation = useSetOpDivDelegateEnabled()
+  // Shared failure path for the writes that have no inline field to route a
+  // message into: an auth failure is already handled by the interceptor, and
+  // anything else toasts the parsed API message.
+  const notifyMutationError = (error: unknown) => {
+    if (isAuthHandled(error)) return
+    notify(parseApiError(error).message, 'error')
+  }
 
   // Unscoped write admins (OWNER + HHS admin) reach the page; everyone else is
   // bounced, mirroring the redirect guard UserTable uses. The backend also
@@ -184,31 +187,28 @@ export default function OpDivAdmin() {
         'success'
       )
     } catch (error) {
-      if (isAuthHandled(error)) return
-      const parsed = parseApiError(error)
-      notify(parsed.message, 'error')
+      notifyMutationError(error)
     }
   }
 
-  const handleConfirmDelegateToggle = (confirm: boolean) => {
+  const handleConfirmDelegateToggle = async (confirm: boolean) => {
     const target = pendingDelegateToggle
     setPendingDelegateToggle(null)
     if (!confirm || !target) return
-    setOpDivDelegateEnabled(target.opdiv_id, !target.system_delegate_enabled)
-      .then(() => {
-        notify(
-          target.system_delegate_enabled
-            ? 'Saved - System Delegate disabled'
-            : 'Saved - System Delegate enabled',
-          'success'
-        )
-        refreshOpdivs()
+    try {
+      await delegateToggleMutation.mutateAsync({
+        opdivId: target.opdiv_id,
+        enabled: !target.system_delegate_enabled,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        notify(parsed.message, 'error')
-      })
+      notify(
+        target.system_delegate_enabled
+          ? 'Saved - System Delegate disabled'
+          : 'Saved - System Delegate enabled',
+        'success'
+      )
+    } catch (error) {
+      notifyMutationError(error)
+    }
   }
 
   const columns: GridColDef[] = useMemo(() => {

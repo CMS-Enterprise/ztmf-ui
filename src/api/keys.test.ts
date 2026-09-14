@@ -50,6 +50,10 @@ describe('queryKeys', () => {
       'list',
       { deleted: true },
     ])
+    expect(queryKeys.fismaSystems.delegateCandidates(42, 'tar')).toEqual([
+      ...queryKeys.fismaSystems.delegateCandidateLists(42),
+      { search: 'tar' },
+    ])
   })
 
   it('hashes a numeric and a string id to the same cache entry', () => {

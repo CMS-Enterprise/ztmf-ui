@@ -1,4 +1,4 @@
-import { screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import type { userData, OpDiv } from '@/types'
 
 // Title-level coverage for #558. The consumer suites inject opdivs into a
@@ -16,11 +16,9 @@ jest.mock('react-router-dom', () => ({
     context: {
       opdivs: OpDiv[]
       opdivsLoaded: boolean
-      refreshOpdivs: () => void
     }
   }) => (
     <div>
-      <button onClick={() => context.refreshOpdivs()}>refresh-opdivs</button>
       <span>loaded:{String(context.opdivsLoaded)}</span>
       <ul>
         {context.opdivs.map((o) => (
@@ -185,23 +183,6 @@ describe('Title — shared OpDiv context (#558)', () => {
     renderWithQueryClient(<Title />)
 
     expect(opdivFetches()).toHaveLength(0)
-  })
-
-  it('refreshOpdivs refetches so a mutation is reflected in the shared copy', async () => {
-    renderWithQueryClient(<Title />)
-    expect(await screen.findByText('CMS')).toBeInTheDocument()
-
-    mockedGet.mockImplementation(
-      respondWithOpdivs([
-        CMS,
-        RETIRED,
-        { ...CMS, opdiv_id: 3, code: 'NEWLY_CREATED' },
-      ])
-    )
-    fireEvent.click(screen.getByRole('button', { name: 'refresh-opdivs' }))
-
-    expect(await screen.findByText('NEWLY_CREATED')).toBeInTheDocument()
-    expect(opdivFetches()).toHaveLength(2)
   })
 
   it('surfaces a failed load rather than leaving consumers silently empty', async () => {
