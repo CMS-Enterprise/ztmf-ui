@@ -315,13 +315,13 @@ export default function UserTable() {
     setOpenOpDivModal(true)
   }
   // Pull a single user's grants and derived identity_provider and patch both
-  // onto the row. Called after a confirmed grant/revoke (the backend recomputes
-  // identity_provider, which can flip okta <-> entra) and again on modal close
-  // as a backstop. The detail response is the authoritative post-save set: a
-  // scoped admin's save omits grants they cannot touch, and the backend keeps
-  // those, so the request body is not what the row should show. Each call
-  // targets its own row, so a late response can't contaminate a different
-  // user.
+  // onto the row. Called after the grant modal saves and after a new user is
+  // created with grants, since the backend recomputes identity_provider on
+  // both and it can flip okta <-> entra. The detail response is the
+  // authoritative post-save set: a scoped admin's save omits grants they
+  // cannot touch, and the backend keeps those, so the request body is not what
+  // the row should show. Each call targets its own row, so a late response
+  // can't contaminate a different user.
   const refreshUserRow = (userid: string) => {
     if (!userid) return
     axiosInstance
@@ -341,7 +341,10 @@ export default function UserTable() {
         )
       })
       .catch((error) => {
+        // Non-blocking refresh: keep the row as it is, but say so, since the
+        // grants and identity provider on screen may no longer match the save.
         console.error(`Failed to refresh user row for ${userid}`, error)
+        notify(ERROR_MESSAGES.refresh, 'warning')
       })
   }
   const handleCloseOpDivModal = () => {

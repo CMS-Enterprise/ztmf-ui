@@ -8,8 +8,7 @@ import type { QueryHookOptions } from '@/queryClient'
  *
  * fetchUserOpDivs reads the current grant set for a user. The users list
  * carries the same set inline on each row, so a direct read is only needed by
- * the grant modal, which must see the current set on open, and by a table row
- * from an older backend that omitted the inline field.
+ * the grant modal, which must see the current set on open.
  *
  * setUserOpDivs replaces the full grant set in one batch request. The backend
  * reconciles the desired set against current grants (adds missing, removes
@@ -104,8 +103,12 @@ export function useSetUserOpDivs() {
       opdivIds: number[]
     }) => setUserOpDivs(userid, opdivIds),
     onSuccess: (_data, { userid }) => {
+      // refetchType none: the modal is still mounted when this runs and closes
+      // immediately after, so an active refetch here is a read nobody reads.
+      // Marking the entry stale is enough, since the next open refetches.
       void queryClient.invalidateQueries({
         queryKey: queryKeys.users.assignedOpdivs(userid),
+        refetchType: 'none',
       })
     },
   })

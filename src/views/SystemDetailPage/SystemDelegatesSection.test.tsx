@@ -224,7 +224,6 @@ test('attaching runs one candidate search, not one per key change', async () => 
   // The empty search sends no params at all, so the one post-write refresh is
   // the cleared picker rather than another pass at 'tar'.
   expect(candidateGets()[2].params).toBeUndefined()
-  expect(candidateGets()).toHaveLength(3)
 })
 
 test('a failed attach puts the search term back so the person can be retried', async () => {

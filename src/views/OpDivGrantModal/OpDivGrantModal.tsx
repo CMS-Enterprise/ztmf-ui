@@ -183,9 +183,12 @@ export default function OpDivGrantModal({
   const failure =
     targetQuery.error ?? (enforceCallerScope ? callerQuery.error : null)
   const toastedRef = React.useRef(false)
+  // Cleared on a change of target as well as on open and close, for the same
+  // reason the staged edits are: a dialog pointed at a new person owes that
+  // person's failed read its own report.
   React.useEffect(() => {
-    if (!open) toastedRef.current = false
-  }, [open])
+    toastedRef.current = false
+  }, [open, targetId])
   React.useEffect(() => {
     if (!open || loading || !failure || toastedRef.current) return
     toastedRef.current = true

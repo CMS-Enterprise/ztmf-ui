@@ -172,6 +172,7 @@ jest.mock('@/utils/notify', () => ({
   isAuthHandled: jest.fn(() => false),
 }))
 const notify = require('@/utils/notify').notify as jest.Mock
+const { ERROR_MESSAGES } = require('@/constants')
 
 jest.mock('@/axiosConfig', () => ({
   __esModule: true,
@@ -999,6 +1000,38 @@ test('the OpDivs column repaints from the user detail after the grant modal save
   await waitFor(() => expect(axios.get).toHaveBeenCalledWith(detailUrl))
   expect(await within(row).findByText('FDA')).toBeInTheDocument()
   expect(within(row).getByText('CMS')).toBeInTheDocument()
+})
+
+test('a failed post-save row refresh warns rather than leaving the row quietly stale', async () => {
+  // The refresh is non-blocking, so the row keeps what it has. That is only
+  // safe if the admin is told, since the grants and identity provider on
+  // screen no longer reflect the save they just made.
+  const user = userEvent.setup()
+  const err = jest.spyOn(console, 'error').mockImplementation(() => {})
+  const detailUrl = `/users/${PIETT_ROW.userid}`
+  axios.get.mockImplementation((url: string) => {
+    if (url === `${detailUrl}/assignedopdivs`)
+      return Promise.resolve({ status: 200, data: { data: [1] } })
+    if (url === detailUrl) return Promise.reject(new Error('refresh failed'))
+    if (url.startsWith('/users'))
+      return Promise.resolve({ status: 200, data: { data: [PIETT_ROW] } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
+  axios.put.mockResolvedValue({ status: 204 })
+
+  renderWithProviders(<UserTable />)
+  const row = await screen.findByTestId(`datagrid-row-${PIETT_ROW.userid}`)
+
+  await user.click(within(row).getByRole('button', { name: 'assignedOpDivs' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  )
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() =>
+    expect(notify).toHaveBeenCalledWith(ERROR_MESSAGES.refresh, 'warning')
+  )
+  err.mockRestore()
 })
 
 test('processRowUpdate grants OpDivs when a new row carries them', async () => {

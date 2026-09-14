@@ -118,4 +118,29 @@ describe('useSetUserOpDivs', () => {
     expect(client.getQueryData(key)).toEqual([1, 5])
     expect(client.getQueryState(key)?.isInvalidated).toBe(true)
   })
+
+  it('does not pull a read the closing modal will never use', async () => {
+    mock.onGet(GRANTS_URL).reply(200, { data: [1] })
+    mock.onPut(`/users/${USER}/opdivs`).reply(204)
+    const client = createTestQueryClient()
+    const wrapper = queryWrapper(client)
+
+    // An observer is still mounted when the write lands: the modal closes on
+    // the line after the save, so an active refetch here is a request whose
+    // result is discarded, and the zero stale time refetches on the next open
+    // regardless.
+    const read = renderHook(() => useUserOpDivs(USER), { wrapper })
+    await waitFor(() => expect(read.result.current.data).toEqual([1]))
+
+    const { result } = renderHook(() => useSetUserOpDivs(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({ userid: USER, opdivIds: [1] })
+    })
+    await act(async () => {})
+
+    expect(mock.history.get).toHaveLength(1)
+    expect(
+      client.getQueryState(queryKeys.users.assignedOpdivs(USER))?.isInvalidated
+    ).toBe(true)
+  })
 })

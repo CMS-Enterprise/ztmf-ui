@@ -640,6 +640,37 @@ test('staged edits do not follow the dialog to a different user', async () => {
   expect(JSON.parse(mock.history.put[0].data)).toEqual({ opdiv_ids: [2] })
 })
 
+test('a failed read on a new target is reported, not swallowed by the first one', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(500)
+  mock.onGet(`/users/${USER_ID_B}/assignedopdivs`).reply(500)
+
+  const { rerender } = renderModal({ enforceCallerScope: false })
+  expect(await screen.findByText(ERROR_MESSAGES.tryAgain)).toBeInTheDocument()
+  expect(screen.getAllByText(ERROR_MESSAGES.tryAgain)).toHaveLength(1)
+
+  // Point the same open dialog at a second user whose read also fails. The
+  // one-toast-per-open guard is per target as well, or the admin sees a blank
+  // disabled picker for this person with no report of why.
+  rerender(
+    <OpDivGrantModal
+      open={true}
+      handleClose={jest.fn()}
+      userid={USER_ID_B}
+      userName="Test User B"
+      assignableOpDivs={assignableOpDivs}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={false}
+      callerUserId={CALLER_ID}
+      onChanged={jest.fn()}
+    />
+  )
+
+  await waitFor(() =>
+    expect(screen.getAllByText(ERROR_MESSAGES.tryAgain)).toHaveLength(2)
+  )
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+})
+
 test('stale fetch from a prior user is discarded when userid changes', async () => {
   // User A's fetch is intentionally slow — held until we manually release it.
   let resolveUserA!: () => void
