@@ -77,6 +77,27 @@ describe('useDelegateCandidates', () => {
   })
 })
 
+describe('delegate reads', () => {
+  it('refetch on a remount, since other pages edit the roster without invalidating', async () => {
+    const rosterUrl = apiPaths.fismaSystems.delegates(42)
+    mock.onGet(rosterUrl).reply(200, { data: [] })
+    const client = createTestQueryClient()
+    const wrapper = queryWrapper(client)
+
+    const first = renderHook(() => useSystemDelegates(42), { wrapper })
+    await waitFor(() => expect(first.result.current.isSuccess).toBe(true))
+    first.unmount()
+
+    // A role edit or a system assignment on another page moves someone on or
+    // off this roster and invalidates nothing, so the generic stale window
+    // would serve a roster the server no longer has.
+    const second = renderHook(() => useSystemDelegates(42), { wrapper })
+    await waitFor(() => expect(second.result.current.isSuccess).toBe(true))
+
+    expect(mock.history.get.filter((g) => g.url === rosterUrl)).toHaveLength(2)
+  })
+})
+
 describe('delegate writes', () => {
   it('invalidate both the roster and every cached candidate list', async () => {
     mock.onDelete(apiPaths.fismaSystems.delegate(42, 'd-1')).reply(204)
