@@ -57,6 +57,12 @@ export async function setUserOpDivs(
  * request rather than a cache hit. The users table does not read this key; it
  * renders the grants the list returns inline on each row.
  *
+ * A reconnect does not refetch. The modal treats any in-flight read as its
+ * initial load, blanking and disabling the picker, so a background refetch
+ * mid-edit would lock the user out of their own changes, and one that failed
+ * would leave Save disabled with the edits intact. Open and a change of user
+ * are the only fetch triggers.
+ *
  * The caller owns the error surface. The modal shows one toast for its two
  * reads, so the cache boundary stays silent for this key.
  *
@@ -69,6 +75,7 @@ export function useUserOpDivs(userid: string, options: QueryHookOptions = {}) {
     queryKey: queryKeys.users.assignedOpdivs(userid),
     queryFn: ({ signal }) => fetchUserOpDivs(userid, signal),
     staleTime: 0,
+    refetchOnReconnect: false,
     ...options,
     meta: { suppressErrorNotification: true },
   })

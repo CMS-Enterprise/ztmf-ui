@@ -8,6 +8,7 @@ jest.mock('@/axiosConfig', () => {
 })
 
 import { act, renderHook, waitFor } from '@testing-library/react'
+import { onlineManager } from '@tanstack/react-query'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import axiosInstance from '@/axiosConfig'
@@ -71,6 +72,29 @@ describe('useUserOpDivs', () => {
 
     await waitFor(() => expect(result.current.data).toEqual([1, 2]))
     expect(mock.history.get).toHaveLength(2)
+  })
+})
+
+describe('useUserOpDivs on reconnect', () => {
+  it('does not refetch when the browser comes back online', async () => {
+    mock.onGet(GRANTS_URL).reply(200, { data: [1] })
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useUserOpDivs(USER), {
+      wrapper: queryWrapper(client),
+    })
+    await waitFor(() => expect(result.current.data).toEqual([1]))
+
+    // The modal reads any in-flight fetch as its initial load and blanks the
+    // picker, so a reconnect refetch would discard the user's edits.
+    act(() => {
+      onlineManager.setOnline(false)
+      onlineManager.setOnline(true)
+    })
+    await act(async () => {})
+
+    expect(mock.history.get).toHaveLength(1)
+    expect(result.current.isFetching).toBe(false)
   })
 })
 

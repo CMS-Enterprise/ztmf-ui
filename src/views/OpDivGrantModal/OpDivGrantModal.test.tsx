@@ -15,9 +15,10 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: instance }
 })
 
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
+import { onlineManager } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import router from '@/router/router'
 import OpDivGrantModal from './OpDivGrantModal'
@@ -453,6 +454,34 @@ test('401 redirects to sign-in without firing a generic error snackbar', async (
     })
   })
   expect(screen.queryByText(ERROR_MESSAGES.tryAgain)).not.toBeInTheDocument()
+})
+
+test('a reconnect mid-edit keeps the picker and Save usable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1] })
+  const user = userEvent.setup()
+  renderModal({ enforceCallerScope: false })
+  await waitForReady()
+  const targetGets = () =>
+    mock.history.get.filter((g) => g.url === `/users/${USER_ID}/assignedopdivs`)
+  expect(targetGets()).toHaveLength(1)
+
+  await user.click(screen.getByRole('combobox'))
+  await user.click(await screen.findByRole('option', { name: /BBB/ }))
+  await user.keyboard('{Escape}')
+  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
+
+  // Coming back online must not restart the load: the modal disables the
+  // picker and Save for any in-flight read, which would strand the edit.
+  act(() => {
+    onlineManager.setOnline(false)
+    onlineManager.setOnline(true)
+  })
+  await act(async () => {})
+
+  expect(targetGets()).toHaveLength(1)
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  expect(screen.getByRole('combobox')).toBeEnabled()
+  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
 })
 
 test('save button is disabled while the request is in flight', async () => {
