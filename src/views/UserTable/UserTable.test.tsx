@@ -1228,13 +1228,10 @@ test('renders a placeholder for a user with no OpDiv grants', async () => {
   expect(opdivCell.queryByText('CMS')).not.toBeInTheDocument()
 })
 
-test('renders backfilled grants when the row omits them inline', async () => {
-  // No assignedopdivids on the row, so the per-user backfill populates the
-  // override map the cell reads before falling back to the row.
-  const { fetchUserOpDivs } = require('@/utils/userOpdivs') as {
-    fetchUserOpDivs: jest.Mock
-  }
-  fetchUserOpDivs.mockResolvedValue([2])
+test('renders a placeholder, and fetches nothing per user, when the row omits its grants', async () => {
+  // The list always carries assignedopdivids, so a row without the key has no
+  // grants to show. The cell reads the row alone: no per-user grant read fires
+  // to fill the gap, which is what kept the column free of an N+1.
   setMockCtx(makeCtx({ opdivs: [CMS_OPDIV, IHS_OPDIV] }))
   const legacyRow = { ...PIETT_ROW } as Partial<users>
   delete (legacyRow as Record<string, unknown>).assignedopdivids
@@ -1243,10 +1240,13 @@ test('renders backfilled grants when the row omits them inline', async () => {
   renderWithProviders(<UserTable />)
   await screen.findByTestId('datagrid-mock')
 
-  await waitFor(() =>
-    expect(
-      cell(PIETT_ROW.userid, 'opdivs').getByText('IHS')
-    ).toBeInTheDocument()
+  expect(cell(PIETT_ROW.userid, 'opdivs').getByText('—')).toBeInTheDocument()
+  expect(axios.get).not.toHaveBeenCalledWith(
+    expect.stringMatching(/\/assignedopdivs$/),
+    expect.anything()
+  )
+  expect(axios.get).not.toHaveBeenCalledWith(
+    expect.stringMatching(/\/assignedopdivs$/)
   )
 })
 
@@ -1307,31 +1307,6 @@ test('threads the parsed date into the last-seen cell, not the raw timestamp', a
 function column(field: string) {
   return mockGrid.columns?.find((col) => col.field === field)
 }
-
-test('prefers a refreshed OpDiv grant over the stale inline one on the row', async () => {
-  // refreshUserRow updates userOpDivMap but never patches row.assignedopdivids,
-  // so after a grant edit the inline field is stale and the map has to win.
-  // One row missing the key backfills every row (the check is data.some), which
-  // is how both sources end up populated and disagreeing for the same user.
-  const { fetchUserOpDivs } = require('@/utils/userOpdivs') as {
-    fetchUserOpDivs: jest.Mock
-  }
-  fetchUserOpDivs.mockImplementation((userid: string) =>
-    Promise.resolve(userid === PIETT_ROW.userid ? [2] : [])
-  )
-  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV, IHS_OPDIV] }))
-  const legacyRow = rowWith({ userid: 'legacy-user' } as Partial<users>)
-  delete (legacyRow as Record<string, unknown>).assignedopdivids
-  const staleRow = rowWith({ assignedopdivids: [1] } as Partial<users>)
-  mockUsers([legacyRow, staleRow])
-
-  renderWithProviders(<UserTable />)
-  await screen.findByTestId('datagrid-mock')
-
-  const opdivCell = () => cell(PIETT_ROW.userid, 'opdivs')
-  await waitFor(() => expect(opdivCell().getByText('IHS')).toBeInTheDocument())
-  expect(opdivCell().queryByText('CMS')).not.toBeInTheDocument()
-})
 
 test('wires the OpDiv editor, the IdP select options, and the last-seen comparator', async () => {
   // The grid mock only calls valueGetter and renderCell, so these three
