@@ -1,6 +1,7 @@
-// UserTable has no render coverage, so the OpDiv views it derives from the
-// shared context list (#558) are pinned here instead. The caller-scope
-// narrowing is the one that matters: it is a rule, not a transform.
+// These pin the OpDiv views derived from the shared context list in isolation;
+// the column definitions that consume them are covered separately in
+// UserTable.test.tsx. The caller-scope narrowing is the one that matters here:
+// it is a rule, not a transform.
 import {
   buildOpDivCodeMap,
   buildOpDivLabelMap,

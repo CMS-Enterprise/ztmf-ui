@@ -2,6 +2,7 @@ import FismaTable from '../FismaTable/FismaTable'
 import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
 import { useState, useEffect } from 'react'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
 import { Box, Button, CircularProgress } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
@@ -100,7 +101,7 @@ export default function HomePageContainer() {
         Promise.all(
           ids.map((id) =>
             axiosInstance
-              .get(`/scores/aggregate?datacallid=${id}`, {
+              .get(apiPaths.scores.aggregateByDatacall(id), {
                 signal: controller.signal,
               })
               .then((res) => res.data.data as ScoreAggregate[])
@@ -114,7 +115,7 @@ export default function HomePageContainer() {
         Promise.all(
           ids.map((id) =>
             axiosInstance
-              .get(`/scores/progress?datacallid=${id}`, {
+              .get(apiPaths.scores.progress(id), {
                 signal: controller.signal,
               })
               .then((res) => res.data.data as ScoreProgress[])

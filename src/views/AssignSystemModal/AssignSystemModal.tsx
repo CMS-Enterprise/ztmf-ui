@@ -10,6 +10,7 @@ import {
 import Modal from '@/components/ui/Modal'
 import { GridRowId } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import SearchIcon from '@mui/icons-material/Search'
 import { ERROR_MESSAGES } from '@/constants'
@@ -115,11 +116,11 @@ export default function AssignSystemModal({
       // existing assignment.
       const [assignedRes, assignableRes] = await Promise.allSettled([
         axiosInstance.get<{ data: number[] | null }>(
-          `/users/${userid}/assignedfismasystems`,
+          apiPaths.users.assignedFismaSystems(userid),
           { signal: controller.signal }
         ),
         axiosInstance.get<{ data: FismaSystemType[] | null }>(
-          `/users/${userid}/assignablefismasystems`,
+          apiPaths.users.assignableFismaSystems(userid),
           { signal: controller.signal }
         ),
       ])
@@ -236,7 +237,7 @@ export default function AssignSystemModal({
     if (!confirm || !target) return
     try {
       await axiosInstance.delete(
-        `/users/${userid}/assignedfismasystems/${target.systemid}`
+        apiPaths.users.assignedFismaSystem(userid, target.systemid)
       )
       setAssignedSystems(target.nextValue)
       notify('Saved - unassigned system', 'success')

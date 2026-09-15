@@ -51,6 +51,10 @@ interface SystemDetailReadViewProps {
   targetMaturitySlot?: ReactNode
   /** Resolved OpDiv display name, shown next to the code badge. */
   opdivName?: string | null
+  /** Whether the viewer may write the system (gates the adopt-CFACTS action). */
+  isAdmin?: boolean
+  /** Refetch the system after the ISSO is adopted from CFACTS. */
+  onIssoUpdated?: () => void | Promise<void>
 }
 
 /**
@@ -87,6 +91,8 @@ export default function SystemDetailReadView({
   decommissionedByName,
   targetMaturitySlot,
   opdivName,
+  isAdmin,
+  onIssoUpdated,
 }: SystemDetailReadViewProps) {
   const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
   // cloud_service_model and cloud_vendor do not apply to a non-cloud system,
@@ -218,7 +224,11 @@ export default function SystemDetailReadView({
           />
         </Box>
       )}
-      <InsightsSection system={system} />
+      <InsightsSection
+        system={system}
+        isAdmin={isAdmin}
+        onIssoUpdated={onIssoUpdated}
+      />
     </Box>
   )
 }
@@ -542,7 +552,15 @@ function DetailCard({
  * (when sdl_sync is on and the upstream returns data) or the insights empty
  * state (when sdl_sync is off, or on but the upstream has no record).
  */
-function InsightsSection({ system }: { system: FismaSystemType }) {
+function InsightsSection({
+  system,
+  isAdmin,
+  onIssoUpdated,
+}: {
+  system: FismaSystemType
+  isAdmin?: boolean
+  onIssoUpdated?: () => void | Promise<void>
+}) {
   const body =
     system.fismauid && system.sdl_sync_enabled ? (
       <SystemEnrichmentCard
@@ -551,6 +569,11 @@ function InsightsSection({ system }: { system: FismaSystemType }) {
         // disagrees with the ZTMF value (ztmf#239); without it the mismatch
         // chip can never render.
         systemDataCenterEnvironment={system.datacenterenvironment}
+        // The full system plus admin flag drive the ISSO-mismatch callout and
+        // its adopt-CFACTS action; onIssoUpdated refetches after adopting.
+        system={system}
+        isAdmin={isAdmin}
+        onIssoUpdated={onIssoUpdated}
       />
     ) : (
       <InsightsEmptyState />

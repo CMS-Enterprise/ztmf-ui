@@ -1,4 +1,5 @@
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import type { DelegateRow, DelegateCandidate, OpDiv } from '@/types'
 
 /**
@@ -34,7 +35,7 @@ export async function fetchSystemDelegates(
   signal?: AbortSignal
 ): Promise<DelegateRow[]> {
   const res = await axiosInstance.get<{ data: DelegateRow[] | null }>(
-    `/fismasystems/${systemId}/delegates`,
+    apiPaths.fismaSystems.delegates(systemId),
     { signal }
   )
   return res.data.data ?? []
@@ -57,7 +58,7 @@ export async function searchDelegateCandidates(
   signal?: AbortSignal
 ): Promise<DelegateCandidate[]> {
   const res = await axiosInstance.get<{ data: DelegateCandidate[] | null }>(
-    `/fismasystems/${systemId}/delegate-candidates`,
+    apiPaths.fismaSystems.delegateCandidates(systemId),
     { params: q ? { q } : undefined, signal }
   )
   return res.data.data ?? []
@@ -79,7 +80,7 @@ export async function addSystemDelegate(
   // skipAuthHandling so the capability-off 403 reaches this caller instead of the
   // global interceptor swallowing it into a generic toast; the component keys on
   // the DELEGATE_NOT_ENABLED code to render an in-dialog guard.
-  await axiosInstance.post(`/fismasystems/${systemId}/delegates`, body, {
+  await axiosInstance.post(apiPaths.fismaSystems.delegates(systemId), body, {
     skipAuthHandling: true,
   })
 }
@@ -99,7 +100,7 @@ export async function renewSystemDelegate(
   accessExpiresAt?: string
 ): Promise<DelegateRow> {
   const res = await axiosInstance.patch<{ data: DelegateRow }>(
-    `/fismasystems/${systemId}/delegates/${userid}`,
+    apiPaths.fismaSystems.delegate(systemId, userid),
     { access_expires_at: accessExpiresAt }
   )
   return res.data.data
@@ -116,7 +117,7 @@ export async function removeSystemDelegate(
   systemId: number,
   userid: string
 ): Promise<void> {
-  await axiosInstance.delete(`/fismasystems/${systemId}/delegates/${userid}`)
+  await axiosInstance.delete(apiPaths.fismaSystems.delegate(systemId, userid))
 }
 
 /**
@@ -133,7 +134,7 @@ export async function setOpDivDelegateEnabled(
   enabled: boolean
 ): Promise<OpDiv> {
   const res = await axiosInstance.put<{ data: OpDiv }>(
-    `/opdivs/${opdivId}/system-delegate-enabled`,
+    apiPaths.opdivs.systemDelegateEnabled(opdivId),
     { enabled }
   )
   return res.data.data

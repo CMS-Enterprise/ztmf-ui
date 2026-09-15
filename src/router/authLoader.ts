@@ -1,6 +1,7 @@
 import 'core-js/stable/atob'
 import { userData } from '@/types'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { EMPTY_USER } from '@/constants'
 import { AuthCodes, SignInReasons, type SignInReason } from '@/utils/authCodes'
 /**
@@ -38,7 +39,7 @@ const authLoader = async (): Promise<AuthLoaderData> => {
     // redirect loop. authLoader is the OWNER of the session-expired
     // decision: a 401 here means "render LoginPage as a child route"
     // (via the discriminated return below), not "redirect away."
-    const axiosUser = await axiosInstance.get('/users/current', {
+    const axiosUser = await axiosInstance.get(apiPaths.users.current, {
       skipAuthHandling: true,
     })
     if (axiosUser.status != 200) {

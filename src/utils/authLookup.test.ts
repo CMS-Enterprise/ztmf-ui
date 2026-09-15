@@ -12,6 +12,7 @@ jest.mock('@/axiosConfig', () => {
 })
 
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { lookupIdpForEmail } from './authLookup'
 
 const mock = new MockAdapter(axiosInstance)
@@ -26,6 +27,9 @@ describe('lookupIdpForEmail - clean backend answers', () => {
     await expect(lookupIdpForEmail('user@okta.example')).resolves.toEqual({
       idp: 'okta',
     })
+    expect(mock.history.get).toHaveLength(1)
+    expect(mock.history.get[0].url).toBe(apiPaths.auth.lookup)
+    expect(mock.history.get[0].skipAuthHandling).toBe(true)
   })
 
   it('returns { idp: "entra" } for an Entra-routed email', async () => {

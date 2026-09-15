@@ -10,6 +10,7 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import { COMPLETE_HINT_MSG, NEXT_HINT_MSG } from '@/constants'
+import { apiPaths } from '@/api/keys'
 import type { userData } from '@/types'
 
 // Rendered-component coverage for three QuestionnairePage effect paths from
@@ -39,7 +40,7 @@ const axios = require('@/axiosConfig').default as {
 // every question open (time-spent tracking, #368). These assertions care about
 // score *saves* (POST 'scores'), so filter the view pings out.
 const saveScorePosts = () =>
-  axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'scores')
+  axios.post.mock.calls.filter((c: unknown[]) => c[0] === apiPaths.scores.root)
 
 const saveDraftMock = jest
   .fn<
@@ -243,7 +244,7 @@ test('scores fetch 403 (auth-handled) still commits questions and opens the targ
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.reject(authError)
+    if (url.startsWith(apiPaths.scores.root)) return Promise.reject(authError)
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -315,7 +316,8 @@ test('read-only session evicts the current-question draft on mount', async () =>
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -344,7 +346,7 @@ test('read-only session evicts the current-question draft on mount', async () =>
 // ---------------------------------------------------------------------------
 
 const viewPings = () =>
-  axios.post.mock.calls.filter((c: unknown[]) => c[0] === 'events/view')
+  axios.post.mock.calls.filter((c: unknown[]) => c[0] === apiPaths.events.view)
 
 // The store declines rather than deletes, but the no-edits clear fires
 // whenever on-screen values match the server's — exactly what a declined load
@@ -356,7 +358,8 @@ test('does not clear a draft the store declined to read', async () => {
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -380,7 +383,8 @@ test('does not clear a draft the store kept when the key was unreachable', async
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -402,7 +406,8 @@ test('clears a draft-free question as before, when nothing was declined', async 
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -420,7 +425,8 @@ test('records an events/view ping with the DB questionid when a question opens',
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -471,7 +477,8 @@ test('records an events/view ping in a read-only session too', async () => {
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -528,7 +535,7 @@ test('scores 403 (auth-handled) on a datacall switch also commits the questions 
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.reject(authError)
+    if (url.startsWith(apiPaths.scores.root)) return Promise.reject(authError)
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -550,7 +557,7 @@ test('scores 403 (auth-handled) on a datacall switch also commits the questions 
   const firstBatchCount = axios.get.mock.calls.filter(
     (c: unknown[]) =>
       typeof c[0] === 'string' &&
-      (c[0] as string).startsWith('scores?datacallid=')
+      (c[0] as string).startsWith(`${apiPaths.scores.root}?datacallid=`)
   ).length
   await act(async () => {
     setMockCtx(
@@ -577,7 +584,7 @@ test('scores 403 (auth-handled) on a datacall switch also commits the questions 
     const secondBatchCount = axios.get.mock.calls.filter(
       (c: unknown[]) =>
         typeof c[0] === 'string' &&
-        (c[0] as string).startsWith('scores?datacallid=')
+        (c[0] as string).startsWith(`${apiPaths.scores.root}?datacallid=`)
     ).length
     expect(secondBatchCount).toBeGreaterThan(firstBatchCount)
   })
@@ -610,7 +617,8 @@ test('editable to read-only flip disarms an in-flight autosave', async () => {
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) return Promise.resolve({ data: { data: [] } })
+    if (url.startsWith(apiPaths.scores.root))
+      return Promise.resolve({ data: { data: [] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
     return Promise.resolve({ data: { data: [] } })
@@ -691,7 +699,7 @@ test('out-of-band scores refresh re-seeds the answer after save-and-back', async
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) {
+    if (url.startsWith(apiPaths.scores.root)) {
       scoresCallCount++
       if (scoresCallCount === 1) return Promise.resolve({ data: { data: [] } })
       // Second call = fetchQuestionScores fired by saveResponse. Hold it
@@ -756,7 +764,7 @@ test('out-of-band scores refresh does not overwrite an unsaved in-progress edit'
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores')) {
+    if (url.startsWith(apiPaths.scores.root)) {
       scoresCallCount++
       if (scoresCallCount === 1) return Promise.resolve({ data: { data: [] } })
       return scoresGate.promise
@@ -828,7 +836,7 @@ test('the questionId effect reads live scores via ref and seeds the answer at mo
   axios.get.mockImplementation((url: string) => {
     if (url.includes('/questions'))
       return Promise.resolve({ data: { data: QUESTIONS } })
-    if (url.startsWith('scores'))
+    if (url.startsWith(apiPaths.scores.root))
       return Promise.resolve({ data: { data: [answeredScore] } })
     if (url.includes('/options'))
       return Promise.resolve({ data: { data: OPTIONS_7006 } })
@@ -972,14 +980,14 @@ describe('QuestionnairePage justification integration', () => {
     insightsResponse?: Promise<InsightsResponse>
   } = {}) {
     axios.get.mockImplementation((url: string) => {
-      if (url === 'insights') {
+      if (url === apiPaths.insights) {
         return (
           insightsResponse ?? Promise.resolve({ data: { data: insightRows } })
         )
       }
       if (url.includes('/questions'))
         return Promise.resolve({ data: { data: [JUSTIFICATION_QUESTION] } })
-      if (url.startsWith('scores'))
+      if (url.startsWith(apiPaths.scores.root))
         return Promise.resolve({ data: { data: [CARRY_FORWARD_SCORE] } })
       if (url.includes('/options'))
         return Promise.resolve({ data: { data: JUSTIFICATION_OPTIONS } })
@@ -1045,12 +1053,15 @@ describe('QuestionnairePage justification integration', () => {
     fireEvent.click(complete)
 
     await waitFor(() =>
-      expect(axios.put).toHaveBeenCalledWith('scores/5001/confirm')
+      expect(axios.put).toHaveBeenCalledWith(apiPaths.scores.confirm(5001))
     )
     // The unchanged answer body must NOT be re-PUT — that path re-stamps
     // nothing server-side and would clear notes_is_ai_summary on a real
     // change-detection miss.
-    expect(axios.put).not.toHaveBeenCalledWith('scores/5001', expect.anything())
+    expect(axios.put).not.toHaveBeenCalledWith(
+      apiPaths.scores.detail(5001),
+      expect.anything()
+    )
   })
 
   it('shows the insights panel, option badges, and suggestion for a CMS data call', async () => {
@@ -1264,11 +1275,11 @@ describe('carried-forward confirmation', () => {
   ) {
     let rows = scores
     axios.get.mockImplementation((url: string) => {
-      if (url === 'insights')
+      if (url === apiPaths.insights)
         return Promise.resolve({ data: { data: insightRows } })
       if (url.includes('/questions'))
         return Promise.resolve({ data: { data: QUESTIONS } })
-      if (url.startsWith('scores'))
+      if (url.startsWith(apiPaths.scores.root))
         return Promise.resolve({ data: { data: rows } })
       if (url.includes('functions/7006/options'))
         return Promise.resolve({ data: { data: OPTIONS_7006 } })
@@ -1278,10 +1289,14 @@ describe('carried-forward confirmation', () => {
     })
     axios.post.mockResolvedValue({ data: {} })
     axios.put.mockImplementation((url: string) => {
-      const confirm = /^scores\/(\d+)\/confirm$/.exec(url)
-      if (confirm) {
+      const confirmedRow = rows.find(
+        (row) => url === apiPaths.scores.confirm(row.scoreid)
+      )
+      if (confirmedRow) {
         rows = rows.map((row) =>
-          row.scoreid === Number(confirm[1]) ? { ...row, status: 'done' } : row
+          row.scoreid === confirmedRow.scoreid
+            ? { ...row, status: 'done' }
+            : row
         )
       }
       return Promise.resolve({ data: { data: {} } })
@@ -1306,7 +1321,7 @@ describe('carried-forward confirmation', () => {
       })
     )
     await waitFor(() =>
-      expect(axios.put).toHaveBeenCalledWith('scores/6001/confirm')
+      expect(axios.put).toHaveBeenCalledWith(apiPaths.scores.confirm(6001))
     )
     expect(axios.put).toHaveBeenCalledTimes(1)
     expect(saveScorePosts()).toHaveLength(0)

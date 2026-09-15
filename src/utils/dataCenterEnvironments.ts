@@ -1,4 +1,5 @@
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import type { DataCenterEnvironment } from '@/types'
 
 /**
@@ -16,7 +17,7 @@ export async function fetchDataCenterEnvironments(
   signal?: AbortSignal
 ): Promise<DataCenterEnvironment[]> {
   const response = await axiosInstance.get<{ data: DataCenterEnvironment[] }>(
-    '/datacenterenvironments',
+    apiPaths.dataCenterEnvironments,
     { signal }
   )
   return response.data.data

@@ -1,6 +1,7 @@
 import {
   toSlug,
   encodeDatacallSlug,
+  findSystemsByAcronym,
   resolveSystemIdByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
@@ -50,6 +51,31 @@ describe('resolveSystemIdByAcronym', () => {
 
   it('returns undefined when systems have not loaded yet', () => {
     expect(resolveSystemIdByAcronym([], 'aco-ms')).toBeUndefined()
+  })
+
+  it('refuses to guess when more than one system shares the acronym', () => {
+    // Acronyms are not unique; picking the first match opened another
+    // system's questionnaire.
+    const dupes = [...systems, sys(3, 'Pending'), sys(4, 'PENDING')]
+    expect(resolveSystemIdByAcronym(dupes, 'pending')).toBeUndefined()
+    expect(resolveSystemIdByAcronym(dupes, 'aco-ms')).toBe(1)
+  })
+})
+
+describe('findSystemsByAcronym', () => {
+  const systems = [sys(1, 'ACO-MS'), sys(3, 'Pending'), sys(4, 'PENDING')]
+
+  it('returns every case-insensitive match', () => {
+    expect(
+      findSystemsByAcronym(systems, 'pending').map((s) => s.fismasystemid)
+    ).toEqual([3, 4])
+    expect(findSystemsByAcronym(systems, 'ACO-MS')).toHaveLength(1)
+  })
+
+  it('returns an empty list for an unknown or missing acronym', () => {
+    expect(findSystemsByAcronym(systems, 'nope')).toEqual([])
+    expect(findSystemsByAcronym(systems, undefined)).toEqual([])
+    expect(findSystemsByAcronym([], 'pending')).toEqual([])
   })
 })
 
