@@ -35,16 +35,13 @@ export async function fetchOpDivs(
  * under `vocabularyQueryOptions`; the write hooks below invalidate it, so a
  * change made in OpDiv admin reaches every consumer of the shared list.
  *
- * Unlike the other vocabulary hooks this returns the load state as well as
- * the rows. The questionnaire's insights gate needs to tell "not fetched yet"
- * from "fetched, and there are none", and the layout notifies on failure
- * because this is the only fetch site: an empty list would persist for the
- * session and leave the system form's Save stuck.
+ * Returns the load state too: the questionnaire's insights gate has to tell
+ * "not fetched yet" from "fetched, and there are none", and the layout
+ * notifies on failure because this is the only fetch site.
  *
- * Title reads the inactive-inclusive superset once and shares it through
- * Outlet context. Views should read the context rather than call this: a
- * second call with a different `includeInactive` is a second cache entry and
- * a second request for the same reference data.
+ * Read the Outlet context rather than calling this. Title holds the
+ * inactive-inclusive superset for the app; a second call with a different
+ * `includeInactive` is a second entry and a second request for the same list.
  *
  * @param includeInactive - Pass true to include deactivated rows.
  * @param options - See QueryHookOptions.

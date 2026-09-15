@@ -109,6 +109,51 @@ rather than calling `useQuery` with the same key elsewhere. A write that
 changes one must invalidate its key explicitly, as the OpDiv mutations do;
 nothing under this policy refreshes on its own.
 
+### Operational data
+
+Reference vocabularies are the exception, not the rule. Everything else is data
+someone else is editing while the page is open, and it carries a zero stale
+time so each mount reads the server.
+
+The delegate roster is the clearest case: it is the shared user-to-system table
+filtered to delegates, so a role edit or a system assignment made on another
+page moves someone on or off it. Those writes still go through raw requests and
+invalidate nothing, so a stale window would render a delegate the server no
+longer has.
+
+A user's OpDiv grants are the same shape for a different reason. Grants decide
+what an admin is allowed to grant, so a cached answer is not just out of date,
+it is a wrong permission boundary. That read also opts out of
+refetch-on-reconnect, because the grant modal treats any in-flight read as its
+initial load: a background refetch mid-edit would blank the picker and disable
+Save with the user's changes still on screen.
+
+The candidate search sits between the two. Every term the user has not just
+typed is its own key and so its own request, every delegate write invalidates
+the set, and a stale entry is self-correcting because the backend rejects an
+attach for someone no longer eligible. Zeroing its stale time would instead
+refetch on each return to a previous term, including the cleared one after an
+attach.
+
+### Holding previous results
+
+A search-shaped query can hold the previous result while a new term loads, so
+the list does not blank between keystrokes. Scope that to the rest of the key:
+`keepPreviousData` on its own holds data across _any_ key change, including the
+resource the search is scoped to. A picker that swapped systems without
+remounting would show one system's candidates under another, and acting on one
+writes to the system in the path. Compare the prefix and return `undefined`
+when it differs.
+
+### Seeding against invalidating
+
+Writing the request body into the cache on success avoids a refetch, and is
+right only when the body is the stored state. It is not when the server
+reconciles rather than replaces: a scoped admin's grant save sends only the
+OpDivs they hold and the backend preserves the target's others, so seeding
+would drop grants the user still has. Invalidate unless the endpoint replaces
+the whole resource and rejects anything it will not store.
+
 ### `useMutation`
 
 Use `useMutation` for server writes initiated by React. On success, invalidate

@@ -98,17 +98,13 @@ export default function OpDivGrantModal({
   const grantMutation = useSetUserOpDivs()
   const saving = grantMutation.isPending
 
-  // Only the user's edits live in state. Until the picker is touched the
-  // fetched grants render directly, so a background refresh cannot clobber an
-  // edit, and every open starts from the server again. Empty while a read is
-  // in flight so a previous open's grants never flash in the picker. A read
-  // that fails leaves the previous grants on screen rather than blanking, but
-  // fetchFailed disables the picker and Save, so they cannot be acted on.
+  // Only the user's edits live in state; until the picker is touched the fetched
+  // grants render directly, so a refresh cannot clobber an edit. Empty while a
+  // read is in flight, so a previous open's grants never flash. A failed read
+  // leaves them on screen, but fetchFailed disables the picker and Save.
   const [edits, setEdits] = React.useState<number[] | null>(null)
-  // Dropped on open and on close, and on a change of target: the current
-  // caller closes before switching users, but nothing in the type stops a
-  // future one from swapping userid in place, and staged selections must
-  // never follow the dialog onto a different person.
+  // On target change as well as open and close: staged selections must never
+  // follow the dialog onto a different person.
   React.useEffect(() => {
     setEdits(null)
   }, [open, targetId])

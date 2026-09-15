@@ -51,19 +51,13 @@ export async function setUserOpDivs(
 /**
  * Reads a user's OpDiv grants for the grant modal.
  *
- * Grants decide what an admin may grant, so a read is only trustworthy when it
- * is current: the stale time is zero, which makes every enable a fresh
- * request rather than a cache hit. The users table does not read this key; it
- * renders the grants the list returns inline on each row.
+ * Read fresh on every enable and never on reconnect, so open and a change of
+ * user are the only fetch triggers. See "Operational data" in
+ * docs/data-fetching.md. The users table does not read this key; it renders the
+ * grants the list returns inline on each row.
  *
- * A reconnect does not refetch. The modal treats any in-flight read as its
- * initial load, blanking and disabling the picker, so a background refetch
- * mid-edit would lock the user out of their own changes, and one that failed
- * would leave Save disabled with the edits intact. Open and a change of user
- * are the only fetch triggers.
- *
- * The caller owns the error surface. The modal shows one toast for its two
- * reads, so the cache boundary stays silent for this key.
+ * The caller owns the error surface: the modal shows one toast for its two
+ * reads, so the cache boundary stays silent here.
  *
  * @param userid - The user to read grants for.
  * @param options - `enabled`, per QueryHookOptions.
@@ -83,11 +77,9 @@ export function useUserOpDivs(userid: string, options: QueryHookOptions = {}) {
 /**
  * Mutation that replaces a user's grant set.
  *
- * On success the user's cache entry is invalidated rather than seeded from the
- * request. The body is not the stored set for every caller: a scoped admin
- * sends only the OpDivs they hold, and the backend preserves the target's
- * other grants, so writing the body into the cache would drop chips the user
- * still has. The modal refetches on its next open. Error handling stays with
+ * Invalidates rather than seeding: the backend reconciles the set instead of
+ * replacing it, so the request body is not the stored state. See "Seeding
+ * against invalidating" in docs/data-fetching.md. Error handling stays with
  * the caller.
  *
  * @returns The mutation, taking the user id and the complete desired set.

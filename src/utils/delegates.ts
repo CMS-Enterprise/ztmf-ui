@@ -147,12 +147,8 @@ export async function setOpDivDelegateEnabled(
  * through the cache boundary's toast, which carries the same parsed message
  * the section used to raise itself.
  *
- * Read fresh on every mount. The roster is the shared user-to-system table
- * filtered to delegates, so pages this module does not own change it: a role
- * edit or a system assignment moves someone on or off it. Those writes still
- * go through raw requests and invalidate nothing, so a stale window would
- * show a delegate the server no longer has. The generic stale time is meant
- * for reference data, and this is operational data someone else edits.
+ * Read fresh on every mount: other pages edit this roster without
+ * invalidating. See "Operational data" in docs/data-fetching.md.
  *
  * @param systemId - The fismasystemid whose roster to read.
  * @returns The query result; `data` is the delegate rows.
@@ -167,25 +163,12 @@ export function useSystemDelegates(systemId: number) {
 
 /**
  * Searches the candidates eligible to attach to a system. Keyed on the search
- * term, with the previous result held while a new term loads so the picker
- * does not blank between keystrokes; the caller still debounces its input. A
- * failure is non-fatal, since an empty option list just means nothing to
- * attach.
+ * term; the caller debounces its input. A failure is non-fatal, since an empty
+ * option list just means nothing to attach.
  *
- * Rows are held only across a change of search term, never across a change of
- * system. A bare `keepPreviousData` holds them across any key change, so a
- * caller that swapped systems without remounting would show one system's
- * candidates in another's picker, and attaching one writes to the system in
- * the path. The detail page also keys the section by system, but this is what
- * makes that key a convenience rather than the only thing standing between a
- * reader and the wrong system's data.
- *
- * Not forced fresh the way the roster is. Every term the user has not just
- * typed is a new key and so a new request, each delegate write here
- * invalidates the lot, and an entry that did go stale is self-correcting:
- * the backend rejects an attach for someone no longer eligible. Zeroing the
- * stale time would instead refetch on each return to a previous term,
- * including the cleared one after an attach.
+ * Rows are held across a change of search term but never across a change of
+ * system, and the stale time is left alone rather than zeroed. See "Operational
+ * data" and "Holding previous results" in docs/data-fetching.md.
  *
  * @param systemId - The fismasystemid to find candidates for.
  * @param search - Case-insensitive substring on name/email; empty for all.
@@ -202,6 +185,7 @@ export function useDelegateCandidates(
   return useQuery({
     queryKey: queryKeys.fismaSystems.delegateCandidates(systemId, search),
     queryFn: ({ signal }) => searchDelegateCandidates(systemId, search, signal),
+    // Same system only: attaching posts to the system in the path.
     placeholderData: (previousData, previousQuery) =>
       previousQuery &&
       systemKey.every((part, i) => previousQuery.queryKey[i] === part)
@@ -214,12 +198,10 @@ export function useDelegateCandidates(
 
 /**
  * Builds a system-scoped delegate mutation. Every delegate write changes both
- * the roster and who is still eligible to attach, so both are invalidated.
- * The roster invalidation is returned so the mutation resolves only once the
- * list has refetched: the section closes its dialogs and toasts against the
- * refreshed roster, as it did when it awaited the reload itself. The candidate
- * lists are invalidated without waiting, since nothing acts on them at that
- * moment. Error handling stays with the caller.
+ * the roster and who is still eligible to attach, so both are invalidated. The
+ * roster is awaited so the section's dialogs close over the refreshed list;
+ * the candidate lists are not, since nothing acts on them at that moment.
+ * Error handling stays with the caller.
  */
 function useSystemDelegateMutation<TVariables>(
   systemId: number,
