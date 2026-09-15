@@ -341,6 +341,9 @@ export default function UserTable() {
         )
       })
       .catch((error) => {
+        // The interceptor is already navigating away on a 401; a stale-row
+        // warning on top of that is noise.
+        if (isAuthHandled(error)) return
         // Non-blocking refresh: keep the row as it is, but say so, since the
         // grants and identity provider on screen may no longer match the save.
         console.error(`Failed to refresh user row for ${userid}`, error)

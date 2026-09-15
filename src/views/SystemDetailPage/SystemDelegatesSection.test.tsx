@@ -57,6 +57,14 @@ const rosterGets = () => mock.history.get.filter((g) => g.url === ROSTER_URL)
 const candidateGets = () =>
   mock.history.get.filter((g) => g.url === CANDIDATES_URL)
 
+const SYSTEM_B_ID = 2002
+const SYSTEM_B = { fismasystemid: SYSTEM_B_ID } as unknown as FismaSystemType
+const CANDIDATE_B: DelegateCandidate = {
+  userid: 'c-2',
+  fullname: 'Maximilian Veers',
+  email: 'veers@empire.gov',
+}
+
 function renderSection(canManage = true) {
   return renderWithProviders(
     <SystemDelegatesSection system={SYSTEM} canManage={canManage} />
@@ -386,4 +394,48 @@ test('a non-manager (ISSM) sees the roster but no controls', async () => {
   expect(
     screen.queryByRole('button', { name: /remove Active Delegate/i })
   ).not.toBeInTheDocument()
+})
+
+test('a change of system carries no candidates into the new picker', async () => {
+  // The detail page stays mounted when the route moves between two systems in
+  // the shared list. It keys the section by system id, but the picker must not
+  // depend on that alone: attaching posts to the system in the path, so
+  // rendering one system's candidates under another writes a delegate to the
+  // wrong system.
+  const user = userEvent.setup()
+  mock
+    .onGet(apiPaths.fismaSystems.delegates(SYSTEM_B_ID))
+    .reply(200, { data: [] })
+  // Held open so the assertion lands in the window where the new system's own
+  // list has not arrived yet, which is exactly when retained rows would show.
+  let releaseB: () => void = () => {}
+  const bLanded = new Promise<void>((resolve) => {
+    releaseB = resolve
+  })
+  mock
+    .onGet(apiPaths.fismaSystems.delegateCandidates(SYSTEM_B_ID))
+    .reply(async () => {
+      await bLanded
+      return [200, { data: [CANDIDATE_B] }]
+    })
+
+  // No key, so the section does not remount: the state this guards is the
+  // query cache, not the component's.
+  const { rerender } = renderWithProviders(
+    <SystemDelegatesSection system={SYSTEM} canManage />
+  )
+  await screen.findByText('Active Delegate')
+  await user.click(
+    screen.getByRole('combobox', { name: /attach an existing delegate/i })
+  )
+  await screen.findByText(/Wilhuff Tarkin/i)
+
+  rerender(<SystemDelegatesSection system={SYSTEM_B} canManage />)
+
+  await waitFor(() =>
+    expect(screen.queryByText(/Wilhuff Tarkin/i)).not.toBeInTheDocument()
+  )
+
+  releaseB()
+  expect(await screen.findByText(/Maximilian Veers/i)).toBeInTheDocument()
 })

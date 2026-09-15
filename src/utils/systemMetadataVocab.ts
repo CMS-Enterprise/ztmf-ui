@@ -47,14 +47,17 @@ export async function fetchSystemAttributes(
  * vocabulary means no dropdown options, which every select already renders
  * around by showing its current value.
  *
- * @param selectableOnly - When true, asks the backend for dropdown options
- *   only (hides any non-selectable rows).
+ * Both consumers want the selectable set, which is what `fetchSystemAttributes`
+ * asks for by default. The hook takes no parameter: a second value would be a
+ * second cache entry held for the session, and the key factory already models
+ * the dimension for whenever a caller needs the other set.
+ *
  * @returns The current attribute rows.
  */
-export function useSystemAttributes(selectableOnly = true): SystemAttribute[] {
+export function useSystemAttributes(): SystemAttribute[] {
   const { data } = useQuery({
-    queryKey: queryKeys.systemAttributes(selectableOnly),
-    queryFn: ({ signal }) => fetchSystemAttributes(signal, selectableOnly),
+    queryKey: queryKeys.systemAttributes(),
+    queryFn: ({ signal }) => fetchSystemAttributes(signal),
     ...vocabularyQueryOptions,
   })
   return data ?? EMPTY_LIST

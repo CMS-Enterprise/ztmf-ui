@@ -75,6 +75,36 @@ describe('useDelegateCandidates', () => {
     expect(result.current.data?.[0].userid).toBe('c-1')
     await waitFor(() => expect(result.current.data?.[0].userid).toBe('c-2'))
   })
+
+  it("drops them on a change of system, so one system never shows another's", async () => {
+    mock
+      .onGet(apiPaths.fismaSystems.delegateCandidates(42), {
+        params: { q: 'ta' },
+      })
+      .reply(200, { data: [{ userid: 'c-1', fullname: 'Tarkin', email: 't' }] })
+    mock
+      .onGet(apiPaths.fismaSystems.delegateCandidates(43), {
+        params: { q: 'ta' },
+      })
+      .reply(200, { data: [{ userid: 'c-9', fullname: 'Veers', email: 'v' }] })
+    const client = createTestQueryClient()
+    let systemId = 42
+
+    const { result, rerender } = renderHook(
+      () => useDelegateCandidates(systemId, 'ta'),
+      { wrapper: queryWrapper(client) }
+    )
+    await waitFor(() => expect(result.current.data?.[0].userid).toBe('c-1'))
+
+    systemId = 43
+    rerender()
+
+    // Attaching a candidate posts to the system in the path, so showing 42's
+    // people under 43 would write a delegate to the wrong system. The picker
+    // blanks instead until 43's own list lands.
+    expect(result.current.data).toBeUndefined()
+    await waitFor(() => expect(result.current.data?.[0].userid).toBe('c-9'))
+  })
 })
 
 describe('delegate reads', () => {

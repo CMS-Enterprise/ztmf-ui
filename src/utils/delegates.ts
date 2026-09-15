@@ -1,9 +1,4 @@
-import {
-  keepPreviousData,
-  useMutation,
-  useQuery,
-  useQueryClient,
-} from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import type { QueryHookOptions } from '@/queryClient'
@@ -177,6 +172,14 @@ export function useSystemDelegates(systemId: number) {
  * failure is non-fatal, since an empty option list just means nothing to
  * attach.
  *
+ * Rows are held only across a change of search term, never across a change of
+ * system. A bare `keepPreviousData` holds them across any key change, so a
+ * caller that swapped systems without remounting would show one system's
+ * candidates in another's picker, and attaching one writes to the system in
+ * the path. The detail page also keys the section by system, but this is what
+ * makes that key a convenience rather than the only thing standing between a
+ * reader and the wrong system's data.
+ *
  * Not forced fresh the way the roster is. Every term the user has not just
  * typed is a new key and so a new request, each delegate write here
  * invalidates the lot, and an entry that did go stale is self-correcting:
@@ -195,10 +198,15 @@ export function useDelegateCandidates(
   search: string,
   options: QueryHookOptions = {}
 ) {
+  const systemKey = queryKeys.fismaSystems.delegateCandidateLists(systemId)
   return useQuery({
     queryKey: queryKeys.fismaSystems.delegateCandidates(systemId, search),
     queryFn: ({ signal }) => searchDelegateCandidates(systemId, search, signal),
-    placeholderData: keepPreviousData,
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery &&
+      systemKey.every((part, i) => previousQuery.queryKey[i] === part)
+        ? previousData
+        : undefined,
     enabled: options.enabled,
     meta: { suppressErrorNotification: true },
   })

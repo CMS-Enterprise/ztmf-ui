@@ -73,9 +73,9 @@ export function useUserOpDivs(userid: string, options: QueryHookOptions = {}) {
   return useQuery({
     queryKey: queryKeys.users.assignedOpdivs(userid),
     queryFn: ({ signal }) => fetchUserOpDivs(userid, signal),
+    enabled: options.enabled,
     staleTime: 0,
     refetchOnReconnect: false,
-    ...options,
     meta: { suppressErrorNotification: true },
   })
 }

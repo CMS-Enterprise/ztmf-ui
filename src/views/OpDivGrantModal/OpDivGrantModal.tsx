@@ -101,7 +101,9 @@ export default function OpDivGrantModal({
   // Only the user's edits live in state. Until the picker is touched the
   // fetched grants render directly, so a background refresh cannot clobber an
   // edit, and every open starts from the server again. Empty while a read is
-  // in flight so a previous open's grants never flash in the picker.
+  // in flight so a previous open's grants never flash in the picker. A read
+  // that fails leaves the previous grants on screen rather than blanking, but
+  // fetchFailed disables the picker and Save, so they cannot be acted on.
   const [edits, setEdits] = React.useState<number[] | null>(null)
   // Dropped on open and on close, and on a change of target: the current
   // caller closes before switching users, but nothing in the type stops a
