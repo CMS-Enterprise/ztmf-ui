@@ -4,6 +4,14 @@ import Tooltip from '@mui/material/Tooltip'
 import type { ScoreProgress } from '@/types'
 import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
 
+// An outlined chip paints its label with `<color>.main`, and MUI's default
+// warning main (#ed6c02) holds only 3.1:1 on the white grid row - below the
+// WCAG AA 4.5:1 floor for text (ui#714). Same hue, darkened to 4.6:1; the
+// border follows so the chip stays one color. Success (#2e7d32) already
+// clears AA and is left alone.
+const WARNING_AA = '#BE5702'
+const warningChipSx = { color: WARNING_AA, borderColor: WARNING_AA }
+
 /**
  * Cell body for the Data Call Progress column: an updated-count fraction
  * ("12/41") next to a status chip, wrapped in a tooltip carrying the
@@ -87,6 +95,7 @@ export function ProgressCell({
             label="Incomplete"
             color="warning"
             variant="outlined"
+            sx={warningChipSx}
           />
         </Box>
       </Tooltip>
@@ -123,6 +132,7 @@ export function ProgressCell({
           label={label}
           color={updated ? 'success' : 'warning'}
           variant="outlined"
+          sx={updated ? undefined : warningChipSx}
         />
       </Box>
     </Tooltip>

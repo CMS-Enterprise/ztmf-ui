@@ -724,9 +724,12 @@ test('cancelling the delete confirmation issues no DELETE', async () => {
   expect(axios.delete).not.toHaveBeenCalled()
 })
 
-test('the delete action is disabled for the acting user (self-delete guard)', async () => {
+test('the delete action is inert for the acting user (self-delete guard)', async () => {
   // userInfo.userid is u-1 (the OWNER in makeCtx); a row for that same id must
-  // render its Delete affordance disabled so an admin cannot lock themselves out.
+  // not offer a working Delete, so an admin cannot lock themselves out. The
+  // button stays enabled and carries aria-disabled: the actions cell is a
+  // role="menu" whose children must all be menu items, and the <span> a truly
+  // disabled button needs for its Tooltip broke that (ui#714).
   const selfRow: users = {
     userid: 'u-1',
     email: 'grand.moff@deathstar.empire',
@@ -739,8 +742,15 @@ test('the delete action is disabled for the acting user (self-delete guard)', as
 
   renderWithProviders(<UserTable />)
 
+  const user = userEvent.setup()
   const deleteBtn = await screen.findByRole('button', { name: 'Delete' })
-  expect(deleteBtn).toBeDisabled()
+  expect(deleteBtn).toHaveAttribute('aria-disabled', 'true')
+
+  // aria-disabled alone stops nothing, so the click must be a no-op: no
+  // confirmation dialog, no DELETE.
+  await user.click(deleteBtn)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(axios.delete).not.toHaveBeenCalled()
 })
 
 test('a failed DELETE surfaces the try-again error and keeps the row', async () => {
