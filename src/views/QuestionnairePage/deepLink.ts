@@ -1,4 +1,5 @@
 import { FismaSystemType, datacall } from '@/types'
+import { RouteIds } from '@/router/constants'
 
 // Slugify a pillar/function name for the questionnaire URL. Kept here (rather
 // than inline in QuestionnairePage) so the deep-link resolvers below and the
@@ -9,7 +10,30 @@ export const toSlug = (str: string) =>
     .toLowerCase()
     .replaceAll(' ', '-')
 
-// Every system whose acronym matches the :fismaacronym URL param,
+// The questionnaire route is keyed on fismasystemid (#732). A purely numeric
+// :fismasystemid segment is an id; anything else is a legacy acronym link
+// (bookmarks and shared URLs from before the change) that the page redirects
+// to the id form when it resolves to exactly one system.
+export function parseSystemIdParam(
+  param: string | undefined
+): number | undefined {
+  if (!param || !/^\d+$/.test(param)) return undefined
+  return Number(param)
+}
+
+// Build the questionnaire path for a system, with the optional trailing
+// datacall / pillar / function segments. Every link into the questionnaire
+// (dashboard, System Info, breadcrumbs, in-survey nav, legacy redirect) goes
+// through here so the URL shape has one definition.
+export function questionnairePath(
+  fismasystemid: number,
+  ...segments: (string | undefined)[]
+): string {
+  const tail = segments.filter((s): s is string => !!s).join('/')
+  return `/${RouteIds.QUESTIONNAIRE}/${fismasystemid}${tail ? `/${tail}` : ''}`
+}
+
+// Every system whose acronym matches the legacy acronym URL segment,
 // case-insensitively. fismasystems.fismaacronym is not unique, so a slug can
 // name more than one system.
 export function findSystemsByAcronym(
@@ -19,19 +43,6 @@ export function findSystemsByAcronym(
   if (!acronym) return []
   const target = acronym.toLowerCase()
   return systems.filter((s) => s.fismaacronym?.toLowerCase() === target)
-}
-
-// Resolve the :fismaacronym URL param to a fismasystemid using the systems list
-// the app already loads. Enables cold loads (paste / refresh / bookmark) where
-// router location.state is empty. Case-insensitive; undefined when unresolved
-// or ambiguous: taking the first of several matches opened another system's
-// questionnaire, and answers were saved against it.
-export function resolveSystemIdByAcronym(
-  systems: FismaSystemType[],
-  acronym: string | undefined
-): number | undefined {
-  const matches = findSystemsByAcronym(systems, acronym)
-  return matches.length === 1 ? matches[0].fismasystemid : undefined
 }
 
 // Encode a datacall name for its URL segment. Spaces become underscores (the

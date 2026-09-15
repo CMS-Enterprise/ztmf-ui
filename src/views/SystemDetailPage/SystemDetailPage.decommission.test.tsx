@@ -403,6 +403,39 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
   expect(setFismaSystems).not.toHaveBeenCalled()
 })
 
+test('a reactivate refused for a taken acronym shows the backend reason, not "invalid input"', async () => {
+  // ztmf#587: a live system may have taken this acronym while it was
+  // decommissioned. The 400 body is { error: "invalid input", data: { field:
+  // reason } }; the reason must reach the admin.
+  const decommissioned = {
+    ...BASE_SYSTEM,
+    decommissioned: true,
+    decommissioned_date: '2020-01-01T00:00:00.000Z',
+  } as unknown as FismaSystemType
+  const reason =
+    'another active system in this OpDiv already uses the acronym DS-CORE'
+  mock.onPut(/fismasystems\/42\/reactivate$/).reply(400, {
+    error: 'invalid input',
+    data: { fismaacronym: reason },
+  })
+  const user = userEvent.setup()
+  renderPage(decommissioned)
+  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+
+  await screen.findByText('System Identity')
+  await clickEdit(user)
+  await user.click(
+    await screen.findByRole('button', { name: 'Reactivate System' })
+  )
+  await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  await waitFor(() => expect(notify).toHaveBeenCalledWith(reason, 'error'))
+  expect(notify).not.toHaveBeenCalledWith('invalid input', 'error')
+  expect(setFismaSystems).not.toHaveBeenCalled()
+})
+
 test('toggling data-lake sync in edit mode updates the draft', async () => {
   const user = userEvent.setup()
   renderPage(BASE_SYSTEM)

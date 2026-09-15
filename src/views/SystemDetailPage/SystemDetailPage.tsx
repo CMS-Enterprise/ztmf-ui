@@ -508,7 +508,16 @@ export default function SystemDetailPage() {
         })
         return
       }
-      notify(parsed.message, 'error')
+      // Reactivation can be refused with a field map (ztmf#587: a live system
+      // took this one's acronym while it was decommissioned). The top-level
+      // error is just "invalid input", and the reactivate dialog has no
+      // acronym input to attach the reason to, so surface the reasons in the
+      // toast instead of the generic message.
+      const fieldReasons = Object.values(parsed.fieldErrors ?? {})
+      notify(
+        fieldReasons.length > 0 ? fieldReasons.join(' ') : parsed.message,
+        'error'
+      )
     }
   }
 
@@ -614,7 +623,6 @@ export default function SystemDetailPage() {
       <SystemDetailHeader
         systemName={system.fismaname}
         fismasystemid={system.fismasystemid}
-        fismaacronym={system.fismaacronym}
         canEdit={isAdmin}
         isEditing={isEditing}
         isSaving={isSaving}
