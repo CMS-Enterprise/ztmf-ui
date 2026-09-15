@@ -429,7 +429,8 @@ export default function Title() {
                 sx={{
                   fontSize: 12,
                   fontWeight: 600,
-                  color: '#7997AF',
+                  // Darkened from #7997AF, which held only 3.06:1 on white.
+                  color: '#4F7290',
                   letterSpacing: '2px',
                   textTransform: 'uppercase',
                   lineHeight: 1.15,
