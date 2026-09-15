@@ -1,4 +1,5 @@
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 
 /**
  * OpDiv grant management for a single user (users_opdivs membership).
@@ -14,7 +15,7 @@ import axiosInstance from '@/axiosConfig'
 
 export async function fetchUserOpDivs(userid: string): Promise<number[]> {
   const response = await axiosInstance.get<{ data: number[] }>(
-    `/users/${userid}/assignedopdivs`
+    apiPaths.users.assignedOpdivs(userid)
   )
   return response.data.data ?? []
 }
@@ -23,5 +24,7 @@ export async function setUserOpDivs(
   userid: string,
   opdivIds: number[]
 ): Promise<void> {
-  await axiosInstance.put(`/users/${userid}/opdivs`, { opdiv_ids: opdivIds })
+  await axiosInstance.put(apiPaths.users.opdivs(userid), {
+    opdiv_ids: opdivIds,
+  })
 }

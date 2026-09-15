@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import type { SystemAttribute, FismaSystemType } from '@/types'
 
 /**
@@ -28,7 +29,7 @@ export async function fetchSystemAttributes(
   selectableOnly = true
 ): Promise<SystemAttribute[]> {
   const res = await axiosInstance.get<{ data: SystemAttribute[] | null }>(
-    '/systemattributes',
+    apiPaths.systemAttributes,
     { params: selectableOnly ? { selectable_only: true } : undefined, signal }
   )
   return res.data.data ?? []

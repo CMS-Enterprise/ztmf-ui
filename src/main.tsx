@@ -4,9 +4,11 @@
  */
 import * as React from 'react'
 import * as ReactDOMClient from 'react-dom/client'
+import { QueryClientProvider } from '@tanstack/react-query'
 import { RouterProvider } from 'react-router-dom'
 import CONFIG from '@/utils/config'
 import router from '@/router/router'
+import queryClient from '@/queryClient'
 import { SIGN_IN_GREETING } from '@/locales/en'
 // Self-hosted typefaces (no third-party CDN, per federal hosting rules).
 // Public Sans for UI text, JetBrains Mono for scores, IDs and codes.
@@ -21,6 +23,20 @@ import '@/sass/style.scss'
 import onPerfEntry from './utils/onPerfEntry'
 import { initLogoutListener } from '@/utils/sessionSync'
 import { SnackbarProvider } from 'notistack'
+
+// The devtools are a devDependency, so they must not appear in the runtime
+// dependency graph an SBOM or Snyk scan reads. Vite replaces
+// import.meta.env.DEV with a literal false in every deployable build, which
+// folds this ternary to null and drops the dynamic import with it, so no
+// devtools chunk is emitted. scripts/assert-prod-excludes-devtools.mjs checks
+// that on the built output.
+const DevtoolsPanel = import.meta.env.DEV
+  ? React.lazy(async () => ({
+      default: (await import('@tanstack/react-query-devtools'))
+        .ReactQueryDevtools,
+    }))
+  : null
+
 // IIFE that initializes the root node and renders the application.
 ;(async function () {
   // Once per tab lifetime, outside React so StrictMode cannot double-invoke it.
@@ -32,9 +48,16 @@ import { SnackbarProvider } from 'notistack'
   // create the React root node and render the application
   ReactDOMClient.createRoot(rootElement).render(
     <React.StrictMode>
-      <SnackbarProvider>
-        <RouterProvider router={router} />
-      </SnackbarProvider>
+      <QueryClientProvider client={queryClient}>
+        <SnackbarProvider>
+          <RouterProvider router={router} />
+        </SnackbarProvider>
+        {DevtoolsPanel && (
+          <React.Suspense fallback={null}>
+            <DevtoolsPanel initialIsOpen={false} />
+          </React.Suspense>
+        )}
+      </QueryClientProvider>
     </React.StrictMode>
   )
 

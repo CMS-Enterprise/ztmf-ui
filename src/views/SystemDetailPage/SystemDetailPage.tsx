@@ -12,6 +12,7 @@ import {
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import {
   CONFIRMATION_MESSAGE,
   ERROR_MESSAGES,
@@ -86,9 +87,12 @@ export default function SystemDetailPage() {
       setRetryingFetch(true)
       async function load() {
         try {
-          const res = await axiosInstance.get(`fismasystems/${systemId}`, {
-            signal: controller.signal,
-          })
+          const res = await axiosInstance.get(
+            apiPaths.fismaSystems.detail(systemId),
+            {
+              signal: controller.signal,
+            }
+          )
           const data = res.data?.data
           if (data) {
             setFismaSystems((prev) => [...prev, data])
@@ -199,7 +203,7 @@ export default function SystemDetailPage() {
       const userId = system.decommissioned_by
       async function load() {
         try {
-          const res = await axiosInstance.get(`users/${userId}`, {
+          const res = await axiosInstance.get(apiPaths.users.detail(userId), {
             signal: controller.signal,
           })
           setDecommissionedByName(res.data?.data?.fullname || userId)
@@ -225,7 +229,7 @@ export default function SystemDetailPage() {
       const userId = system.reactivated_by
       async function load() {
         try {
-          const res = await axiosInstance.get(`users/${userId}`, {
+          const res = await axiosInstance.get(apiPaths.users.detail(userId), {
             signal: controller.signal,
           })
           setReactivatedByName(res.data?.data?.fullname || userId)
@@ -384,7 +388,7 @@ export default function SystemDetailPage() {
         buildExtendedDiff(editedSystem, system, EXTENDED_METADATA_KEYS)
       )
       await axiosInstance.put(
-        `fismasystems/${editedSystem.fismasystemid}`,
+        apiPaths.fismaSystems.detail(editedSystem.fismasystemid),
         putBody
       )
 
@@ -450,7 +454,7 @@ export default function SystemDetailPage() {
 
     try {
       const res = await axiosInstance.delete(
-        `fismasystems/${editedSystem.fismasystemid}`,
+        apiPaths.fismaSystems.detail(editedSystem.fismasystemid),
         { data: body }
       )
       if (res.status === 200 || res.status === 204) {
@@ -502,7 +506,7 @@ export default function SystemDetailPage() {
 
     try {
       const res = await axiosInstance.put(
-        `fismasystems/${editedSystem.fismasystemid}/reactivate`,
+        apiPaths.fismaSystems.reactivate(editedSystem.fismasystemid),
         body
       )
       if (res.status === 200) {
@@ -827,6 +831,13 @@ export default function SystemDetailPage() {
           decommissionedByName={decommissionedByName}
           targetMaturitySlot={targetMaturityCard}
           opdivName={opdivName}
+          isAdmin={isAdmin}
+          onIssoUpdated={async () => {
+            // The read is the source of truth for resolved fields like
+            // isso_name, so refetch rather than echo the adopted value.
+            triedFetch.current = false
+            await fetchFismaSystems(showDecommissioned)
+          }}
         />
       )}
 

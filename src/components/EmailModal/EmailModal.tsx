@@ -12,6 +12,7 @@ import Field, { fieldInputSx } from '@/components/ui/Field'
 import SentEmailsModal from './SentEmailsModal'
 import { EmailModalProps } from '@/types'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { colors, fonts } from '@/theme/tokens'
@@ -58,7 +59,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   }
   const submitEmail = async () => {
     try {
-      const res = await axiosInstance.post('/massemails', {
+      const res = await axiosInstance.post(apiPaths.massEmails, {
         group: groupValue,
         subject,
         body,

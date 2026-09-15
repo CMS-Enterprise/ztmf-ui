@@ -4,6 +4,7 @@ import Modal from '@/components/ui/Modal'
 import Field, { fieldInputSx } from '@/components/ui/Field'
 import { datacallModalProps } from '@/types'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { radius } from '@/theme/tokens'
@@ -98,7 +99,7 @@ export default function DataCallModal({
     if (submitting) return
     setSubmitting(true)
     try {
-      await axiosInstance.post(`/datacalls`, {
+      await axiosInstance.post(apiPaths.datacalls.root, {
         datacall: datacall.toUpperCase(),
         deadline: new Date(deadline).toISOString(),
       })

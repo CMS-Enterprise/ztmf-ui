@@ -316,7 +316,13 @@ function TableToolbar({
           cases it exists to cover. */}
       <Box role="status" aria-live="polite">
         {!openCallInView && (
-          <Alert severity="info" sx={{ borderRadius: 0, py: 0 }}>
+          // role="presentation" strips MUI Alert's default role="alert" so the
+          // message is announced once by the polite wrapper, not twice.
+          <Alert
+            severity="info"
+            role="presentation"
+            sx={{ borderRadius: 0, py: 0 }}
+          >
             {hasOpenCall
               ? 'The open data call is not in the selected view'
               : "No open data call; showing each system's most recently updated call"}

@@ -1,7 +1,7 @@
-// The four views UserTable derives from the shared OpDiv list (#558). Pure so
-// they can be tested without rendering the grid - UserTable itself has no
-// render coverage, and the caller-scope narrowing below is a rule, not a
-// transform, so it needs pinning.
+// The four views UserTable derives from the shared OpDiv list. Pure so they
+// can be tested without rendering the grid; the column definitions that
+// consume them are pinned separately in UserTable.test.tsx. The caller-scope
+// narrowing below is a rule, not a transform, so it needs pinning either way.
 import { isOpDivTier } from '@/utils/userRoles'
 import type { OpDiv, userData } from '@/types'
 

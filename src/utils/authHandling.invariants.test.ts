@@ -59,7 +59,7 @@ const expectations: FileExpectation[] = [
   },
   {
     filePath: 'src/views/SystemDetailPage/SystemEnrichmentCard.tsx',
-    includes: ['skipAuthHandling: true'],
+    includes: ['skipAuthHandling: true', 'suppressErrorNotification: true'],
   },
   {
     filePath: 'src/views/SystemDetailPage/SystemDetailPage.tsx',
