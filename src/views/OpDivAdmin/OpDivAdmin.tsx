@@ -29,8 +29,8 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
 import { Routes } from '@/router/constants'
-import { createOpDiv, updateOpDiv, type OpDivInput } from '@/utils/opdivs'
-import { setOpDivDelegateEnabled } from '@/utils/delegates'
+import { useCreateOpDiv, useUpdateOpDiv, type OpDivInput } from '@/utils/opdivs'
+import { useSetOpDivDelegateEnabled } from '@/utils/delegates'
 import { isUnscopedWriteAdmin } from '@/utils/userRoles'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -68,12 +68,7 @@ function CreateToolbar({
 
 export default function OpDivAdmin() {
   const navigate = useNavigate()
-  const {
-    userInfo,
-    opdivs: rows,
-    opdivsLoaded,
-    refreshOpdivs,
-  } = useContextProp()
+  const { userInfo, opdivs: rows, opdivsLoaded } = useContextProp()
   // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
   // the page only to flip the per-OpDiv System Delegate toggle - every other
   // control stays OWNER-only. The backend enforces both boundaries (OpDiv
@@ -90,6 +85,18 @@ export default function OpDivAdmin() {
   const [pendingToggle, setPendingToggle] = useState<OpDiv | null>(null)
   const [pendingDelegateToggle, setPendingDelegateToggle] =
     useState<OpDiv | null>(null)
+  // All three invalidate the shared OpDiv list on success, so the grid and
+  // every other consumer refetch on their own.
+  const createMutation = useCreateOpDiv()
+  const updateMutation = useUpdateOpDiv()
+  const delegateToggleMutation = useSetOpDivDelegateEnabled()
+  // Shared failure path for the writes that have no inline field to route a
+  // message into: an auth failure is already handled by the interceptor, and
+  // anything else toasts the parsed API message.
+  const notifyMutationError = (error: unknown) => {
+    if (isAuthHandled(error)) return
+    notify(parseApiError(error).message, 'error')
+  }
 
   // Unscoped write admins (OWNER + HHS admin) reach the page; everyone else is
   // bounced, mirroring the redirect guard UserTable uses. The backend also
@@ -128,82 +135,80 @@ export default function OpDivAdmin() {
     return Object.keys(errors).length === 0
   }
 
-  const handleSave = () => {
+  const handleSave = async () => {
     if (!validate()) return
     const input: OpDivInput = {
       code: form.code.trim(),
       name: form.name.trim(),
       is_parent: form.is_parent,
     }
-    const request = editing
-      ? updateOpDiv(editing.opdiv_id, { ...input, active: editing.active })
-      : createOpDiv(input)
-    request
-      .then(() => {
-        notify(
-          editing ? 'Saved - OpDiv updated' : 'Saved - OpDiv created',
-          'success'
-        )
-        setDialogOpen(false)
-        refreshOpdivs()
-      })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        if (parsed.fieldErrors) {
-          // Surface backend field-level validation inline (e.g. duplicate code).
-          setFieldErrors(parsed.fieldErrors)
-          return
-        }
-        notify(parsed.message, 'error')
-      })
+    try {
+      if (editing) {
+        await updateMutation.mutateAsync({
+          opdivId: editing.opdiv_id,
+          input: { ...input, active: editing.active },
+        })
+      } else {
+        await createMutation.mutateAsync(input)
+      }
+      notify(
+        editing ? 'Saved - OpDiv updated' : 'Saved - OpDiv created',
+        'success'
+      )
+      setDialogOpen(false)
+    } catch (error) {
+      if (isAuthHandled(error)) return
+      const parsed = parseApiError(error)
+      if (parsed.fieldErrors) {
+        // Surface backend field-level validation inline (e.g. duplicate code).
+        setFieldErrors(parsed.fieldErrors)
+        return
+      }
+      notify(parsed.message, 'error')
+    }
   }
 
-  const handleConfirmToggle = (confirm: boolean) => {
+  const handleConfirmToggle = async (confirm: boolean) => {
     const target = pendingToggle
     setPendingToggle(null)
     if (!confirm || !target) return
-    updateOpDiv(target.opdiv_id, {
-      code: target.code,
-      name: target.name,
-      is_parent: target.is_parent,
-      active: !target.active,
-    })
-      .then(() => {
-        notify(
-          target.active
-            ? 'Saved - OpDiv deactivated'
-            : 'Saved - OpDiv activated',
-          'success'
-        )
-        refreshOpdivs()
+    try {
+      await updateMutation.mutateAsync({
+        opdivId: target.opdiv_id,
+        input: {
+          code: target.code,
+          name: target.name,
+          is_parent: target.is_parent,
+          active: !target.active,
+        },
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        notify(parsed.message, 'error')
-      })
+      notify(
+        target.active ? 'Saved - OpDiv deactivated' : 'Saved - OpDiv activated',
+        'success'
+      )
+    } catch (error) {
+      notifyMutationError(error)
+    }
   }
 
-  const handleConfirmDelegateToggle = (confirm: boolean) => {
+  const handleConfirmDelegateToggle = async (confirm: boolean) => {
     const target = pendingDelegateToggle
     setPendingDelegateToggle(null)
     if (!confirm || !target) return
-    setOpDivDelegateEnabled(target.opdiv_id, !target.system_delegate_enabled)
-      .then(() => {
-        notify(
-          target.system_delegate_enabled
-            ? 'Saved - System Delegate disabled'
-            : 'Saved - System Delegate enabled',
-          'success'
-        )
-        refreshOpdivs()
+    try {
+      await delegateToggleMutation.mutateAsync({
+        opdivId: target.opdiv_id,
+        enabled: !target.system_delegate_enabled,
       })
-      .catch((error) => {
-        if (isAuthHandled(error)) return
-        const parsed = parseApiError(error)
-        notify(parsed.message, 'error')
-      })
+      notify(
+        target.system_delegate_enabled
+          ? 'Saved - System Delegate disabled'
+          : 'Saved - System Delegate enabled',
+        'success'
+      )
+    } catch (error) {
+      notifyMutationError(error)
+    }
   }
 
   const columns: GridColDef[] = useMemo(() => {

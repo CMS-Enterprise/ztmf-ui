@@ -95,16 +95,6 @@ jest.mock('@mui/x-data-grid', () => {
   }
 })
 
-jest.mock('@/utils/opdivs', () => ({
-  __esModule: true,
-  fetchOpDivs: jest.fn(),
-  createOpDiv: jest.fn(),
-  updateOpDiv: jest.fn(),
-}))
-jest.mock('@/utils/delegates', () => ({
-  __esModule: true,
-  setOpDivDelegateEnabled: jest.fn(),
-}))
 jest.mock('@/utils/notify', () => {
   const actual = jest.requireActual('@/utils/notify')
   return { ...actual, notify: jest.fn() }
@@ -133,10 +123,16 @@ import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OpDivAdmin from './OpDivAdmin'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import { setOpDivDelegateEnabled } from '@/utils/delegates'
+import MockAdapter from 'axios-mock-adapter'
+import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import type { OpDiv, UserRole, userData } from '@/types'
 
-const setEnabledMock = setOpDivDelegateEnabled as jest.Mock
+// The toggle writes through the real hook, so the stub sits at the axios
+// boundary.
+const mock = new MockAdapter(axiosInstance)
+const TOGGLE_URL = apiPaths.opdivs.systemDelegateEnabled(3)
+const OPDIVS_URL = apiPaths.opdivs.root
 
 const EMPIRE: OpDiv = {
   opdiv_id: 3,
@@ -146,8 +142,6 @@ const EMPIRE: OpDiv = {
   active: true,
   system_delegate_enabled: false,
 }
-
-const refreshOpdivsMock = jest.fn()
 
 function ctx(role: UserRole) {
   return {
@@ -159,7 +153,6 @@ function ctx(role: UserRole) {
     } as userData,
     opdivs: [EMPIRE],
     opdivsLoaded: true,
-    refreshOpdivs: refreshOpdivsMock,
   }
 }
 
@@ -170,7 +163,54 @@ function renderAs(role: UserRole) {
 
 beforeEach(() => {
   jest.clearAllMocks()
-  setEnabledMock.mockResolvedValue({ ...EMPIRE, system_delegate_enabled: true })
+  mock.reset()
+  mock
+    .onPut(TOGGLE_URL)
+    .reply(200, { data: { ...EMPIRE, system_delegate_enabled: true } })
+  mock.onPost(OPDIVS_URL).reply(201, { data: EMPIRE })
+  mock.onPut(apiPaths.opdivs.detail(3)).reply(204)
+  mock.onGet(OPDIVS_URL).reply(200, { data: [EMPIRE] })
+})
+
+test('creating an OpDiv POSTs the trimmed form and closes the dialog', async () => {
+  const user = userEvent.setup()
+  renderAs('OWNER')
+
+  await user.click(screen.getByRole('button', { name: /create opdiv/i }))
+  await user.type(await screen.findByLabelText(/code/i), '  NEWOP  ')
+  await user.type(screen.getByLabelText(/^name/i), '  New Division  ')
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  expect(mock.history.post[0].url).toBe(OPDIVS_URL)
+  expect(JSON.parse(mock.history.post[0].data)).toEqual({
+    code: 'NEWOP',
+    name: 'New Division',
+    is_parent: false,
+  })
+  await waitFor(() =>
+    expect(
+      screen.queryByRole('dialog', { name: /create opdiv/i })
+    ).not.toBeInTheDocument()
+  )
+})
+
+test('a backend field error on create stays inline and keeps the dialog open', async () => {
+  const user = userEvent.setup()
+  mock.onPost(OPDIVS_URL).reply(400, { data: { code: 'code already exists' } })
+  renderAs('OWNER')
+
+  await user.click(screen.getByRole('button', { name: /create opdiv/i }))
+  await user.type(await screen.findByLabelText(/code/i), 'EMPIRE')
+  await user.type(screen.getByLabelText(/^name/i), 'Duplicate')
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  // Routed to the Code field rather than a toast, so the admin can correct it
+  // in place.
+  expect(await screen.findByText(/code already exists/i)).toBeInTheDocument()
+  expect(
+    screen.getByRole('dialog', { name: /create opdiv/i })
+  ).toBeInTheDocument()
 })
 
 test('OWNER sees the delegate toggle plus Create and row actions', async () => {
@@ -219,14 +259,14 @@ test('flipping the toggle confirms then calls the dedicated enable endpoint', as
   await user.click(toggle)
 
   // Nothing is written until the admin confirms.
-  expect(setEnabledMock).not.toHaveBeenCalled()
+  expect(mock.history.put).toHaveLength(0)
   await user.click(screen.getByRole('button', { name: /^enable$/i }))
 
-  await waitFor(() => expect(setEnabledMock).toHaveBeenCalledTimes(1))
-  // Toggled from false -> true for EMPIRE (opdiv_id 3).
-  expect(setEnabledMock).toHaveBeenCalledWith(3, true)
-  // The grid reads the shared context list, so the write must refresh it.
-  await waitFor(() => expect(refreshOpdivsMock).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  // Toggled from false -> true for EMPIRE (opdiv_id 3), through the dedicated
+  // endpoint rather than the OWNER-only OpDiv update.
+  expect(mock.history.put[0].url).toBe(TOGGLE_URL)
+  expect(JSON.parse(mock.history.put[0].data)).toEqual({ enabled: true })
 })
 
 test('cancelling the toggle confirmation writes nothing', async () => {
@@ -239,7 +279,7 @@ test('cancelling the toggle confirmation writes nothing', async () => {
   await user.click(toggle)
   await user.click(screen.getByRole('button', { name: /^cancel$/i }))
 
-  expect(setEnabledMock).not.toHaveBeenCalled()
+  expect(mock.history.put).toHaveLength(0)
 })
 
 test('the grid reads as loading until the shared OpDiv list settles', () => {

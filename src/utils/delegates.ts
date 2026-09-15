@@ -1,5 +1,7 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import type { QueryHookOptions } from '@/queryClient'
 import type { DelegateRow, DelegateCandidate, OpDiv } from '@/types'
 
 /**
@@ -138,4 +140,145 @@ export async function setOpDivDelegateEnabled(
     { enabled }
   )
   return res.data.data
+}
+
+/**
+ * Reads a system's delegate roster for a component. A failure surfaces
+ * through the cache boundary's toast, which carries the same parsed message
+ * the section used to raise itself.
+ *
+ * Read fresh on every mount: other pages edit this roster without
+ * invalidating. See "Operational data" in docs/data-fetching.md.
+ *
+ * @param systemId - The fismasystemid whose roster to read.
+ * @returns The query result; `data` is the delegate rows.
+ */
+export function useSystemDelegates(systemId: number) {
+  return useQuery({
+    queryKey: queryKeys.fismaSystems.delegates(systemId),
+    queryFn: ({ signal }) => fetchSystemDelegates(systemId, signal),
+    staleTime: 0,
+  })
+}
+
+/**
+ * Searches the candidates eligible to attach to a system. Keyed on the search
+ * term; the caller debounces its input. A failure is non-fatal, since an empty
+ * option list just means nothing to attach.
+ *
+ * Rows are held across a change of search term but never across a change of
+ * system, and the stale time is left alone rather than zeroed. See "Operational
+ * data" and "Holding previous results" in docs/data-fetching.md.
+ *
+ * @param systemId - The fismasystemid to find candidates for.
+ * @param search - Case-insensitive substring on name/email; empty for all.
+ * @param options - `enabled`, for a caller that only shows the picker to
+ *   managers.
+ * @returns The query result; `data` is the candidate rows.
+ */
+export function useDelegateCandidates(
+  systemId: number,
+  search: string,
+  options: QueryHookOptions = {}
+) {
+  const systemKey = queryKeys.fismaSystems.delegateCandidateLists(systemId)
+  return useQuery({
+    queryKey: queryKeys.fismaSystems.delegateCandidates(systemId, search),
+    queryFn: ({ signal }) => searchDelegateCandidates(systemId, search, signal),
+    // Same system only: attaching posts to the system in the path.
+    placeholderData: (previousData, previousQuery) =>
+      previousQuery &&
+      systemKey.every((part, i) => previousQuery.queryKey[i] === part)
+        ? previousData
+        : undefined,
+    enabled: options.enabled,
+    meta: { suppressErrorNotification: true },
+  })
+}
+
+/**
+ * Builds a system-scoped delegate mutation. Every delegate write changes both
+ * the roster and who is still eligible to attach, so both are invalidated. The
+ * roster is awaited so the section's dialogs close over the refreshed list;
+ * the candidate lists are not, since nothing acts on them at that moment.
+ * Error handling stays with the caller.
+ */
+function useSystemDelegateMutation<TVariables>(
+  systemId: number,
+  mutationFn: (variables: TVariables) => Promise<unknown>
+) {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.delegateCandidateLists(systemId),
+      })
+      return queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.delegates(systemId),
+      })
+    },
+  })
+}
+
+/**
+ * Mutation that adds a delegate to a system. The caller keys on the response
+ * code to place a guard inline.
+ *
+ * @param systemId - The fismasystemid to add to.
+ * @returns The mutation, taking an AddDelegateBody.
+ */
+export function useAddSystemDelegate(systemId: number) {
+  return useSystemDelegateMutation(systemId, (body: AddDelegateBody) =>
+    addSystemDelegate(systemId, body)
+  )
+}
+
+/**
+ * Mutation that renews or changes a delegate's expiration.
+ *
+ * @param systemId - The fismasystemid the delegate is assigned to.
+ * @returns The mutation, taking the delegate's user id and the new expiry.
+ */
+export function useRenewSystemDelegate(systemId: number) {
+  return useSystemDelegateMutation(
+    systemId,
+    ({
+      userid,
+      accessExpiresAt,
+    }: {
+      userid: string
+      accessExpiresAt?: string
+    }) => renewSystemDelegate(systemId, userid, accessExpiresAt)
+  )
+}
+
+/**
+ * Mutation that removes a delegate from a system.
+ *
+ * @param systemId - The fismasystemid to remove from.
+ * @returns The mutation, taking the delegate's user id.
+ */
+export function useRemoveSystemDelegate(systemId: number) {
+  return useSystemDelegateMutation(systemId, (userid: string) =>
+    removeSystemDelegate(systemId, userid)
+  )
+}
+
+/**
+ * Mutation that toggles an OpDiv's System Delegate capability. The flag lives
+ * on the OpDiv row every consumer reads from the shared list, so that list is
+ * invalidated; not awaited, so the confirm dialog closes on the write.
+ *
+ * @returns The mutation, taking the opdiv id and the desired state.
+ */
+export function useSetOpDivDelegateEnabled() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ opdivId, enabled }: { opdivId: number; enabled: boolean }) =>
+      setOpDivDelegateEnabled(opdivId, enabled),
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.opdivs.all })
+    },
+  })
 }
