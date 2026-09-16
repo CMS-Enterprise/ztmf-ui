@@ -71,7 +71,7 @@ export default function OpDivAdmin() {
   const navigate = useNavigate()
   const accessibleGrid = useAccessibleGrid()
   const { userInfo, opdivs: rows, opdivsLoaded } = useContextProp()
-  
+
   // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
   // the page only to flip the per-OpDiv System Delegate toggle - every other
   // control stays OWNER-only. The backend enforces both boundaries (OpDiv
