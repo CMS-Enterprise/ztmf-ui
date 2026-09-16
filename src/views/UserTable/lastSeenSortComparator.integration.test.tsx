@@ -7,6 +7,7 @@
  */
 import { render, screen, fireEvent, within } from '@testing-library/react'
 import { DataGrid, GridColDef } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import { lastSeenSortComparator, parseLastSeen } from './lastSeen'
 
 type Row = { id: number; name: string; last_seen: string | null }
@@ -29,15 +30,25 @@ const columns: GridColDef[] = [
   },
 ]
 
+// Configured the way the app configures its grids, so the roles asserted below
+// are the roles a user's screen reader meets.
+function Grid() {
+  const accessibleGrid = useAccessibleGrid()
+  return (
+    <DataGrid
+      {...accessibleGrid}
+      rows={rows}
+      columns={columns}
+      disableVirtualization
+      autoHeight
+    />
+  )
+}
+
 function renderGrid() {
   return render(
     <div style={{ height: 500, width: 700 }}>
-      <DataGrid
-        rows={rows}
-        columns={columns}
-        disableVirtualization
-        autoHeight
-      />
+      <Grid />
     </div>
   )
 }
@@ -47,9 +58,9 @@ function namesInOrder(): string[] {
   return (
     screen
       .getAllByRole('row')
-      // Header row has columnheaders, not cells (v6 renders role="cell").
-      .filter((row) => within(row).queryAllByRole('cell').length > 0)
-      .map((row) => within(row).getAllByRole('cell')[0].textContent ?? '')
+      // Header row has columnheaders, not cells (ariaV7 renders gridcell).
+      .filter((row) => within(row).queryAllByRole('gridcell').length > 0)
+      .map((row) => within(row).getAllByRole('gridcell')[0].textContent ?? '')
   )
 }
 

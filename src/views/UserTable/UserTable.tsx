@@ -846,7 +846,9 @@ export default function UserTable() {
                 role="menu" whose children must all be menu items, and a
                 disabled button needs a <span> wrapper for Tooltip to see
                 hover events (ui#714). Staying enabled also keeps the control
-                focusable, so the reason reaches keyboard users. */}
+                focusable, so the reason reaches keyboard users. The ripple and
+                the opacity stand in for the disabled styling that goes with
+                it, so a click still reads as refused rather than ignored. */}
             <GridActionsCellItem
               key={`delete-${params.id}`}
               icon={<DeleteIcon sx={{ color: isSelf ? 'gray' : 'black' }} />}
@@ -854,6 +856,8 @@ export default function UserTable() {
               onClick={isSelf ? undefined : handleDeleteClick(params.id)}
               color="inherit"
               aria-disabled={isSelf || undefined}
+              disableRipple={isSelf}
+              sx={isSelf ? { opacity: 0.38, cursor: 'not-allowed' } : undefined}
             />
           </Tooltip>,
         ]

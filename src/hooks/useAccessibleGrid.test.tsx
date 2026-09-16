@@ -2,18 +2,15 @@ import { render, screen, waitFor } from '@testing-library/react'
 import { DataGrid } from '@mui/x-data-grid'
 import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 
-// Stands in for the MUI v6 grid DOM: the root carries role="grid" and the aria
-// counts, the toolbar and footer are siblings of .MuiDataGrid-main, and only
-// main holds the rowgroups. `role` is a prop here because the real root gets it
-// from MUI (role="grid") or from the hook's forwardedProps (presentation),
-// depending on which render won last.
+// Stands in for the ariaV7 grid DOM: a generic root holding the toolbar, main,
+// and the footer, with the caller's aria-label forwarded to the root.
 function GridHarness({
-  role = 'presentation',
-  rowCount = 5,
+  label = 'Users',
+  labelAttribute = 'aria-label',
   withMain = true,
 }: {
-  role?: string
-  rowCount?: number
+  label?: string
+  labelAttribute?: string
   withMain?: boolean
 }) {
   const { ref } = useAccessibleGrid()
@@ -22,17 +19,13 @@ function GridHarness({
       ref={ref}
       data-testid="root"
       className="MuiDataGrid-root"
-      role={role}
-      aria-label="Users"
-      aria-colcount={3}
-      aria-rowcount={rowCount}
-      aria-multiselectable={false}
+      {...{ [labelAttribute]: label }}
     >
       <div className="MuiDataGrid-toolbarContainer">
         <input aria-label="Search" />
       </div>
       {withMain && (
-        <div data-testid="main" className="MuiDataGrid-main">
+        <div data-testid="main" className="MuiDataGrid-main" role="grid">
           <div role="rowgroup" />
         </div>
       )}
@@ -41,94 +34,68 @@ function GridHarness({
   )
 }
 
-test('moves the grid role and its aria attributes onto .MuiDataGrid-main', async () => {
+test('carries the accessible name onto the element that is the grid', async () => {
   render(<GridHarness />)
-  const root = screen.getByTestId('root')
-  const main = screen.getByTestId('main')
-
-  await waitFor(() => expect(main).toHaveAttribute('role', 'grid'))
-  expect(main).toHaveAttribute('aria-label', 'Users')
-  expect(main).toHaveAttribute('aria-colcount', '3')
-  expect(main).toHaveAttribute('aria-rowcount', '5')
-  expect(main).toHaveAttribute('aria-multiselectable', 'false')
-
-  // Left on a presentational root they would be reported as aria-allowed-attr.
-  expect(root).toHaveAttribute('role', 'presentation')
-  expect(root).not.toHaveAttribute('aria-label')
-  expect(root).not.toHaveAttribute('aria-colcount')
-  expect(root).not.toHaveAttribute('aria-rowcount')
-})
-
-test('mirrors the counts again when the grid rewrites them', async () => {
-  const { rerender } = render(<GridHarness rowCount={5} />)
-  const main = screen.getByTestId('main')
-  await waitFor(() => expect(main).toHaveAttribute('aria-rowcount', '5'))
-
-  // What filtering, sorting, and paging do to the real grid.
-  rerender(<GridHarness rowCount={9} />)
-
-  await waitFor(() => expect(main).toHaveAttribute('aria-rowcount', '9'))
-})
-
-test('demotes a root that re-declares role="grid"', async () => {
-  render(<GridHarness role="grid" />)
 
   await waitFor(() =>
-    expect(screen.getByTestId('root')).toHaveAttribute('role', 'presentation')
+    expect(screen.getByTestId('main')).toHaveAttribute('aria-label', 'Users')
   )
-  expect(screen.getByTestId('main')).toHaveAttribute('role', 'grid')
+  // Prohibited on the generic root, and a second answer to what the grid is
+  // called.
+  expect(screen.getByTestId('root')).not.toHaveAttribute('aria-label')
+})
+
+test('carries aria-labelledby the same way', async () => {
+  render(<GridHarness labelAttribute="aria-labelledby" label="grid-heading" />)
+
+  await waitFor(() =>
+    expect(screen.getByTestId('main')).toHaveAttribute(
+      'aria-labelledby',
+      'grid-heading'
+    )
+  )
+  expect(screen.getByTestId('root')).not.toHaveAttribute('aria-labelledby')
 })
 
 test('leaves a grid without a main element untouched', async () => {
-  // Every table test in this repo mocks the DataGrid away; the hook has to be
-  // inert against a DOM that never renders MUI's internals.
-  render(<GridHarness role="grid" withMain={false} />)
+  // Every table test in this repo mocks the DataGrid away, and a rename of
+  // MUI's internals would look the same: the hook has to be inert, never
+  // stripping a name it cannot re-home.
+  render(<GridHarness withMain={false} />)
 
   await waitFor(() => expect(screen.getByTestId('root')).toBeInTheDocument())
-  expect(screen.getByTestId('root')).toHaveAttribute('role', 'grid')
   expect(screen.getByTestId('root')).toHaveAttribute('aria-label', 'Users')
 })
 
-test('never carries one grid’s accessible name to the next', () => {
-  // Against the real DataGrid, because the hazard is MUI's: it harvests the
-  // grid's aria-* props by mutating the forwardedProps object it is handed, so
-  // one shared object would label the dashboard grid "Users" the moment anyone
-  // visited the users page.
-  function Grid({ label }: { label?: string }) {
+test('puts the grid role on main and names it, against the real DataGrid', async () => {
+  // The end state this hook exists to produce. Against the real component
+  // because the value is in MUI's ariaV7 wiring plus ours, not ours alone.
+  function Grid() {
     const accessibleGrid = useAccessibleGrid()
     return (
       <DataGrid
         {...accessibleGrid}
-        {...(label ? { 'aria-label': label } : {})}
-        rows={[]}
+        aria-label="Users"
+        rows={[{ id: 1, name: 'Piett' }]}
         columns={[{ field: 'name' }]}
         autoHeight
       />
     )
   }
+  const { container } = render(<Grid />)
 
-  const labeled = render(<Grid label="Users" />)
-  expect(labeled.container.querySelector('.MuiDataGrid-main')).toHaveAttribute(
-    'aria-label',
-    'Users'
-  )
-  labeled.unmount()
+  const main = container.querySelector('.MuiDataGrid-main')
+  await waitFor(() => expect(main).toHaveAttribute('aria-label', 'Users'))
+  expect(main).toHaveAttribute('role', 'grid')
+  expect(main).toHaveAttribute('aria-colcount', '1')
 
-  const unlabeled = render(<Grid />)
-  expect(
-    unlabeled.container.querySelector('.MuiDataGrid-main')
-  ).not.toHaveAttribute('aria-label')
-})
+  // The toolbar and the pagination footer live out here, which is the whole
+  // reason the grid role may not sit on the root.
+  const root = container.querySelector('.MuiDataGrid-root')
+  expect(root).not.toHaveAttribute('role')
+  expect(root).not.toHaveAttribute('aria-label')
 
-test('forwards a presentational role to the grid root', () => {
-  // The hook cannot set `role` through a normal prop: DataGrid only forwards
-  // aria-* and data-* attributes to its root element.
-  let forwarded: Record<string, unknown> | undefined
-  function Probe() {
-    forwarded = useAccessibleGrid().forwardedProps
-    return null
-  }
-  render(<Probe />)
-
-  expect(forwarded).toEqual({ role: 'presentation' })
+  // role="cell" is a table role; a grid takes gridcell.
+  expect(container.querySelector('[role="cell"]')).toBeNull()
+  expect(container.querySelector('[role="gridcell"]')).toBeInTheDocument()
 })

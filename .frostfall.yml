@@ -35,6 +35,10 @@ tests:
       # stop is the column header, and ArrowDown from there walks into the rows
       # and scrolls them (the WAI-ARIA grid pattern). Off here only; every other
       # page keeps the rule, and the dashboard grid still has to pass it.
+      #
+      # Rules scope to a test, not a selector, so this covers the whole /#/users
+      # route: a scrollable region added to this page later would go unchecked.
+      # Re-point it at the grid if frostfall grows selector-scoped rules.
       scrollable-region-focusable: off
 
   - id: admin-opdivs
