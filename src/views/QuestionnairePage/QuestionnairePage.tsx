@@ -44,6 +44,7 @@ import {
   NEXT_HINT_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { outlinedChipSx } from '@/utils/chipStyles'
 import { sortPillars } from '@/utils/sortPillars'
 import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
@@ -1896,6 +1897,13 @@ export default function QuestionnarePage() {
                           currentCarryState === 'unconfirmed'
                             ? 'warning'
                             : 'success'
+                        }
+                        // Outlined warning reads at 3.1:1 on white; success
+                        // clears AA on its own (ui#714).
+                        sx={
+                          currentCarryState === 'unconfirmed'
+                            ? outlinedChipSx('warning')
+                            : undefined
                         }
                         label={
                           currentCarryState === 'unconfirmed'

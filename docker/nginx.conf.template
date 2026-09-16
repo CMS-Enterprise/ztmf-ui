@@ -1,0 +1,45 @@
+# Rendered by the nginx image entrypoint (envsubst on PR_PATH_PREFIX and
+# API_UPSTREAM). PR_PATH_PREFIX is "" at the root or "/pr/<repo>/<n>" in a PR
+# environment; the bundle is path-agnostic so the same image serves both.
+server {
+    listen 443 ssl;
+    server_name _;
+    ssl_certificate     /etc/nginx/cert.pem;
+    ssl_certificate_key /etc/nginx/key.pem;
+    ssl_protocols TLSv1.2 TLSv1.3;
+    absolute_redirect off;
+
+    # The ALB rule also routes the slashless prefix, which no prefix location
+    # matches. Inert when the prefix is empty: $request_uri is never "".
+    if ($request_uri = "${PR_PATH_PREFIX}") {
+        return 301 "${PR_PATH_PREFIX}/";
+    }
+
+    # Target group health check; hits the target directly, bypassing the prefix.
+    location = /healthz {
+        access_log off;
+        default_type text/plain;
+        return 200 "ok\n";
+    }
+
+    # Relative api/v1/ calls from the bundle resolve under the prefix.
+    location ${PR_PATH_PREFIX}/api/ {
+        proxy_pass ${API_UPSTREAM}/api/;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto https;
+        proxy_read_timeout 300s;
+        # Bearer-only image on dev's host: a dev ztmf_session cookie would be
+        # checked before the bearer and fail, and logout's Set-Cookie clears
+        # would drop the user's dev and ALB sessions. No cookie crosses.
+        proxy_set_header Cookie "";
+        proxy_hide_header Set-Cookie;
+    }
+
+    location ${PR_PATH_PREFIX}/ {
+        alias /usr/share/nginx/html/;
+        index index.html;
+        add_header Cache-Control "no-store";
+    }
+}

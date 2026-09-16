@@ -1,5 +1,6 @@
 import { Chip, Tooltip } from '@mui/material'
 import AutoAwesomeIcon from '@mui/icons-material/AutoAwesome'
+import { outlinedChipSx } from '@/utils/chipStyles'
 
 interface AISummaryBadgeProps {
   /**
@@ -23,7 +24,8 @@ export default function AISummaryBadge({ show = true }: AISummaryBadgeProps) {
         size="small"
         variant="outlined"
         color="info"
-        sx={{ height: 18, fontSize: '0.65rem' }}
+        // Outlined info reads at 3.86:1 on white, under the AA floor (ui#714).
+        sx={{ height: 18, fontSize: '0.65rem', ...outlinedChipSx('info') }}
       />
     </Tooltip>
   )

@@ -25,6 +25,7 @@ import {
   GridToolbarContainer,
   GridToolbarQuickFilter,
 } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import { useContextProp } from '../Title/Context'
@@ -68,7 +69,9 @@ function CreateToolbar({
 
 export default function OpDivAdmin() {
   const navigate = useNavigate()
+  const accessibleGrid = useAccessibleGrid()
   const { userInfo, opdivs: rows, opdivsLoaded } = useContextProp()
+  
   // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
   // the page only to flip the per-OpDiv System Delegate toggle - every other
   // control stays OWNER-only. The backend enforces both boundaries (OpDiv
@@ -304,6 +307,7 @@ export default function OpDivAdmin() {
       </Typography>
       <Box sx={{ height: 600, width: '100%', mb: 2 }}>
         <DataGrid
+          {...accessibleGrid}
           aria-label="Operating Divisions"
           rows={rows}
           columns={columns}

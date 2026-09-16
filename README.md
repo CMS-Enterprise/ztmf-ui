@@ -102,6 +102,26 @@ To build the application, run the following from the root directory:
 yarn build
 ```
 
+### PR environment image
+
+`Dockerfile` builds the frontend for per-PR environments ([ztmf-misc#343](https://github.com/CMS-Enterprise/ztmf-misc/issues/343)): an nginx container that serves the path-agnostic bundle under a prefix, proxies its `api/` calls to the API container, and writes `config.js` at start with a test-mode bearer token. The bundle is built with `VITE_IDP_ENABLED=false`, so this image is never what dev or prod serve, and a PR that changes the IdP login path or the `showIdpSelector` branch is not exercised by its PR environment.
+
+| Variable            | Default                       | Purpose                                                                  |
+| ------------------- | ----------------------------- | ------------------------------------------------------------------------ |
+| `AUTH_HS256_SECRET` | required                      | Signs the token in `config.js`; must match the API's `AUTH_HS256_SECRET` |
+| `PR_PATH_PREFIX`    | empty                         | `/pr/<repo>/<n>` in a PR environment; empty serves at `/`                |
+| `API_UPSTREAM`      | `http://127.0.0.1:8080`       | Where `${PR_PATH_PREFIX}/api/` is proxied                                |
+| `TEST_USER_EMAIL`   | `Grand.Moff@DeathStar.Empire` | Seeded user the token is minted for                                      |
+
+Local check against the ztmf `compose-test.yml` API on 8090:
+
+```shell
+docker build -t ztmf-ui:pr-env .
+docker run --rm -p 8443:443 -e AUTH_HS256_SECRET=zeroTrust -e PR_PATH_PREFIX=/pr/ui/999 \
+  -e API_UPSTREAM=http://host.docker.internal:8090 ztmf-ui:pr-env
+curl -k https://localhost:8443/pr/ui/999/config.js
+```
+
 ## Testing
 
 To run all tests, run the following from the root directory:
