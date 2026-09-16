@@ -15,10 +15,6 @@ server:
 
 defaults:
   standard: section508
-  # Report-only: violations are reported, the build is not failed.
-  # Uncomment to enforce once the baseline is committed:
-  # expect:
-  #   severity: serious
 
 baseline: .frostfall-baseline.json
 
@@ -31,9 +27,37 @@ tests:
 
   - id: users
     path: '/#/users'
+    rules:
+      # The users grid is the one grid tall enough to scroll whose action
+      # buttons all sit at tabindex="-1" (MUI's roving focus for a
+      # `type: 'actions'` column). axe only looks for a tab stop INSIDE the
+      # scroll container, so it reads that as unreachable - but the grid's tab
+      # stop is the column header, and ArrowDown from there walks into the rows
+      # and scrolls them (the WAI-ARIA grid pattern). Off here only; every other
+      # page keeps the rule, and the dashboard grid still has to pass it.
+      #
+      # Rules scope to a test, not a selector, so this covers the whole /#/users
+      # route: a scrollable region added to this page later would go unchecked.
+      # Re-point it at the grid if frostfall grows selector-scoped rules.
+      scrollable-region-focusable: off
 
   - id: admin-opdivs
     path: '/#/admin/opdivs'
+
+  # Events is gated on unscoped read, which the seeded Test.User (OWNER) has.
+  # The grid paginates server-side and renders no toolbar, so unlike the others
+  # it has no quick-search box - the waitFor is the grid itself.
+  - id: admin-events
+    path: '/#/admin/events'
+    waitFor: '.MuiDataGrid-root'
+
+  # The questionnaire, the app's one long editable form. DS-1 is the Death Star
+  # in the Empire seed, which has answers for the open call. Wait for a native
+  # answer radio, which only renders after the current question's choices have
+  # loaded; PageHeader's h1 renders earlier while that payload is still pending.
+  - id: questionnaire
+    path: '/#/questionnaire/DS-1'
+    waitFor: 'input[name="radio-choices"]'
 
   # System detail page incl. the ZTMF Insights enrichment cards.
   # 1002 = the Executor in the Empire seed: active, sdl_sync_enabled, and has
@@ -46,21 +70,19 @@ tests:
     path: '/#/systems/1002'
     waitFor: '#enrichment-synced-at'
 
-  - id: pillar-scores-modal
-    path: /
-    scan: false
-    steps:
-      - waitFor: '.MuiDataGrid-root'
-      - click: '[aria-label^="View Pillar Scores"]'
-      # The title only exists once the modal is open AND scores have loaded.
-      - waitFor: '#pillar-scores-modal-title'
-      - scan:
-          label: modal-open
-          scope: '[role=dialog]'
+  # Dedicated redesigned page (the old pillar-scores modal no longer exists).
+  # The radar's labelled image mounts only after the seeded score payload has
+  # loaded, so the scan covers the populated page rather than its spinner.
+  - id: pillar-scores
+    path: '/#/systems/1002/pillar-scores'
+    waitFor: '[role="img"][aria-label^="Radar chart"]'
 
 profiles:
-  # Placeholder; enforcement lands here after baseline burn-in:
-  #   defaults: { expect: { severity: serious } }
   # CI attaches to a running vite server just like local runs do - the app
   # needs the vite /api proxy, so a static dist serve would 404 every API call.
-  ci: {}
+  ci:
+    defaults:
+      # The baseline burned down to zero in ui#714, so there is no debt left to
+      # grandfather: any new serious-or-worse violation fails the scan.
+      expect:
+        severity: serious

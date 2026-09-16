@@ -1,0 +1,8 @@
+node_modules
+.yarn/cache
+.yarn/install-state.gz
+dist
+.git
+coverage
+.env*
+public/config.js

@@ -1,6 +1,8 @@
-import { useEffect, useState } from 'react'
+import { useQuery } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import { vocabularyQueryOptions } from '@/queryClient'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import type { SystemAttribute, FismaSystemType } from '@/types'
 
 /**
@@ -40,22 +42,25 @@ export async function fetchSystemAttributes(
  * fetch resolves (selects render their current value in the meantime), then
  * the served rows. Kept as a hook so each consumer gets it without threading.
  *
+ * Cached for the session under `vocabularyQueryOptions`, which also keeps a
+ * failed load silent. The hook resolves that failure to an empty list: no
+ * vocabulary means no dropdown options, which every select already renders
+ * around by showing its current value.
+ *
+ * Both consumers want the selectable set, which is what `fetchSystemAttributes`
+ * asks for by default. The hook takes no parameter: a second value would be a
+ * second cache entry held for the session, and the key factory already models
+ * the dimension for whenever a caller needs the other set.
+ *
  * @returns The current attribute rows.
  */
 export function useSystemAttributes(): SystemAttribute[] {
-  const [rows, setRows] = useState<SystemAttribute[]>([])
-  useEffect(() => {
-    const controller = new AbortController()
-    fetchSystemAttributes(controller.signal)
-      .then((r) => {
-        if (!controller.signal.aborted) setRows(r)
-      })
-      .catch(() => {
-        // Non-fatal: an empty vocab just means no dropdown options yet.
-      })
-    return () => controller.abort()
-  }, [])
-  return rows
+  const { data } = useQuery({
+    queryKey: queryKeys.systemAttributes(),
+    queryFn: ({ signal }) => fetchSystemAttributes(signal),
+    ...vocabularyQueryOptions,
+  })
+  return data ?? EMPTY_LIST
 }
 
 export type SelectOption = { value: string; label: string }

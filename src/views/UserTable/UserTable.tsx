@@ -16,6 +16,7 @@ import {
   GridFilterModel,
   useGridApiRef,
 } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import { Typography, IconButton, Tooltip } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import './UserTable.css'
@@ -29,7 +30,7 @@ import {
   selectableRoles,
   roleLabel,
 } from '@/utils/userRoles'
-import { fetchUserOpDivs, setUserOpDivs } from '@/utils/userOpdivs'
+import { useSetUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -77,6 +78,7 @@ import { useSystemCatalog } from './hooks/useSystemCatalog'
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
+  const accessibleGrid = useAccessibleGrid()
   const navigate = useNavigate()
   const { userInfo } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
@@ -131,10 +133,13 @@ export default function UserTable() {
   // Global fisma-system metadata for the Assign Systems modal - fetched once
   // per mount so opening the modal only costs its two per-user reads.
   const { allSystems, decommSystems } = useSystemCatalog(isAdmin)
-  const { rows, setRows, userOpDivMap, setUserOpDivMap } = useLoadUsers({
+  const { rows, setRows } = useLoadUsers({
     canRead,
     showDeleted,
   })
+  // Grants for a newly created row. Existing rows are edited through the
+  // grant modal, which refreshes the row on save.
+  const grantMutation = useSetUserOpDivs()
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -200,42 +205,44 @@ export default function UserTable() {
     const row = rows.find((r) => r.userid === id)
     if (row) modals.openOpDiv(row)
   }
-  // Pull a single user's current OpDiv grants and derived identity_provider
-  // and patch them onto the row. Called after a confirmed grant/revoke (the
-  // backend recomputes identity_provider, which can flip okta <-> entra) and
-  // again on modal close as a backstop. Each call targets its own row, so a
-  // late response can't contaminate a different user.
+  // Pull a single user's grants and derived identity_provider and patch both
+  // onto the row. Called after the grant modal saves and after a new user is
+  // created with grants, since the backend recomputes identity_provider on
+  // both and it can flip okta <-> entra. The detail response is the
+  // authoritative post-save set: a scoped admin's save omits grants they
+  // cannot touch, and the backend keeps those, so the request body is not what
+  // the row should show. Each call targets its own row, so a late response
+  // can't contaminate a different user.
   const refreshUserRow = (userid: string) => {
     if (!userid) return
-    fetchUserOpDivs(userid)
-      .then((ids) => setUserOpDivMap((prev) => ({ ...prev, [userid]: ids })))
-      .catch((error) => {
-        // Non-blocking refresh: keep the previous grants but surface that the
-        // displayed row may be stale.
-        console.error(
-          `Failed to refresh OpDiv grants for user ${userid}`,
-          error
-        )
-        notify(ERROR_MESSAGES.refresh, 'warning')
-      })
     axiosInstance
       .get(`/users/${userid}`)
       .then((res) => {
-        const idp = res.data?.data?.identity_provider
+        const user = res.data?.data
         setRows((prev) =>
           prev.map((row) =>
-            row.userid === userid ? { ...row, identity_provider: idp } : row
+            row.userid === userid
+              ? {
+                  ...row,
+                  identity_provider: user?.identity_provider,
+                  assignedopdivids: user?.assignedopdivids ?? [],
+                }
+              : row
           )
         )
       })
       .catch((error) => {
+        // The interceptor is already navigating away on a 401; a stale-row
+        // warning on top of that is noise.
+        if (isAuthHandled(error)) return
+        // Non-blocking refresh: keep the row as it is, but say so, since the
+        // grants and identity provider on screen may no longer match the save.
         console.error(`Failed to refresh user row for ${userid}`, error)
+        notify(ERROR_MESSAGES.refresh, 'warning')
       })
   }
   const handleCloseOpDivModal = () => {
-    const targetId = String(modals.opdiv.userid)
     modals.closeOpDiv()
-    refreshUserRow(targetId)
   }
   const handleCancelClick = (id: GridRowId) => () => {
     setRowModesModel({
@@ -245,7 +252,7 @@ export default function UserTable() {
 
     const editedRow = rows.find((row) => row.userid === id)
     if (editedRow!.isNew) {
-      setRows(rows.filter((row) => row.userid !== id))
+      setRows((prev) => prev.filter((row) => row.userid !== id))
     }
   }
   const processRowUpdate = async (newRow: GridRowModel) => {
@@ -256,6 +263,7 @@ export default function UserTable() {
       role: newRow.role !== undefined ? newRow.role : selectedRow?.role ?? '',
     } as users
     const curRowUserId = updatedRow.userid
+    let createdUserIdToRefresh: string | undefined
     if (newRow.isNew) {
       try {
         const idpValue = newRow.identity_provider
@@ -278,20 +286,22 @@ export default function UserTable() {
 
         if (opdivIdsToGrant.length > 0) {
           try {
-            await setUserOpDivs(createdUser.userid, opdivIdsToGrant)
-            setUserOpDivMap((prev) => ({
-              ...prev,
-              [createdUser.userid]: opdivIdsToGrant,
-            }))
+            await grantMutation.mutateAsync({
+              userid: createdUser.userid,
+              opdivIds: opdivIdsToGrant,
+            })
             updatedRow.assignedopdivids = opdivIdsToGrant
             // Backend recomputes identity_provider after OpDiv grants — leave blank
             // until refreshUserRow returns the authoritative value.
-            refreshUserRow(createdUser.userid)
+            createdUserIdToRefresh = String(createdUser.userid)
           } catch (grantError) {
             if (isAuthHandled(grantError)) {
               apiRef.current.updateRows([
                 { userid: curRowUserId, _action: 'delete' },
               ])
+              setRows((prev) =>
+                prev.filter((row) => row.userid !== curRowUserId)
+              )
               return updatedRow
             }
             grantsFailed = true
@@ -331,7 +341,22 @@ export default function UserTable() {
         snackbar.showSaveError(error)
       }
     }
-    setRows(rows.map((row) => (row.userid === curRowUserId ? updatedRow : row)))
+    setRows((prev) =>
+      prev.map((row) => {
+        if (row.userid !== curRowUserId) return row
+        if (newRow.isNew) return updatedRow
+        return {
+          ...row,
+          email: updatedRow.email,
+          fullname: updatedRow.fullname,
+          role: updatedRow.role,
+          isNew: updatedRow.isNew,
+        }
+      })
+    )
+    if (createdUserIdToRefresh) {
+      refreshUserRow(createdUserIdToRefresh)
+    }
     return updatedRow
   }
   const handleRowModesModelChange = (newRowModesModel: GridRowModesModel) => {
@@ -546,10 +571,7 @@ export default function UserTable() {
         />
       ),
       renderCell: (params) => {
-        // Refresh override (post grant-modal) wins; otherwise use the grants the
-        // list returned inline on the row.
-        const ids =
-          userOpDivMap[params.row.userid] ?? params.row.assignedopdivids ?? []
+        const ids: number[] = params.row.assignedopdivids ?? []
         if (!ids.length) {
           return (
             <Typography variant="body2" color="text.secondary">
@@ -792,18 +814,19 @@ export default function UserTable() {
 
   // Client-side filtered rows. Search is forwarded as quickFilterValues to the
   // DataGrid (so it gets per-column matching for free); role + opdiv narrow
-  // the row set itself.
+  // the row set itself. Grants read from row.assignedopdivids alone - the
+  // same field the OpDivs column renders - so useLoadUsers's compatibility
+  // backfill and refreshUserRow both land in the one place both consult.
   const filteredRows = useMemo(() => {
     return rows.filter((row) => {
       if (roleFilter !== 'all' && row.role !== roleFilter) return false
       if (opdivFilter !== 'all') {
-        const ids =
-          userOpDivMap[row.userid] ?? row.assignedopdivids ?? ([] as number[])
+        const ids = row.assignedopdivids ?? ([] as number[])
         if (!ids.includes(opdivFilter)) return false
       }
       return true
     })
-  }, [rows, roleFilter, opdivFilter, userOpDivMap])
+  }, [rows, roleFilter, opdivFilter])
 
   return (
     <Box
@@ -874,6 +897,7 @@ export default function UserTable() {
             grid while the page scrolls around the card. */}
         <Box sx={{ height: 600, width: '100%' }}>
           <DataGrid
+            {...accessibleGrid}
             aria-label="Users"
             rows={filteredRows}
             apiRef={apiRef}

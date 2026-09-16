@@ -1,30 +1,107 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import type { QueryHookOptions } from '@/queryClient'
 
 /**
  * OpDiv grant management for a single user (users_opdivs membership).
  *
- * fetchUserOpDivs reads the current grant set for a user (used for post-save
- * refresh and as a fallback for older backends that omit assignedopdivids inline
- * on the list response).
+ * fetchUserOpDivs reads the current grant set for a user. The users list
+ * carries the same set inline on each row, so a direct read is only needed by
+ * the grant modal, which must see the current set on open.
  *
  * setUserOpDivs replaces the full grant set in one batch request. The backend
- * reconciles the desired set against current grants (adds missing, removes extra)
- * in one transaction and re-derives identity_provider once.
+ * reconciles the desired set against current grants (adds missing, removes
+ * extra) in one transaction and re-derives identity_provider once.
  */
 
-export async function fetchUserOpDivs(userid: string): Promise<number[]> {
-  const response = await axiosInstance.get<{ data: number[] }>(
-    apiPaths.users.assignedOpdivs(userid)
+/**
+ * Reads a user's current OpDiv grant ids.
+ *
+ * @param userid - The user to read grants for.
+ * @param signal - Optional AbortSignal to cancel the request.
+ * @returns The granted opdiv ids (empty array when none).
+ */
+export async function fetchUserOpDivs(
+  userid: string,
+  signal?: AbortSignal
+): Promise<number[]> {
+  const response = await axiosInstance.get<{ data: number[] | null }>(
+    apiPaths.users.assignedOpdivs(userid),
+    { signal }
   )
   return response.data.data ?? []
 }
 
+/**
+ * Replaces a user's full OpDiv grant set.
+ *
+ * @param userid - The user whose grants are being set.
+ * @param opdivIds - The complete desired set of opdiv ids.
+ */
 export async function setUserOpDivs(
   userid: string,
   opdivIds: number[]
 ): Promise<void> {
   await axiosInstance.put(apiPaths.users.opdivs(userid), {
     opdiv_ids: opdivIds,
+  })
+}
+
+/**
+ * Reads a user's OpDiv grants for the grant modal.
+ *
+ * Read fresh on every enable and never on reconnect, so open and a change of
+ * user are the only fetch triggers. See "Operational data" in
+ * docs/data-fetching.md. The users table does not read this key; it renders the
+ * grants the list returns inline on each row.
+ *
+ * The caller owns the error surface: the modal shows one toast for its two
+ * reads, so the cache boundary stays silent here.
+ *
+ * @param userid - The user to read grants for.
+ * @param options - `enabled`, per QueryHookOptions.
+ * @returns The query result; `data` is the granted opdiv ids.
+ */
+export function useUserOpDivs(userid: string, options: QueryHookOptions = {}) {
+  return useQuery({
+    queryKey: queryKeys.users.assignedOpdivs(userid),
+    queryFn: ({ signal }) => fetchUserOpDivs(userid, signal),
+    enabled: options.enabled,
+    staleTime: 0,
+    refetchOnReconnect: false,
+    meta: { suppressErrorNotification: true },
+  })
+}
+
+/**
+ * Mutation that replaces a user's grant set.
+ *
+ * Invalidates rather than seeding: the backend reconciles the set instead of
+ * replacing it, so the request body is not the stored state. See "Seeding
+ * against invalidating" in docs/data-fetching.md. Error handling stays with
+ * the caller.
+ *
+ * @returns The mutation, taking the user id and the complete desired set.
+ */
+export function useSetUserOpDivs() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({
+      userid,
+      opdivIds,
+    }: {
+      userid: string
+      opdivIds: number[]
+    }) => setUserOpDivs(userid, opdivIds),
+    onSuccess: (_data, { userid }) => {
+      // refetchType none: the modal is still mounted when this runs and closes
+      // immediately after, so an active refetch here is a read nobody reads.
+      // Marking the entry stale is enough, since the next open refetches.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.users.assignedOpdivs(userid),
+        refetchType: 'none',
+      })
+    },
   })
 }

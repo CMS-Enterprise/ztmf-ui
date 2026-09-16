@@ -3,7 +3,7 @@ import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
 import 'core-js/stable/atob'
-import { userData, datacall, DataCenterEnvironment, OpDiv } from '@/types'
+import { userData, datacall } from '@/types'
 import { EMPTY_USER } from '@/constants'
 import {
   isAdmin as checkIsAdmin,
@@ -24,9 +24,9 @@ import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { notify, isAuthHandled } from '@/utils/notify'
-import { fetchOpDivs } from '@/utils/opdivs'
+import { useOpDivs } from '@/utils/opdivs'
 import { broadcastLogout } from '@/utils/sessionSync'
-import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
+import { useDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
@@ -75,13 +75,24 @@ export default function Title() {
   const [latestDatacall, setLatestDatacall] = useState<string>('')
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
   const [dashboardSearch, setDashboardSearch] = useState<string>('')
-  const [datacenterEnvironments, setDatacenterEnvironments] = useState<
-    DataCenterEnvironment[]
-  >([])
-  const [opdivs, setOpdivs] = useState<OpDiv[]>([])
-  // Distinguishes "not fetched yet" from "fetched, and there are none" - both
-  // are an empty list. The questionnaire's insights gate needs the difference.
-  const [opdivsLoaded, setOpdivsLoaded] = useState(false)
+  const authenticated = loaderData.status === 200
+  // Datacenter-environment vocabulary is reference data shared by the system
+  // form (dropdown) and the questionnaire pillar filter, so it is fetched
+  // once here and passed down via context. Failure is non-fatal: consumers
+  // fall back to raw values when the list is empty.
+  const datacenterEnvironments = useDataCenterEnvironments({
+    enabled: authenticated,
+  })
+  // Fetched once for the five pages that read OpDivs and invalidated by OpDiv
+  // admin after a write. Includes inactive rows so a system tied to a
+  // deactivated OpDiv still resolves its name. opdivsLoaded distinguishes
+  // "not fetched yet" from "fetched, and there are none" - both are an empty
+  // list, and the questionnaire's insights gate needs the difference.
+  const {
+    opdivs,
+    opdivsLoaded,
+    error: opdivsError,
+  } = useOpDivs(true, { enabled: authenticated })
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -175,50 +186,17 @@ export default function Title() {
     }
   }, [loaderData.status, fetchDatacalls])
 
-  // Datacenter-environment vocabulary is reference data shared by the system
-  // form (dropdown) and the questionnaire pillar filter, so it is fetched
-  // once here and passed down via context. Failure is non-fatal: consumers
-  // fall back to raw values when the list is empty.
+  // Notifies rather than logs, unlike the environments fetch: this is the only
+  // OpDiv fetch site, so an empty list persists for the session and leaves the
+  // system form's Save stuck. Keyed so a re-render cannot stack the toast.
   useEffect(() => {
-    if (loaderData.status !== 200) return
-    const controller = new AbortController()
-    fetchDataCenterEnvironments(controller.signal)
-      .then(setDatacenterEnvironments)
-      .catch((error) => {
-        if (controller.signal.aborted) return
-        console.error('Fetch datacenter environments error:', error)
+    if (opdivsError && !isAuthHandled(opdivsError)) {
+      notify(OPDIVS_LOAD_ERROR, 'error', {
+        key: 'opdivs-load-error',
+        preventDuplicate: true,
       })
-    return () => {
-      controller.abort()
     }
-  }, [loaderData.status])
-  // Fetched once for the five pages that read OpDivs, and re-invoked by OpDiv
-  // admin after a write. Includes inactive rows so a system tied to a
-  // deactivated OpDiv still resolves its name. Unlike the sibling fetches
-  // above this notifies rather than logs: it is the only fetch site, so an
-  // empty list persists for the session and leaves the system form's Save stuck.
-  const refreshOpdivs = useCallback((signal?: AbortSignal) => {
-    fetchOpDivs(true, signal)
-      .then(setOpdivs)
-      .catch((error) => {
-        if (signal?.aborted || isAuthHandled(error)) return
-        notify(OPDIVS_LOAD_ERROR, 'error')
-      })
-      .finally(() => {
-        // Settled either way: a failure resolves to "no OpDivs" rather than
-        // leaving consumers blocked on a load that will never arrive.
-        if (!signal?.aborted) setOpdivsLoaded(true)
-      })
-  }, [])
-
-  useEffect(() => {
-    if (loaderData.status !== 200) return
-    const controller = new AbortController()
-    refreshOpdivs(controller.signal)
-    return () => {
-      controller.abort()
-    }
-  }, [loaderData.status, refreshOpdivs])
+  }, [opdivsError])
 
   const datacallsByYear = useMemo(
     () => groupDatacallsByYear(datacalls),
@@ -717,7 +695,6 @@ export default function Title() {
               datacenterEnvironments,
               opdivs,
               opdivsLoaded,
-              refreshOpdivs,
             }}
           />
         </Box>

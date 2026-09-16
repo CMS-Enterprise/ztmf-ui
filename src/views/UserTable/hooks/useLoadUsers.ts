@@ -6,33 +6,36 @@ import { ERROR_MESSAGES } from '@/constants'
 import type { users } from '@/types'
 
 /**
- * Loads the Users table dataset and exposes the two pieces of state the
- * grid renders:
+ * Loads the Users table dataset and exposes the single piece of state the
+ * grid renders and filters from: `rows`, the /users response (role-trimmed),
+ * with `assignedopdivids` backfilled in place from the per-user detail
+ * endpoint when the list response omits it (older backend compatibility).
  *
- *   1. `rows` - the /users response, role-trimmed.
- *   2. `userOpDivMap` - per-user OpDiv grants. Used as a refresh override
- *      after the inline grant/revoke or the grant modal closes. Backfilled
- *      from the per-user detail endpoint only when the list response does
- *      not include `assignedopdivids` inline (older backend compatibility).
+ * Rows are the one authoritative source for grants: both the OpDivs column
+ * (renderCell) and the OpDiv filter read `row.assignedopdivids` directly, and
+ * `refreshUserRow` (in the parent) patches that same field after a grant-modal
+ * save or a new user's grant. A previous version kept the backfill in a
+ * separate `userOpDivMap` that only the filter consulted, which let the
+ * column and the filter disagree and went stale the moment `refreshUserRow`
+ * updated the row but not the map.
  *
  * Re-fetches on canRead / showDeleted changes. The effect aborts on unmount
  * and also flags an internal abort signal for the per-user backfill
- * Promise.all, which has no AbortController of its own.
+ * Promise.all, which has no AbortController of its own. The backfill merge is
+ * race-safe: it only ever fills a row that still lacks `assignedopdivids`, so
+ * a newer update to that row (e.g. `refreshUserRow` resolving first) always
+ * wins over a late-arriving compatibility read.
  *
  * The mutating CRUD callbacks (processRowUpdate, delete, restore, inline
  * grant/revoke) stay in the parent component because they call into the
- * snackbar/notify helpers that live there; the setters returned here are
- * what they mutate.
+ * snackbar/notify helpers that live there; the setter returned here is what
+ * they mutate.
  * @param {{ canRead: boolean, showDeleted: boolean }} args - Inputs that
  *   drive the fetch.
  * @returns {{
  *   rows: users[],
  *   setRows: React.Dispatch<React.SetStateAction<users[]>>,
- *   userOpDivMap: Record<string, number[]>,
- *   setUserOpDivMap: React.Dispatch<
- *     React.SetStateAction<Record<string, number[]>>
- *   >,
- * }} Loaded state + the setters the CRUD callbacks mutate.
+ * }} Loaded rows + the setter the CRUD callbacks mutate.
  */
 export function useLoadUsers({
   canRead,
@@ -42,13 +45,12 @@ export function useLoadUsers({
   showDeleted: boolean
 }) {
   const [rows, setRows] = useState<users[]>([])
-  const [userOpDivMap, setUserOpDivMap] = useState<Record<string, number[]>>({})
 
   useEffect(() => {
     if (!canRead) return
     const controller = new AbortController()
-    // backfillAborted guards the Promise.all per-user calls, which can't
-    // receive a signal since fetchUserOpDivs doesn't accept one.
+    // backfillAborted also guards state writes after cancellation; the shared
+    // signal aborts the per-user requests themselves.
     let backfillAborted = false
     async function load() {
       try {
@@ -78,18 +80,29 @@ export function useLoadUsers({
           try {
             const entries = await Promise.all(
               data.map((u: users) =>
-                fetchUserOpDivs(u.userid)
+                fetchUserOpDivs(u.userid, controller.signal)
                   .then((ids) => [u.userid, ids] as [string, number[]])
                   .catch(() => [u.userid, []] as [string, number[]])
               )
             )
             if (backfillAborted) return
-            // Merge rather than replace so an in-flight per-user refresh
-            // (e.g. from closing the grant modal) is not clobbered.
-            setUserOpDivMap((prev) => ({
-              ...prev,
-              ...Object.fromEntries(entries),
-            }))
+            const backfillMap = Object.fromEntries(entries) as Record<
+              string,
+              number[]
+            >
+            // Patch assignedopdivids onto the matching rows, but only where
+            // it is still missing. A row that already carries the field by
+            // the time this resolves picked it up from a newer update (a
+            // grant-modal save via refreshUserRow, or a just-created row's
+            // own grant) racing ahead of this compatibility read, and that
+            // newer value must win rather than being clobbered here.
+            setRows((prev) =>
+              prev.map((row) =>
+                row.userid in backfillMap && !('assignedopdivids' in row)
+                  ? { ...row, assignedopdivids: backfillMap[row.userid] }
+                  : row
+              )
+            )
           } catch (error) {
             if (backfillAborted) return
             // The per-user catches above already default to [], so this
@@ -113,5 +126,5 @@ export function useLoadUsers({
     }
   }, [canRead, showDeleted])
 
-  return { rows, setRows, userOpDivMap, setUserOpDivMap }
+  return { rows, setRows }
 }

@@ -206,6 +206,15 @@ export const queryKeys = {
       ] as const,
     delegates: (systemId: ApiId) =>
       ['fisma-systems', 'detail', keyId(systemId), 'delegates'] as const,
+    // Prefix over every search term, so a roster write can invalidate all
+    // cached candidate lists for the system at once.
+    delegateCandidateLists: (systemId: ApiId) =>
+      [
+        'fisma-systems',
+        'detail',
+        keyId(systemId),
+        'delegate-candidates',
+      ] as const,
     delegateCandidates: (systemId: ApiId, search = '') =>
       [
         'fisma-systems',

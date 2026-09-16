@@ -52,12 +52,6 @@ jest.mock('../Title/Context', () => ({
   }),
 }))
 
-jest.mock('@/utils/userOpdivs', () => ({
-  fetchUserOpDivs: () => Promise.resolve([]),
-  grantOpDiv: jest.fn().mockResolvedValue(undefined),
-  revokeOpDiv: jest.fn().mockResolvedValue(undefined),
-}))
-
 import axiosInstance from '@/axiosConfig'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import UserTable from './UserTable'
@@ -146,5 +140,95 @@ describe('UserTable', () => {
     })
     expect(screen.getByText('Han Solo')).toBeInTheDocument()
     expect(screen.getByText('Luke Skywalker')).toBeInTheDocument()
+  })
+
+  // #736 converted the OpDiv grant plumbing to useUserOpDivs/useSetUserOpDivs
+  // (see OpDivGrantModal.test.tsx for the mutation's request/invalidation
+  // behavior). The "Show deactivated" toggle round-trips through
+  // useLoadUsers's own /users?deleted= refetch; useLoadUsers's other
+  // responsibilities (the old-backend grants backfill, race safety, catalog
+  // fetch/cancellation) are covered in hooks/useLoadUsers.test.ts and
+  // hooks/useSystemCatalog.test.ts.
+  test('"Show deactivated" toggle refetches /users with the deleted flag', async () => {
+    renderWithProviders(<UserTable />)
+    await screen.findByText('Leia Organa')
+
+    const deletedRow = {
+      userid: '9',
+      email: 'boba@bounty.gov',
+      fullname: 'Boba Fett',
+      role: 'ISSO',
+      assignedfismasystems: [],
+      assignedopdivids: [],
+      identity_provider: 'okta',
+      deleted: true,
+    }
+    mock.onGet('/users').reply((config) => {
+      const deleted = config.params?.deleted
+      return [200, { data: deleted ? [deletedRow] : rows }]
+    })
+
+    const toggle = screen.getByRole('checkbox', { name: /show deactivated/i })
+    await userEvent.click(toggle)
+
+    expect(await screen.findByText('Boba Fett')).toBeInTheDocument()
+    expect(screen.queryByText('Leia Organa')).not.toBeInTheDocument()
+  })
+
+  // Coherence check for the fix that removed userOpDivMap: a legacy row
+  // missing assignedopdivids gets it backfilled onto the row itself, so the
+  // OpDivs column (which reads row.assignedopdivids alone) renders the
+  // backfilled grant with no separate map to fall out of sync with.
+  test('a legacy row missing assignedopdivids renders its backfilled OpDiv grant', async () => {
+    const legacyRow = {
+      userid: '4',
+      email: 'chewie@falcon.gov',
+      fullname: 'Chewbacca',
+      role: 'ISSO',
+      assignedfismasystems: [],
+      identity_provider: 'okta',
+      // No assignedopdivids key at all - the older-backend shape.
+    }
+    mock.onGet('/users').reply(200, { data: [legacyRow] })
+    mock.onGet('/users/4/assignedopdivs').reply(200, { data: [2] })
+
+    renderWithProviders(<UserTable />)
+    await screen.findByText('Chewbacca')
+
+    expect(await screen.findByText('NIH')).toBeInTheDocument()
+  })
+
+  // The OpDiv filter must read the same backfilled value the column just
+  // rendered, not a stale separate map - this is the exact incoherence the
+  // userOpDivMap removal fixed.
+  test("the OpDiv filter narrows using a legacy row's backfilled grant, not a stale value", async () => {
+    const legacyRow = {
+      userid: '4',
+      email: 'chewie@falcon.gov',
+      fullname: 'Chewbacca',
+      role: 'ISSO',
+      assignedfismasystems: [],
+      identity_provider: 'okta',
+      // No assignedopdivids key at all - the older-backend shape.
+    }
+    mock.onGet('/users').reply(200, { data: [legacyRow, rows[0]] })
+    mock.onGet('/users/4/assignedopdivs').reply(200, { data: [2] })
+
+    renderWithProviders(<UserTable />)
+    await screen.findByText('Chewbacca')
+    // Wait for the backfill to land before filtering, so the filter's read
+    // is exercised against the backfilled value rather than racing it.
+    await screen.findByText('NIH')
+
+    const opdivInput = screen.getByPlaceholderText('OpDiv')
+    await userEvent.click(opdivInput)
+    await userEvent.type(opdivInput, 'NIH')
+    const opt = await screen.findByRole('option', { name: /NIH/ })
+    await userEvent.click(opt)
+
+    await waitFor(() => {
+      expect(screen.queryByText('Leia Organa')).not.toBeInTheDocument()
+    })
+    expect(screen.getByText('Chewbacca')).toBeInTheDocument()
   })
 })

@@ -8,13 +8,8 @@ describe('ActionsCell', () => {
   // the standalone behavior of the actions cell instead. Each of the four
   // callbacks must fire exactly once on its trigger and not be cross-wired.
 
-  test('isSelf=true disables the Delete button without firing onDelete', () => {
-    // Matches the pre-redesign bugfix pattern (commit 638b0d6): the Delete
-    // icon stays visible (so the affordance is discoverable) but is
-    // disabled. Browsers prevent click events from firing on disabled
-    // buttons - this test pins both the disabled prop and a non-fired
-    // callback. The action handler in UserTable.handleConfirmDelete is
-    // the backstop if the button is ever re-enabled by a future refactor.
+  test('isSelf=true keeps Delete focusable and aria-disabled without mouse or keyboard activation', async () => {
+    const user = userEvent.setup()
     const onDelete = jest.fn()
     render(
       <ActionsCell
@@ -26,11 +21,15 @@ describe('ActionsCell', () => {
       />
     )
     const button = screen.getByRole('button', { name: 'Delete user' })
-    expect(button).toBeInTheDocument()
-    expect(button).toBeDisabled()
-    // (Skip userEvent.click - it correctly refuses to interact with a
-    // pointer-events: none element, which is what disabled MUI buttons
-    // are. The disabled assertion above is what pins the behavior.)
+    expect(button).toHaveAttribute('aria-disabled', 'true')
+    expect(button).not.toBeDisabled()
+
+    button.focus()
+    expect(button).toHaveFocus()
+
+    await user.click(button)
+    await user.keyboard('{Enter}')
+    await user.keyboard(' ')
     expect(onDelete).not.toHaveBeenCalled()
   })
 
