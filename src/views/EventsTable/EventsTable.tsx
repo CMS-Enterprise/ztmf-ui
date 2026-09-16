@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Autocomplete, Box, Button, TextField, Typography } from '@mui/material'
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
 import { DatePicker } from '@mui/x-date-pickers/DatePicker'
 import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFnsV3'
@@ -129,6 +130,7 @@ function CompactDatePicker({
  */
 export default function EventsTable() {
   const navigate = useNavigate()
+  const accessibleGrid = useAccessibleGrid()
   const { userInfo, fismaSystems } = useContextProp()
   const canAccess = hasUnscopedRead(userInfo)
 
@@ -424,6 +426,7 @@ export default function EventsTable() {
             while the page scrolls around the card. */}
           <Box sx={{ height: 600, width: '100%' }}>
             <DataGrid
+              {...accessibleGrid}
               aria-label="Events"
               rows={rows}
               columns={columns}

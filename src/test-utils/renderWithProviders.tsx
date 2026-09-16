@@ -3,7 +3,7 @@ import { QueryClientProvider } from '@tanstack/react-query'
 import { MemoryRouter, type MemoryRouterProps } from 'react-router-dom'
 import { SnackbarProvider } from 'notistack'
 import { ReactElement } from 'react'
-import { createQueryClient } from '@/queryClient'
+import { createTestQueryClient } from './createTestQueryClient'
 
 /**
  * Wraps a view in the providers it needs at runtime so component tests
@@ -30,17 +30,8 @@ export function renderWithProviders(
 ) {
   const { initialEntries, ...renderOptions } = options
   // A client per render prevents cached server state from leaking between
-  // tests. Retries are disabled so expected failures settle immediately.
-  const queryClient = createQueryClient({
-    defaultOptions: {
-      queries: {
-        retry: false,
-      },
-      mutations: {
-        retry: false,
-      },
-    },
-  })
+  // tests.
+  const queryClient = createTestQueryClient()
 
   const result = render(ui, {
     wrapper: ({ children }) => (

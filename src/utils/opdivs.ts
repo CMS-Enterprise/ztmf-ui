@@ -1,5 +1,8 @@
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import { vocabularyQueryOptions, type QueryHookOptions } from '@/queryClient'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import type { OpDiv } from '@/types'
 
 /**
@@ -25,6 +28,37 @@ export async function fetchOpDivs(
     }
   )
   return response.data.data ?? []
+}
+
+/**
+ * Reads the OpDiv reference list for a component. Cached for the session
+ * under `vocabularyQueryOptions`; the write hooks below invalidate it, so a
+ * change made in OpDiv admin reaches every consumer of the shared list.
+ *
+ * Returns the load state too: the questionnaire's insights gate has to tell
+ * "not fetched yet" from "fetched, and there are none", and the layout
+ * notifies on failure because this is the only fetch site.
+ *
+ * Read the Outlet context rather than calling this. Title holds the
+ * inactive-inclusive superset for the app; a second call with a different
+ * `includeInactive` is a second entry and a second request for the same list.
+ *
+ * @param includeInactive - Pass true to include deactivated rows.
+ * @param options - See QueryHookOptions.
+ * @returns The rows, whether the load has settled (on failure too), and the
+ *   error when it failed.
+ */
+export function useOpDivs(
+  includeInactive = false,
+  options: QueryHookOptions = {}
+): { opdivs: OpDiv[]; opdivsLoaded: boolean; error: Error | null } {
+  const { data, isPending, error } = useQuery({
+    queryKey: queryKeys.opdivs.list(includeInactive),
+    queryFn: ({ signal }) => fetchOpDivs(includeInactive, signal),
+    enabled: options.enabled,
+    ...vocabularyQueryOptions,
+  })
+  return { opdivs: data ?? EMPTY_LIST, opdivsLoaded: !isPending, error }
 }
 
 /**
@@ -60,4 +94,45 @@ export async function updateOpDiv(
   input: OpDivInput
 ): Promise<void> {
   await axiosInstance.put(apiPaths.opdivs.detail(opdivId), input)
+}
+
+/**
+ * Mutation for creating an OpDiv. On success it invalidates every cached
+ * OpDiv list so the shared copy refetches. Error handling stays with the
+ * caller, which routes a 400's field-level message inline.
+ *
+ * @returns The mutation, taking an OpDivInput.
+ */
+export function useCreateOpDiv() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createOpDiv,
+    // Not returned: awaiting the invalidation would hold the mutation
+    // pending until the list refetches, keeping the dialog open. The write
+    // is done; the list catches up behind it, as it did before.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.opdivs.all })
+    },
+  })
+}
+
+/**
+ * Mutation for updating or deactivating an OpDiv. The endpoint returns no
+ * body, so the cache cannot be seeded from the response and is invalidated
+ * instead. Error handling stays with the caller.
+ *
+ * @returns The mutation, taking the target id and its OpDivInput.
+ */
+export function useUpdateOpDiv() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: ({ opdivId, input }: { opdivId: number; input: OpDivInput }) =>
+      updateOpDiv(opdivId, input),
+    // Not returned: awaiting the invalidation would hold the mutation
+    // pending until the list refetches, keeping the dialog open. The write
+    // is done; the list catches up behind it, as it did before.
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.opdivs.all })
+    },
+  })
 }

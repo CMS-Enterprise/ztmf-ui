@@ -5,6 +5,7 @@ import {
   GridActionsCellItem,
   GridRowParams,
 } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import Tooltip from '@mui/material/Tooltip'
 import {
   Alert,
@@ -354,6 +355,7 @@ export default function FismaTable({
   // keeps the table usable on pages that don't surface an Export CSV action.
   const selectionEnabled =
     selectedRows !== undefined && onSelectionChange !== undefined
+  const accessibleGrid = useAccessibleGrid()
   const {
     fismaSystems,
     latestDataCallId,
@@ -886,6 +888,7 @@ export default function FismaTable({
           internally while the page scrolls around the card. */}
       <Box sx={{ height: 600, width: '100%' }}>
         <DataGrid
+          {...accessibleGrid}
           rows={rows}
           columns={columns}
           getRowId={(row) => row.fismasystemid}

@@ -158,6 +158,16 @@ frostfall-report:
 # as an open alert (that is the tracking dashboard); the baseline remains the
 # regression gate for the text/html outputs only. Fixing a violation drops it
 # from the next upload and its alert auto-closes.
+#
+# It runs FIRST, and with --profile none, for two reasons that only bite once
+# the ci profile enforces. The recipe is `bash -euo pipefail`, so the enforcing
+# pass exiting 1 on a new violation would abort before the SARIF file was ever
+# written - the upload step is if: always(), so it would then fail for a missing
+# file and the run would lose the very report that says what broke. And the ci
+# profile would otherwise apply its expect to this pass too, which reads an
+# empty baseline by design: a violation deliberately grandfathered in
+# .frostfall-baseline.json would pass the enforcing run and fail here instead,
+# quietly cancelling the grandfathering. Inventory first, judgement second.
 # Isolated end-to-end scan, identical in spirit to ../ztmf's test-e2e: fresh
 # Empire-seeded stack on :8090, our own vite on :5174 pointed at it, scan,
 # tear everything down. Requires :5174 to be FREE - a running dev server would
@@ -216,8 +226,8 @@ frostfall-ci:
 			[ "$$i" = 60 ] && { echo "vite never came up on :5174:"; cat /tmp/frostfall-vite.log || true; exit 1; }; \
 			sleep 1; \
 		done; \
+		frostfall --profile none --format sarif --output frostfall.sarif --baseline .frostfall-no-baseline.json; \
+		echo "SARIF (all violations, baseline ignored): ./frostfall.sarif"; \
 		frostfall --screenshots --format html "$$@"; \
 		echo "Report: ./frostfall-report.html"; \
-		frostfall --format sarif --output frostfall.sarif --baseline .frostfall-no-baseline.json; \
-		echo "SARIF (all violations, baseline ignored): ./frostfall.sarif"; \
 	' frostfall-ci $(FROSTFALL_ARGS)

@@ -7,8 +7,18 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
 })
 
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
+import { queryWrapper } from '@/test-utils/queryWrapper'
 import axiosInstance from '@/axiosConfig'
-import { fetchOpDivs, createOpDiv, updateOpDiv } from './opdivs'
+import {
+  fetchOpDivs,
+  createOpDiv,
+  updateOpDiv,
+  useOpDivs,
+  useCreateOpDiv,
+  useUpdateOpDiv,
+} from './opdivs'
 import type { OpDiv } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
@@ -94,5 +104,73 @@ describe('updateOpDiv', () => {
       })
     ).resolves.toBeUndefined()
     expect(mock.history.put[0].url).toBe('/opdivs/2')
+  })
+})
+
+describe('useOpDivs', () => {
+  it('returns the rows, forwards the signal, and reports the list loaded', async () => {
+    mock.onGet('/opdivs').reply(200, { data: ROWS })
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useOpDivs(true), {
+      wrapper: queryWrapper(client),
+    })
+
+    expect(result.current.opdivsLoaded).toBe(false)
+    await waitFor(() => expect(result.current.opdivs).toEqual(ROWS))
+    expect(result.current.opdivsLoaded).toBe(true)
+    expect(mock.history.get[0].params).toEqual({ active_only: false })
+    expect(mock.history.get[0].signal).toBeDefined()
+  })
+
+  it('does not fetch while disabled and reports the list not loaded', async () => {
+    mock.onGet('/opdivs').reply(200, { data: ROWS })
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useOpDivs(true, { enabled: false }), {
+      wrapper: queryWrapper(client),
+    })
+    await act(async () => {})
+
+    expect(mock.history.get).toHaveLength(0)
+    expect(result.current.opdivsLoaded).toBe(false)
+    expect(result.current.opdivs).toEqual([])
+  })
+})
+
+describe('OpDiv mutations', () => {
+  it('useCreateOpDiv posts, then refetches the shared list', async () => {
+    mock.onGet('/opdivs').reply(200, { data: ROWS })
+    mock.onPost('/opdivs').reply(201, { data: ROWS[0] })
+    const wrapper = queryWrapper(createTestQueryClient())
+    const list = renderHook(() => useOpDivs(true), { wrapper })
+    await waitFor(() => expect(list.result.current.opdivsLoaded).toBe(true))
+
+    const { result } = renderHook(() => useCreateOpDiv(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({ code: 'NEW', name: 'New OpDiv' })
+    })
+
+    expect(mock.history.post).toHaveLength(1)
+    // The invalidation reaches the mounted list, which refetches.
+    await waitFor(() => expect(mock.history.get).toHaveLength(2))
+  })
+
+  it('useUpdateOpDiv puts to the id path, then refetches the shared list', async () => {
+    mock.onGet('/opdivs').reply(200, { data: ROWS })
+    mock.onPut('/opdivs/2').reply(204)
+    const wrapper = queryWrapper(createTestQueryClient())
+    const list = renderHook(() => useOpDivs(true), { wrapper })
+    await waitFor(() => expect(list.result.current.opdivsLoaded).toBe(true))
+
+    const { result } = renderHook(() => useUpdateOpDiv(), { wrapper })
+    await act(async () => {
+      await result.current.mutateAsync({
+        opdivId: 2,
+        input: { code: 'RETIRED', name: 'Deactivated OpDiv', active: true },
+      })
+    })
+
+    await waitFor(() => expect(mock.history.get).toHaveLength(2))
   })
 })

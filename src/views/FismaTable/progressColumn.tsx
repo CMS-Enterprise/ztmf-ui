@@ -3,6 +3,11 @@ import Chip from '@mui/material/Chip'
 import Tooltip from '@mui/material/Tooltip'
 import type { ScoreProgress } from '@/types'
 import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
+import { outlinedChipSx } from '@/utils/chipStyles'
+
+// The laggard chips are outlined warning, which the palette paints too light
+// to read as text; success clears AA already (ui#714).
+const warningChipSx = outlinedChipSx('warning')
 
 /**
  * Focusable tooltip wrapper for a progress state. tabIndex makes the content
@@ -153,6 +158,7 @@ export function ProgressCell({
           label="Incomplete"
           color="warning"
           variant="outlined"
+          sx={warningChipSx}
         />
       </ProgressState>
     )
@@ -184,6 +190,7 @@ export function ProgressCell({
         label={label}
         color={updated ? 'success' : 'warning'}
         variant="outlined"
+        sx={updated ? undefined : warningChipSx}
       />
     </ProgressState>
   )

@@ -843,7 +843,12 @@ export default function SystemDetailPage() {
 
       {canViewDelegates && (
         <Box sx={{ mt: 4 }}>
+          {/* Keyed by system: this page stays mounted when the route moves
+              between two systems already in the shared list, and without a
+              remount the section would carry the previous system's search
+              term and its candidate rows into the new one. */}
           <SystemDelegatesSection
+            key={system.fismasystemid}
             system={system}
             canManage={canManageDelegates}
           />

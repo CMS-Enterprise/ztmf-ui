@@ -22,9 +22,8 @@ export type ActionsCellProps = {
   /**
    * True when this row represents the signed-in user themselves. The
    * Delete button still renders so the action stays discoverable, but
-   * it's disabled and its tooltip explains why - hiding it entirely
-   * leaves no signal that delete is a thing for this column.
-   * (Pattern matches the pre-redesign bugfix in commit 638b0d6.)
+   * it is focusable, aria-disabled, and inert so its tooltip remains
+   * available to keyboard users without exposing a working self-delete.
    */
   isSelf?: boolean
 }
@@ -70,21 +69,27 @@ export default function ActionsCell({
       <Tooltip
         title={isSelf ? "You can't delete your own account" : 'Delete user'}
       >
-        {/* span wrapper lets Tooltip listen for events even when the
-            child is disabled (MUI requirement). */}
-        <span>
-          <IconButton
-            size="small"
-            onClick={onDelete}
-            aria-label="Delete user"
-            disabled={isSelf}
-          >
-            <DeleteIcon
-              fontSize="small"
-              sx={{ color: isSelf ? colors.neutral400 : colors.neutral700 }}
-            />
-          </IconButton>
-        </span>
+        <IconButton
+          size="small"
+          onClick={isSelf ? undefined : onDelete}
+          aria-label="Delete user"
+          aria-disabled={isSelf || undefined}
+          disableRipple={isSelf}
+          sx={
+            isSelf
+              ? {
+                  opacity: 0.38,
+                  cursor: 'not-allowed',
+                  '&:hover': { backgroundColor: 'transparent' },
+                }
+              : undefined
+          }
+        >
+          <DeleteIcon
+            fontSize="small"
+            sx={{ color: isSelf ? colors.neutral400 : colors.neutral700 }}
+          />
+        </IconButton>
       </Tooltip>
       <Tooltip title="More actions">
         <IconButton

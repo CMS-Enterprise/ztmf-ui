@@ -7,9 +7,13 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
 })
 
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
+import { queryWrapper } from '@/test-utils/queryWrapper'
 import axiosInstance from '@/axiosConfig'
 import {
   fetchDataCenterEnvironments,
+  useDataCenterEnvironments,
   toDropdownOptions,
   toDropdownOptionsWithCurrent,
   toCategoryMap,
@@ -119,5 +123,64 @@ describe('toCategoryMap', () => {
 
   it('returns an empty map for no rows', () => {
     expect(toCategoryMap([])).toEqual({})
+  })
+})
+
+describe('useDataCenterEnvironments', () => {
+  it('returns the served rows and forwards the cancellation signal', async () => {
+    mock.onGet('/datacenterenvironments').reply(200, { data: ROWS })
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useDataCenterEnvironments(), {
+      wrapper: queryWrapper(client),
+    })
+
+    await waitFor(() => expect(result.current).toEqual(ROWS))
+    expect(mock.history.get[0].signal).toBeDefined()
+  })
+
+  it('does not fetch while disabled', async () => {
+    mock.onGet('/datacenterenvironments').reply(200, { data: ROWS })
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(
+      () => useDataCenterEnvironments({ enabled: false }),
+      { wrapper: queryWrapper(client) }
+    )
+    await act(async () => {})
+
+    expect(mock.history.get).toHaveLength(0)
+    expect(result.current).toEqual([])
+  })
+
+  it('serves a remount from cache long after the default collection window', async () => {
+    jest.useFakeTimers()
+    try {
+      mock.onGet('/datacenterenvironments').reply(200, { data: ROWS })
+      const client = createTestQueryClient()
+
+      const first = renderHook(() => useDataCenterEnvironments(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(first.result.current).toEqual(ROWS))
+      first.unmount()
+
+      // Nothing observes the entry now. The client's default five-minute
+      // collection would drop it here and put the next mount back on the
+      // network, so advance well past that: surviving this is gcTime, and
+      // skipping the request on arrival is staleTime.
+      act(() => {
+        jest.advanceTimersByTime(30 * 60 * 1000)
+      })
+
+      const second = renderHook(() => useDataCenterEnvironments(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(second.result.current).toEqual(ROWS))
+
+      expect(mock.history.get).toHaveLength(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })

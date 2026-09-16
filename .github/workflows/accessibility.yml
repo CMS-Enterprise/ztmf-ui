@@ -1,10 +1,11 @@
 name: Accessibility
 
-# Informational 508 scan on every PR. Frostfall runs in report-only mode
-# (exit 0) against the committed baseline, so this job going red means the
-# scan itself broke, not that violations were found; enforcement arrives
-# later as an `expect:` block under the ci profile in .frostfall.yml.
-# Deliberately NOT in the required checks.
+# Enforcing 508 scan on every PR. The ci profile in .frostfall.yml expects
+# severity: serious, so this job goes red when a PR introduces a serious or
+# worse violation that the baseline does not already carry (ui#714 emptied it).
+# The SARIF pass runs first and unenforced, so the code scanning upload still
+# has a report to publish on the runs that fail.
+# NOT a required check yet - make it one to have it block merges.
 
 on:
   pull_request:

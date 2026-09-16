@@ -15,9 +15,10 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: instance }
 })
 
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
+import { onlineManager } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import router from '@/router/router'
 import OpDivGrantModal from './OpDivGrantModal'
@@ -459,6 +460,33 @@ test('401 redirects to sign-in without firing a generic error snackbar', async (
   expect(screen.queryByText(ERROR_MESSAGES.tryAgain)).not.toBeInTheDocument()
 })
 
+test('a reconnect mid-edit keeps the picker and Save usable', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1] })
+  const user = userEvent.setup()
+  renderModal({ enforceCallerScope: false })
+  await waitForReady()
+  const targetGets = () =>
+    mock.history.get.filter((g) => g.url === `/users/${USER_ID}/assignedopdivs`)
+  expect(targetGets()).toHaveLength(1)
+
+  const bbbCheckbox = screen.getByRole('checkbox', { name: /Division B/i })
+  await user.click(bbbCheckbox)
+  expect(bbbCheckbox).toBeChecked()
+
+  // Coming back online must not restart the load: the modal disables the
+  // picker and Save for any in-flight read, which would strand the edit.
+  act(() => {
+    onlineManager.setOnline(false)
+    onlineManager.setOnline(true)
+  })
+  await act(async () => {})
+
+  expect(targetGets()).toHaveLength(1)
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  expect(bbbCheckbox).toBeEnabled()
+  expect(bbbCheckbox).toBeChecked()
+})
+
 test('save button is disabled while the request is in flight', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [] })
   // Never resolves — keeps the request in-flight so we can assert the disabled state.
@@ -578,6 +606,77 @@ test('401 on the initial grant fetch redirects to sign-in without a generic erro
     })
   })
   expect(screen.queryByText(ERROR_MESSAGES.tryAgain)).not.toBeInTheDocument()
+  expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
+})
+
+test('staged edits do not follow the dialog to a different user', async () => {
+  const user = userEvent.setup()
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [1] })
+  mock.onGet(`/users/${USER_ID_B}/assignedopdivs`).reply(200, { data: [2] })
+  mock.onPut(`/users/${USER_ID_B}/opdivs`).reply(204)
+
+  const { rerender } = renderModal({ enforceCallerScope: false })
+  await waitForReady()
+
+  // Stage an edit for user A without saving it.
+  await user.click(screen.getByRole('checkbox', { name: /Division B/i }))
+  expect(screen.getByRole('checkbox', { name: /Division B/i })).toBeChecked()
+
+  // Point the same open dialog at user B.
+  rerender(
+    <OpDivGrantModal
+      open={true}
+      handleClose={jest.fn()}
+      userid={USER_ID_B}
+      userName="Test User B"
+      assignableOpDivs={assignableOpDivs}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={false}
+      callerUserId={CALLER_ID}
+      onChanged={jest.fn()}
+    />
+  )
+  await waitForReady()
+
+  // User B's own grant renders, and user A's staged pick is gone. Saving here
+  // would otherwise write A's selection onto B.
+  expect(screen.getByRole('checkbox', { name: /Division B/i })).toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: /Division A/i })
+  ).not.toBeChecked()
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+  await waitFor(() => expect(mock.history.put).toHaveLength(1))
+  expect(JSON.parse(mock.history.put[0].data)).toEqual({ opdiv_ids: [2] })
+})
+
+test('a failed read on a new target is reported, not swallowed by the first one', async () => {
+  mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(500)
+  mock.onGet(`/users/${USER_ID_B}/assignedopdivs`).reply(500)
+
+  const { rerender } = renderModal({ enforceCallerScope: false })
+  expect(await screen.findByText(ERROR_MESSAGES.tryAgain)).toBeInTheDocument()
+  expect(screen.getAllByText(ERROR_MESSAGES.tryAgain)).toHaveLength(1)
+
+  // Point the same open dialog at a second user whose read also fails. The
+  // one-toast-per-open guard is per target as well, or the admin sees a blank
+  // disabled picker for this person with no report of why.
+  rerender(
+    <OpDivGrantModal
+      open={true}
+      handleClose={jest.fn()}
+      userid={USER_ID_B}
+      userName="Test User B"
+      assignableOpDivs={assignableOpDivs}
+      opdivLabelMap={opdivLabelMap}
+      enforceCallerScope={false}
+      callerUserId={CALLER_ID}
+      onChanged={jest.fn()}
+    />
+  )
+
+  await waitFor(() =>
+    expect(screen.getAllByText(ERROR_MESSAGES.tryAgain)).toHaveLength(2)
+  )
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 

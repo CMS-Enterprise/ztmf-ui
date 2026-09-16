@@ -7,9 +7,22 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
 })
 
+// Spy on the snackbar so the vocab hook's silent-failure contract is asserted,
+// not just implied by the empty list it returns.
+jest.mock('@/utils/notify', () => {
+  const actual = jest.requireActual('@/utils/notify')
+  return { ...actual, notify: jest.fn() }
+})
+
+import { act, renderHook, waitFor } from '@testing-library/react'
+import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
+import { queryWrapper } from '@/test-utils/queryWrapper'
+import { queryKeys } from '@/api/keys'
+import { notify } from '@/utils/notify'
 import axiosInstance from '@/axiosConfig'
 import {
   fetchSystemAttributes,
+  useSystemAttributes,
   optionsForField,
   booleanOptions,
   boolToSelectValue,
@@ -326,5 +339,68 @@ describe('isCrossFieldHidden', () => {
 
   it('never hides unrelated fields', () => {
     expect(isCrossFieldHidden('fips', { cloud_system: false })).toBe(false)
+  })
+})
+
+describe('useSystemAttributes', () => {
+  it('returns the served rows and forwards the cancellation signal', async () => {
+    mock.onGet('/systemattributes').reply(200, { data: ROWS })
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useSystemAttributes(), {
+      wrapper: queryWrapper(client),
+    })
+
+    await waitFor(() => expect(result.current).toEqual(ROWS))
+    expect(mock.history.get[0].signal).toBeDefined()
+    expect(mock.history.get[0].params).toEqual({ selectable_only: true })
+  })
+
+  it('resolves a failure to an empty list without an error surface', async () => {
+    mock.onGet('/systemattributes').reply(500)
+    const client = createTestQueryClient()
+
+    const { result } = renderHook(() => useSystemAttributes(), {
+      wrapper: queryWrapper(client),
+    })
+
+    await waitFor(() =>
+      expect(client.getQueryState(queryKeys.systemAttributes())?.status).toBe(
+        'error'
+      )
+    )
+    expect(result.current).toEqual([])
+    expect(notify).not.toHaveBeenCalled()
+  })
+
+  it('serves a remount from cache long after the default collection window', async () => {
+    jest.useFakeTimers()
+    try {
+      mock.onGet('/systemattributes').reply(200, { data: ROWS })
+      const client = createTestQueryClient()
+
+      const first = renderHook(() => useSystemAttributes(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(first.result.current).toEqual(ROWS))
+      first.unmount()
+
+      // The modals that consume this unmount between openings, and the
+      // client's default five-minute collection would drop the unobserved
+      // entry in between. Advancing past it is what makes this a test of
+      // gcTime rather than only of staleTime.
+      act(() => {
+        jest.advanceTimersByTime(30 * 60 * 1000)
+      })
+
+      const second = renderHook(() => useSystemAttributes(), {
+        wrapper: queryWrapper(client),
+      })
+      await waitFor(() => expect(second.result.current).toEqual(ROWS))
+
+      expect(mock.history.get).toHaveLength(1)
+    } finally {
+      jest.useRealTimers()
+    }
   })
 })
