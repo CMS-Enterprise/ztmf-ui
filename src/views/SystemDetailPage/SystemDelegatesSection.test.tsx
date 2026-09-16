@@ -1,7 +1,8 @@
 // Coverage for the delegates section on the system detail page
-// (ztmf-ui#598). Backend calls are mocked at the util seam
-// (src/utils/delegates). Verifies the roster + expired badge, attach /
-// attach / provision / remove / renew round-trips, the administrator-
+// (ztmf-ui#598). Backend calls are stubbed at the axios boundary so the query
+// and mutation hooks in src/utils/delegates run for real, including the
+// interceptor bypass on the add call. Verifies the roster + expired badge,
+// attach / provision / remove / renew round-trips, the administrator /
 // capability-off inline guards, the +3mo expiry default, and that a
 // non-manager (ISSM) sees the roster without any controls.
 
@@ -10,41 +11,29 @@ jest.mock('@/router/router', () => ({
   default: { navigate: jest.fn() },
 }))
 
-jest.mock('@/utils/delegates', () => ({
-  __esModule: true,
-  fetchSystemDelegates: jest.fn(),
-  searchDelegateCandidates: jest.fn(),
-  addSystemDelegate: jest.fn(),
-  removeSystemDelegate: jest.fn(),
-  renewSystemDelegate: jest.fn(),
-}))
 jest.mock('@/utils/notify', () => {
   const actual = jest.requireActual('@/utils/notify')
   return { ...actual, notify: jest.fn() }
 })
 
+import MockAdapter from 'axios-mock-adapter'
 import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import SystemDelegatesSection from './SystemDelegatesSection'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import { addMonthsISO } from '@/utils/decommission'
-import {
-  fetchSystemDelegates,
-  searchDelegateCandidates,
-  addSystemDelegate,
-  removeSystemDelegate,
-  renewSystemDelegate,
-} from '@/utils/delegates'
+import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import type { FismaSystemType, DelegateRow, DelegateCandidate } from '@/types'
 
-const fetchMock = fetchSystemDelegates as jest.Mock
-const searchMock = searchDelegateCandidates as jest.Mock
-const addMock = addSystemDelegate as jest.Mock
-const removeMock = removeSystemDelegate as jest.Mock
-const renewMock = renewSystemDelegate as jest.Mock
+const mock = new MockAdapter(axiosInstance)
 
 const SYSTEM_ID = 1002
 const SYSTEM = { fismasystemid: SYSTEM_ID } as unknown as FismaSystemType
+const ROSTER_URL = apiPaths.fismaSystems.delegates(SYSTEM_ID)
+const CANDIDATES_URL = apiPaths.fismaSystems.delegateCandidates(SYSTEM_ID)
+const delegateUrl = (userid: string) =>
+  apiPaths.fismaSystems.delegate(SYSTEM_ID, userid)
 
 const ACTIVE: DelegateRow = {
   userid: 'd-active',
@@ -64,12 +53,16 @@ const CANDIDATE: DelegateCandidate = {
   email: 'tarkin@empire.gov',
 }
 
-// Minimal axios-style error so parseApiError treats it as one.
-function axiosError(status: number, data: unknown) {
-  return Object.assign(new Error('request failed'), {
-    isAxiosError: true,
-    response: { status, data },
-  })
+const rosterGets = () => mock.history.get.filter((g) => g.url === ROSTER_URL)
+const candidateGets = () =>
+  mock.history.get.filter((g) => g.url === CANDIDATES_URL)
+
+const SYSTEM_B_ID = 2002
+const SYSTEM_B = { fismasystemid: SYSTEM_B_ID } as unknown as FismaSystemType
+const CANDIDATE_B: DelegateCandidate = {
+  userid: 'c-2',
+  fullname: 'Maximilian Veers',
+  email: 'veers@empire.gov',
 }
 
 function renderSection(canManage = true) {
@@ -78,13 +71,17 @@ function renderSection(canManage = true) {
   )
 }
 
+// Handlers match in registration order and a same-matcher reply replaces the
+// earlier one, so a test that needs the POST to fail re-registers it with
+// reply rather than replyOnce.
 beforeEach(() => {
   jest.clearAllMocks()
-  fetchMock.mockResolvedValue([ACTIVE, EXPIRED])
-  searchMock.mockResolvedValue([CANDIDATE])
-  addMock.mockResolvedValue(undefined)
-  removeMock.mockResolvedValue(undefined)
-  renewMock.mockResolvedValue(ACTIVE)
+  mock.reset()
+  mock.onGet(ROSTER_URL).reply(200, { data: [ACTIVE, EXPIRED] })
+  mock.onGet(CANDIDATES_URL).reply(200, { data: [CANDIDATE] })
+  mock.onPost(ROSTER_URL).reply(201)
+  mock.onDelete(delegateUrl('d-active')).reply(204)
+  mock.onPatch(delegateUrl('d-active')).reply(200, { data: ACTIVE })
 })
 
 test('renders the roster with per-row status chips (Active / Expired)', async () => {
@@ -100,14 +97,16 @@ test('renders the roster with per-row status chips (Active / Expired)', async ()
 
 test('a delegate within 30 days of expiry shows an Expiring soon chip', async () => {
   const soon = new Date(Date.now() + 10 * 24 * 60 * 60 * 1000).toISOString()
-  fetchMock.mockResolvedValue([
-    {
-      ...ACTIVE,
-      userid: 'd-soon',
-      fullname: 'Soon Delegate',
-      access_expires_at: soon,
-    },
-  ])
+  mock.onGet(ROSTER_URL).reply(200, {
+    data: [
+      {
+        ...ACTIVE,
+        userid: 'd-soon',
+        fullname: 'Soon Delegate',
+        access_expires_at: soon,
+      },
+    ],
+  })
   renderSection()
 
   const soonRow = (await screen.findByText('Soon Delegate')).closest('li')!
@@ -136,9 +135,9 @@ test('the provision control opens a dialog rather than an inline form', async ()
 
 test('an expired candidate carries the same Expired chip as the roster', async () => {
   const user = userEvent.setup()
-  searchMock.mockResolvedValue([
-    { ...CANDIDATE, access_expires_at: '2000-01-01T00:00:00Z' },
-  ])
+  mock.onGet(CANDIDATES_URL).reply(200, {
+    data: [{ ...CANDIDATE, access_expires_at: '2000-01-01T00:00:00Z' }],
+  })
   renderSection()
   await screen.findByText('Active Delegate')
 
@@ -151,9 +150,9 @@ test('an expired candidate carries the same Expired chip as the roster', async (
 
 test('an active candidate carries an Active chip', async () => {
   const user = userEvent.setup()
-  searchMock.mockResolvedValue([
-    { ...CANDIDATE, access_expires_at: '2099-12-31T23:59:59Z' },
-  ])
+  mock.onGet(CANDIDATES_URL).reply(200, {
+    data: [{ ...CANDIDATE, access_expires_at: '2099-12-31T23:59:59Z' }],
+  })
   renderSection()
   await screen.findByText('Active Delegate')
 
@@ -171,18 +170,18 @@ test('removing a delegate refreshes the candidate list', async () => {
   const user = userEvent.setup()
   renderSection()
   await screen.findByText('Active Delegate')
-  await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(1))
+  await waitFor(() => expect(candidateGets()).toHaveLength(1))
 
   await user.click(
     screen.getByRole('button', { name: /remove Active Delegate/i })
   )
   await user.click(screen.getByRole('button', { name: /^remove$/i }))
 
-  await waitFor(() => expect(removeMock).toHaveBeenCalledTimes(1))
-  await waitFor(() => expect(searchMock).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(mock.history.delete).toHaveLength(1))
+  await waitFor(() => expect(candidateGets()).toHaveLength(2))
 })
 
-test('attaching an existing candidate POSTs just the email and refetches', async () => {
+test('attaching an existing candidate POSTs just the email, bypassing the auth interceptor, and refetches', async () => {
   const user = userEvent.setup()
   renderSection()
   await screen.findByText('Active Delegate')
@@ -195,19 +194,69 @@ test('attaching an existing candidate POSTs just the email and refetches', async
   )
   await user.click(option)
 
-  await waitFor(() => expect(addMock).toHaveBeenCalledTimes(1))
-  expect(addMock).toHaveBeenCalledWith(SYSTEM_ID, {
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  expect(mock.history.post[0].url).toBe(ROSTER_URL)
+  expect(JSON.parse(mock.history.post[0].data)).toEqual({
     email: 'tarkin@empire.gov',
   })
+  // The one sanctioned bypass in this module: a coded 403 must reach the
+  // component rather than the global interceptor.
+  expect(mock.history.post[0].skipAuthHandling).toBe(true)
   // Roster refetched (initial load + after attach).
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(rosterGets()).toHaveLength(2))
+})
+
+test('attaching runs one candidate search, not one per key change', async () => {
+  const user = userEvent.setup()
+  renderSection()
+  await screen.findByText('Active Delegate')
+  await waitFor(() => expect(candidateGets()).toHaveLength(1))
+
+  // Type a term so a search other than the empty one is the active query when
+  // the write invalidates the candidate lists.
+  await user.type(
+    screen.getByRole('combobox', { name: /attach an existing delegate/i }),
+    'tar'
+  )
+  await waitFor(() => expect(candidateGets()).toHaveLength(2))
+
+  await user.click(
+    await screen.findByText(/Wilhuff Tarkin \(tarkin@empire\.gov\)/i)
+  )
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+
+  // The cleared search refetches once. Clearing after the write instead would
+  // refresh the typed term first and throw that result away.
+  await waitFor(() => expect(rosterGets()).toHaveLength(2))
+  await waitFor(() => expect(candidateGets()).toHaveLength(3))
+  // The empty search sends no params at all, so the one post-write refresh is
+  // the cleared picker rather than another pass at 'tar'.
+  expect(candidateGets()[2].params).toBeUndefined()
+})
+
+test('a failed attach puts the search term back so the person can be retried', async () => {
+  const user = userEvent.setup()
+  mock.onPost(ROSTER_URL).reply(400, { data: { email: 'not attachable' } })
+  renderSection()
+  await screen.findByText('Active Delegate')
+
+  const picker = screen.getByRole('combobox', {
+    name: /attach an existing delegate/i,
+  })
+  await user.type(picker, 'tar')
+  await user.click(
+    await screen.findByText(/Wilhuff Tarkin \(tarkin@empire\.gov\)/i)
+  )
+
+  // The POST is recorded when it is sent, so wait for the rejection to reach
+  // the restore rather than asserting off the request log.
+  await waitFor(() => expect(picker).toHaveValue('tar'))
+  expect(await screen.findByText(/not attachable/i)).toBeInTheDocument()
 })
 
 test('a field-map error on attach is surfaced rather than swallowed', async () => {
   const user = userEvent.setup()
-  addMock.mockRejectedValueOnce(
-    axiosError(400, { data: { email: 'not attachable' } })
-  )
+  mock.onPost(ROSTER_URL).reply(400, { data: { email: 'not attachable' } })
   renderSection()
   await screen.findByText('Active Delegate')
 
@@ -243,8 +292,8 @@ test('provisioning a new person POSTs email, name, and expiry', async () => {
   await user.type(screen.getByLabelText(/^email/i), 'jerjerrod@empire.gov')
   await user.click(screen.getByRole('button', { name: /^provision$/i }))
 
-  await waitFor(() => expect(addMock).toHaveBeenCalledTimes(1))
-  const [, body] = addMock.mock.calls[0]
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  const body = JSON.parse(mock.history.post[0].data)
   expect(body.email).toBe('jerjerrod@empire.gov')
   expect(body.fullname).toBe('Moff Jerjerrod')
   expect(typeof body.access_expires_at).toBe('string')
@@ -252,12 +301,10 @@ test('provisioning a new person POSTs email, name, and expiry', async () => {
 
 test('an administrator-required email shows an inline guard, not a provision', async () => {
   const user = userEvent.setup()
-  addMock.mockRejectedValueOnce(
-    axiosError(400, {
-      error: 'admin required',
-      code: 'DELEGATE_REQUIRES_ADMIN',
-    })
-  )
+  mock.onPost(ROSTER_URL).reply(400, {
+    error: 'admin required',
+    code: 'DELEGATE_REQUIRES_ADMIN',
+  })
   renderSection()
   await screen.findByText('Active Delegate')
 
@@ -280,12 +327,11 @@ test('a capability-off 403 shows the OpDiv-disabled inline guard', async () => {
   const user = userEvent.setup()
   // The add call opts out of the global auth interceptor (skipAuthHandling), so
   // the coded 403 reaches the component and classifyAddError keys on the code.
-  addMock.mockRejectedValueOnce(
-    axiosError(403, {
-      error: 'system delegate role is not enabled for this opdiv',
-      code: 'DELEGATE_NOT_ENABLED',
-    })
-  )
+  // The interceptor is real here, so this proves the bypass end to end.
+  mock.onPost(ROSTER_URL).reply(403, {
+    error: 'system delegate role is not enabled for this opdiv',
+    code: 'DELEGATE_NOT_ENABLED',
+  })
   renderSection()
   await screen.findByText('Active Delegate')
 
@@ -311,13 +357,12 @@ test('removing a delegate confirms then DELETEs and refetches', async () => {
     screen.getByRole('button', { name: /remove Active Delegate/i })
   )
   // Not deleted until confirmed.
-  expect(removeMock).not.toHaveBeenCalled()
+  expect(mock.history.delete).toHaveLength(0)
   await user.click(screen.getByRole('button', { name: /^remove$/i }))
 
-  await waitFor(() =>
-    expect(removeMock).toHaveBeenCalledWith(SYSTEM_ID, 'd-active')
-  )
-  await waitFor(() => expect(fetchMock).toHaveBeenCalledTimes(2))
+  await waitFor(() => expect(mock.history.delete).toHaveLength(1))
+  expect(mock.history.delete[0].url).toBe(delegateUrl('d-active'))
+  await waitFor(() => expect(rosterGets()).toHaveLength(2))
 })
 
 test('renewing a delegate PATCHes the new expiration', async () => {
@@ -330,11 +375,10 @@ test('renewing a delegate PATCHes the new expiration', async () => {
   )
   await user.click(screen.getByRole('button', { name: /^save$/i }))
 
-  await waitFor(() => expect(renewMock).toHaveBeenCalledTimes(1))
-  const [sysId, userId, expiresAt] = renewMock.mock.calls[0]
-  expect(sysId).toBe(SYSTEM_ID)
-  expect(userId).toBe('d-active')
-  expect(typeof expiresAt).toBe('string')
+  await waitFor(() => expect(mock.history.patch).toHaveLength(1))
+  expect(mock.history.patch[0].url).toBe(delegateUrl('d-active'))
+  const body = JSON.parse(mock.history.patch[0].data)
+  expect(typeof body.access_expires_at).toBe('string')
 })
 
 test('a non-manager (ISSM) sees the roster but no controls', async () => {
@@ -350,4 +394,48 @@ test('a non-manager (ISSM) sees the roster but no controls', async () => {
   expect(
     screen.queryByRole('button', { name: /remove Active Delegate/i })
   ).not.toBeInTheDocument()
+})
+
+test('a change of system carries no candidates into the new picker', async () => {
+  // The detail page stays mounted when the route moves between two systems in
+  // the shared list. It keys the section by system id, but the picker must not
+  // depend on that alone: attaching posts to the system in the path, so
+  // rendering one system's candidates under another writes a delegate to the
+  // wrong system.
+  const user = userEvent.setup()
+  mock
+    .onGet(apiPaths.fismaSystems.delegates(SYSTEM_B_ID))
+    .reply(200, { data: [] })
+  // Held open so the assertion lands in the window where the new system's own
+  // list has not arrived yet, which is exactly when retained rows would show.
+  let releaseB: () => void = () => {}
+  const bLanded = new Promise<void>((resolve) => {
+    releaseB = resolve
+  })
+  mock
+    .onGet(apiPaths.fismaSystems.delegateCandidates(SYSTEM_B_ID))
+    .reply(async () => {
+      await bLanded
+      return [200, { data: [CANDIDATE_B] }]
+    })
+
+  // No key, so the section does not remount: the state this guards is the
+  // query cache, not the component's.
+  const { rerender } = renderWithProviders(
+    <SystemDelegatesSection system={SYSTEM} canManage />
+  )
+  await screen.findByText('Active Delegate')
+  await user.click(
+    screen.getByRole('combobox', { name: /attach an existing delegate/i })
+  )
+  await screen.findByText(/Wilhuff Tarkin/i)
+
+  rerender(<SystemDelegatesSection system={SYSTEM_B} canManage />)
+
+  await waitFor(() =>
+    expect(screen.queryByText(/Wilhuff Tarkin/i)).not.toBeInTheDocument()
+  )
+
+  releaseB()
+  expect(await screen.findByText(/Maximilian Veers/i)).toBeInTheDocument()
 })

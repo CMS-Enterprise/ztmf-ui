@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from 'react'
+import { useEffect, useState } from 'react'
 import {
   Alert,
   Autocomplete,
@@ -26,12 +26,13 @@ import DeleteOutlineIcon from '@mui/icons-material/DeleteOutline'
 import EventRepeatIcon from '@mui/icons-material/EventRepeat'
 import { FismaSystemType, DelegateRow, DelegateCandidate } from '@/types'
 import {
-  fetchSystemDelegates,
-  searchDelegateCandidates,
-  addSystemDelegate,
-  removeSystemDelegate,
-  renewSystemDelegate,
+  useSystemDelegates,
+  useDelegateCandidates,
+  useAddSystemDelegate,
+  useRemoveSystemDelegate,
+  useRenewSystemDelegate,
 } from '@/utils/delegates'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -110,17 +111,32 @@ interface Props {
 export default function SystemDelegatesSection({ system, canManage }: Props) {
   const systemId = system.fismasystemid
 
-  const [delegates, setDelegates] = useState<DelegateRow[]>([])
-  const [loading, setLoading] = useState(true)
-  // Bumped on every successful roster load. The candidate search keys off
-  // this rather than the `delegates` array so the refresh does not depend on
-  // the array's referential identity changing.
-  const [rosterVersion, setRosterVersion] = useState(0)
+  const rosterQuery = useSystemDelegates(systemId)
+  const delegates: DelegateRow[] = rosterQuery.data ?? EMPTY_LIST
+  const loading = rosterQuery.isPending
 
-  // Attach-existing picker.
-  const [candidates, setCandidates] = useState<DelegateCandidate[]>([])
+  // Attach-existing picker. The input is debounced before it reaches the
+  // candidate query; only managers see the picker, so only they search. The
+  // eligible set excludes anyone already on the system, and every delegate
+  // write invalidates it, so the picker refreshes whenever the roster does.
   const [candidateInput, setCandidateInput] = useState('')
-  const [attaching, setAttaching] = useState(false)
+  const [debouncedInput, setDebouncedInput] = useState('')
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedInput(candidateInput), 250)
+    return () => clearTimeout(t)
+  }, [candidateInput])
+  const candidatesQuery = useDelegateCandidates(systemId, debouncedInput, {
+    enabled: canManage,
+  })
+  const candidates: DelegateCandidate[] = candidatesQuery.data ?? EMPTY_LIST
+
+  // Separate mutation instances so the attach picker and the provision dialog
+  // each report only their own in-flight write.
+  const attachMutation = useAddSystemDelegate(systemId)
+  const provisionMutation = useAddSystemDelegate(systemId)
+  const removeMutation = useRemoveSystemDelegate(systemId)
+  const renewMutation = useRenewSystemDelegate(systemId)
+  const attaching = attachMutation.isPending
 
   // Provision-new dialog.
   const [provisionOpen, setProvisionOpen] = useState(false)
@@ -131,7 +147,7 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
     Record<string, string>
   >({})
   const [provisionGuard, setProvisionGuard] = useState('')
-  const [provisioning, setProvisioning] = useState(false)
+  const provisioning = provisionMutation.isPending
 
   // Inline guard for administrator-required / capability-off on the ATTACH
   // path (card-level). The provision path shows its own guard in the dialog.
@@ -142,53 +158,6 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
   const [renewTarget, setRenewTarget] = useState<DelegateRow | null>(null)
   const [renewDate, setRenewDate] = useState('')
   const [renewError, setRenewError] = useState('')
-
-  const loadRoster = useCallback(
-    async (signal?: AbortSignal) => {
-      try {
-        const rows = await fetchSystemDelegates(systemId, signal)
-        if (signal?.aborted) return
-        setDelegates(rows)
-        setRosterVersion((v) => v + 1)
-      } catch (error) {
-        if (signal?.aborted || isAuthHandled(error)) return
-        notify(parseApiError(error).message, 'error')
-      } finally {
-        if (!signal?.aborted) setLoading(false)
-      }
-    },
-    [systemId]
-  )
-
-  useEffect(() => {
-    const controller = new AbortController()
-    setLoading(true)
-    loadRoster(controller.signal)
-    return () => controller.abort()
-  }, [loadRoster])
-
-  // Debounced candidate search; only managers see the picker. Re-runs on
-  // rosterVersion because the eligible set excludes anyone already on the
-  // system: removing a delegate makes them a candidate again, and attaching
-  // one drops them from the list, so the picker has to refresh whenever the
-  // roster does rather than going stale until a page reload.
-  useEffect(() => {
-    if (!canManage) return
-    const controller = new AbortController()
-    const t = setTimeout(() => {
-      searchDelegateCandidates(systemId, candidateInput, controller.signal)
-        .then((rows) => {
-          if (!controller.signal.aborted) setCandidates(rows)
-        })
-        .catch(() => {
-          // Non-fatal: an empty option list just means nothing to attach.
-        })
-    }, 250)
-    return () => {
-      clearTimeout(t)
-      controller.abort()
-    }
-  }, [systemId, candidateInput, canManage, rosterVersion])
 
   // Classify an add failure so the caller can place it: administrator-required
   // and capability-off become an inline guard string; a 400 field map is
@@ -210,13 +179,21 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
 
   const handleAttach = async (candidate: DelegateCandidate) => {
     setGuardMessage('')
-    setAttaching(true)
+    // Clear the search before the write rather than after it, and clear the
+    // debounced copy with it. The write invalidates every candidate list, and
+    // whichever term is active at that moment is the one that refetches, so
+    // clearing afterwards refetched the typed term and then the empty one.
+    // Restored below if the attach fails, so a guard message still leaves the
+    // person on screen to retry.
+    const searched = candidateInput
+    setCandidateInput('')
+    setDebouncedInput('')
     try {
-      await addSystemDelegate(systemId, { email: candidate.email })
-      await loadRoster()
-      setCandidateInput('')
+      await attachMutation.mutateAsync({ email: candidate.email })
       notify('Saved - delegate added', 'success', { autoHideDuration: 1500 })
     } catch (error) {
+      setCandidateInput(searched)
+      setDebouncedInput(searched)
       const c = classifyAddError(error)
       if (c?.guard) setGuardMessage(c.guard)
       // The attach call sends only a validated email, so a 400 field map is
@@ -224,8 +201,6 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
       // backend ever returns one (no provision form to route it into).
       else if (c?.fieldErrors)
         setGuardMessage(Object.values(c.fieldErrors).join(' '))
-    } finally {
-      setAttaching(false)
     }
   }
 
@@ -254,14 +229,12 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
   const handleProvision = async () => {
     setProvisionGuard('')
     if (!validateProvision()) return
-    setProvisioning(true)
     try {
-      await addSystemDelegate(systemId, {
+      await provisionMutation.mutateAsync({
         email: provisionEmail.trim(),
         fullname: provisionName.trim(),
         access_expires_at: dateToExpiryISO(provisionExpiry),
       })
-      await loadRoster()
       setProvisionOpen(false)
       notify('Saved - delegate provisioned', 'success', {
         autoHideDuration: 1500,
@@ -270,8 +243,6 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
       const c = classifyAddError(error)
       if (c?.guard) setProvisionGuard(c.guard)
       if (c?.fieldErrors) setProvisionErrors(c.fieldErrors)
-    } finally {
-      setProvisioning(false)
     }
   }
 
@@ -280,8 +251,7 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
     setPendingRemove(null)
     if (!confirm || !target) return
     try {
-      await removeSystemDelegate(systemId, target.userid)
-      await loadRoster()
+      await removeMutation.mutateAsync(target.userid)
       notify('Saved - delegate removed', 'success', { autoHideDuration: 1500 })
     } catch (error) {
       if (isAuthHandled(error)) return
@@ -302,13 +272,11 @@ export default function SystemDelegatesSection({ system, canManage }: Props) {
       return
     }
     try {
-      await renewSystemDelegate(
-        systemId,
-        renewTarget.userid,
-        dateToExpiryISO(renewDate)
-      )
+      await renewMutation.mutateAsync({
+        userid: renewTarget.userid,
+        accessExpiresAt: dateToExpiryISO(renewDate),
+      })
       setRenewTarget(null)
-      await loadRoster()
       notify('Saved - expiration updated', 'success', {
         autoHideDuration: 1500,
       })

@@ -98,6 +98,62 @@ rendered data solely because `error` is set.
 Do not create a component-local `AbortController`; TanStack Query cancels the
 request when the query becomes unused or is superseded.
 
+### Reference vocabularies
+
+System attributes, datacenter environments, and OpDivs change a few times a
+year. Their hooks spread `vocabularyQueryOptions` from `src/queryClient.ts`,
+which caches for the session (`staleTime` and `gcTime` both `Infinity`) and
+keeps a failed load silent, since every consumer already renders around an
+empty list. Read those lists through the existing hooks or Outlet context
+rather than calling `useQuery` with the same key elsewhere. A write that
+changes one must invalidate its key explicitly, as the OpDiv mutations do;
+nothing under this policy refreshes on its own.
+
+### Operational data
+
+Reference vocabularies are the exception, not the rule. Everything else is data
+someone else is editing while the page is open, and it carries a zero stale
+time so each mount reads the server.
+
+The delegate roster is the clearest case: it is the shared user-to-system table
+filtered to delegates, so a role edit or a system assignment made on another
+page moves someone on or off it. Those writes still go through raw requests and
+invalidate nothing, so a stale window would render a delegate the server no
+longer has.
+
+A user's OpDiv grants are the same shape for a different reason. Grants decide
+what an admin is allowed to grant, so a cached answer is not just out of date,
+it is a wrong permission boundary. That read also opts out of
+refetch-on-reconnect, because the grant modal treats any in-flight read as its
+initial load: a background refetch mid-edit would blank the picker and disable
+Save with the user's changes still on screen.
+
+The candidate search sits between the two. Every term the user has not just
+typed is its own key and so its own request, every delegate write invalidates
+the set, and a stale entry is self-correcting because the backend rejects an
+attach for someone no longer eligible. Zeroing its stale time would instead
+refetch on each return to a previous term, including the cleared one after an
+attach.
+
+### Holding previous results
+
+A search-shaped query can hold the previous result while a new term loads, so
+the list does not blank between keystrokes. Scope that to the rest of the key:
+`keepPreviousData` on its own holds data across _any_ key change, including the
+resource the search is scoped to. A picker that swapped systems without
+remounting would show one system's candidates under another, and acting on one
+writes to the system in the path. Compare the prefix and return `undefined`
+when it differs.
+
+### Seeding against invalidating
+
+Writing the request body into the cache on success avoids a refetch, and is
+right only when the body is the stored state. It is not when the server
+reconciles rather than replaces: a scoped admin's grant save sends only the
+OpDivs they hold and the backend preserves the target's others, so seeding
+would drop grants the user still has. Invalidate unless the endpoint replaces
+the whole resource and rejects anything it will not store.
+
 ### `useMutation`
 
 Use `useMutation` for server writes initiated by React. On success, invalidate
@@ -118,6 +174,13 @@ const mutation = useMutation({
   },
 })
 ```
+
+Return the invalidation promise from `onSuccess` only when the caller acts
+on the refreshed data, such as closing a dialog over the updated list;
+`mutateAsync` then resolves after the refetch. Otherwise fire it with `void`
+so the write resolves on its own and the list catches up behind it. Both
+styles are in use, and the reason for the choice belongs in a comment next to
+it.
 
 Mutations retain local error handling because forms may need field-level
 errors from `parseApiError`. Do not add a global `MutationCache.onError` while
