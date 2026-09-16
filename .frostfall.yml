@@ -51,6 +51,14 @@ tests:
     path: '/#/admin/events'
     waitFor: '.MuiDataGrid-root'
 
+  # The questionnaire, the app's one long editable form. DS-1 is the Death Star
+  # in the Empire seed, which has answers for the open call. The <h1> is the
+  # question text itself, so it only exists once the questionnaire payload has
+  # rendered - no separate anchor element needed.
+  - id: questionnaire
+    path: '/#/questionnaire/DS-1'
+    waitFor: 'h1'
+
   # System detail page incl. the ZTMF Insights enrichment cards.
   # 1002 = the Executor in the Empire seed: active, sdl_sync_enabled, and has
   # an enrichment row WITHOUT a contacts key, so this scans the legacy-fallback

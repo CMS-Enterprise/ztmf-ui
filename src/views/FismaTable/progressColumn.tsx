@@ -3,14 +3,11 @@ import Chip from '@mui/material/Chip'
 import Tooltip from '@mui/material/Tooltip'
 import type { ScoreProgress } from '@/types'
 import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
+import { outlinedChipSx } from '@/utils/chipStyles'
 
-// An outlined chip paints its label with `<color>.main`, and MUI's default
-// warning main (#ed6c02) holds only 3.1:1 on the white grid row - below the
-// WCAG AA 4.5:1 floor for text (ui#714). Same hue, darkened to 4.6:1; the
-// border follows so the chip stays one color. Success (#2e7d32) already
-// clears AA and is left alone.
-const WARNING_AA = '#BE5702'
-const warningChipSx = { color: WARNING_AA, borderColor: WARNING_AA }
+// The laggard chips are outlined warning, which the palette paints too light
+// to read as text; success clears AA already (ui#714).
+const warningChipSx = outlinedChipSx('warning')
 
 /**
  * Cell body for the Data Call Progress column: an updated-count fraction
