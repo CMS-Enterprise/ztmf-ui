@@ -44,6 +44,13 @@ tests:
   - id: admin-opdivs
     path: '/#/admin/opdivs'
 
+  # Events is gated on unscoped read, which the seeded Test.User (OWNER) has.
+  # The grid paginates server-side and renders no toolbar, so unlike the others
+  # it has no quick-search box - the waitFor is the grid itself.
+  - id: admin-events
+    path: '/#/admin/events'
+    waitFor: '.MuiDataGrid-root'
+
   # System detail page incl. the ZTMF Insights enrichment cards.
   # 1002 = the Executor in the Empire seed: active, sdl_sync_enabled, and has
   # an enrichment row WITHOUT a contacts key, so this scans the legacy-fallback
