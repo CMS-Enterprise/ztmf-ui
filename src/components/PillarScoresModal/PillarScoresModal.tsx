@@ -301,11 +301,16 @@ const PillarScoresModal: React.FC<PillarScoresModalProps> = ({
                   Viewing: <strong>{currentDatacallName}</strong>
                 </Typography>
                 <Box display="flex" alignItems="center" gap={1}>
-                  <Typography variant="body2" color="text.secondary">
+                  <Typography
+                    id="pillar-scores-compare-label"
+                    variant="body2"
+                    color="text.secondary"
+                  >
                     Compare with:
                   </Typography>
                   <FormControl size="small">
                     <Select
+                      labelId="pillar-scores-compare-label"
                       value={
                         scoredDatacalls.length === 0
                           ? ''

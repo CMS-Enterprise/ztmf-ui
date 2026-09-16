@@ -3,6 +3,11 @@ import Chip from '@mui/material/Chip'
 import Tooltip from '@mui/material/Tooltip'
 import type { ScoreProgress } from '@/types'
 import { hasNoQuestionnaire, progressTooltip } from './progressHelpers'
+import { outlinedChipSx } from '@/utils/chipStyles'
+
+// The laggard chips are outlined warning, which the palette paints too light
+// to read as text; success clears AA already (ui#714).
+const warningChipSx = outlinedChipSx('warning')
 
 /**
  * Cell body for the Data Call Progress column: an updated-count fraction
@@ -87,6 +92,7 @@ export function ProgressCell({
             label="Incomplete"
             color="warning"
             variant="outlined"
+            sx={warningChipSx}
           />
         </Box>
       </Tooltip>
@@ -123,6 +129,7 @@ export function ProgressCell({
           label={label}
           color={updated ? 'success' : 'warning'}
           variant="outlined"
+          sx={updated ? undefined : warningChipSx}
         />
       </Box>
     </Tooltip>

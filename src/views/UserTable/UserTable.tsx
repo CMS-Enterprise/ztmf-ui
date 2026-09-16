@@ -25,6 +25,7 @@ import {
   GridFilterModel,
   useGridApiRef,
 } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import { Chip, FormControlLabel, Switch, Typography } from '@mui/material'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import Tooltip from '@mui/material/Tooltip'
@@ -190,6 +191,7 @@ function validateEmail(email: string) {
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
+  const accessibleGrid = useAccessibleGrid()
   const navigate = useNavigate()
   const { userInfo, opdivs } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
@@ -840,18 +842,23 @@ export default function UserTable() {
             key={`tooltip-delete-${params.id}`}
             placement="right-start"
           >
-            {/* span wrapper lets Tooltip listen to events even when the
-                child is disabled (MUI requirement). */}
-            <span>
-              <GridActionsCellItem
-                key={`delete-${params.id}`}
-                icon={<DeleteIcon sx={{ color: isSelf ? 'gray' : 'black' }} />}
-                label="Delete"
-                onClick={handleDeleteClick(params.id)}
-                color="inherit"
-                disabled={isSelf}
-              />
-            </span>
+            {/* aria-disabled rather than disabled: the actions cell is a
+                role="menu" whose children must all be menu items, and a
+                disabled button needs a <span> wrapper for Tooltip to see
+                hover events (ui#714). Staying enabled also keeps the control
+                focusable, so the reason reaches keyboard users. The ripple and
+                the opacity stand in for the disabled styling that goes with
+                it, so a click still reads as refused rather than ignored. */}
+            <GridActionsCellItem
+              key={`delete-${params.id}`}
+              icon={<DeleteIcon sx={{ color: isSelf ? 'gray' : 'black' }} />}
+              label="Delete"
+              onClick={isSelf ? undefined : handleDeleteClick(params.id)}
+              color="inherit"
+              aria-disabled={isSelf || undefined}
+              disableRipple={isSelf}
+              sx={isSelf ? { opacity: 0.38, cursor: 'not-allowed' } : undefined}
+            />
           </Tooltip>,
         ]
       },
@@ -875,6 +882,7 @@ export default function UserTable() {
         }}
       >
         <DataGrid
+          {...accessibleGrid}
           aria-label="Users"
           rows={rows}
           apiRef={apiRef}
