@@ -93,6 +93,7 @@ export default function Title() {
   // Distinguishes "not fetched yet" from "fetched, and there are none" - both
   // are an empty list. The questionnaire's insights gate needs the difference.
   const [opdivsLoaded, setOpdivsLoaded] = useState(false)
+  const [fismaSystemsLoaded, setFismaSystemsLoaded] = useState(false)
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -109,6 +110,8 @@ export default function Title() {
           (error as { response?: { status?: number; data?: unknown } }).response
             ?.data
         )
+      } finally {
+        setFismaSystemsLoaded(true)
       }
     },
     []
@@ -690,6 +693,7 @@ export default function Title() {
                   showDecommissioned,
                   setShowDecommissioned,
                   fetchFismaSystems,
+                  fismaSystemsLoaded,
                   datacenterEnvironments,
                   opdivs,
                   opdivsLoaded,

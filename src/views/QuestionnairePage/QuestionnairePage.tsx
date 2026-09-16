@@ -154,6 +154,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     fismaSystems,
+    fismaSystemsLoaded,
     datacalls,
     opdivs,
     opdivsLoaded,
@@ -338,6 +339,7 @@ export default function QuestionnarePage() {
   // `function` is a reserved word, so the :function route param is aliased.
   const {
     fismasystemid: systemParam,
+    fismaacronym: legacyAcronym,
     datacallid: datacallSlug,
     pillar: pillarSlug,
     function: functionSlug,
@@ -346,10 +348,12 @@ export default function QuestionnarePage() {
   // The route is keyed on fismasystemid (#732), the same key the System Detail
   // page uses, so a link always opens the system it was generated from: the
   // acronym is free text, not unique, changes on rename, and may contain a
-  // slash. A non-numeric first segment is a legacy acronym bookmark, handled by
-  // the redirect effect below rather than resolved into a system here.
+  // slash. The id lives under a static `system` segment; the legacy acronym
+  // route (Routes.QUESTIONNAIRE_LEGACY) renders this same page with
+  // :fismaacronym set instead, and is handled by the redirect effect below
+  // rather than resolved into a system here. The two shapes never overlap, so
+  // an all-digit acronym cannot be mistaken for an id.
   const routeSystemId = parseSystemIdParam(systemParam)
-  const legacyAcronym = routeSystemId === undefined ? systemParam : undefined
   // The context list holds active systems only, so a deep link to a
   // decommissioned system would read as "not found" and mislead (its real
   // state is "no questionnaire available"). When the id (or legacy acronym)
@@ -394,8 +398,8 @@ export default function QuestionnarePage() {
   React.useEffect(() => {
     if (
       system !== undefined ||
-      fismaSystems.length === 0 ||
-      !systemParam ||
+      !fismaSystemsLoaded ||
+      (!systemParam && !legacyAcronym) ||
       legacyActiveMatches.length > 0 ||
       decommissionedSystems !== null
     )
@@ -419,8 +423,9 @@ export default function QuestionnarePage() {
     return () => controller.abort()
   }, [
     system,
-    fismaSystems.length,
+    fismaSystemsLoaded,
     systemParam,
+    legacyAcronym,
     legacyActiveMatches.length,
     decommissionedSystems,
   ])
@@ -432,7 +437,7 @@ export default function QuestionnarePage() {
   // not-found warning instead of guessing (guessing is how answers were once
   // saved against another system that shared the acronym, misc#386).
   React.useEffect(() => {
-    if (!legacyAcronym || fismaSystems.length === 0) return
+    if (!legacyAcronym || !fismaSystemsLoaded) return
     const matches =
       legacyActiveMatches.length > 0
         ? legacyActiveMatches
@@ -460,7 +465,7 @@ export default function QuestionnarePage() {
   }, [
     legacyAcronym,
     legacyActiveMatches,
-    fismaSystems.length,
+    fismaSystemsLoaded,
     decommissionedSystems,
     navigate,
     datacallSlug,
@@ -1516,12 +1521,14 @@ export default function QuestionnarePage() {
     // flight, so the id can't be resolved yet — and if it missed the active
     // list, the decommissioned list is being checked before concluding
     // not-found. Show a spinner until both have answered; only then is the
-    // link genuinely unresolvable. (#500 / #524 review) A legacy acronym link
+    // link genuinely unresolvable. (#500 / #524 review) The gate is the loaded
+    // flag, not an empty list: a user with no active systems still needs the
+    // decommissioned lookup and the not-found state. A legacy acronym link
     // always spins here: the redirect effect moves it to the id form or the
     // dashboard.
     if (
       legacyAcronym ||
-      fismaSystems.length === 0 ||
+      !fismaSystemsLoaded ||
       decommissionedSystems === null
     ) {
       return (

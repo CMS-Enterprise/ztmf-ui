@@ -25,6 +25,10 @@ type ContextType = {
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
   fetchFismaSystems: (decommissioned?: boolean) => Promise<void>
+  // False until the initial systems fetch settles (success or failure), so an
+  // empty list is distinguishable from a pending one: a user with no active
+  // systems must still reach not-found rather than an indefinite spinner.
+  fismaSystemsLoaded: boolean
   // Datacenter-environment vocabulary, fetched once at the layout level.
   // Empty until the fetch resolves; consumers fall back to raw values.
   datacenterEnvironments: DataCenterEnvironment[]

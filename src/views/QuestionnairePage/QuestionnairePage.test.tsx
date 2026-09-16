@@ -200,6 +200,7 @@ function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
     datacenterEnvironments: [],
     opdivs: [],
     opdivsLoaded: true,
+    fismaSystemsLoaded: true,
     ...overrides,
   }
 }
@@ -215,7 +216,7 @@ function renderAt(path: string) {
 }
 
 const DEEP_LINK =
-  '/questionnaire/1002/FY2026_Q1/identity/imperial-identity-verification'
+  '/questionnaire/system/1002/FY2026_Q1/identity/imperial-identity-verification'
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -935,7 +936,7 @@ const HHS_ZTM = {
 }
 
 const HHS_DEEP_LINK =
-  '/questionnaire/1002/FY25_ZTM/identity/imperial-identity-verification'
+  '/questionnaire/system/1002/FY25_ZTM/identity/imperial-identity-verification'
 
 // SSD-EX (opdiv_id 9) belongs to the insights-enabled OpDiv; 2 is a disabled
 // OpDiv for the negative case.
@@ -1236,7 +1237,7 @@ describe('carried-forward confirmation', () => {
   })
 
   const DEVICES_LINK =
-    '/questionnaire/1002/FY2026_Q1/devices/imperial-device-management'
+    '/questionnaire/system/1002/FY2026_Q1/devices/imperial-device-management'
 
   // The guidance sentence, asserted by exact text so a copy change has to be
   // deliberate.

@@ -10,10 +10,10 @@ export const toSlug = (str: string) =>
     .toLowerCase()
     .replaceAll(' ', '-')
 
-// The questionnaire route is keyed on fismasystemid (#732). A purely numeric
-// :fismasystemid segment is an id; anything else is a legacy acronym link
-// (bookmarks and shared URLs from before the change) that the page redirects
-// to the id form when it resolves to exactly one system.
+// The questionnaire route is keyed on fismasystemid (#732) under a static
+// `system` segment, so it never shares a shape with a legacy acronym link (an
+// acronym is free text and may itself be all digits). The :fismasystemid param
+// still has to be a whole number; anything else is not found.
 export function parseSystemIdParam(
   param: string | undefined
 ): number | undefined {
@@ -30,7 +30,7 @@ export function questionnairePath(
   ...segments: (string | undefined)[]
 ): string {
   const tail = segments.filter((s): s is string => !!s).join('/')
-  return `/${RouteIds.QUESTIONNAIRE}/${fismasystemid}${tail ? `/${tail}` : ''}`
+  return `/${RouteIds.QUESTIONNAIRE}/${RouteIds.QUESTIONNAIRE_SYSTEM}/${fismasystemid}${tail ? `/${tail}` : ''}`
 }
 
 // Every system whose acronym matches the legacy acronym URL segment,

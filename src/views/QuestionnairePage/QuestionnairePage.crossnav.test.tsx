@@ -115,6 +115,7 @@ function makeCtx(role: userData['role'] | undefined) {
     datacenterEnvironments: [],
     opdivs: [],
     opdivsLoaded: true,
+    fismaSystemsLoaded: true,
   }
 }
 
@@ -143,7 +144,7 @@ function renderPage() {
       { path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> },
       { path: '/systems/:fismasystemid', element: <div>system detail</div> },
     ],
-    { initialEntries: ['/questionnaire/1002'] }
+    { initialEntries: ['/questionnaire/system/1002'] }
   )
   const { unmount } = render(<RouterProvider router={router} />)
   return { router, unmount }

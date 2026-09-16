@@ -30,7 +30,7 @@ function renderHeader(props: Partial<typeof BASE_PROPS> = {}) {
         element: <SystemDetailHeader {...BASE_PROPS} {...props} />,
       },
       {
-        path: '/questionnaire/:fismasystemid',
+        path: '/questionnaire/system/:fismasystemid',
         element: <div>questionnaire</div>,
       },
       { path: '/', element: <div>dashboard</div> },
@@ -59,14 +59,14 @@ it('targets the questionnaire keyed on the fismasystemid', () => {
   // call.
   expect(
     screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
-  ).toBe('/questionnaire/1002')
+  ).toBe('/questionnaire/system/1002')
 })
 
 it('never puts the acronym in the link, so a rename or a slash cannot break it', () => {
   renderHeader({ systemName: 'Alliance/Fleet Comms' })
   expect(
     screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
-  ).toBe('/questionnaire/1002')
+  ).toBe('/questionnaire/system/1002')
 })
 
 it('shows Questionnaire alongside Edit for an editor', () => {

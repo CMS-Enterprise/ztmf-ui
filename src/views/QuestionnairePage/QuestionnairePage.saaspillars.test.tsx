@@ -156,6 +156,7 @@ function makeCtx(
     ],
     opdivs: [],
     opdivsLoaded: true,
+    fismaSystemsLoaded: true,
   }
 }
 
@@ -182,7 +183,7 @@ beforeEach(() => {
 function renderPage(fismasystemid = SAAS_SYSTEM.fismasystemid) {
   const router = createMemoryRouter(
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
-    { initialEntries: [`/questionnaire/${fismasystemid}`] }
+    { initialEntries: [`/questionnaire/system/${fismasystemid}`] }
   )
   return render(<RouterProvider router={router} />)
 }

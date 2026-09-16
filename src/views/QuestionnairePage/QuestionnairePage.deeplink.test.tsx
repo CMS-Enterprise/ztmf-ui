@@ -121,6 +121,7 @@ beforeEach(() => {
     datacenterEnvironments: [],
     opdivs: [],
     opdivsLoaded: true,
+    fismaSystemsLoaded: true,
   }
 
   mockGet.mockImplementation((url: string) => {
@@ -143,6 +144,7 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
   const router = createMemoryRouter(
     [
       { path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> },
+      { path: AppRoutes.QUESTIONNAIRE_LEGACY, element: <QuestionnairePage /> },
       { path: '/', element: <div>dashboard</div> },
     ],
     { initialEntries: [entry] }
@@ -163,7 +165,7 @@ const callsTo = (fragment: string) =>
 
 it('resolves the system from :fismasystemid on a cold load (no location.state)', async () => {
   renderAt(
-    '/questionnaire/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+    '/questionnaire/system/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
   )
 
   // The old failure mode was this warning; it must not appear now.
@@ -178,7 +180,7 @@ it('resolves the system from :fismasystemid on a cold load (no location.state)',
 
 it('resolves the cycle from the URL datacall segment (not the latest/selected call)', async () => {
   renderAt(
-    '/questionnaire/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+    '/questionnaire/system/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
   )
 
   await waitFor(() =>
@@ -204,7 +206,7 @@ it('resolves the cycle from the URL datacall segment (not the latest/selected ca
 
 it('opens the deep-linked :pillar/:function instead of the first', async () => {
   renderAt(
-    '/questionnaire/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+    '/questionnaire/system/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
   )
 
   // Networks/Imperial Network Security is functionid 7003; the first pillar
@@ -220,7 +222,7 @@ it('opens the deep-linked :pillar/:function instead of the first', async () => {
 })
 
 it('falls back to the first function when the URL omits :pillar/:function', async () => {
-  renderAt('/questionnaire/1002')
+  renderAt('/questionnaire/system/1002')
 
   // No pillar/function in the URL -> first pillar (Identity, 7006).
   await waitFor(() =>
@@ -232,7 +234,7 @@ it('falls back to the first function when the URL omits :pillar/:function', asyn
 
 it('shows a not-found warning once systems are loaded and the id is unknown', async () => {
   renderAt(
-    '/questionnaire/4242/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+    '/questionnaire/system/4242/FY2025_Death_Star_Assessment/networks/imperial-network-security'
   )
 
   await waitFor(() =>
@@ -253,7 +255,9 @@ it('opens a system whose acronym contains a slash (misc#382)', async () => {
       datacenterenvironment: 'Imperial-Fleet',
     },
   ]
-  const router = renderAt('/questionnaire/1003/FY2025_Death_Star_Assessment')
+  const router = renderAt(
+    '/questionnaire/system/1003/FY2025_Death_Star_Assessment'
+  )
 
   await waitFor(() =>
     expect(callsTo('/fismasystems/1003/questions')).toHaveLength(1)
@@ -262,7 +266,7 @@ it('opens a system whose acronym contains a slash (misc#382)', async () => {
   // where its slash would split the path into acronym + datacall.
   await waitFor(() =>
     expect(router.state.location.pathname).toMatch(
-      /^\/questionnaire\/1003\/FY2025_Death_Star_Assessment\/identity\//
+      /^\/questionnaire\/system\/1003\/FY2025_Death_Star_Assessment\/identity\//
     )
   )
   expect(screen.queryByText(/Could not find a system/i)).not.toBeInTheDocument()
@@ -303,7 +307,7 @@ describe('legacy acronym links', () => {
 
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(
-        '/questionnaire/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+        '/questionnaire/system/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
       )
     )
     // Replace, not push: the legacy URL leaves no history entry behind.
@@ -322,11 +326,40 @@ describe('legacy acronym links', () => {
   it('redirects a bare acronym link to the bare id form', async () => {
     const router = renderAt('/questionnaire/SSD-EX')
     await waitFor(() =>
-      expect(router.state.location.pathname).toMatch(/^\/questionnaire\/1002/)
+      expect(router.state.location.pathname).toMatch(
+        /^\/questionnaire\/system\/1002/
+      )
     )
     await waitFor(() =>
       expect(callsTo('/fismasystems/1002/questions')).toHaveLength(1)
     )
+  })
+
+  it('redirects an all-digit acronym as an acronym, never as an id (review)', async () => {
+    // Acronyms are free text and may be entirely numeric. The id form lives
+    // under /questionnaire/system/, so "/questionnaire/1002" is unambiguously
+    // a legacy acronym link - here for system 3003 whose acronym is "1002" -
+    // and must not open system id 1002 (SSD-EX).
+    mockCtx.fismaSystems = [
+      ...(mockCtx.fismaSystems as unknown[]),
+      {
+        fismasystemid: 3003,
+        fismaacronym: '1002',
+        fismaname: 'Numerically Named System',
+        datacenterenvironment: 'Imperial-Fleet',
+      },
+    ]
+    const router = renderAt('/questionnaire/1002')
+
+    await waitFor(() =>
+      expect(router.state.location.pathname).toMatch(
+        /^\/questionnaire\/system\/3003/
+      )
+    )
+    await waitFor(() =>
+      expect(callsTo('/fismasystems/3003/questions')).toHaveLength(1)
+    )
+    expect(callsTo('/fismasystems/1002/questions')).toHaveLength(0)
   })
 
   it('sends an ambiguous acronym to the dashboard with the not-found warning', async () => {
@@ -396,7 +429,7 @@ describe('legacy acronym links', () => {
 
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(
-        '/questionnaire/1099/FY2025_Death_Star_Assessment'
+        '/questionnaire/system/1099/FY2025_Death_Star_Assessment'
       )
     )
     await waitFor(() =>
@@ -409,8 +442,9 @@ describe('legacy acronym links', () => {
 
 it('shows a spinner (not the not-found warning) while the systems list is still loading', () => {
   mockCtx.fismaSystems = []
+  mockCtx.fismaSystemsLoaded = false
   renderAt(
-    '/questionnaire/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+    '/questionnaire/system/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
   )
 
   expect(screen.queryByText(/Could not find a system/i)).not.toBeInTheDocument()
@@ -418,7 +452,7 @@ it('shows a spinner (not the not-found warning) while the systems list is still 
 
 it('runs the fetch exactly once per cold deep-link mount (no self-triggered rerun)', async () => {
   renderAt(
-    '/questionnaire/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+    '/questionnaire/system/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
   )
 
   // Settle: the deep-linked question's options request marks the end of the
@@ -439,7 +473,7 @@ it('runs the fetch exactly once per cold deep-link mount (no self-triggered reru
 
 it('runs the fetch exactly once for the dashboard flow too (route state present)', async () => {
   renderAt({
-    pathname: '/questionnaire/1002',
+    pathname: '/questionnaire/system/1002',
     state: {
       datacallid: 5,
       datacall: 'Audit Fields Smoke Cycle',
@@ -483,7 +517,7 @@ it('resolves a decommissioned system and shows its no-questionnaire state, not t
     return Promise.resolve({ data: { data: [] } })
   })
 
-  renderAt('/questionnaire/1099/FY2025_Death_Star_Assessment')
+  renderAt('/questionnaire/system/1099/FY2025_Death_Star_Assessment')
 
   await waitFor(() =>
     expect(
@@ -494,11 +528,68 @@ it('resolves a decommissioned system and shows its no-questionnaire state, not t
 })
 
 it('still warns not-found when the id is in neither the active nor the decommissioned list', async () => {
-  renderAt('/questionnaire/9999/FY2025_Death_Star_Assessment')
+  renderAt('/questionnaire/system/9999/FY2025_Death_Star_Assessment')
 
   await waitFor(() =>
     expect(screen.getByText(/Could not find a system/i)).toBeInTheDocument()
   )
   // The decommissioned list was actually consulted before concluding.
   expect(callsTo('fismasystems?decommissioned=true')).toHaveLength(1)
+})
+
+// A user with no active systems gets an empty list from a completed fetch.
+// That must read as "loaded, nothing here", not "still loading" (review):
+// otherwise a decommissioned-system link or a bad id spins forever.
+describe('user with no active systems', () => {
+  beforeEach(() => {
+    mockCtx.fismaSystems = []
+    mockCtx.fismaSystemsLoaded = true
+  })
+
+  it('still reaches not-found for an unknown id', async () => {
+    renderAt('/questionnaire/system/4242')
+
+    await waitFor(() =>
+      expect(screen.getByText(/Could not find a system/i)).toBeInTheDocument()
+    )
+    expect(callsTo('fismasystems?decommissioned=true')).toHaveLength(1)
+  })
+
+  it('still resolves a decommissioned system by id', async () => {
+    mockGet.mockImplementation((url: string) => {
+      if (url.includes('fismasystems?decommissioned=true'))
+        return Promise.resolve({
+          data: {
+            data: [
+              {
+                fismasystemid: 1099,
+                fismaacronym: 'OLD-SYS',
+                fismaname: 'Retired Imperial System',
+                datacenterenvironment: 'Imperial-Fleet',
+                decommissioned: true,
+              },
+            ],
+          },
+        })
+      if (url.includes('/fismasystems/1099/questions'))
+        return Promise.resolve({ data: { data: null } })
+      return Promise.resolve({ data: { data: [] } })
+    })
+    renderAt('/questionnaire/system/1099')
+
+    await waitFor(() =>
+      expect(
+        screen.getByText(/No questionnaire is available for this system/i)
+      ).toBeInTheDocument()
+    )
+  })
+
+  it('still sends an unknown legacy acronym to the dashboard', async () => {
+    const router = renderAt('/questionnaire/nope')
+    await waitFor(() => expect(router.state.location.pathname).toBe('/'))
+    expect(notifyMock).toHaveBeenCalledWith(
+      expect.stringMatching(/Could not find a system matching “nope”/),
+      'warning'
+    )
+  })
 })

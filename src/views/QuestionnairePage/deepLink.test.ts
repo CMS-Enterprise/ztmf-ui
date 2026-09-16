@@ -51,19 +51,21 @@ describe('parseSystemIdParam', () => {
 })
 
 describe('questionnairePath', () => {
-  it('builds the bare id form', () => {
-    expect(questionnairePath(1002)).toBe('/questionnaire/1002')
+  it('builds the bare id form under the static system segment', () => {
+    // The segment keeps the id shape distinct from a legacy acronym link, so
+    // an all-digit acronym can never be read as an id.
+    expect(questionnairePath(1002)).toBe('/questionnaire/system/1002')
   })
 
   it('appends datacall / pillar / function segments, skipping absent ones', () => {
     expect(
       questionnairePath(1002, 'FY2026_Q1', 'identity', 'imperial-id')
-    ).toBe('/questionnaire/1002/FY2026_Q1/identity/imperial-id')
+    ).toBe('/questionnaire/system/1002/FY2026_Q1/identity/imperial-id')
     expect(questionnairePath(1002, 'FY2026_Q1')).toBe(
-      '/questionnaire/1002/FY2026_Q1'
+      '/questionnaire/system/1002/FY2026_Q1'
     )
     expect(questionnairePath(1002, undefined, undefined, undefined)).toBe(
-      '/questionnaire/1002'
+      '/questionnaire/system/1002'
     )
   })
 
@@ -72,9 +74,9 @@ describe('questionnairePath', () => {
     // "alliance" + datacall "fleet". The id form has no such segment.
     const slashed = sys(7, 'ALLIANCE/FLEET')
     expect(questionnairePath(slashed.fismasystemid, 'FY2026_Q1')).toBe(
-      '/questionnaire/7/FY2026_Q1'
+      '/questionnaire/system/7/FY2026_Q1'
     )
-    expect(questionnairePath(slashed.fismasystemid).split('/')).toHaveLength(3)
+    expect(questionnairePath(slashed.fismasystemid).split('/')).toHaveLength(4)
   })
 })
 
