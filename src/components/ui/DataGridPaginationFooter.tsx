@@ -91,6 +91,7 @@ export function DataGridPaginationFooter({
         <Select
           size="small"
           value={model.pageSize}
+          inputProps={{ 'aria-label': 'Rows per page' }}
           onChange={(e) =>
             apiRef.current.setPaginationModel({
               page: 0,

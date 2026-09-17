@@ -8,12 +8,14 @@ function GridHarness({
   label = 'Users',
   labelAttribute = 'aria-label',
   withMain = true,
+  ensureScrollableContentFocusable = false,
 }: {
   label?: string
   labelAttribute?: string
   withMain?: boolean
+  ensureScrollableContentFocusable?: boolean
 }) {
-  const { ref } = useAccessibleGrid()
+  const { ref } = useAccessibleGrid({ ensureScrollableContentFocusable })
   return (
     <div
       ref={ref}
@@ -26,7 +28,14 @@ function GridHarness({
       </div>
       {withMain && (
         <div data-testid="main" className="MuiDataGrid-main" role="grid">
-          <div role="rowgroup" />
+          <div
+            data-testid="virtual-scroller"
+            className="MuiDataGrid-virtualScroller"
+          >
+            <div role="rowgroup">
+              <div data-testid="gridcell" role="gridcell" tabIndex={-1} />
+            </div>
+          </div>
         </div>
       )}
       <div className="MuiDataGrid-footerContainer" />
@@ -57,6 +66,15 @@ test('carries aria-labelledby the same way', async () => {
   expect(screen.getByTestId('root')).not.toHaveAttribute('aria-labelledby')
 })
 
+test('makes scrollable grid content keyboard-focusable when requested', async () => {
+  render(<GridHarness ensureScrollableContentFocusable />)
+
+  await waitFor(() =>
+    expect(screen.getByTestId('gridcell')).toHaveAttribute('tabindex', '0')
+  )
+  expect(screen.getByTestId('virtual-scroller')).not.toHaveAttribute('tabindex')
+})
+
 test('leaves a grid without a main element untouched', async () => {
   // Every table test in this repo mocks the DataGrid away, and a rename of
   // MUI's internals would look the same: the hook has to be inert, never
@@ -71,7 +89,9 @@ test('puts the grid role on main and names it, against the real DataGrid', async
   // The end state this hook exists to produce. Against the real component
   // because the value is in MUI's ariaV7 wiring plus ours, not ours alone.
   function Grid() {
-    const accessibleGrid = useAccessibleGrid()
+    const accessibleGrid = useAccessibleGrid({
+      ensureScrollableContentFocusable: true,
+    })
     return (
       <DataGrid
         {...accessibleGrid}
@@ -88,6 +108,14 @@ test('puts the grid role on main and names it, against the real DataGrid', async
   await waitFor(() => expect(main).toHaveAttribute('aria-label', 'Users'))
   expect(main).toHaveAttribute('role', 'grid')
   expect(main).toHaveAttribute('aria-colcount', '1')
+  await waitFor(() =>
+    expect(
+      container.querySelector('.MuiDataGrid-virtualScroller [role="gridcell"]')
+    ).toHaveAttribute('tabindex', '0')
+  )
+  expect(
+    container.querySelector('.MuiDataGrid-virtualScroller')
+  ).not.toHaveAttribute('tabindex')
 
   // The toolbar and the pagination footer live out here, which is the whole
   // reason the grid role may not sit on the root.

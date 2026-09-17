@@ -130,7 +130,9 @@ function CompactDatePicker({
  */
 export default function EventsTable() {
   const navigate = useNavigate()
-  const accessibleGrid = useAccessibleGrid()
+  const accessibleGrid = useAccessibleGrid({
+    ensureScrollableContentFocusable: true,
+  })
   const { userInfo, fismaSystems } = useContextProp()
   const canAccess = hasUnscopedRead(userInfo)
 
