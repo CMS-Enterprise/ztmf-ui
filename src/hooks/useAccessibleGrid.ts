@@ -30,27 +30,56 @@ const LABEL_ATTRIBUTES = ['aria-label', 'aria-labelledby']
  * without this the grid ends up anonymous.
  * @returns {object} Props to spread onto `<DataGrid>`.
  */
-export default function useAccessibleGrid() {
+export default function useAccessibleGrid({
+  ensureScrollableContentFocusable = false,
+}: {
+  ensureScrollableContentFocusable?: boolean
+} = {}) {
   // Callback ref, not useRef: GridRoot renders null on its first pass and
   // mounts on the second, so an effect keyed off a ref object would run before
   // the element exists and never re-run.
   const [root, setRoot] = useState<HTMLDivElement | null>(null)
 
   useEffect(() => {
-    const main = root?.querySelector<HTMLElement>('.MuiDataGrid-main')
-    if (!root || !main) return
+    if (!root) return
 
-    // Read once: every grid here names itself with a literal. A grid that ever
-    // renames itself mid-session would need this watched.
-    LABEL_ATTRIBUTES.forEach((name) => {
-      const value = root.getAttribute(name)
-      if (value === null) return
-      main.setAttribute(name, value)
-      // Left behind it is a prohibited attribute on a generic element, and a
-      // second answer to "what is this grid called".
-      root.removeAttribute(name)
-    })
-  }, [root])
+    // Every grid here uses a literal name. Capture it before removing it from
+    // the generic root so it can be restored if MUI rebuilds its internal DOM.
+    const labels = LABEL_ATTRIBUTES.map(
+      (name) => [name, root.getAttribute(name)] as const
+    )
+    const enhanceGrid = () => {
+      const main = root.querySelector<HTMLElement>('.MuiDataGrid-main')
+      if (!main) return
+
+      if (ensureScrollableContentFocusable) {
+        const virtualScroller = main.querySelector<HTMLElement>(
+          '.MuiDataGrid-virtualScroller'
+        )
+        if (
+          virtualScroller &&
+          !virtualScroller.querySelector('[tabindex="0"]')
+        ) {
+          virtualScroller
+            .querySelector<HTMLElement>('[role="gridcell"]')
+            ?.setAttribute('tabindex', '0')
+        }
+      }
+
+      labels.forEach(([name, value]) => {
+        if (value === null) return
+        main.setAttribute(name, value)
+        // Left behind it is a prohibited attribute on a generic element, and
+        // a second answer to "what is this grid called".
+        root.removeAttribute(name)
+      })
+    }
+
+    enhanceGrid()
+    const observer = new MutationObserver(enhanceGrid)
+    observer.observe(root, { childList: true, subtree: true })
+    return () => observer.disconnect()
+  }, [ensureScrollableContentFocusable, root])
 
   return { ref: setRoot, experimentalFeatures: EXPERIMENTAL_FEATURES }
 }
