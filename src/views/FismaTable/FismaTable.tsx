@@ -201,6 +201,15 @@ function TableToolbar({
                 inputProps={{ 'aria-label': 'Search systems' }}
               />
             </Box>
+          </Box>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 1,
+            }}
+          >
             {/* Environment facet only renders when the rows span more than one
               category - a single-value filter costs toolbar width for nothing. */}
             {envOptions.length > 1 && (
@@ -272,15 +281,6 @@ function TableToolbar({
                 />
               )}
             />
-          </Box>
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
-              gap: 1,
-            }}
-          >
             {/* Both call-scoped toggles gray out when the open call is not in
               view (ui#639): "Not updated only" is a current-cycle laggard
               signal with nothing to match, and "Open data call only" would
