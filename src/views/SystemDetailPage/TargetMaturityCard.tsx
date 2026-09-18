@@ -157,7 +157,7 @@ export default function TargetMaturityCard({
 
   return (
     <>
-      <Card variant="outlined" sx={{ mb: 3 }}>
+      <Card variant="outlined">
         <CardHeader
           title="Target Maturity Level"
           titleTypographyProps={{ variant: 'h6' }}

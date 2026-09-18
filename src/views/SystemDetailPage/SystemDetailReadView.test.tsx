@@ -76,6 +76,21 @@ function renderWithExtended(extra: Partial<FismaSystemType>) {
   )
 }
 
+test('places target maturity and extended metadata in the same layout row', () => {
+  renderWithProviders(
+    <SystemDetailReadView
+      system={{ ...BASE_SYSTEM, hva: true } as FismaSystemType}
+      decommissionedByName=""
+      opdivName="CMS"
+      targetMaturitySlot={<div>Target maturity content</div>}
+    />
+  )
+
+  const grid = screen.getByTestId('metadata-target-grid')
+  expect(grid).toContainElement(screen.getByText('Target maturity content'))
+  expect(grid).toContainElement(screen.getByText('Extended metadata'))
+})
+
 describe('extended metadata formatting', () => {
   test('renders tri-state booleans as Yes/No/Unknown, not raw values', () => {
     renderWithExtended({ hva: true, cloud_system: false, legacy: null })
