@@ -658,12 +658,11 @@ export default function SystemDetailPage() {
   const canManageDelegates = isAdmin || isISSO(userInfo)
 
   // Target maturity owns its own edit/save lifecycle (see TargetMaturityCard).
-  // The card is slotted into the right column of whichever view renders
-  // (between Data Lake Export and Organization). The card's Edit button is
-  // hidden while the page is in Edit mode so an admin can't run both
-  // edit flows at once: saving the card mid-page-edit would fire the
-  // isEditing/system useEffect and reset editedSystem, wiping any
-  // in-progress page-form edits.
+  // Read mode pairs it with Extended metadata; edit mode keeps it in the right
+  // form column. The card's Edit button is hidden while the page is in Edit
+  // mode so an admin can't run both edit flows at once: saving the card
+  // mid-page-edit would fire the isEditing/system useEffect and reset
+  // editedSystem, wiping any in-progress page-form edits.
   const targetMaturityCard = (
     <TargetMaturityCard
       system={system}

@@ -45,8 +45,8 @@ interface SystemDetailReadViewProps {
   /** Resolved full name of the user who decommissioned the system. */
   decommissionedByName?: string
   /**
-   * Target-maturity card, rendered after the detail cards. The page owns the
-   * card so its edit state is independent of this view.
+   * Target-maturity card, paired with Extended metadata when that card has
+   * content. The page owns the card so its edit state is independent.
    */
   targetMaturitySlot?: ReactNode
   /** Resolved OpDiv display name, shown next to the code badge. */
@@ -212,16 +212,33 @@ export default function SystemDetailReadView({
           />
         </Box>
       )}
-      {targetMaturitySlot && <Box sx={{ mb: 1.75 }}>{targetMaturitySlot}</Box>}
-      {hasAnyExtendedData && (
-        <Box sx={{ mb: 1.75 }}>
-          <DetailCard
-            title="Extended metadata"
-            rows={extendedFields.map((field) => ({
-              label: field.label,
-              value: formatFieldValue(field, system) || '-',
-            }))}
-          />
+      {(targetMaturitySlot || hasAnyExtendedData) && (
+        <Box
+          data-testid="metadata-target-grid"
+          sx={{
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              md:
+                targetMaturitySlot && hasAnyExtendedData
+                  ? 'minmax(0, 1fr) minmax(0, 1fr)'
+                  : '1fr',
+            },
+            alignItems: 'start',
+            gap: 1.75,
+            mb: 1.75,
+          }}
+        >
+          {targetMaturitySlot}
+          {hasAnyExtendedData && (
+            <DetailCard
+              title="Extended metadata"
+              rows={extendedFields.map((field) => ({
+                label: field.label,
+                value: formatFieldValue(field, system) || '-',
+              }))}
+            />
+          )}
         </Box>
       )}
       <InsightsSection
