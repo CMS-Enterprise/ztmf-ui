@@ -967,6 +967,16 @@ const OPDIV_ROWS = [
 describe('QuestionnairePage justification integration', () => {
   type InsightsResponse = { data: { data: unknown[] } }
 
+  // These integration tests wait for the full questionnaire to load before
+  // asserting the insights gate. CI runners can exceed RTL's 1s default while
+  // rendering that page, even though every mocked request resolves immediately.
+  beforeAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 4000 })
+  })
+  afterAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 1000 })
+  })
+
   // This block is the insights-enabled variant: SSD-EX's OpDiv (9) carries
   // insights_enabled, so the layer is expected on unless a test says otherwise.
   const insightsCtx = (overrides: Record<string, unknown> = {}) =>
