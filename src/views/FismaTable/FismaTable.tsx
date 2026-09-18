@@ -36,14 +36,14 @@ import { parseDatacallName } from '@/utils/datacallGrouping'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
-import { isNotUpdated, isOpenCallInView } from './dashboardFilters'
+import {
+  applyDashboardSearch,
+  isNotUpdated,
+  isOpenCallInView,
+} from './dashboardFilters'
 import { scoreSortValue } from './scoreHelpers'
 import { isSystemSelectable } from './rowSelection'
-import {
-  resolveRowCallId,
-  resolveQuestionnaireCall,
-  datacallNameComparator,
-} from './rowCall'
+import { resolveQuestionnaireCall } from './rowCall'
 import ScoreDisplay from '@/components/ui/ScoreDisplay'
 import { CodeBadge } from '@/components/ui/StatusChip'
 import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
@@ -67,9 +67,8 @@ function formatOpDivCode(code: string): string {
 const PAGE_SIZES = [25, 50, 100]
 
 /**
- * Card header for the systems table: the title and count on the left, with the
- * search box, environment filter, OpDiv filter, not-updated toggle and
- * decommissioned toggle on the right.
+ * Four-column card header for the systems table: title, result count, a
+ * two-row filter area, and the clear action.
  */
 function TableToolbar({
   count,
@@ -147,9 +146,11 @@ function TableToolbar({
     <>
       <Box
         sx={{
-          display: 'flex',
+          display: 'grid',
+          gridTemplateColumns:
+            'max-content max-content minmax(0, 1fr) max-content',
           alignItems: 'center',
-          gap: 1.5,
+          columnGap: 2,
           px: 2.25,
           py: 1.5,
           borderBottom: `1px solid ${colors.neutral200}`,
@@ -165,11 +166,10 @@ function TableToolbar({
         </Typography>
         <Box
           sx={{
-            marginLeft: 'auto',
-            display: 'flex',
-            alignItems: 'center',
-            flexWrap: 'wrap',
+            display: 'grid',
+            gridTemplateRows: 'repeat(2, 30px)',
             gap: 1,
+            minWidth: 0,
           }}
         >
           <Box
@@ -177,129 +177,157 @@ function TableToolbar({
               display: 'flex',
               alignItems: 'center',
               gap: 1,
-              px: 1.5,
-              height: 30,
-              border: `1px solid ${colors.neutral200}`,
-              borderRadius: `${radius.md}px`,
+              justifyContent: 'flex-end',
+              minWidth: 0,
             }}
           >
-            <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
-            <InputBase
-              placeholder="Search systems"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              sx={{ fontSize: 13, width: 150 }}
-              inputProps={{ 'aria-label': 'Search systems' }}
-            />
-          </Box>
-          {/* Environment facet only renders when the rows span more than one
-            category - a single-value filter costs toolbar width for nothing. */}
-          {envOptions.length > 1 && (
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'center',
+                gap: 1,
+                px: 1.5,
+                height: 30,
+                border: `1px solid ${colors.neutral200}`,
+                borderRadius: `${radius.md}px`,
+              }}
+            >
+              <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
+              <InputBase
+                placeholder="Search systems"
+                value={search}
+                onChange={(e) => setSearch(e.target.value)}
+                sx={{ fontSize: 13, width: 150 }}
+                inputProps={{ 'aria-label': 'Search systems' }}
+              />
+            </Box>
+            {/* Environment facet only renders when the rows span more than one
+              category - a single-value filter costs toolbar width for nothing. */}
+            {envOptions.length > 1 && (
+              <Autocomplete
+                size="small"
+                options={envOptions}
+                value={envFilter === 'all' ? null : envFilter}
+                onChange={(_event, env) => setEnvFilter(env ?? 'all')}
+                sx={{ width: 170, ...compactAutocompleteSx }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder="All environments"
+                    inputProps={{
+                      ...params.inputProps,
+                      'aria-label': 'Filter by environment',
+                    }}
+                  />
+                )}
+              />
+            )}
             <Autocomplete
               size="small"
-              options={envOptions}
-              value={envFilter === 'all' ? null : envFilter}
-              onChange={(_event, env) => setEnvFilter(env ?? 'all')}
-              sx={{ width: 170, ...compactAutocompleteSx }}
+              options={opdivs}
+              getOptionLabel={(od) => od.code}
+              isOptionEqualToValue={(option, value) =>
+                option.opdiv_id === value.opdiv_id
+              }
+              value={
+                opdivFilter === 'all'
+                  ? null
+                  : opdivs.find((od) => od.opdiv_id === opdivFilter) ?? null
+              }
+              onChange={(_event, od) =>
+                setOpDivFilter(od ? od.opdiv_id : 'all')
+              }
+              renderOption={(props, option) => {
+                const { key, ...rest } = props
+                return (
+                  <li key={key} {...rest}>
+                    <Box
+                      sx={{
+                        display: 'flex',
+                        flexDirection: 'column',
+                        width: '100%',
+                      }}
+                    >
+                      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                        {option.code}
+                      </Typography>
+                      <Typography
+                        sx={{ fontSize: 12, color: colors.neutral500 }}
+                      >
+                        {option.name}
+                      </Typography>
+                    </Box>
+                  </li>
+                )
+              }}
+              sx={{ width: 180, ...compactAutocompleteSx }}
               renderInput={(params) => (
                 <TextField
                   {...params}
-                  placeholder="All environments"
+                  placeholder="All OpDivs"
                   inputProps={{
                     ...params.inputProps,
-                    'aria-label': 'Filter by environment',
+                    'aria-label': 'Filter by OpDiv',
                   }}
                 />
               )}
             />
-          )}
-          <Autocomplete
-            size="small"
-            options={opdivs}
-            getOptionLabel={(od) => od.code}
-            isOptionEqualToValue={(option, value) =>
-              option.opdiv_id === value.opdiv_id
-            }
-            value={
-              opdivFilter === 'all'
-                ? null
-                : opdivs.find((od) => od.opdiv_id === opdivFilter) ?? null
-            }
-            onChange={(_event, od) => setOpDivFilter(od ? od.opdiv_id : 'all')}
-            renderOption={(props, option) => {
-              const { key, ...rest } = props
-              return (
-                <li key={key} {...rest}>
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      flexDirection: 'column',
-                      width: '100%',
-                    }}
-                  >
-                    <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
-                      {option.code}
-                    </Typography>
-                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                      {option.name}
-                    </Typography>
-                  </Box>
-                </li>
-              )
+          </Box>
+          <Box
+            sx={{
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 1,
             }}
-            sx={{ width: 180, ...compactAutocompleteSx }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                placeholder="All OpDivs"
-                inputProps={{
-                  ...params.inputProps,
-                  'aria-label': 'Filter by OpDiv',
-                }}
-              />
-            )}
-          />
-          {/* Both call-scoped toggles gray out when the open call is not in
-            view (ui#639): "Not updated only" is a current-cycle laggard
-            signal with nothing to match, and "Open data call only" would
-            empty the grid. The span wrappers keep the tooltips firing on the
-            disabled controls. */}
-          <Tooltip title={callScopeHint}>
-            <span>
-              <CompactSwitchLabel
-                checked={openCallOnly}
-                onChange={setOpenCallOnly}
-                label="Open data call only"
-                disabled={!openCallInView}
-              />
-            </span>
-          </Tooltip>
-          <Tooltip title={callScopeHint}>
-            <span>
-              <CompactSwitchLabel
-                checked={notUpdatedOnly}
-                onChange={setNotUpdatedOnly}
-                label="Not updated only"
-                disabled={!openCallInView}
-              />
-            </span>
-          </Tooltip>
-          <CompactSwitchLabel
-            checked={showDecommissioned}
-            onChange={setShowDecommissioned}
-            label="Show decommissioned"
-          />
-          <Button
-            variant="text"
-            color="primary"
-            size="small"
-            onClick={handleClearAll}
-            disabled={!hasActiveFilters}
-            sx={{ fontSize: 13, fontWeight: 600, textTransform: 'none' }}
           >
-            Clear filters
-          </Button>
+            {/* Both call-scoped toggles gray out when the open call is not in
+              view (ui#639): "Not updated only" is a current-cycle laggard
+              signal with nothing to match, and "Open data call only" would
+              empty the grid. The span wrappers keep the tooltips firing on the
+              disabled controls. */}
+            <Tooltip title={callScopeHint}>
+              <span>
+                <CompactSwitchLabel
+                  checked={openCallOnly}
+                  onChange={setOpenCallOnly}
+                  label="Open data call only"
+                  disabled={!openCallInView}
+                />
+              </span>
+            </Tooltip>
+            <Tooltip title={callScopeHint}>
+              <span>
+                <CompactSwitchLabel
+                  checked={notUpdatedOnly}
+                  onChange={setNotUpdatedOnly}
+                  label="Not updated only"
+                  disabled={!openCallInView}
+                />
+              </span>
+            </Tooltip>
+            <CompactSwitchLabel
+              checked={showDecommissioned}
+              onChange={setShowDecommissioned}
+              label="Show decommissioned"
+            />
+          </Box>
         </Box>
+        <Button
+          variant="text"
+          color="primary"
+          size="small"
+          onClick={handleClearAll}
+          disabled={!hasActiveFilters}
+          sx={{
+            justifySelf: 'end',
+            fontSize: 13,
+            fontWeight: 600,
+            textTransform: 'none',
+          }}
+        >
+          Clear filters
+        </Button>
       </Box>
       {/* Toolbar-row captions crowd the filter cluster and wrap it (ui#639),
           so the call-scope notice renders as its own slim banner between the
@@ -395,10 +423,8 @@ export default function FismaTable({
   // not-updated filter) only makes sense then; a past/closed call shows a
   // neutral Complete/Incomplete chip instead (ztmf#537). Rows without a chosen
   // call, or before latestDataCallId has loaded, keep the current rendering.
-  // Agrees with resolveRowCallId (the Data Call column) by construction:
   // buildDashboardMaps fills chosenCallMap and systemCallMap for the same key
-  // set, so a row is grayed iff its column names a non-open call. Keep the
-  // two in step if either resolution changes.
+  // set, so this state also drives the questionnaire action and export target.
   const isRowCurrentCall = useCallback(
     (fismasystemid: number): boolean => {
       const chosen = chosenCallMap[fismasystemid]
@@ -421,20 +447,6 @@ export default function FismaTable({
     latestDeadlinePassed,
     activeDatacallIds
   )
-  const callById = useMemo(
-    () => new Map(datacalls.map((d) => [d.datacallid, d])),
-    [datacalls]
-  )
-  // Sort key for the Data Call column: call names do not sort chronologically
-  // ("FY2025 Q3" vs "FY25 ZTM"), so the column orders by deadline instead.
-  const deadlineByCallName = useMemo(
-    () =>
-      new Map(
-        datacalls.map((d) => [d.datacall, new Date(d.deadline).getTime()])
-      ),
-    [datacalls]
-  )
-
   // The call-scoped facets only mean something while the open call is in
   // view (their switches gray out otherwise). Drop any stored true when it is
   // not, so a year-picker move to a historical group, or a /datacalls refetch
@@ -527,41 +539,43 @@ export default function FismaTable({
     }
   }, [envFilter, envOptions])
 
-  const rows = useMemo(
-    () =>
-      fismaSystems.filter((s) => {
-        if (openCallOnly && !isRowCurrentCall(s.fismasystemid)) return false
-        if (opdivFilter !== 'all' && s.opdiv_id !== opdivFilter) return false
-        if (
-          envFilter !== 'all' &&
-          envLabel(s.datacenterenvironment) !== envFilter
+  const rows = useMemo(() => {
+    const facetFilteredRows = fismaSystems.filter((s) => {
+      if (openCallOnly && !isRowCurrentCall(s.fismasystemid)) return false
+      if (opdivFilter !== 'all' && s.opdiv_id !== opdivFilter) return false
+      if (
+        envFilter !== 'all' &&
+        envLabel(s.datacenterenvironment) !== envFilter
+      )
+        return false
+      if (
+        notUpdatedOnly &&
+        !isNotUpdated(
+          progress?.[s.fismasystemid],
+          isRowCurrentCall(s.fismasystemid)
         )
-          return false
-        if (
-          notUpdatedOnly &&
-          !isNotUpdated(
-            progress?.[s.fismasystemid],
-            isRowCurrentCall(s.fismasystemid)
-          )
-        )
-          return false
-        return true
-      }),
-    [
-      fismaSystems,
-      opdivFilter,
-      envFilter,
-      envLabel,
-      notUpdatedOnly,
-      openCallOnly,
-      progress,
-      isRowCurrentCall,
-    ]
-  )
+      )
+        return false
+      return true
+    })
 
-  const quickFilterValues = dashboardSearch.trim()
-    ? dashboardSearch.trim().split(/\s+/)
-    : []
+    return applyDashboardSearch(
+      facetFilteredRows,
+      dashboardSearch,
+      opdivCodeMap
+    )
+  }, [
+    fismaSystems,
+    opdivFilter,
+    envFilter,
+    envLabel,
+    notUpdatedOnly,
+    openCallOnly,
+    progress,
+    isRowCurrentCall,
+    dashboardSearch,
+    opdivCodeMap,
+  ])
 
   const columns: GridColDef[] = [
     {
@@ -571,8 +585,6 @@ export default function FismaTable({
       minWidth: 240,
       hideable: false,
       renderCell: (params: GridRenderCellParams) => {
-        // Subtitle pulls from mission/component only - datacenterenvironment
-        // has its own column, so showing it here would duplicate.
         const subtitle = params.row.mission || params.row.component || ''
         return (
           <Box>
@@ -652,25 +664,9 @@ export default function FismaTable({
         params.value ? <CodeBadge code={String(params.value)} /> : null,
     },
     {
-      field: 'datacenterenvironment',
-      headerName: 'Data center',
-      flex: 1,
-      minWidth: 130,
-      // Sort/search on the reporting category (what the cell shows), not the
-      // raw legacy value.
-      valueGetter: (params) => envLabel(params.row.datacenterenvironment),
-      renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, color: colors.neutral700 }}>
-          {envLabel(params.row.datacenterenvironment) || '-'}
-        </Typography>
-      ),
-    },
-    {
       field: 'Score',
       headerName: 'Zero Trust Score',
       type: 'number',
-      // Stacked tier-over-bar layout roughly halves the footprint the old
-      // inline row needed; the freed width goes to the Data Call column.
       width: 150,
       align: 'left',
       headerAlign: 'left',
@@ -680,40 +676,6 @@ export default function FismaTable({
         const entry = scores[params.row.fismasystemid]
         return <ScoreDisplay score={entry?.score} tier={entry?.tier} stacked />
       },
-    },
-    {
-      // Which call the row is displaying (ui#639), named plainly so a
-      // past-call row is identifiable and quick-searchable without relying
-      // on the grayed styling.
-      field: 'rowdatacall',
-      headerName: 'Data Call',
-      // Renders as the column-header tooltip: the resolution is not obvious
-      // from the name (it is not simply "last completed call").
-      description:
-        "The data call this row's score and progress are shown from: the system's most recently updated call among the selected calls, or the newest selected call for a system with no data in them.",
-      // Flexes into the width the stacked Score column freed; call names
-      // like "FY2020 Imperial Archives Import" were truncating at 130px.
-      flex: 1,
-      minWidth: 170,
-      align: 'center',
-      headerAlign: 'center',
-      valueGetter: (value) =>
-        callById.get(
-          resolveRowCallId(
-            value.row.fismasystemid,
-            chosenCallMap,
-            systemCallMap,
-            datacalls,
-            activeDataCallId,
-            activeDatacallIds
-          )
-        )?.datacall ?? '',
-      renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, color: colors.neutral700 }}>
-          {params.value || '-'}
-        </Typography>
-      ),
-      sortComparator: datacallNameComparator(deadlineByCallName),
     },
     {
       // Questionnaire progress for the row's data call (ztmf#299). The
@@ -929,7 +891,6 @@ export default function FismaTable({
           // built-in filter popup conflicts with the CMS DSG global styles
           // (overlapping labels). Disable it on every column.
           disableColumnMenu
-          filterModel={{ items: [], quickFilterValues }}
           initialState={{
             pagination: { paginationModel: { pageSize: 25, page: 0 } },
           }}
@@ -963,7 +924,7 @@ export default function FismaTable({
             '& .past-call-row .MuiDataGrid-cell': {
               color: colors.neutral500,
             },
-            '& .past-call-row [data-field="fismaacronym"] .MuiTypography-root, & .past-call-row [data-field="isso_name"] .MuiTypography-root, & .past-call-row [data-field="datacenterenvironment"] .MuiTypography-root, & .past-call-row [data-field="rowdatacall"] .MuiTypography-root, & .past-call-row [data-field="fismaname"] .MuiTypography-root':
+            '& .past-call-row [data-field="fismaacronym"] .MuiTypography-root, & .past-call-row [data-field="isso_name"] .MuiTypography-root, & .past-call-row [data-field="fismaname"] .MuiTypography-root':
               {
                 color: colors.neutral500,
               },

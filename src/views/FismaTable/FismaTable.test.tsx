@@ -10,6 +10,8 @@ jest.mock('@/axiosConfig', () => ({
 
 import FismaTable from './FismaTable'
 
+let mockDashboardSearch = ''
+
 // Provide just enough context for the table to render one system row.
 jest.mock('../Title/Context', () => ({
   useContextProp: () => ({
@@ -23,10 +25,22 @@ jest.mock('../Title/Context', () => ({
         decommissioned: false,
         opdiv_id: 5,
       },
+      {
+        fismasystemid: 2,
+        fismaname: 'Death Star',
+        fismaacronym: 'DS',
+        fismauid: 'DS-001',
+        mission: 'Orbital battle station',
+        decommissioned: false,
+        opdiv_id: 7,
+      },
     ],
     userInfo: { role: 'OWNER' },
     // The OpDiv code column resolves ids against this shared context list.
-    opdivs: [{ opdiv_id: 5, code: 'CMS', name: 'CMS', active: true }],
+    opdivs: [
+      { opdiv_id: 5, code: 'CMS', name: 'CMS', active: true },
+      { opdiv_id: 7, code: 'HHS', name: 'HHS', active: true },
+    ],
     latestDataCallId: 5,
     selectedDatacall: null,
     activeDatacallIds: [],
@@ -34,12 +48,16 @@ jest.mock('../Title/Context', () => ({
     datacenterEnvironments: [],
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
-    dashboardSearch: '',
+    dashboardSearch: mockDashboardSearch,
     setDashboardSearch: jest.fn(),
   }),
 }))
 
 describe('FismaTable', () => {
+  beforeEach(() => {
+    mockDashboardSearch = ''
+  })
+
   // Smoke test that the table renders a row from the systems list. The score
   // cell renders <ScoreDisplay>, which is unit-tested separately; the grid's
   // column virtualization makes asserting far-right cells unreliable under
@@ -56,5 +74,39 @@ describe('FismaTable', () => {
     // FISMA UID column was dropped in the redesign; Acronym replaces it
     // as the per-row identifier on the leftmost stripe of cells.
     expect(screen.getByText('ISD')).toBeInTheDocument()
+  })
+
+  it('does not render Data center or Data Call columns', async () => {
+    render(
+      <MemoryRouter>
+        <FismaTable scores={{}} />
+      </MemoryRouter>
+    )
+
+    expect(
+      await screen.findByRole('columnheader', { name: 'System' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Data center' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Data Call' })
+    ).not.toBeInTheDocument()
+  })
+
+  it('counts only rows matching the current search', async () => {
+    mockDashboardSearch = 'death'
+
+    render(
+      <MemoryRouter>
+        <FismaTable scores={{}} />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByText('1 system')).toBeInTheDocument()
+    expect(screen.getByText('Death Star')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Imperial Star Destroyer')
+    ).not.toBeInTheDocument()
   })
 })
