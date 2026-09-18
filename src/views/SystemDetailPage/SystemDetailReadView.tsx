@@ -19,6 +19,7 @@ import {
   formatList,
   isCrossFieldHidden,
 } from '@/utils/systemMetadataVocab'
+import SystemDetailCard from './SystemDetailCard'
 
 /**
  * Highest possible zero trust score on the user-facing scale, used to
@@ -224,7 +225,7 @@ export default function SystemDetailReadView({
                   ? 'minmax(0, 1fr) minmax(0, 1fr)'
                   : '1fr',
             },
-            alignItems: 'start',
+            alignItems: 'stretch',
             gap: 1.75,
             mb: 1.75,
           }}
@@ -233,6 +234,7 @@ export default function SystemDetailReadView({
           {hasAnyExtendedData && (
             <DetailCard
               title="Extended metadata"
+              twoColumnRows
               rows={extendedFields.map((field) => ({
                 label: field.label,
                 value: formatFieldValue(field, system) || '-',
@@ -518,34 +520,23 @@ function TrendLine({
 function DetailCard({
   title,
   rows,
+  twoColumnRows = false,
 }: {
   title: string
   rows: { label: string; value: ReactNode }[]
+  twoColumnRows?: boolean
 }) {
   return (
-    <Box
-      sx={{
-        backgroundColor: colors.white,
-        border: `1px solid ${colors.neutral200}`,
-        borderRadius: `${radius.card}px`,
-        p: 2.25,
-      }}
-    >
-      <Typography
-        component="h2"
-        sx={{
-          fontSize: 14,
-          fontWeight: 700,
-          color: colors.ink,
-          mb: 1.5,
-        }}
-      >
-        {title}
-      </Typography>
+    <SystemDetailCard title={title}>
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns: '130px 1fr',
+          gridTemplateColumns: twoColumnRows
+            ? {
+                xs: '130px minmax(0, 1fr)',
+                lg: 'minmax(100px, 0.75fr) minmax(0, 1fr) minmax(100px, 0.75fr) minmax(0, 1fr)',
+              }
+            : '130px minmax(0, 1fr)',
           gap: '8px 14px',
           fontSize: 13,
         }}
@@ -559,7 +550,7 @@ function DetailCard({
           </Box>
         ))}
       </Box>
-    </Box>
+    </SystemDetailCard>
   )
 }
 

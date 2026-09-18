@@ -2,9 +2,6 @@ import { useState } from 'react'
 import {
   Box,
   Button,
-  Card,
-  CardContent,
-  CardHeader,
   Chip,
   MenuItem,
   TextField,
@@ -26,6 +23,7 @@ import {
   DEFAULT_TARGET_TIER,
   TARGET_JUSTIFICATION_MAX,
 } from './targetMaturityConfig'
+import SystemDetailCard from './SystemDetailCard'
 
 const JUSTIFICATION_HELPER =
   'In one sentence, explain why this target level is appropriate for this system.'
@@ -157,114 +155,116 @@ export default function TargetMaturityCard({
 
   return (
     <>
-      <Card variant="outlined">
-        <CardHeader
-          title="Target Maturity Level"
-          titleTypographyProps={{ variant: 'h6' }}
-          subheader="Risk-based target this system's answers are compared against"
-          action={
-            canEdit && !isEditing ? (
-              <Button size="small" onClick={handleEdit}>
-                Edit
-              </Button>
-            ) : undefined
-          }
-          sx={{ pb: 0 }}
-        />
-        <CardContent sx={{ pt: 0 }}>
-          {isEditing ? (
-            <Box
-              sx={{
-                display: 'flex',
-                flexDirection: 'column',
-                gap: 2,
-                maxWidth: 640,
-              }}
-            >
-              {/* variant="standard" + marginTop:0 on the label matches
+      <SystemDetailCard
+        title="Target Maturity Level"
+        subheader="Risk-based target this system's answers are compared against"
+        action={
+          canEdit && !isEditing ? (
+            <Button size="small" onClick={handleEdit}>
+              Edit
+            </Button>
+          ) : undefined
+        }
+      >
+        {isEditing ? (
+          <Box
+            sx={{
+              display: 'flex',
+              flexDirection: 'column',
+              gap: 2,
+              maxWidth: 640,
+            }}
+          >
+            {/* variant="standard" + marginTop:0 on the label matches
                   SystemDetailEditView: the CMS design-system global CSS breaks
                   MUI's outlined floating label (it overlays the value). */}
-              <TextField
-                select
-                label="Target level"
-                variant="standard"
-                value={tier}
-                onChange={(e) => setTier(e.target.value)}
-                InputLabelProps={{ sx: { marginTop: 0 } }}
-                inputProps={{ 'aria-label': 'Target level' }}
+            <TextField
+              select
+              label="Target level"
+              variant="standard"
+              value={tier}
+              onChange={(e) => setTier(e.target.value)}
+              InputLabelProps={{ sx: { marginTop: 0 } }}
+              inputProps={{ 'aria-label': 'Target level' }}
+            >
+              {TIER_OPTIONS.map((o) => (
+                <MenuItem key={o.value} value={o.value}>
+                  {o.label}
+                </MenuItem>
+              ))}
+            </TextField>
+            <TextField
+              label="Justification"
+              variant="standard"
+              required
+              multiline
+              minRows={2}
+              value={justification}
+              onChange={(e) => setJustification(e.target.value)}
+              helperText={
+                justificationTooLong
+                  ? `Must be ${TARGET_JUSTIFICATION_MAX} characters or fewer`
+                  : JUSTIFICATION_HELPER
+              }
+              error={justificationTooLong || justificationMissing}
+              InputLabelProps={{ sx: { marginTop: 0 } }}
+              inputProps={{ 'aria-label': 'Justification' }}
+            />
+            <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
+              <Button
+                onClick={handleCancel}
+                disabled={isSaving}
+                color="inherit"
               >
-                {TIER_OPTIONS.map((o) => (
-                  <MenuItem key={o.value} value={o.value}>
-                    {o.label}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <TextField
-                label="Justification"
-                variant="standard"
-                required
-                multiline
-                minRows={2}
-                value={justification}
-                onChange={(e) => setJustification(e.target.value)}
-                helperText={
-                  justificationTooLong
-                    ? `Must be ${TARGET_JUSTIFICATION_MAX} characters or fewer`
-                    : JUSTIFICATION_HELPER
-                }
-                error={justificationTooLong || justificationMissing}
-                InputLabelProps={{ sx: { marginTop: 0 } }}
-                inputProps={{ 'aria-label': 'Justification' }}
-              />
-              <Box sx={{ display: 'flex', gap: 1, justifyContent: 'flex-end' }}>
-                <Button
-                  onClick={handleCancel}
-                  disabled={isSaving}
-                  color="inherit"
-                >
-                  Cancel
-                </Button>
-                <Button
-                  variant="contained"
-                  onClick={handleSave}
-                  disabled={!isSavable}
-                >
-                  {isSaving ? 'Saving...' : 'Save'}
-                </Button>
-              </Box>
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                onClick={handleSave}
+                disabled={!isSavable}
+              >
+                {isSaving ? 'Saving...' : 'Save'}
+              </Button>
             </Box>
-          ) : (
-            <Box>
-              <Box
-                sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}
-              >
-                <Chip
-                  label={tierLabel(
-                    system.target_maturity_tier ?? DEFAULT_TARGET_TIER
-                  )}
-                  color="primary"
-                  size="small"
-                />
-                {!hasExplicitTarget && (
-                  <Typography variant="caption" color="text.secondary">
-                    Default — no target has been set for this system yet
-                  </Typography>
+          </Box>
+        ) : (
+          <Box
+            sx={{
+              minHeight: '100%',
+              display: 'flex',
+              flexDirection: 'column',
+              justifyContent: 'center',
+            }}
+          >
+            <Box
+              sx={{ display: 'flex', alignItems: 'center', gap: 1, mb: 2.5 }}
+            >
+              <Chip
+                label={tierLabel(
+                  system.target_maturity_tier ?? DEFAULT_TARGET_TIER
                 )}
-              </Box>
-              {hasExplicitTarget && (
-                <Box>
-                  <Typography variant="caption" color="text.secondary">
-                    Justification
-                  </Typography>
-                  <Typography variant="body1">
-                    {system.target_maturity_justification || '—'}
-                  </Typography>
-                </Box>
+                color="primary"
+                size="small"
+              />
+              {!hasExplicitTarget && (
+                <Typography variant="caption" color="text.secondary">
+                  Default — no target has been set for this system yet
+                </Typography>
               )}
             </Box>
-          )}
-        </CardContent>
-      </Card>
+            {hasExplicitTarget && (
+              <Box>
+                <Typography variant="caption" color="text.secondary">
+                  Justification
+                </Typography>
+                <Typography variant="body1">
+                  {system.target_maturity_justification || '—'}
+                </Typography>
+              </Box>
+            )}
+          </Box>
+        )}
+      </SystemDetailCard>
       <ConfirmDialog
         confirmationText={CONFIRMATION_MESSAGE}
         open={openConfirmDialog}

@@ -65,6 +65,9 @@ beforeEach(() => {
 
 test('no target set renders the Advanced default with the default caption', () => {
   renderCard({ canEdit: false })
+  expect(
+    screen.getByRole('heading', { level: 2, name: 'Target Maturity Level' })
+  ).toBeInTheDocument()
   expect(screen.getByText('3 — Advanced (default)')).toBeInTheDocument()
   expect(
     screen.getByText(/Default — no target has been set/)
