@@ -1,17 +1,16 @@
-import { fireEvent, render, screen } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import SystemDetailHeader from './SystemDetailHeader'
 
 // Cross-navigation coverage for ui#609: System Info needs a link to the
-// system's questionnaire. The questionnaire route is keyed on :fismaacronym
-// while this page is routed by :fismasystemid, so the acronym is passed in.
-// Acronyms are not unique, so an in-app click also carries the fismasystemid
-// in route state and the questionnaire opens this exact system.
+// system's questionnaire. Both routes are keyed on :fismasystemid (#732), so
+// the link is a plain anchor with no route state: acronyms are not unique and
+// change on rename, and the id form opens this exact system from any click
+// shape, including open-in-new-tab and a pasted copy of the link.
 
 const BASE_PROPS = {
   systemName: 'Super Star Destroyer Executor Command Systems',
   fismasystemid: 1002,
-  fismaacronym: 'SSD-EX',
   canEdit: false,
   isEditing: false,
   isSaving: false,
@@ -31,7 +30,7 @@ function renderHeader(props: Partial<typeof BASE_PROPS> = {}) {
         element: <SystemDetailHeader {...BASE_PROPS} {...props} />,
       },
       {
-        path: '/questionnaire/:fismaacronym',
+        path: '/questionnaire/system/:fismasystemid',
         element: <div>questionnaire</div>,
       },
       { path: '/', element: <div>dashboard</div> },
@@ -51,37 +50,23 @@ it('renders Questionnaire as a link, not a bare button', () => {
   expect(link.tagName).toBe('A')
 })
 
-it('targets the questionnaire keyed on the lowercased acronym', () => {
+it('targets the questionnaire keyed on the fismasystemid', () => {
   renderHeader()
-  // Lowercased to match the URL shape the dashboard's own questionnaire action
-  // builds (FismaTable openQuestionnaire), so both entry points share one link.
-  // Bare acronym with no trailing segments: the omitted datacall is what makes
-  // QuestionnairePage resolve the cycle itself, and pinning one from here would
-  // fix the wrong call.
+  // Same URL shape the dashboard's questionnaire action builds (FismaTable
+  // openQuestionnaire), so both entry points share one link. Bare id with no
+  // trailing segments: the omitted datacall is what makes QuestionnairePage
+  // resolve the cycle itself, and pinning one from here would fix the wrong
+  // call.
   expect(
     screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
-  ).toBe('/questionnaire/ssd-ex')
+  ).toBe('/questionnaire/system/1002')
 })
 
-it('carries the fismasystemid in route state on a plain click', () => {
-  const router = renderHeader()
-  fireEvent.click(screen.getByRole('link', { name: 'Questionnaire' }))
-  expect(router.state.location.pathname).toBe('/questionnaire/ssd-ex')
-  // The id, not the acronym, is what QuestionnairePage keys the system on
-  // when several systems share an acronym.
-  expect(router.state.location.state).toEqual({ fismasystemid: 1002 })
-})
-
-it('leaves a modified click to the anchor so open-in-new-tab still works', () => {
-  const router = renderHeader()
-  const link = screen.getByRole('link', { name: 'Questionnaire' })
-  // jsdom has no navigation; swallow the anchor default so the un-intercepted
-  // click is observable only as the router NOT moving.
-  link.addEventListener('click', (e) => e.preventDefault())
-  fireEvent.click(link, { metaKey: true })
-  fireEvent.click(link, { ctrlKey: true })
-  fireEvent.click(link, { button: 1 })
-  expect(router.state.location.pathname).toBe('/systems/1002')
+it('never puts the acronym in the link, so a rename or a slash cannot break it', () => {
+  renderHeader({ systemName: 'Alliance/Fleet Comms' })
+  expect(
+    screen.getByRole('link', { name: 'Questionnaire' }).getAttribute('href')
+  ).toBe('/questionnaire/system/1002')
 })
 
 it('shows Questionnaire alongside Edit for an editor', () => {

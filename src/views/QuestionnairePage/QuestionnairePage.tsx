@@ -32,7 +32,6 @@ import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
-import { RouteNames } from '@/router/constants'
 import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
@@ -87,10 +86,11 @@ import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
   toSlug,
   encodeDatacallSlug,
-  resolveSystemIdByAcronym,
   findSystemsByAcronym,
   resolveDatacallBySlug,
   resolveFunctionTarget,
+  parseSystemIdParam,
+  questionnairePath,
 } from './deepLink'
 type Category = {
   name: string
@@ -155,6 +155,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     fismaSystems,
+    fismaSystemsLoaded,
     datacalls,
     opdivs,
     opdivsLoaded,
@@ -338,27 +339,27 @@ export default function QuestionnarePage() {
   const location = useLocation()
   // `function` is a reserved word, so the :function route param is aliased.
   const {
-    fismaacronym,
+    fismasystemid: systemParam,
+    fismaacronym: legacyAcronym,
     datacallid: datacallSlug,
     pillar: pillarSlug,
     function: functionSlug,
   } = useParams()
 
-  // Direct/bookmarked navigation to /questionnaire/<acronym> has a null
-  // location.state. On such a cold load (paste / refresh / bookmark) fall back
-  // to resolving :fismaacronym against the systems list the app already loads,
-  // so the questionnaire is self-addressable (#500). In-app navigation keeps
-  // carrying the id in location.state, which takes precedence.
-  const stateSystem = location.state?.fismasystemid as number | undefined
-  const resolvedSystem = React.useMemo(
-    () => resolveSystemIdByAcronym(fismaSystems, fismaacronym),
-    [fismaSystems, fismaacronym]
-  )
+  // The route is keyed on fismasystemid (#732), the same key the System Detail
+  // page uses, so a link always opens the system it was generated from: the
+  // acronym is free text, not unique, changes on rename, and may contain a
+  // slash. The id lives under a static `system` segment; the legacy acronym
+  // route (Routes.QUESTIONNAIRE_LEGACY) renders this same page with
+  // :fismaacronym set instead, and is handled by the redirect effect below
+  // rather than resolved into a system here. The two shapes never overlap, so
+  // an all-digit acronym cannot be mistaken for an id.
+  const routeSystemId = parseSystemIdParam(systemParam)
   // The context list holds active systems only, so a deep link to a
   // decommissioned system would read as "not found" and mislead (its real
-  // state is "no questionnaire available"). When the acronym misses the active
-  // list, lazily fetch the decommissioned list once and retry against it.
-  // null = not fetched; [] = fetched (empty or failed).
+  // state is "no questionnaire available"). When the id (or legacy acronym)
+  // misses the active list, lazily fetch the decommissioned list once and
+  // retry against it. null = not fetched; [] = fetched (empty or failed).
   const [decommissionedSystems, setDecommissionedSystems] = React.useState<
     FismaSystemType[] | null
   >(null)
@@ -377,16 +378,30 @@ export default function QuestionnarePage() {
       ),
     [opdivs]
   )
-  const resolvedDecommissioned = React.useMemo(
-    () => resolveSystemIdByAcronym(decommissionedSystems ?? [], fismaacronym),
-    [decommissionedSystems, fismaacronym]
+  // The system is resolved by id from the lists the app loads (active, then
+  // decommissioned), never from route state: the id in the URL is the whole
+  // address, so refresh, paste and open-in-new-tab all land on the same system.
+  const systemInfo = React.useMemo(
+    () =>
+      routeSystemId === undefined
+        ? undefined
+        : fismaSystems.find((s) => s.fismasystemid === routeSystemId) ??
+          decommissionedSystems?.find((s) => s.fismasystemid === routeSystemId),
+    [fismaSystems, decommissionedSystems, routeSystemId]
   )
-  const system = stateSystem ?? resolvedSystem ?? resolvedDecommissioned
+  const system = systemInfo?.fismasystemid
+  // Legacy acronym links: every active-list match. One match redirects to the
+  // id form; the decommissioned list is only consulted when there is none.
+  const legacyActiveMatches = React.useMemo(
+    () => findSystemsByAcronym(fismaSystems, legacyAcronym),
+    [fismaSystems, legacyAcronym]
+  )
   React.useEffect(() => {
     if (
       system !== undefined ||
-      fismaSystems.length === 0 ||
-      !fismaacronym ||
+      !fismaSystemsLoaded ||
+      (!systemParam && !legacyAcronym) ||
+      legacyActiveMatches.length > 0 ||
       decommissionedSystems !== null
     )
       return
@@ -407,7 +422,58 @@ export default function QuestionnarePage() {
     }
     void load()
     return () => controller.abort()
-  }, [system, fismaSystems.length, fismaacronym, decommissionedSystems])
+  }, [
+    system,
+    fismaSystemsLoaded,
+    systemParam,
+    legacyAcronym,
+    legacyActiveMatches.length,
+    decommissionedSystems,
+  ])
+  // Redirect a pre-#732 acronym bookmark to the id form once the systems list
+  // can answer. Exactly one match (active, else decommissioned) rewrites the
+  // first segment in place and keeps the datacall / pillar / function tail, so
+  // a rename can never break a bookmark again. Zero or several matches cannot
+  // name a questionnaire, so the link lands on the dashboard with the
+  // not-found warning instead of guessing (guessing is how answers were once
+  // saved against another system that shared the acronym, misc#386).
+  React.useEffect(() => {
+    if (!legacyAcronym || !fismaSystemsLoaded) return
+    const matches =
+      legacyActiveMatches.length > 0
+        ? legacyActiveMatches
+        : decommissionedSystems === null
+          ? null
+          : findSystemsByAcronym(decommissionedSystems, legacyAcronym)
+    if (matches === null) return
+    if (matches.length === 1) {
+      navigate(
+        questionnairePath(
+          matches[0].fismasystemid,
+          datacallSlug,
+          pillarSlug,
+          functionSlug
+        ),
+        { state: location.state, replace: true }
+      )
+      return
+    }
+    notify(
+      `Could not find a system matching “${legacyAcronym}”. It may not exist, or you may not have access to it.`,
+      'warning'
+    )
+    navigate('/', { replace: true })
+  }, [
+    legacyAcronym,
+    legacyActiveMatches,
+    fismaSystemsLoaded,
+    decommissionedSystems,
+    navigate,
+    datacallSlug,
+    pillarSlug,
+    functionSlug,
+    location.state,
+  ])
   // Deep-link URL params, read via refs inside the data-fetch effect so honoring
   // them doesn't enroll them as effect deps (which would refetch on every
   // in-survey question change, since those rewrite :pillar/:function).
@@ -442,10 +508,7 @@ export default function QuestionnarePage() {
     datacall?: string
     deadline?: string
   }>({})
-  const systemInfo =
-    fismaSystems.find((s) => s.fismasystemid === system) ??
-    decommissionedSystems?.find((s) => s.fismasystemid === system)
-  const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
+  const systemName = systemInfo?.fismaname ?? ''
 
   // Fetch ZTMF Insights for this system once (not per question — one call
   // returns every question's row). The initial lookup briefly blocks submission
@@ -735,13 +798,15 @@ export default function QuestionnarePage() {
     // questionId change that never fires, stranding the spinner.
     if (entry.functionid === questionId) return
     const q = questions[entry.functionid]
-    if (q) {
+    if (q && system !== undefined) {
       navigate(
-        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
-        {
-          state: { fismasystemid: system, ...datacallStateRef.current },
-          replace: true,
-        }
+        questionnairePath(
+          system,
+          datacall,
+          toSlug(q.pillar),
+          toSlug(q.function)
+        ),
+        { state: datacallStateRef.current, replace: true }
       )
     }
     handleListItemClick(entry.functionid)
@@ -981,11 +1046,13 @@ export default function QuestionnarePage() {
               setStepFunctionId(sortedFuncId)
               setCategories(categoriesData)
               navigate(
-                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(targetPillarName)}/${toSlug(targetFunctionName)}`,
-                {
-                  state: { fismasystemid: system, ...datacallStateRef.current },
-                  replace: true,
-                }
+                questionnairePath(
+                  system,
+                  datacall,
+                  toSlug(targetPillarName),
+                  toSlug(targetFunctionName)
+                ),
+                { state: datacallStateRef.current, replace: true }
               )
               setSelectedIndex(targetFuncId)
             }
@@ -1052,7 +1119,6 @@ export default function QuestionnarePage() {
   }, [
     system,
     navigate,
-    fismaacronym,
     routeDatacallId,
     routeDatacall,
     routeDeadline,
@@ -1445,24 +1511,26 @@ export default function QuestionnarePage() {
     selectQuestionOption,
   ])
 
-  const breadcrumbSegmentLabels = fismaacronym
-    ? { [fismaacronym]: fismaacronym.toUpperCase() }
-    : undefined
+  // The URL carries the id; the breadcrumb shows the acronym people know the
+  // system by, once it has resolved.
+  const breadcrumbSegmentLabels =
+    systemParam && systemInfo
+      ? { [systemParam]: systemInfo.fismaacronym }
+      : undefined
   if (!system) {
-    // Acronyms are not unique. A bare acronym link that matches several
-    // systems is refused rather than guessed, so the wrong questionnaire is
-    // never opened (or answered) by accident.
-    const ambiguous =
-      findSystemsByAcronym(fismaSystems, fismaacronym).length > 1 ||
-      findSystemsByAcronym(decommissionedSystems ?? [], fismaacronym).length > 1
     // Cold load (paste / refresh / bookmark): the systems list may still be in
-    // flight, so :fismaacronym can't be resolved yet — and if it missed the
-    // active list, the decommissioned list is being checked before concluding
+    // flight, so the id can't be resolved yet — and if it missed the active
+    // list, the decommissioned list is being checked before concluding
     // not-found. Show a spinner until both have answered; only then is the
-    // link genuinely unresolvable. (#500 / #524 review)
+    // link genuinely unresolvable. (#500 / #524 review) The gate is the loaded
+    // flag, not an empty list: a user with no active systems still needs the
+    // decommissioned lookup and the not-found state. A legacy acronym link
+    // always spins here: the redirect effect moves it to the id form or the
+    // dashboard.
     if (
-      !ambiguous &&
-      (fismaSystems.length === 0 || decommissionedSystems === null)
+      legacyAcronym ||
+      !fismaSystemsLoaded ||
+      decommissionedSystems === null
     ) {
       return (
         <>
@@ -1480,18 +1548,8 @@ export default function QuestionnarePage() {
         <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
         <Container maxWidth={false} disableGutters>
           <Alert severity="warning" sx={{ mt: 2 }}>
-            {ambiguous ? (
-              <>
-                More than one system uses the acronym “{fismaacronym}”, so this
-                link cannot tell which questionnaire to open. Open it from the
-                Dashboard or from the system&apos;s System Info page instead.
-              </>
-            ) : (
-              <>
-                Could not find a system matching “{fismaacronym}”. It may not
-                exist, or you may not have access to it.
-              </>
-            )}
+            Could not find a system matching “{systemParam}”. It may not exist,
+            or you may not have access to it.
           </Alert>
         </Container>
       </>
@@ -1677,12 +1735,14 @@ export default function QuestionnarePage() {
                                   setOpenAlert(true)
                                 } else {
                                   navigate(
-                                    `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
+                                    questionnairePath(
+                                      system,
+                                      datacall,
+                                      toSlug(pillar.name),
+                                      toSlug(func.function.function)
+                                    ),
                                     {
-                                      state: {
-                                        fismasystemid: system,
-                                        ...datacallStateRef.current,
-                                      },
+                                      state: datacallStateRef.current,
                                       replace: true,
                                     }
                                   )
@@ -1958,12 +2018,14 @@ export default function QuestionnarePage() {
                           if (questions[id]) {
                             const q = questions[id]
                             navigate(
-                              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                              questionnairePath(
+                                system,
+                                datacall,
+                                toSlug(q.pillar),
+                                toSlug(q.function)
+                              ),
                               {
-                                state: {
-                                  fismasystemid: system,
-                                  ...datacallStateRef.current,
-                                },
+                                state: datacallStateRef.current,
                                 replace: true,
                               }
                             )
@@ -2003,12 +2065,14 @@ export default function QuestionnarePage() {
                             if (questions[id]) {
                               const q = questions[id]
                               navigate(
-                                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                                questionnairePath(
+                                  system,
+                                  datacall,
+                                  toSlug(q.pillar),
+                                  toSlug(q.function)
+                                ),
                                 {
-                                  state: {
-                                    fismasystemid: system,
-                                    ...datacallStateRef.current,
-                                  },
+                                  state: datacallStateRef.current,
                                   replace: true,
                                 }
                               )
@@ -2107,19 +2171,15 @@ export default function QuestionnarePage() {
         onClose={() => setDiffModalOpen(false)}
         fismasystemid={system ?? 0}
         systemName={systemName}
-        systemAcronym={fismaacronym ?? ''}
+        systemAcronym={systemInfo?.fismaacronym ?? ''}
         selectedDataCallId={viewedDataCallId}
       />
-      {/* Same modal the dashboard's Pillar Scores action opens. The acronym
-          comes from the resolved system rather than the lowercased URL param so
-          the title matches the dashboard's casing. */}
+      {/* Same modal the dashboard's Pillar Scores action opens. */}
       <PillarScoresModal
         open={pillarScores.open}
         onClose={() => setPillarScores((prev) => ({ ...prev, open: false }))}
         systemName={systemName}
-        systemAcronym={
-          systemInfo?.fismaacronym ?? fismaacronym?.toUpperCase() ?? ''
-        }
+        systemAcronym={systemInfo?.fismaacronym ?? ''}
         scores={pillarScores.scores}
         selectedDataCallId={viewedDataCallId}
       />

@@ -115,6 +115,7 @@ function makeCtx(role: userData['role'] | undefined) {
     datacenterEnvironments: [],
     opdivs: [],
     opdivsLoaded: true,
+    fismaSystemsLoaded: true,
   }
 }
 
@@ -143,7 +144,7 @@ function renderPage() {
       { path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> },
       { path: '/systems/:fismasystemid', element: <div>system detail</div> },
     ],
-    { initialEntries: ['/questionnaire/ssd-ex'] }
+    { initialEntries: ['/questionnaire/system/1002'] }
   )
   const { unmount } = render(<RouterProvider router={router} />)
   return { router, unmount }
@@ -158,8 +159,8 @@ it('navigates to the system detail page keyed on fismasystemid', async () => {
   const { router } = renderPage()
   const button = await screen.findByRole('link', { name: 'System Info' })
   await userEvent.click(button)
-  // The questionnaire route carries the acronym; the detail route is keyed on
-  // the id, so this proves the acronym was resolved to 1002 before linking.
+  // Both routes are keyed on the fismasystemid (#732), so the link is a plain
+  // path swap.
   expect(router.state.location.pathname).toBe('/systems/1002')
 })
 
