@@ -93,6 +93,38 @@ export function isNotUpdated(
 }
 
 /**
+ * Apply the dashboard's free-text search to the fields still visible in the
+ * redesigned grid. Every whitespace-separated term must match at least one
+ * field, matching DataGrid quick-filter behavior while making the visible row
+ * count available outside the grid.
+ * @param {FismaSystemType[]} rows - Rows that already passed the facet filters.
+ * @param {string} search - The user's free-text query.
+ * @param {Record<number, string>} opdivCodeMap - OpDiv code keyed by opdiv_id.
+ * @returns {FismaSystemType[]} Rows matching every search term.
+ */
+export function applyDashboardSearch(
+  rows: FismaSystemType[],
+  search: string,
+  opdivCodeMap: Record<number, string>
+): FismaSystemType[] {
+  const terms = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return rows
+
+  return rows.filter((row) => {
+    const fields = [
+      row.fismaname,
+      row.fismaacronym,
+      row.mission,
+      row.component,
+      row.isso_name,
+      row.opdiv_id == null ? '' : opdivCodeMap[row.opdiv_id],
+    ].map((value) => String(value ?? '').toLocaleLowerCase())
+
+    return terms.every((term) => fields.some((field) => field.includes(term)))
+  })
+}
+
+/**
  * Apply the dashboard filters to the system rows. Pure and side-effect free so
  * it can be memoized in the component and unit-tested in isolation (the
  * repo's established pattern for grid logic).
