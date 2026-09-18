@@ -15,6 +15,7 @@ import {
   gridQuickFilterValuesSelector,
   GridRowParams,
 } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import Tooltip from '@mui/material/Tooltip'
 import {
   Box,
@@ -535,6 +536,7 @@ export default function FismaTable({
   chosenCallMap = {},
 }: FismaTableProps) {
   const apiRef = useGridApiRef()
+  const accessibleGrid = useAccessibleGrid()
   const {
     fismaSystems,
     latestDataCallId,
@@ -1018,6 +1020,7 @@ export default function FismaTable({
   return (
     <Box sx={{ height: 600, width: '100%', mb: 2 }}>
       <DataGrid
+        {...accessibleGrid}
         rows={filteredRows}
         isRowSelectable={(params: GridRowParams) =>
           isSystemSelectable(params.row.fismasystemid, scores, progress)

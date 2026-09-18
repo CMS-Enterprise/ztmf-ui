@@ -83,6 +83,7 @@ jest.mock('@mui/x-data-grid', () => {
     }) => {
       const { rows = [], columns = [], getRowId } = props
       mockGrid.processRowUpdate = props.processRowUpdate
+      mockGrid.columns = columns
       mockGrid.isCellEditable = props.isCellEditable
       if (props.apiRef) {
         props.apiRef.current = {
@@ -118,7 +119,10 @@ jest.mock('@mui/x-data-grid', () => {
               if (col.type === 'actions' && getActions) {
                 return react.createElement(
                   'div',
-                  { key: String(col.field) },
+                  {
+                    key: String(col.field),
+                    'data-testid': `cell-${String(col.field)}`,
+                  },
                   getActions({ id, row })
                 )
               }
@@ -136,7 +140,7 @@ jest.mock('@mui/x-data-grid', () => {
                 : row[field]
               return react.createElement(
                 'div',
-                { key: field },
+                { key: field, 'data-testid': `cell-${field}` },
                 renderCell ? renderCell({ row, id, value, field }) : null
               )
             })
@@ -151,6 +155,7 @@ jest.mock('@mui/x-data-grid', () => {
 // can invoke the create/edit save path directly (the inline-edit commit that
 // would call it is not simulated by the minimal grid).
 const mockGrid: {
+  columns?: Array<Record<string, unknown>>
   processRowUpdate?: (row: Record<string, unknown>) => unknown
   isCellEditable?: (p: {
     field: string
@@ -163,14 +168,6 @@ jest.mock('@/utils/config', () => ({
   default: { IDP_ENABLED: false },
 }))
 
-// OpDiv grant writes/reads during create-with-grants and row refresh.
-jest.mock('@/utils/userOpdivs', () => ({
-  __esModule: true,
-  setUserOpDivs: jest.fn().mockResolvedValue(undefined),
-  fetchUserOpDivs: jest.fn().mockResolvedValue([]),
-}))
-const setUserOpDivs = require('@/utils/userOpdivs').setUserOpDivs as jest.Mock
-
 // notify drives the delete/restore snackbars; mock it to assert calls.
 // isAuthHandled must stay a real-ish predicate (false for ordinary errors) so
 // the fetch tests' catch branches still log rather than short-circuit.
@@ -180,6 +177,7 @@ jest.mock('@/utils/notify', () => ({
   isAuthHandled: jest.fn(() => false),
 }))
 const notify = require('@/utils/notify').notify as jest.Mock
+const { ERROR_MESSAGES } = require('@/constants')
 
 jest.mock('@/axiosConfig', () => ({
   __esModule: true,
@@ -220,7 +218,12 @@ import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import UserTable from './UserTable'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import type { FismaSystemType, userData, users } from '@/types'
+import type { FismaSystemType, OpDiv, userData, users } from '@/types'
+import {
+  LAST_SEEN_EMPTY_LABEL,
+  formatLastSeenAbsolute,
+  lastSeenSortComparator,
+} from './lastSeen'
 
 const ACTIVE_SYSTEMS: FismaSystemType[] = [
   {
@@ -292,15 +295,9 @@ beforeEach(() => {
   axios.put.mockReset()
   axios.delete.mockReset()
   // resetMocks: true (jest.config) wipes implementations set at mock-factory
-  // time, so re-establish the ones consumers depend on: ordinary errors are not
-  // auth-handled, and the OpDiv grant reads/writes resolve.
+  // time, so re-establish the one consumers depend on: ordinary errors are not
+  // auth-handled.
   ;(require('@/utils/notify').isAuthHandled as jest.Mock).mockReturnValue(false)
-  ;(
-    require('@/utils/userOpdivs').fetchUserOpDivs as jest.Mock
-  ).mockResolvedValue([])
-  ;(require('@/utils/userOpdivs').setUserOpDivs as jest.Mock).mockResolvedValue(
-    undefined
-  )
 })
 
 test('fetches both /fismasystems and /fismasystems?decommissioned=true regardless of context', async () => {
@@ -663,6 +660,10 @@ const PIETT_ROW: users = {
 
 function mockUsers(list: users[]) {
   axios.get.mockImplementation((url: string) => {
+    // The grant modal's on-open read must not be answered with the users
+    // list.
+    if (url.endsWith('/assignedopdivs'))
+      return Promise.resolve({ status: 200, data: { data: [] } })
     if (url.startsWith('/users'))
       return Promise.resolve({ status: 200, data: { data: list } })
     if (url.startsWith('/fismasystems'))
@@ -714,9 +715,12 @@ test('cancelling the delete confirmation issues no DELETE', async () => {
   expect(axios.delete).not.toHaveBeenCalled()
 })
 
-test('the delete action is disabled for the acting user (self-delete guard)', async () => {
+test('the delete action is inert for the acting user (self-delete guard)', async () => {
   // userInfo.userid is u-1 (the OWNER in makeCtx); a row for that same id must
-  // render its Delete affordance disabled so an admin cannot lock themselves out.
+  // not offer a working Delete, so an admin cannot lock themselves out. The
+  // button stays enabled and carries aria-disabled: the actions cell is a
+  // role="menu" whose children must all be menu items, and the <span> a truly
+  // disabled button needs for its Tooltip broke that (ui#714).
   const selfRow: users = {
     userid: 'u-1',
     email: 'grand.moff@deathstar.empire',
@@ -729,8 +733,15 @@ test('the delete action is disabled for the acting user (self-delete guard)', as
 
   renderWithProviders(<UserTable />)
 
+  const user = userEvent.setup()
   const deleteBtn = await screen.findByRole('button', { name: 'Delete' })
-  expect(deleteBtn).toBeDisabled()
+  expect(deleteBtn).toHaveAttribute('aria-disabled', 'true')
+
+  // aria-disabled alone stops nothing, so the click must be a no-op: no
+  // confirmation dialog, no DELETE.
+  await user.click(deleteBtn)
+  expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
+  expect(axios.delete).not.toHaveBeenCalled()
 })
 
 test('a failed DELETE surfaces the try-again error and keeps the row', async () => {
@@ -953,29 +964,94 @@ test('processRowUpdate surfaces a 400 field error on a failed create', async () 
   expect(await screen.findByText(/Email already exists/i)).toBeInTheDocument()
 })
 
-test('backfills OpDiv grants per user when the list omits them inline', async () => {
-  // An older backend response without assignedopdivids on the row triggers the
-  // per-user fetchUserOpDivs backfill rather than the inline read.
-  const legacyRow = {
-    userid: '33333333-3333-3333-3333-333333333333',
-    email: 'legacy@agency.gov',
-    fullname: 'Legacy Admin',
-    role: 'ISSO',
-    assignedfismasystems: [],
-  } as unknown as users
-  const { fetchUserOpDivs } = require('@/utils/userOpdivs') as {
-    fetchUserOpDivs: jest.Mock
-  }
-  fetchUserOpDivs.mockResolvedValue([1])
-  mockUsers([legacyRow])
+test('the OpDivs column repaints from the user detail after the grant modal saves', async () => {
+  // The row is refreshed from GET /users/{id} after a save rather than from
+  // the request body. A scoped admin's body omits grants they cannot touch and
+  // the backend keeps those, so only the detail response is the true set.
+  const user = userEvent.setup()
+  setMockCtx(
+    makeCtx({
+      opdivs: [
+        {
+          opdiv_id: 1,
+          code: 'CMS',
+          name: 'Centers for Medicare & Medicaid Services',
+          is_parent: false,
+          active: true,
+          system_delegate_enabled: false,
+        },
+        {
+          opdiv_id: 5,
+          code: 'FDA',
+          name: 'Food and Drug Administration',
+          is_parent: false,
+          active: true,
+          system_delegate_enabled: false,
+        },
+      ],
+    })
+  )
+  const detailUrl = `/users/${PIETT_ROW.userid}`
+  axios.get.mockImplementation((url: string) => {
+    // The modal's on-open read sees one grant; the detail after save sees two.
+    if (url === `${detailUrl}/assignedopdivs`)
+      return Promise.resolve({ status: 200, data: { data: [1] } })
+    if (url === detailUrl)
+      return Promise.resolve({
+        status: 200,
+        data: { data: { ...PIETT_ROW, assignedopdivids: [1, 5] } },
+      })
+    if (url.startsWith('/users'))
+      return Promise.resolve({ status: 200, data: { data: [PIETT_ROW] } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
+  axios.put.mockResolvedValue({ status: 204 })
 
   renderWithProviders(<UserTable />)
-  await screen.findByTestId('datagrid-mock')
+  const row = await screen.findByTestId(`datagrid-row-${PIETT_ROW.userid}`)
+  expect(within(row).queryByText('FDA')).not.toBeInTheDocument()
 
-  // The row has no inline grants, so the component fetches them per user.
+  await user.click(within(row).getByRole('button', { name: 'assignedOpDivs' }))
   await waitFor(() =>
-    expect(fetchUserOpDivs).toHaveBeenCalledWith(legacyRow.userid)
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
   )
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() => expect(axios.get).toHaveBeenCalledWith(detailUrl))
+  expect(await within(row).findByText('FDA')).toBeInTheDocument()
+  expect(within(row).getByText('CMS')).toBeInTheDocument()
+})
+
+test('a failed post-save row refresh warns rather than leaving the row quietly stale', async () => {
+  // The refresh is non-blocking, so the row keeps what it has. That is only
+  // safe if the admin is told, since the grants and identity provider on
+  // screen no longer reflect the save they just made.
+  const user = userEvent.setup()
+  const err = jest.spyOn(console, 'error').mockImplementation(() => {})
+  const detailUrl = `/users/${PIETT_ROW.userid}`
+  axios.get.mockImplementation((url: string) => {
+    if (url === `${detailUrl}/assignedopdivs`)
+      return Promise.resolve({ status: 200, data: { data: [1] } })
+    if (url === detailUrl) return Promise.reject(new Error('refresh failed'))
+    if (url.startsWith('/users'))
+      return Promise.resolve({ status: 200, data: { data: [PIETT_ROW] } })
+    return Promise.resolve({ status: 200, data: { data: [] } })
+  })
+  axios.put.mockResolvedValue({ status: 204 })
+
+  renderWithProviders(<UserTable />)
+  const row = await screen.findByTestId(`datagrid-row-${PIETT_ROW.userid}`)
+
+  await user.click(within(row).getByRole('button', { name: 'assignedOpDivs' }))
+  await waitFor(() =>
+    expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
+  )
+  await user.click(screen.getByRole('button', { name: /^save$/i }))
+
+  await waitFor(() =>
+    expect(notify).toHaveBeenCalledWith(ERROR_MESSAGES.refresh, 'warning')
+  )
+  err.mockRestore()
 })
 
 test('processRowUpdate grants OpDivs when a new row carries them', async () => {
@@ -1001,7 +1077,9 @@ test('processRowUpdate grants OpDivs when a new row carries them', async () => {
   })
 
   // The created user's id is granted the selected OpDivs.
-  expect(setUserOpDivs).toHaveBeenCalledWith('srv-9', [1, 2])
+  expect(axios.put).toHaveBeenCalledWith('/users/srv-9/opdivs', {
+    opdiv_ids: [1, 2],
+  })
   // The grant succeeds, so the success snackbar shows, NOT the
   // "grants failed" fallback (which is what surfaced when the grant read threw).
   expect(await screen.findByText('Saved')).toBeInTheDocument()
@@ -1079,4 +1157,180 @@ test('isCellEditable forwards the field, row, and caller context to the guard', 
   expect(
     isCellEditable({ field: 'fullname', row: { isNew: false, role: 'ISSO' } })
   ).toBe(true)
+})
+
+// Column-definition rendering. The grid mock runs each column's valueGetter
+// and renderCell, but nothing asserted on the output, so a wrong map, an
+// inverted fallback, or the wrong value threaded into a cell component would
+// not have failed a test. These pin the wiring itself; the transforms behind
+// it are pinned in opdivDerivations.test.ts, lastSeen.test.ts, and
+// LastSeenCell.test.tsx.
+
+const CMS_OPDIV = {
+  opdiv_id: 1,
+  code: 'CMS',
+  name: 'Centers for Medicare & Medicaid Services',
+  is_parent: false,
+  active: true,
+  system_delegate_enabled: false,
+  insights_enabled: false,
+} as unknown as OpDiv
+
+const IHS_OPDIV = {
+  ...CMS_OPDIV,
+  opdiv_id: 2,
+  code: 'IHS',
+  name: 'Indian Health Service',
+} as unknown as OpDiv
+
+function rowWith(overrides: Partial<users>): users {
+  return { ...PIETT_ROW, ...overrides } as users
+}
+
+/** Scopes assertions to one column's rendered cell in one row. */
+function cell(userid: string, field: string) {
+  return within(
+    within(screen.getByTestId(`datagrid-row-${userid}`)).getByTestId(
+      `cell-${field}`
+    )
+  )
+}
+
+test('renders each OpDiv grant as its code, never its long name', async () => {
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV, IHS_OPDIV] }))
+  mockUsers([rowWith({ assignedopdivids: [1, 2] } as Partial<users>)])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  const row = cell(PIETT_ROW.userid, 'opdivs')
+  expect(row.getByText('CMS')).toBeInTheDocument()
+  expect(row.getByText('IHS')).toBeInTheDocument()
+  // The label map carries the same ids keyed to full names; using it here
+  // would render these instead.
+  expect(
+    row.queryByText('Centers for Medicare & Medicaid Services')
+  ).not.toBeInTheDocument()
+  expect(row.queryByText('Indian Health Service')).not.toBeInTheDocument()
+})
+
+test('falls back to the raw id when a grant has no matching OpDiv', async () => {
+  // A grant to an OpDiv missing from the list (inactive, or fetched before the
+  // list refreshed) still has to render something identifiable.
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV] }))
+  mockUsers([rowWith({ assignedopdivids: [999] } as Partial<users>)])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  expect(cell(PIETT_ROW.userid, 'opdivs').getByText('999')).toBeInTheDocument()
+})
+
+test('renders a placeholder for a user with no OpDiv grants', async () => {
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV] }))
+  mockUsers([rowWith({ assignedopdivids: [] } as Partial<users>)])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  const opdivCell = cell(PIETT_ROW.userid, 'opdivs')
+  expect(opdivCell.getByText('—')).toBeInTheDocument()
+  expect(opdivCell.queryByText('CMS')).not.toBeInTheDocument()
+})
+
+test('renders a placeholder, and fetches nothing per user, when the row omits its grants', async () => {
+  // The list always carries assignedopdivids, so a row without the key has no
+  // grants to show. The cell reads the row alone: no per-user grant read fires
+  // to fill the gap, which is what kept the column free of an N+1.
+  setMockCtx(makeCtx({ opdivs: [CMS_OPDIV, IHS_OPDIV] }))
+  const legacyRow = { ...PIETT_ROW } as Partial<users>
+  delete (legacyRow as Record<string, unknown>).assignedopdivids
+  mockUsers([legacyRow as users])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  expect(cell(PIETT_ROW.userid, 'opdivs').getByText('—')).toBeInTheDocument()
+  expect(axios.get).not.toHaveBeenCalledWith(
+    expect.stringMatching(/\/assignedopdivs$/),
+    expect.anything()
+  )
+  expect(axios.get).not.toHaveBeenCalledWith(
+    expect.stringMatching(/\/assignedopdivs$/)
+  )
+})
+
+test('renders the identity provider, and a placeholder when it is unset', async () => {
+  const withIdp = rowWith({
+    userid: 'idp-set',
+    identity_provider: 'entra',
+  } as Partial<users>)
+  // Unset is undefined on the row, not null: the backend omits the key for
+  // users whose IdP it has not derived yet.
+  const withoutIdp = rowWith({
+    userid: 'idp-unset',
+    identity_provider: undefined,
+  } as Partial<users>)
+  mockUsers([withIdp, withoutIdp])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  expect(
+    cell('idp-set', 'identity_provider').getByText('entra')
+  ).toBeInTheDocument()
+  expect(
+    cell('idp-unset', 'identity_provider').getByText('—')
+  ).toBeInTheDocument()
+})
+
+test('threads the parsed date into the last-seen cell, not the raw timestamp', async () => {
+  const iso = '2026-03-04T15:30:00.000Z'
+  const seen = rowWith({ userid: 'seen', last_seen: iso } as Partial<users>)
+  const never = rowWith({ userid: 'never', last_seen: null } as Partial<users>)
+  mockUsers([seen, never])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  // The cell receives the valueGetter's Date, so it formats an absolute
+  // timestamp. Handing it the raw ISO string instead would render the string
+  // through, or fall to the empty state.
+  // Exact match on the cell's visually-hidden absolute timestamp. `exact:
+  // false` would also match case-insensitively, which is looser than this
+  // needs; the parenthesised form is the span's whole normalized text.
+  const absolute = formatLastSeenAbsolute(new Date(iso))
+  expect(
+    cell('seen', 'last_seen').getByText(`(${absolute})`)
+  ).toBeInTheDocument()
+  expect(cell('seen', 'last_seen').queryByText(iso)).not.toBeInTheDocument()
+  expect(
+    cell('seen', 'last_seen').queryByText(LAST_SEEN_EMPTY_LABEL)
+  ).not.toBeInTheDocument()
+
+  expect(
+    cell('never', 'last_seen').getByText(LAST_SEEN_EMPTY_LABEL)
+  ).toBeInTheDocument()
+})
+
+/** The live column definition the component handed the grid. */
+function column(field: string) {
+  return mockGrid.columns?.find((col) => col.field === field)
+}
+
+test('wires the OpDiv editor, the IdP select options, and the last-seen comparator', async () => {
+  // The grid mock only calls valueGetter and renderCell, so these three
+  // properties are invisible to a rendering assertion. Read them off the
+  // column definition the component actually passed in.
+  mockUsers([PIETT_ROW])
+
+  renderWithProviders(<UserTable />)
+  await screen.findByTestId('datagrid-mock')
+
+  expect(column('opdivs')?.renderEditCell).toEqual(expect.any(Function))
+  expect(column('identity_provider')).toMatchObject({
+    type: 'singleSelect',
+    valueOptions: ['okta', 'entra'],
+  })
+  expect(column('last_seen')?.sortComparator).toBe(lastSeenSortComparator)
 })

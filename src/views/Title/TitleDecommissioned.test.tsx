@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { screen, fireEvent, waitFor } from '@testing-library/react'
 import type { userData } from '@/types'
 
 // Title-level integration test for #572 (follow-up to #569 / #566).
@@ -51,11 +51,6 @@ jest.mock('@/axiosConfig', () => ({
   default: { get: jest.fn(), post: jest.fn() },
 }))
 
-jest.mock('@/utils/dataCenterEnvironments', () => ({
-  __esModule: true,
-  fetchDataCenterEnvironments: jest.fn(),
-}))
-
 jest.mock('@/views/QuestionnairePage/draftStore', () => ({
   __esModule: true,
   clearOtherUserDrafts: jest.fn(),
@@ -102,15 +97,14 @@ jest.mock('@/assets/ztmf-logo-color.png', () => 'ztmf-logo-color.png', {
 
 import { useLoaderData, useLocation } from 'react-router-dom'
 import axiosInstance from '@/axiosConfig'
-import { fetchDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
 import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import Title from './Title'
 
 const mockedUseLoaderData = useLoaderData as jest.Mock
 const mockedUseLocation = useLocation as jest.Mock
 const mockedGet = axiosInstance.get as jest.Mock
 const mockedPost = axiosInstance.post as jest.Mock
-const mockedFetchEnvs = fetchDataCenterEnvironments as jest.Mock
 const mockedClearDrafts = clearOtherUserDrafts as jest.Mock
 
 const USER: userData = {
@@ -154,7 +148,6 @@ beforeEach(() => {
     return Promise.resolve({ data: { data: [] } })
   })
   mockedPost.mockResolvedValue({ status: 204 })
-  mockedFetchEnvs.mockResolvedValue([])
   mockedClearDrafts.mockResolvedValue(undefined)
 
   Object.defineProperty(window, 'location', {
@@ -174,7 +167,7 @@ afterEach(() => {
 
 describe('Title — Clear filters drops decommissioned rows via refetch (#572)', () => {
   it('refetches the unparameterized endpoint on clear, dropping decommissioned rows', async () => {
-    render(<Title />)
+    renderWithQueryClient(<Title />)
 
     // 1. Mount: active-only load against the unparameterized endpoint.
     expect(await screen.findByText('Active Alpha')).toBeInTheDocument()

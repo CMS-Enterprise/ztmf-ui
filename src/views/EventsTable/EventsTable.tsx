@@ -8,6 +8,7 @@ import {
   Typography,
 } from '@mui/material'
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid'
+import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
@@ -69,6 +70,7 @@ function dateFieldState(value: string): {
  */
 export default function EventsTable() {
   const navigate = useNavigate()
+  const accessibleGrid = useAccessibleGrid()
   const { userInfo, fismaSystems } = useContextProp()
   const canAccess = hasUnscopedRead(userInfo)
 
@@ -295,6 +297,7 @@ export default function EventsTable() {
         />
       </Box>
       <DataGrid
+        {...accessibleGrid}
         autoHeight
         rows={rows}
         columns={columns}

@@ -37,8 +37,6 @@ type ContextType = {
   // False until the initial fetch settles, so an empty list is distinguishable
   // from a pending one. Stays true across later refreshes.
   opdivsLoaded: boolean
-  // Refetch after a mutation to keep the shared list fresh.
-  refreshOpdivs: () => void
 }
 
 export function useContextProp() {
