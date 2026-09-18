@@ -1,22 +1,87 @@
+// Document-scroll layout: content grows the page and pushes the CMS footer
+// down, and the browser owns the scrollbar (matches main). Tables render at
+// their natural height (DataGrid autoHeight) instead of scrolling inside a
+// viewport-bounded canvas - a page-size row set was squeezing the dashboard
+// table down to a few visible rows.
 html,
 body {
-  margin: 0; // remove default margin/padding
+  margin: 0;
   padding: 0;
-  min-height: 100%; // allow for full-page layouts
 }
 
 #root {
   display: flex;
   flex-direction: column;
-  min-height: 100vh; // ensures the root container fills the screen
+  min-height: 100vh;
 }
 
-// The main content area can stretch
 main {
-  flex: 1; // "take up the leftover space"
+  flex: 1;
 }
 
-// The footer is then pushed to the bottom
+// Keep the footer at the bottom of the viewport when a view is shorter than
+// the fold; taller views push it down naturally.
 footer {
   margin-top: auto;
+}
+
+// The CMS Design System global stylesheet uppercases button text. Force
+// sentence case on MUI buttons app-wide so labels render as authored
+// (e.g. "Export CSV", "Add system"), once, instead of per-component.
+.MuiButton-root {
+  text-transform: none !important;
+}
+
+// The CMS DSG stylesheet sets `ul` items to display: list-item / column-stack,
+// which collapses every MUI component that renders as an inline horizontal ul
+// (Pagination, Breadcrumbs, Tabs, Stepper, etc.). Force row layout on those
+// component ULs so we don't have to patch each one inline.
+.MuiPagination-ul,
+.MuiBreadcrumbs-ol {
+  display: flex !important;
+  flex-direction: row !important;
+  flex-wrap: nowrap !important;
+  align-items: center !important;
+}
+
+// CMS DSG resets `label, legend { display: block; margin-block: 1.5em 0 }` and
+// stamps cursor/font-weight on every <label>. That collides with MUI's
+// floating-label pattern in two ways:
+//
+//   1. The <legend> inside <fieldset> (the notch cutout for the floating
+//      label) renders as a visible block of text alongside the label, since
+//      DSG sets it to display:block with non-zero font/padding.
+//   2. The <label> itself (MUI's InputLabel) picks up a 1.5em top margin
+//      from DSG, which pushes the floating label out of position inside
+//      the outlined input.
+//
+// Reset those properties back to MUI's defaults on every label/legend that
+// is part of an MUI form control. Scoped to MUI selectors so non-MUI labels
+// (CMS DSG's own choice/radio labels) keep their intended treatment.
+.MuiFormControl-root,
+.MuiTextField-root {
+  > .MuiInputLabel-root,
+  .MuiInputBase-root + .MuiInputLabel-root,
+  .MuiInputLabel-root {
+    margin: 0 !important;
+    display: block;
+  }
+}
+
+.MuiOutlinedInput-notchedOutline legend {
+  display: block;
+  margin: 0 !important;
+  padding: 0 !important;
+  font-size: 0.75em !important;
+  visibility: hidden !important;
+  height: 11px;
+  line-height: 11px;
+}
+
+// Same fix for FormControlLabel labels (used with Switch / Checkbox /
+// Radio in plain MUI form rows like the "Parent (department) row" toggle
+// in Create OpDiv). DSG would otherwise push the label text down 1.5em
+// below the switch.
+.MuiFormControlLabel-root .MuiFormControlLabel-label {
+  margin: 0 !important;
 }

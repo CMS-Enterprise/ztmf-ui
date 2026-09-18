@@ -6,6 +6,7 @@
  */
 import { createTheme } from '@mui/material/styles'
 import { CSSProperties } from '@mui/material/styles/createMixins'
+import { colors, fonts, radius } from './tokens'
 
 export const MuiDrawerWidth = 200
 
@@ -59,8 +60,8 @@ let theme = createTheme({
 //* Spacing
 theme = createTheme({
   shape: {
-    // hack around the typing for border radius being wrong
-    borderRadius: +`${theme.spacing(2)}`.replace('px', ''),
+    // Base radius is the md token (8px): buttons, cards, modals.
+    borderRadius: radius.md,
   },
 })
 
@@ -79,9 +80,16 @@ theme = createTheme(theme, {
 theme = createTheme(theme, {
   palette: {
     primary: {
-      light: '#5B70AD',
-      main: '#5666b8',
-      dark: '#5A5FE0',
+      light: colors.primaryHover,
+      main: colors.primary,
+      dark: colors.ink900,
+      contrastText: theme.palette.common.white,
+    },
+    // Custom slot consumed by the `dark` Button and SvgIcon variants.
+    dark: {
+      light: colors.primary,
+      main: colors.ink900,
+      dark: colors.ink900,
       contrastText: theme.palette.common.white,
     },
     secondary: {
@@ -164,11 +172,10 @@ theme = createTheme(theme, {
 // ** Typography
 theme = createTheme(theme, {
   typography: {
-    fontFamily:
-      "'Open Sans',--apple-system,BlinkMacSystemFont,'Segoe UI',Helvetica,Arial,sans-serif,'Apple Color Emoji','Segoe UI Emoji','Segoe UI Symbol'",
+    fontFamily: fonts.base,
     fonts: {
-      base: '-apple-system, BlinkMacSystemFont, "Segoe UI", Helvetica, Arial, sans-serif, "Apple Color Emoji", "Segoe UI Emoji", "Segoe UI Symbol"',
-      mono: 'ui-monospace, "Cascadia Mono", "Segoe UI Mono", "Liberation Mono", Menlo, Monaco, Consolas, monospace',
+      base: fonts.base,
+      mono: fonts.mono,
     },
     htmlFontSize: 16,
     fontSize: 14,
@@ -317,8 +324,9 @@ theme = createTheme(theme, {
       fontWeight: theme.typography.fontWeightMedium,
       fontSize: '0.875rem',
       lineHeight: 1.75,
-      textTransform: 'uppercase',
-      letterSpacing: '0.4px',
+      // No caps. Sentence-case button labels per the redesign glossary.
+      textTransform: 'none',
+      letterSpacing: 0,
       color: theme.palette.text.primary,
     },
     caption: {
@@ -625,13 +633,26 @@ theme = createTheme(theme, {
     MuiButton: {
       styleOverrides: {
         root: {
-          fontSize: theme.typography.htmlFontSize,
+          fontSize: '0.875rem',
           fontFamily: theme.typography.fontFamily,
-          fontWeight: theme.typography.fontWeightRegular,
-          textTransform: 'capitalize',
-          borderRadius: theme.shape.borderRadius,
+          fontWeight: theme.typography.fontWeightMedium,
+          textTransform: 'none',
+          borderRadius: radius.button,
           lineHeight: 1.715,
           padding: '0.4375rem 0.75rem',
+          // A Button rendered as a router link (component={RouterLink}) is a
+          // real <a>, so the browser would repaint its label with the visited
+          // color and make the button look like a followed link. Pin the
+          // visited color to each variant's own resting color. Scoped to the
+          // variant classes (specificity beats a bare a:visited) and harmless
+          // on plain <button> buttons, which never match :visited.
+          '&.MuiButton-outlinedPrimary:visited, &.MuiButton-textPrimary:visited':
+            {
+              color: theme.palette.primary.main,
+            },
+          '&.MuiButton-containedPrimary:visited': {
+            color: theme.palette.primary.contrastText,
+          },
           '&.MuiButton-textPrimary:hover': {
             backgroundColor: 'rgba(102, 108, 255, 0.08)',
           },
@@ -652,7 +673,10 @@ theme = createTheme(theme, {
           },
         },
         contained: {
-          boxShadow: '0px 4px 8px -4px rgba(76, 78, 100, 0.42)',
+          boxShadow: '0 1px 0 rgba(14,18,24,0.08)',
+          '&:hover': {
+            boxShadow: '0 1px 0 rgba(14,18,24,0.12)',
+          },
           padding: '0.4375rem 1.375rem',
         },
         outlined: {
@@ -910,7 +934,7 @@ theme = createTheme(theme, {
     MuiCircularProgress: {
       styleOverrides: {
         root: {
-          color: '#3f51b5',
+          color: colors.primary,
         },
       },
     },
@@ -951,13 +975,18 @@ theme = createTheme(theme, {
       styleOverrides: {
         root: {},
         columnHeaders: {
-          backgroundColor: theme.palette.primary.light,
-          color: theme.palette.common.white,
-          fontWeight: theme.typography.fontWeightMedium,
+          backgroundColor: colors.neutral50,
+          color: colors.neutral500,
+          fontWeight: theme.typography.fontWeightBold,
+          borderBottom: `1px solid ${colors.neutral200}`,
         },
         columnHeader: {
-          padding: `${theme.spacing(1.5)} ${theme.spacing(3.5)}`,
-          textTransform: 'capitalize',
+          // 10px x 18px per the redesign table-header spec (spacing unit is
+          // 8px app-wide, so 1.25 = 10px and 2.25 = 18px).
+          padding: `${theme.spacing(1.25)} ${theme.spacing(2.25)}`,
+          textTransform: 'uppercase',
+          letterSpacing: '0.08em',
+          fontSize: '0.6875rem',
 
           '&:focus': {
             outline: 'none',
@@ -965,21 +994,22 @@ theme = createTheme(theme, {
 
           '& .MuiDataGrid-iconButtonContainer, & .MuiDataGrid-menuIcon': {
             '& .MuiSvgIcon-root': {
-              color: theme.palette.common.white,
-              fill: theme.palette.common.white,
+              color: colors.neutral500,
+              fill: colors.neutral500,
             },
           },
         },
         cell: {
           color: theme.palette.text.primary,
-          padding: `${theme.spacing(0.5)} calc(${theme.spacing(3.5)} + 2px)`,
+          // 18px horizontal padding to match the header gutters.
+          padding: `${theme.spacing(0.5)} ${theme.spacing(2.25)}`,
 
           '&:focus': {
             outline: 'none',
           },
 
           '&:first-of-type': {
-            paddingLeft: theme.spacing(3.5),
+            paddingLeft: theme.spacing(2.25),
           },
 
           '&:nth-last-of-type(2)': {
@@ -1010,9 +1040,9 @@ theme = createTheme(theme, {
     MuiDialog: {
       styleOverrides: {
         paper: {
-          boxShadow: theme.shadows[6],
-          borderRadius: theme.shape.borderRadius * 1.5,
-          border: `1px solid ${theme.palette.primary.dark}`,
+          boxShadow: '0 24px 48px rgba(0,0,0,0.25)',
+          borderRadius: theme.shape.borderRadius,
+          border: 'none',
         },
       },
     },
@@ -1171,7 +1201,7 @@ theme = createTheme(theme, {
             borderBottomColor: theme.palette.text.disabled,
           },
           '&:after': {
-            borderBottomColor: '#3f51b5',
+            borderBottomColor: colors.primary,
           },
           '&.Mui-disabled:before': {
             borderBottomStyle: 'dotted',
@@ -1185,7 +1215,7 @@ theme = createTheme(theme, {
           backgroundColor: theme.palette.action.disabledBackground,
         },
         colorPrimary: {
-          backgroundColor: '#3f51b5',
+          backgroundColor: colors.primary,
         },
       },
     },
@@ -1281,14 +1311,21 @@ theme = createTheme(theme, {
     MuiOutlinedInput: {
       styleOverrides: {
         root: {
+          // colors.border clears the WCAG 1.4.11 3:1 boundary-contrast bar;
+          // the old palette.divider (12% alpha) was nearly invisible and
+          // failed Section 508 for control boundaries.
           '& .MuiOutlinedInput-notchedOutline': {
-            borderColor: theme.palette.divider,
+            borderColor: colors.border,
           },
           '&:hover:not(.Mui-disabled) .MuiOutlinedInput-notchedOutline': {
-            borderColor: theme.palette.text.disabled,
+            borderColor: colors.neutral700,
           },
           '&.Mui-focused .MuiOutlinedInput-notchedOutline': {
-            borderColor: '#3f51b5',
+            borderColor: colors.primary,
+            borderWidth: 1.5,
+          },
+          '&.Mui-focused': {
+            boxShadow: `0 0 0 3px ${colors.primary50}`,
           },
           '&.Mui-disabled .MuiOutlinedInput-notchedOutline': {
             borderColor: theme.palette.divider,
@@ -1307,7 +1344,7 @@ theme = createTheme(theme, {
           padding: '1.25rem',
         },
         notchedOutline: {
-          borderRadius: '0.625rem',
+          borderRadius: radius.sm,
         },
       },
     },
@@ -1354,7 +1391,7 @@ theme = createTheme(theme, {
       styleOverrides: {
         root: {
           '& .MuiSwitch-switchBase.Mui-checked + .MuiSwitch-track': {
-            backgroundColor: '#3f51b5',
+            backgroundColor: colors.primary,
             opacity: 0.5,
           },
           '& .MuiSwitch-switchBase.Mui-disabled + .MuiSwitch-track': {
@@ -1391,7 +1428,7 @@ theme = createTheme(theme, {
       styleOverrides: {
         root: {
           '&.Mui-selected': {
-            color: '#3f51b5',
+            color: colors.primary,
           },
         },
       },
@@ -1452,7 +1489,7 @@ theme = createTheme(theme, {
           borderBottom: '1px solid rgba(0, 0, 0, 0.12)',
         },
         indicator: {
-          backgroundColor: '#3f51b5',
+          backgroundColor: colors.primary,
         },
       },
     },
@@ -1461,9 +1498,9 @@ theme = createTheme(theme, {
         root: {
           '&$selected': {
             color: theme.palette.common.white,
-            backgroundColor: '#3f51b5',
+            backgroundColor: colors.primary,
             '&:hover': {
-              backgroundColor: '#3f51b5',
+              backgroundColor: colors.primary,
             },
           },
         },

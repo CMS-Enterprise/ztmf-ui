@@ -1,14 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
-import {
-  Autocomplete,
-  Box,
-  MenuItem,
-  TextField,
-  Typography,
-} from '@mui/material'
+import { Autocomplete, Box, Button, TextField, Typography } from '@mui/material'
 import { DataGrid, GridColDef, GridPaginationModel } from '@mui/x-data-grid'
 import useAccessibleGrid from '@/hooks/useAccessibleGrid'
+import { LocalizationProvider } from '@mui/x-date-pickers/LocalizationProvider'
+import { DatePicker } from '@mui/x-date-pickers/DatePicker'
+import { AdapterDateFns } from '@mui/x-date-pickers/AdapterDateFnsV3'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
@@ -17,7 +14,13 @@ import { Routes } from '@/router/constants'
 import { EventWithUser, EventsPage, userData } from '@/types'
 import { notify, isAuthHandled } from '@/utils/notify'
 import { parseApiError } from '@/utils/apiErrors'
-import { endOfDayISO, maskUSDate, parseUSDate, startOfDayISO } from './dateMask'
+import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ui/PageHeader'
+import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
+import { colors, radius } from '@/theme/tokens'
+import { endOfDayISO, startOfDayISO } from './dateBounds'
+import { resourceLabel } from './resourceLabels'
+import { actionLabel } from './actionLabels'
 
 // The complete set of values that appear in events.action (see the backend's
 // event-action constants). Display gating only; the endpoint accepts any
@@ -28,37 +31,94 @@ const ACTIONS = ['created', 'updated', 'deleted', 'viewed', 'imported']
 // initial state agree without a round of re-fetching.
 const DEFAULT_PAGE_SIZE = 50
 
+// Compact 30px control height shared across the toolbar filters, matching the
+// Users / OpDivs table toolbars.
+const CONTROL_H = 30
+
+// Toolbar controls carry an aria-label instead of a floating label (the
+// redesign toolbars are placeholder-driven), sized down to the 30px row.
+const controlSx = {
+  '& .MuiInputBase-root': { height: CONTROL_H, fontSize: 13 },
+}
+
+// Autocomplete needs the height forced onto its inner input rows too.
+const autocompleteSx = (width: number) => ({
+  width,
+  '& .MuiInputBase-root': {
+    height: CONTROL_H,
+    fontSize: 13,
+    py: '0 !important',
+  },
+  '& .MuiAutocomplete-input': { py: '0 !important' },
+})
+
 type Filters = {
   user: userData | null
   action: string
   resource: string
   system: number | null
-  from: string
-  to: string
+  from: Date | null
+  to: Date | null
 }
-
-// The CMS design system's global stylesheet gives every bare label a
-// margin-block, which shoves MUI's absolutely-positioned floating labels down
-// through the field border; every labeled TextField in the app zeroes it.
-const LABEL_FIX = { sx: { marginTop: 0 } }
 
 const EMPTY_FILTERS: Filters = {
   user: null,
   action: '',
   resource: '',
   system: null,
-  from: '',
-  to: '',
+  from: null,
+  to: null,
 }
 
-// A date field participates in the query only when complete and valid; a
-// partial entry is just "still typing", never an error banner or a request.
-function dateFieldState(value: string): {
-  date: Date | null
-  invalid: boolean
-} {
-  const date = parseUSDate(value)
-  return { date, invalid: value.length === 10 && date === null }
+// A DatePicker hands back an Invalid Date mid-edit; only a real date maps to a
+// query bound.
+function isValidDate(d: Date | null): d is Date {
+  return d !== null && !Number.isNaN(d.getTime())
+}
+
+type CompactDatePickerProps = {
+  ariaLabel: string
+  value: Date | null
+  onChange: (value: Date | null) => void
+  minDate?: Date
+  maxDate?: Date
+}
+
+/**
+ * The toolbar's date field: a MUI DatePicker sized to the 30px filter row,
+ * with the calendar trigger icon scaled down so it sits inside the compact
+ * field instead of dwarfing it.
+ * @param {CompactDatePickerProps} props - Field label, value and bounds.
+ * @returns {JSX.Element} The compact date picker.
+ */
+function CompactDatePicker({
+  ariaLabel,
+  value,
+  onChange,
+  minDate,
+  maxDate,
+}: CompactDatePickerProps) {
+  return (
+    <DatePicker
+      value={value}
+      onChange={onChange}
+      minDate={minDate}
+      maxDate={maxDate}
+      slotProps={{
+        textField: {
+          size: 'small',
+          sx: { width: 160, ...controlSx },
+          inputProps: { 'aria-label': ariaLabel },
+        },
+        openPickerButton: {
+          size: 'small',
+          'aria-label': `${ariaLabel} date`,
+          sx: { p: 0.5 },
+        },
+        openPickerIcon: { sx: { fontSize: 18 } },
+      }}
+    />
+  )
 }
 
 /**
@@ -70,7 +130,9 @@ function dateFieldState(value: string): {
  */
 export default function EventsTable() {
   const navigate = useNavigate()
-  const accessibleGrid = useAccessibleGrid()
+  const accessibleGrid = useAccessibleGrid({
+    ensureScrollableContentFocusable: true,
+  })
   const { userInfo, fismaSystems } = useContextProp()
   const canAccess = hasUnscopedRead(userInfo)
 
@@ -87,8 +149,10 @@ export default function EventsTable() {
     pageSize: DEFAULT_PAGE_SIZE,
   })
 
-  const fromField = dateFieldState(filters.from)
-  const toField = dateFieldState(filters.to)
+  const fromDate = isValidDate(filters.from) ? filters.from : null
+  const toDate = isValidDate(filters.to) ? filters.to : null
+  // Cap both fields at today: an audit trail has no future events.
+  const today = new Date()
 
   useEffect(() => {
     if (userInfo.role && !canAccess) {
@@ -116,9 +180,6 @@ export default function EventsTable() {
 
   useEffect(() => {
     if (!canAccess) return
-    // An invalid complete date never fires a request the admin didn't mean;
-    // the field shows its error state until corrected.
-    if (fromField.invalid || toField.invalid) return
     const controller = new AbortController()
     const params: Record<string, string | number> = {
       limit: paginationModel.pageSize,
@@ -129,8 +190,8 @@ export default function EventsTable() {
     if (resourceQuery) params.resource = resourceQuery
     if (filters.system !== null)
       params['payload.fismasystemid'] = filters.system
-    if (fromField.date) params.from = startOfDayISO(fromField.date)
-    if (toField.date) params.to = endOfDayISO(toField.date)
+    if (fromDate) params.from = startOfDayISO(fromDate)
+    if (toDate) params.to = endOfDayISO(toDate)
 
     setLoading(true)
     axiosInstance
@@ -148,7 +209,7 @@ export default function EventsTable() {
         if (!controller.signal.aborted) setLoading(false)
       })
     return () => controller.abort()
-    // fromField/toField derive from filters.from/filters.to, which the
+    // fromDate/toDate derive from filters.from/filters.to, which the
     // dependency list carries.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [
@@ -166,6 +227,22 @@ export default function EventsTable() {
     setFilters((prev) => ({ ...prev, [key]: value }))
     // Any filter change restarts from the first page; a preserved offset
     // could point past the new result set's end.
+    setPaginationModel((prev) => ({ ...prev, page: 0 }))
+  }
+
+  const hasActiveFilters =
+    filters.user !== null ||
+    filters.action !== '' ||
+    filters.resource !== '' ||
+    filters.system !== null ||
+    filters.from !== null ||
+    filters.to !== null
+
+  const clearFilters = () => {
+    setFilters(EMPTY_FILTERS)
+    // The debounce would clear it 400ms later; do it now so the request that
+    // resets the table carries no stale resource term.
+    setResourceQuery('')
     setPaginationModel((prev) => ({ ...prev, page: 0 }))
   }
 
@@ -187,18 +264,34 @@ export default function EventsTable() {
         sortable: false,
         renderCell: ({ row }) => (
           <Box>
-            <Typography variant="body2">
+            <Typography
+              sx={{ fontSize: 14, fontWeight: 600, color: colors.ink }}
+            >
               {row.userfullname}
               {row.userdeleted ? ' (deleted)' : ''}
             </Typography>
-            <Typography variant="caption" color="text.secondary">
+            <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
               {row.useremail}
             </Typography>
           </Box>
         ),
       },
-      { field: 'action', headerName: 'Action', width: 130, sortable: false },
-      { field: 'type', headerName: 'Resource', width: 200, sortable: false },
+      {
+        field: 'action',
+        headerName: 'Action',
+        width: 130,
+        sortable: false,
+        // Capitalize the raw verb ("created" -> "Created").
+        renderCell: ({ row }) => actionLabel(row.action),
+      },
+      {
+        field: 'type',
+        headerName: 'Resource',
+        width: 200,
+        sortable: false,
+        // Show a friendly noun, not the raw database table name.
+        renderCell: ({ row }) => resourceLabel(row.type),
+      },
     ],
     []
   )
@@ -206,122 +299,173 @@ export default function EventsTable() {
   if (!canAccess) return null
 
   return (
-    <Box sx={{ px: 3, py: 2 }}>
-      <Typography variant="h5" component="h1" sx={{ mb: 2 }}>
-        Events
-      </Typography>
-      <Box sx={{ display: 'flex', flexWrap: 'wrap', gap: 2, mb: 2 }}>
-        <Autocomplete
-          size="small"
-          sx={{ minWidth: 260 }}
-          options={users}
-          value={filters.user}
-          onChange={(_, value) => setFilter('user', value)}
-          getOptionLabel={(u) => `${u.fullname} (${u.email})`}
-          isOptionEqualToValue={(a, b) => a.userid === b.userid}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="User"
-              InputLabelProps={{ ...params.InputLabelProps, ...LABEL_FIX }}
-            />
-          )}
+    <LocalizationProvider dateAdapter={AdapterDateFns}>
+      <Box sx={{ pt: 3, pb: 4, boxSizing: 'border-box' }}>
+        <PageHeader
+          title="Events"
+          subtitle={total > 0 ? `${total.toLocaleString()} events` : undefined}
+          breadcrumbs={<BreadCrumbs />}
         />
-        <TextField
-          select
-          size="small"
-          sx={{ minWidth: 140 }}
-          label="Action"
-          InputLabelProps={LABEL_FIX}
-          value={filters.action}
-          onChange={(e) => setFilter('action', e.target.value)}
+        <Box
+          sx={{
+            backgroundColor: colors.white,
+            border: `1px solid ${colors.neutral200}`,
+            borderRadius: `${radius.card}px`,
+            overflow: 'hidden',
+          }}
         >
-          <MenuItem value="">Any</MenuItem>
-          {ACTIONS.map((action) => (
-            <MenuItem key={action} value={action}>
-              {action}
-            </MenuItem>
-          ))}
-        </TextField>
-        <TextField
-          size="small"
-          sx={{ minWidth: 180 }}
-          label="Resource"
-          InputLabelProps={LABEL_FIX}
-          value={filters.resource}
-          onChange={(e) => setFilter('resource', e.target.value)}
-        />
-        <Autocomplete
-          size="small"
-          sx={{ minWidth: 240 }}
-          options={fismaSystems}
-          value={
-            fismaSystems.find((s) => s.fismasystemid === filters.system) ?? null
-          }
-          onChange={(_, value) =>
-            setFilter('system', value ? value.fismasystemid : null)
-          }
-          getOptionLabel={(s) => s.fismaacronym}
-          isOptionEqualToValue={(a, b) => a.fismasystemid === b.fismasystemid}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="System"
-              InputLabelProps={{ ...params.InputLabelProps, ...LABEL_FIX }}
+          {/* Filter toolbar inside the card, right-aligned like the Users /
+            OpDivs toolbars; each control carries an aria-label instead of a
+            floating label, and wraps when the row runs out of width. */}
+          <Box
+            sx={{
+              display: 'flex',
+              flexWrap: 'wrap',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+              gap: 1.5,
+              px: 2.25,
+              py: 1.5,
+              borderBottom: `1px solid ${colors.neutral200}`,
+            }}
+          >
+            <Autocomplete
+              size="small"
+              sx={autocompleteSx(240)}
+              options={users}
+              value={filters.user}
+              onChange={(_, value) => setFilter('user', value)}
+              getOptionLabel={(u) => `${u.fullname} (${u.email})`}
+              isOptionEqualToValue={(a, b) => a.userid === b.userid}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="User"
+                  inputProps={{ ...params.inputProps, 'aria-label': 'User' }}
+                />
+              )}
             />
-          )}
-        />
-        <TextField
-          size="small"
-          sx={{ width: 150 }}
-          label="From"
-          InputLabelProps={LABEL_FIX}
-          placeholder="MM/DD/YYYY"
-          value={filters.from}
-          error={fromField.invalid}
-          helperText={fromField.invalid ? 'Invalid date' : undefined}
-          onChange={(e) => setFilter('from', maskUSDate(e.target.value))}
-          inputProps={{ inputMode: 'numeric' }}
-        />
-        <TextField
-          size="small"
-          sx={{ width: 150 }}
-          label="To"
-          InputLabelProps={LABEL_FIX}
-          placeholder="MM/DD/YYYY"
-          value={filters.to}
-          error={toField.invalid}
-          helperText={toField.invalid ? 'Invalid date' : undefined}
-          onChange={(e) => setFilter('to', maskUSDate(e.target.value))}
-          inputProps={{ inputMode: 'numeric' }}
-        />
+            <Autocomplete
+              size="small"
+              sx={autocompleteSx(150)}
+              options={ACTIONS}
+              value={filters.action || null}
+              onChange={(_, value) => setFilter('action', value ?? '')}
+              // Display capitalized; the option value stays the raw verb the
+              // endpoint matches on.
+              getOptionLabel={(action) => actionLabel(action)}
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="Action"
+                  inputProps={{ ...params.inputProps, 'aria-label': 'Action' }}
+                />
+              )}
+            />
+            <TextField
+              size="small"
+              sx={{ width: 180, ...controlSx }}
+              placeholder="Resource"
+              value={filters.resource}
+              onChange={(e) => setFilter('resource', e.target.value)}
+              inputProps={{ 'aria-label': 'Resource' }}
+            />
+            <Autocomplete
+              size="small"
+              sx={autocompleteSx(200)}
+              options={fismaSystems}
+              value={
+                fismaSystems.find((s) => s.fismasystemid === filters.system) ??
+                null
+              }
+              onChange={(_, value) =>
+                setFilter('system', value ? value.fismasystemid : null)
+              }
+              getOptionLabel={(s) => s.fismaacronym}
+              isOptionEqualToValue={(a, b) =>
+                a.fismasystemid === b.fismasystemid
+              }
+              renderInput={(params) => (
+                <TextField
+                  {...params}
+                  placeholder="System"
+                  inputProps={{ ...params.inputProps, 'aria-label': 'System' }}
+                />
+              )}
+            />
+            {/* Themed MUI date pickers so the field and calendar inherit the
+              design tokens. "From" cannot exceed "To" or today; "To" cannot
+              precede "From". */}
+            <CompactDatePicker
+              ariaLabel="From"
+              value={filters.from}
+              onChange={(value) => setFilter('from', value)}
+              maxDate={toDate ?? today}
+            />
+            <CompactDatePicker
+              ariaLabel="To"
+              value={filters.to}
+              onChange={(value) => setFilter('to', value)}
+              minDate={fromDate ?? undefined}
+              maxDate={today}
+            />
+            <Button
+              variant="text"
+              size="small"
+              onClick={clearFilters}
+              disabled={!hasActiveFilters}
+              sx={{
+                fontSize: 13,
+                textTransform: 'none',
+                whiteSpace: 'nowrap',
+                color: colors.primary,
+              }}
+            >
+              Clear filters
+            </Button>
+          </Box>
+          {/* Fixed grid height (parity with OpDivs): rows scroll inside the grid
+            while the page scrolls around the card. */}
+          <Box sx={{ height: 600, width: '100%' }}>
+            <DataGrid
+              {...accessibleGrid}
+              aria-label="Events"
+              rows={rows}
+              columns={columns}
+              getRowId={(row) => row.eventid}
+              loading={loading}
+              // The endpoint owns ordering (createdat DESC, eventid tiebreaker)
+              // and filtering; the grid is display-only, so its client-side
+              // machinery is off across the board.
+              paginationMode="server"
+              rowCount={total}
+              paginationModel={paginationModel}
+              onPaginationModelChange={setPaginationModel}
+              pageSizeOptions={[25, 50, 100, 250]}
+              slots={{ footer: DataGridPaginationFooter }}
+              // Server mode: hand the footer the true total, since the grid only
+              // holds the current page's rows.
+              slotProps={{
+                footer: { rowCount: total, pageSizes: [25, 50, 100, 250] },
+              }}
+              disableColumnFilter
+              disableColumnMenu
+              disableRowSelectionOnClick
+              sx={{
+                height: '100%',
+                border: 'none',
+                backgroundColor: colors.white,
+                '& .MuiDataGrid-columnHeaders': {
+                  backgroundColor: colors.neutral50,
+                },
+                '& .MuiDataGrid-cell': {
+                  borderBottom: `1px solid ${colors.neutral100}`,
+                },
+              }}
+            />
+          </Box>
+        </Box>
       </Box>
-      <DataGrid
-        {...accessibleGrid}
-        autoHeight
-        rows={rows}
-        columns={columns}
-        getRowId={(row) => row.eventid}
-        loading={loading}
-        // The endpoint owns ordering (createdat DESC, eventid tiebreaker) and
-        // filtering; the grid is display-only, so its client-side machinery
-        // is off across the board.
-        paginationMode="server"
-        rowCount={total}
-        paginationModel={paginationModel}
-        onPaginationModelChange={setPaginationModel}
-        pageSizeOptions={[25, 50, 100, 250]}
-        disableColumnFilter
-        disableColumnMenu
-        disableRowSelectionOnClick
-        sx={{
-          '& .MuiDataGrid-columnHeaders': {
-            backgroundColor: '#004297',
-            color: '#fff',
-          },
-          '& .MuiDataGrid-sortIcon': { color: '#fff' },
-        }}
-      />
-    </Box>
+    </LocalizationProvider>
   )
 }

@@ -3,16 +3,13 @@ import Box from '@mui/material/Box'
 import Chip from '@mui/material/Chip'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import Typography from '@mui/material/Typography'
-import List from '@mui/material/List'
-import ListItem from '@mui/material/ListItem'
-import ListItemButton from '@mui/material/ListItemButton'
-import ListItemText from '@mui/material/ListItemText'
-import ListSubheader from '@mui/material/ListSubheader'
 import { useParams } from 'react-router-dom'
-import { Button as CmsButton, Spinner } from '@cmsgov/design-system'
-import Grid from '@mui/material/Grid'
+import { Spinner } from '@cmsgov/design-system'
+import { colors, status } from '@/theme/tokens'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ui/PageHeader'
+import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import { visuallyHidden } from '@mui/utils'
@@ -25,7 +22,6 @@ import {
   QuestionScores,
   Insight,
   InsightPayload,
-  ScoreAggregate,
 } from '@/types'
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
@@ -33,7 +29,6 @@ import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import { RouteNames } from '@/router/constants'
-import { ArrowIcon } from '@cmsgov/design-system'
 import {
   ERROR_MESSAGES,
   STATUS_MESSAGES,
@@ -50,11 +45,18 @@ import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
-import PillarScoresModal from '@/components/PillarScoresModal/PillarScoresModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
-import LastEditedFooter from './LastEditedFooter'
+import {
+  carryForwardState,
+  canConfirmCarryForward,
+  buildScoreByFunction,
+  buildConfirmSummary,
+  type ConfirmSummary,
+  type ConfirmSummaryEntry,
+} from './confirmState'
+import ConfirmSummaryDialog from './ConfirmSummaryDialog'
 import InsightsPanel from './InsightsPanel/InsightsPanel'
 import QuestionRadioGroup from './QuestionRadioGroup'
 import JustificationField, {
@@ -68,15 +70,16 @@ import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
-import {
-  carryForwardState,
-  canConfirmCarryForward,
-  buildScoreByFunction,
-  buildConfirmSummary,
-  type ConfirmSummary,
-  type ConfirmSummaryEntry,
-} from './confirmState'
-import ConfirmSummaryDialog from './ConfirmSummaryDialog'
+import { addSpace, type Category } from './helpers'
+// Aliased because a local state variable named `datacall` shadows the type.
+import type { datacall as Datacall } from '@/types'
+import ClosedDatacallBanner from './components/ClosedDatacallBanner'
+import PillarRail from './components/PillarRail'
+import EyebrowLine from './components/EyebrowLine'
+import SectionRail from './components/SectionRail'
+import QuestionnaireProgress from './components/QuestionnaireProgress'
+import SaveIndicator from './components/SaveIndicator'
+import Card from './components/Card'
 import {
   saveDraft,
   loadDraft,
@@ -92,10 +95,6 @@ import {
   resolveDatacallBySlug,
   resolveFunctionTarget,
 } from './deepLink'
-type Category = {
-  name: string
-  steps: FismaQuestion[]
-}
 type questionScoreMap = {
   [key: number]: QuestionScores
 }
@@ -133,20 +132,6 @@ const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
 // on hover only.
 const NAV_HINT_ID = 'questionnaire-nav-hint'
 
-const addSpace = (str: string) => {
-  for (let i = 0; i < str.length; i++) {
-    if (
-      i > 0 &&
-      str[i] === str[i].toUpperCase() &&
-      // str[i - 1] !== '-' &&
-      str[i - 1] !== ' '
-    ) {
-      str = str.slice(0, i) + ' ' + str.slice(i)
-      i++
-    }
-  }
-  return str
-}
 export default function QuestionnarePage() {
   const {
     userInfo,
@@ -161,12 +146,6 @@ export default function QuestionnarePage() {
   } = useContextProp()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
-  // PillarScoresModal takes its rows as a prop rather than fetching (unlike
-  // ScoreDiffModal), so the header button fetches before opening (ui#610).
-  const [pillarScores, setPillarScores] = React.useState<{
-    open: boolean
-    scores: ScoreAggregate[]
-  }>({ open: false, scores: [] })
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
@@ -214,6 +193,11 @@ export default function QuestionnarePage() {
   const [stepId, setStepId] = React.useState<number>(0)
   const [selectQuestionOption, setSelectQuestionOption] =
     React.useState<number>(-1)
+  // Local "last saved" timestamp used by the save indicator under the
+  // question card. Updated on every successful saveResponse() so the
+  // indicator reads "Saved just now / 2 min ago" without depending on the
+  // questionScores re-fetch round trip.
+  const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
   const [draftStatus, setDraftStatus] = React.useState<
     'idle' | 'restored' | 'saved' | 'error'
   >('idle')
@@ -288,13 +272,24 @@ export default function QuestionnarePage() {
       const response = await axiosInstance.get(
         apiPaths.scores.list(datacallID, systemId, true)
       )
+      const rows: QuestionScores[] = response.data.data ?? []
       const hashTable: questionScoreMap = Object.assign(
         {},
-        ...response.data.data.map((item: QuestionScores) => ({
+        ...rows.map((item: QuestionScores) => ({
           [item.functionoptionid]: item,
         }))
       )
       setQuestionScores(hashTable)
+      // Seed the "last saved" indicator from the freshest score row so the
+      // header subtitle reads "last saved 2 min ago" on first paint instead
+      // of waiting for a save in this session.
+      let maxAt = 0
+      for (const r of rows) {
+        if (!r.last_edited_at) continue
+        const t = new Date(r.last_edited_at).getTime()
+        if (Number.isFinite(t) && t > maxAt) maxAt = t
+      }
+      if (maxAt > 0) setLastSavedAt(new Date(maxAt))
       return hashTable
     } catch (error) {
       if (isAuthHandled(error)) return undefined
@@ -516,23 +511,6 @@ export default function QuestionnarePage() {
     // the entry, declined or not, so nothing is left to suppress.
     declinedDraftRef.current = false
     setDraftStatus('idle')
-  }
-
-  // Same aggregate call the dashboard's Pillar Scores action makes. Not cached:
-  // the dashboard memoizes across many rows, this page is one system and one
-  // click. On failure nothing opens and the user is told, rather than opening an
-  // empty modal that reads as "this system has no scores".
-  const handleOpenPillarScores = async () => {
-    try {
-      const res = await axiosInstance.get(
-        apiPaths.scores.aggregateBySystem(system)
-      )
-      setPillarScores({ open: true, scores: res.data?.data ?? [] })
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      console.error('Error fetching pillar scores:', error)
-      notify(ERROR_MESSAGES.tryAgain, 'error')
-    }
   }
 
   // Keep insight, review, and card state scoped to one system x data call x
@@ -807,6 +785,7 @@ export default function QuestionnarePage() {
         })
       }
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      setLastSavedAt(new Date())
       clearCurrentDraft()
       setPriorReview((current) =>
         current.contextId === priorReviewContextId
@@ -869,7 +848,12 @@ export default function QuestionnarePage() {
               datacalls,
               datacallSlugRef.current
             )
-            const isHistorical =
+            // "Not the latest call" does not mean "closed": two calls can be
+            // open at once (e.g. a CMS quarterly and an HHS annual), and
+            // "latest" only ranks deadlines. A non-latest pick just means the
+            // user chose a specific call; whether it reads as closed is
+            // decided by that call's own deadline below.
+            const isExplicitPick =
               selectedDatacall !== null &&
               selectedDatacall.datacallid !== latestDataCallId
             if (deepLinkDatacall) {
@@ -881,10 +865,14 @@ export default function QuestionnarePage() {
                   : true
               )
               activeDataCallId = deepLinkDatacall.datacallid
-            } else if (isHistorical && selectedDatacall) {
+            } else if (isExplicitPick && selectedDatacall) {
               datacall = encodeDatacallSlug(selectedDatacall.datacall)
               setDatacall(datacall)
-              setIsPastDeadline(true)
+              setIsPastDeadline(
+                selectedDatacall.deadline
+                  ? new Date() > new Date(selectedDatacall.deadline)
+                  : true
+              )
               activeDataCallId = selectedDatacall.datacallid
             } else {
               datacall = encodeDatacallSlug(latestDatacall)
@@ -1008,12 +996,24 @@ export default function QuestionnarePage() {
               apiPaths.scores.list(activeDataCallId, system, true),
               { signal: controller.signal }
             )
+            const rows: QuestionScores[] = res.data.data ?? []
+            // Assigned into the outer hashTable so the batch below commits
+            // questions + scores + datacallID + questionId together.
             hashTable = Object.assign(
               {},
-              ...res.data.data.map((item: QuestionScores) => ({
+              ...rows.map((item: QuestionScores) => ({
                 [item.functionoptionid]: item,
               }))
             )
+            // Same seed as fetchQuestionScores so a freshly-loaded page
+            // shows "last saved <time>" without needing a save first.
+            let maxAt = 0
+            for (const r of rows) {
+              if (!r.last_edited_at) continue
+              const t = new Date(r.last_edited_at).getTime()
+              if (Number.isFinite(t) && t > maxAt) maxAt = t
+            }
+            if (maxAt > 0) setLastSavedAt(new Date(maxAt))
           } catch (error) {
             if (controller.signal.aborted) return
             if (!isAuthHandled(error)) {
@@ -1510,7 +1510,13 @@ export default function QuestionnarePage() {
       size="small"
       component={RouterLink}
       to={`/systems/${system}`}
-      sx={{ whiteSpace: 'nowrap' }}
+      // Renders as a real <a>, so the CMS design system's global a:visited
+      // rule would repaint the label purple after a click and break the button
+      // look. Pin the link states to the button's own color.
+      sx={{
+        whiteSpace: 'nowrap',
+        '&:link, &:visited': { color: 'primary.main' },
+      }}
     >
       System Info
     </Button>
@@ -1542,6 +1548,69 @@ export default function QuestionnarePage() {
       </>
     )
   }
+  // Derived values used in the render block. Plain const (not useMemo)
+  // because they sit below the early returns above; useMemo here would
+  // violate React's rules-of-hooks ordering. Cheap O(n) over the pillar
+  // list, which has < 10 elements.
+  const totalQuestions = categories.reduce((acc, p) => acc + p.steps.length, 0)
+  // Answered count = number of score rows for this (system, datacall). The
+  // map is keyed by functionoptionid; each question has exactly one picked
+  // option, so size === answered question count.
+  const totalAnswered = Object.keys(questionScores).length
+  // Set of functionids that have a score row, derived from the embedded
+  // functionoption.functionid on each score row (present because we fetched
+  // with ?include=functionoption). Drives per-pillar progress counts in the
+  // left rail and per-question checkmarks in the right rail.
+  const answeredFunctionIds = new Set<number>()
+  for (const id in questionScores) {
+    const row = questionScores[Number(id)] as QuestionScores & {
+      functionoption?: { functionid?: number }
+    }
+    const fid = row.functionoption?.functionid
+    if (typeof fid === 'number') answeredFunctionIds.add(fid)
+  }
+  const answeredCountInCategory = (cat: Category): number =>
+    cat.steps.reduce(
+      (acc, s) =>
+        answeredFunctionIds.has(s.function.functionid) ? acc + 1 : acc,
+      0
+    )
+  const currentCategory = categories.find((c) =>
+    c.steps.some((s) => s.function.functionid === selectedIndex)
+  )
+  const currentCategoryName = currentCategory?.name ?? ''
+  const currentFunctionIndex = currentCategory
+    ? currentCategory.steps.findIndex(
+        (s) => s.function.functionid === selectedIndex
+      )
+    : 0
+  const currentFunctionName = currentCategory?.steps[currentFunctionIndex]
+    ? addSpace(currentCategory.steps[currentFunctionIndex].function.function)
+    : ''
+
+  const navigateToFunction = (pillarName: string, fn: FismaQuestion) => {
+    if (selectedIndex === fn.function.functionid) return
+    const dirty =
+      !isReadOnly &&
+      ((selectQuestionOption !== -1 &&
+        initQuestionChoice !== selectQuestionOption) ||
+        initNotes !== notes ||
+        priorReviewNeedsSave)
+    if (dirty) {
+      setStepId(fn.function.functionid)
+      setOpenAlert(true)
+      return
+    }
+    navigate(
+      `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillarName)}/${toSlug(fn.function.function)}`,
+      {
+        state: { fismasystemid: system, ...datacallStateRef.current },
+        replace: true,
+      }
+    )
+    handleListItemClick(fn.function.functionid)
+  }
+
   // Inline validation: when the user has flipped their answer without
   // substantially editing the notes, we block the save (Next button) and
   // surface the reason under the notes field. See saveGuard.ts for the rule.
@@ -1571,537 +1640,583 @@ export default function QuestionnarePage() {
   // questionnaire actually resolved (datacallID covers every entry path,
   // including URL deep links where no route state exists); fall back to the
   // route/selected/latest chain during the pre-fetch window.
+
+  // The questionnaire resolves its own call from route state / the URL, which
+  // can differ from the global dashboard selection (e.g. opened on a system's
+  // historical call while the dashboard aggregates the current year). The
+  // context card must describe THIS page's call, or its Active chip and dates
+  // contradict the closed-call banner below it.
+  const viewedDatacall =
+    datacalls.find((dc) => dc.datacallid === datacallID) ?? null
+
+  // The data call the Compare-datacalls modal presents as "current". Prefer
+  // the call this questionnaire actually resolved (datacallID covers every
+  // entry path, including URL deep links where no route state exists); fall
+  // back to the route/selected/latest chain during the pre-fetch window.
   const viewedDataCallId =
     datacallID > 0
       ? datacallID
       : routeDatacallId ?? selectedDatacall?.datacallid ?? latestDataCallId
+
+  // Picking a call in the card re-opens the questionnaire on it: same system,
+  // same pillar/function, new datacall segment + route state (the resolution
+  // effect keys on the route state and re-runs).
+  const handleDatacallPick = (dc: Datacall) => {
+    if (dc.datacallid === datacallID) return
+    const dirty =
+      !isReadOnly &&
+      ((selectQuestionOption !== -1 &&
+        initQuestionChoice !== selectQuestionOption) ||
+        initNotes !== notes ||
+        priorReviewNeedsSave)
+    if (dirty) {
+      notify(
+        'Save or discard your changes before switching data calls.',
+        'warning',
+        { autoHideDuration: 3000 }
+      )
+      return
+    }
+    const q = questions[selectedIndex]
+    const tail = q ? `/${toSlug(q.pillar)}/${toSlug(q.function)}` : ''
+    navigate(
+      `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${encodeDatacallSlug(dc.datacall)}${tail}`,
+      {
+        state: {
+          fismasystemid: system,
+          datacallid: dc.datacallid,
+          datacall: dc.datacall,
+          deadline: dc.deadline,
+        },
+        replace: true,
+      }
+    )
+  }
   return (
-    <>
+    <Box sx={{ py: 4 }}>
+      <PageHeader
+        breadcrumbs={<BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />}
+        title={
+          <Box
+            component="span"
+            sx={{ display: 'inline-flex', alignItems: 'baseline', gap: 1 }}
+          >
+            <Box component="span" sx={{ color: colors.ink }}>
+              {systemName}
+            </Box>
+            <Box
+              component="span"
+              sx={{ color: colors.neutral500, fontWeight: 600 }}
+            >
+              · Questionnaire
+            </Box>
+          </Box>
+        }
+        actions={
+          <>
+            {/* Cross-navigation back to the system detail page (ui#610);
+                systemInfoLink is a real router link so open-in-new-tab and
+                copy-link work. */}
+            {systemInfoLink}
+            <Button
+              variant="outlined"
+              color="primary"
+              // Same destination as the dashboard's Pillar Scores action
+              // (a route in this app, not a modal) (ui#610).
+              onClick={() => navigate(`/systems/${system}/pillar-scores`)}
+            >
+              Pillar scores
+            </Button>
+            <Button
+              variant="outlined"
+              color="primary"
+              onClick={() => setDiffModalOpen(true)}
+            >
+              Compare datacalls
+            </Button>
+            {/* No submit affordance: each answer persists on its own when the
+                user clicks Next or Complete (there is no submit endpoint), so
+                a header "Submit" would only navigate away - which System Info
+                already does. Leaving the questionnaire is that link or the
+                breadcrumb, not a button dressed up as a submission. */}
+          </>
+        }
+      />
+      <QuestionnaireProgress answered={totalAnswered} total={totalQuestions} />
+      <DatacallContextCard
+        viewedDatacall={viewedDatacall}
+        onPick={handleDatacallPick}
+      />
+      {isPastDeadline && <ClosedDatacallBanner readOnly={isReadOnly} />}
       <Box
         sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
+          display: 'grid',
+          gridTemplateColumns: {
+            xs: '1fr',
+            md: '220px 1fr 260px',
+          },
+          gap: 1.75,
+          alignItems: 'flex-start',
         }}
       >
-        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
-        <Box sx={{ display: 'flex', gap: 1 }}>
-          {systemInfoLink}
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={handleOpenPillarScores}
-            sx={{ whiteSpace: 'nowrap' }}
+        <PillarRail
+          categories={categories}
+          currentCategoryName={currentCategoryName}
+          answeredCountInCategory={answeredCountInCategory}
+          // Cross-pillar confirmation visibility: every pillar shows how many
+          // carried-forward answers still need confirming, so the remaining
+          // work is scannable without paging section by section. Same
+          // classification the section rail's per-question markers use.
+          toConfirmCountInCategory={(cat) =>
+            cat.steps.reduce(
+              (acc, s) =>
+                carryForwardState(
+                  scoreByFunction[s.function.functionid],
+                  isOpenCall
+                ) === 'unconfirmed'
+                  ? acc + 1
+                  : acc,
+              0
+            )
+          }
+          onPillarClick={(category) => {
+            const first = category.steps[0]
+            if (first) navigateToFunction(category.name, first)
+          }}
+        />
+        <Card sx={{ p: 3 }}>
+          <EyebrowLine
+            pillar={currentCategoryName}
+            functionName={currentFunctionName}
+            current={currentFunctionIndex + 1}
+            total={currentCategory?.steps.length ?? 0}
+          />
+          {/* The question is the card's heading - h2 under the PageHeader's
+              h1 so screen-reader users can jump straight to it. */}
+          <Typography
+            component="h2"
+            sx={{
+              fontSize: 18,
+              fontWeight: 700,
+              color: colors.ink,
+              mt: 0.75,
+              mb: 0.5,
+              lineHeight: 1.35,
+            }}
           >
-            Pillar Scores
-          </Button>
-          <Button
-            variant="outlined"
-            size="small"
-            onClick={() => setDiffModalOpen(true)}
-            sx={{ whiteSpace: 'nowrap' }}
-          >
-            Compare Datacalls
-          </Button>
-        </Box>
-      </Box>
-      {isPastDeadline && !isReadOnly && (
-        <Alert severity="warning" sx={{ mb: 2 }}>
-          This datacall has closed. Changes will be recorded as post-deadline.
-        </Alert>
-      )}
-      <Container maxWidth={false} disableGutters>
-        <Grid container columnSpacing={2} sx={{ mt: 2 }}>
-          <Grid item xs={3}>
-            <List
+            {question || ' '}
+          </Typography>
+          {description && (
+            <Typography
               sx={{
-                width: '100%',
-                bgcolor: 'background.paper',
-                position: 'relative',
-                overflowY: 'auto',
-                overflowX: 'hidden',
-                maxHeight: 'calc(100vh - 240px)',
-                '& ul': { padding: 0 },
+                fontSize: 13,
+                color: colors.neutral500,
+                mb: 2,
               }}
-              subheader={<li />}
             >
-              {categories.map((pillar) => (
-                <li key={`${pillar.name}-section`}>
-                  <ul>
-                    <ListSubheader
+              {description}
+            </Typography>
+          )}
+          {insightsPending && (
+            <Typography
+              role="status"
+              variant="caption"
+              sx={{ color: 'text.secondary' }}
+            >
+              Checking for prior responses...
+            </Typography>
+          )}
+          {showInsights && currentInsight && (
+            <InsightsPanel
+              payload={currentInsight}
+              questionId={currentDatabaseQuestionId}
+            />
+          )}
+          {loadingQuestion ? (
+            <Box
+              sx={{
+                display: 'flex',
+                justifyContent: 'center',
+                alignItems: 'center',
+                py: 4,
+              }}
+            >
+              <Spinner size="big" />
+            </Box>
+          ) : (
+            <>
+              {/* QuestionRadioGroup (not OptionCardList) so each option keeps
+                  its insight badges and the FIPS baseline treatment; the box
+                  key remounts the subtree on an out-of-band re-seed. */}
+              <Box key={radioKey} sx={{ mb: 2 }}>
+                {renderRadioGroup(options)}
+              </Box>
+              {hasJustificationContext ? (
+                // Carried-forward prior response and/or an Insights
+                // suggestion exist: render the review-aware justification
+                // editor. It owns its own label, char counter, and (for
+                // CMS calls) the suggestion card.
+                <JustificationField
+                  key={justificationContextId}
+                  contextId={justificationContextId}
+                  label={notePrompt || 'Justification'}
+                  value={notes}
+                  onChange={(value) => {
+                    setNotes(value)
+                    if (draftStatus === 'restored') setDraftStatus('idle')
+                  }}
+                  insight={currentInsight}
+                  priorResponse={currentPriorResponse}
+                  showInsightSuggestion={showCmsInsights}
+                  viewedDatacall={datacall}
+                  priorReviewState={priorReviewState}
+                  onPriorReview={updatePriorReviewState}
+                  disabled={isReadOnly}
+                  error={needsNotesUpdate}
+                  helperText={
+                    needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                  }
+                  maxLength={MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                />
+              ) : (
+                <>
+                  <Typography
+                    component="label"
+                    htmlFor="questionnaire-notes"
+                    sx={{
+                      display: 'block',
+                      fontSize: 13,
+                      fontWeight: 600,
+                      color: colors.ink,
+                      mt: 3,
+                      mb: 0.5,
+                    }}
+                  >
+                    Supporting evidence{' '}
+                    <Box
+                      component="span"
                       sx={{
-                        backgroundColor: '#07124d',
-                        color: 'white',
-                        textAlign: 'center',
+                        color: colors.neutral500,
+                        fontWeight: 500,
                       }}
                     >
-                      {pillar.name === 'CrossCutting'
-                        ? 'CROSS CUTTING'
-                        : pillar.name.toUpperCase()}
-                    </ListSubheader>
-                    {pillar.steps.map((func) => {
-                      // console.log(func)
-                      const text = addSpace(func.function.function)
-                      const customFontSize =
-                        text.length > 33 ? '0.9rem' : '1rem'
-                      // Sidebar confirmation marker: same classification the
-                      // question view's badge reads. Text-bearing, not
-                      // color-only (508); rendered as ListItemText secondary
-                      // so it is part of the button's accessible name.
-                      const sidebarCarryState = carryForwardState(
-                        scoreByFunction[func.function.functionid],
-                        isOpenCall
-                      )
-                      // TODO: refactor this code such that it's going to be a single component instead of being rerendered everytime
-                      return (
-                        <ListItem
-                          key={`item-${pillar.name}-${func.function.functionid}`}
-                          disablePadding
-                        >
-                          <ListItemButton
-                            selected={
-                              selectedIndex === func.function.functionid
-                            }
-                            onClick={() => {
-                              // prevent clicking on the same question to break list
-                              if (selectedIndex !== func.function.functionid) {
-                                setStepId(func.function.functionid)
-                                if (
-                                  !isReadOnly &&
-                                  ((selectQuestionOption !== -1 &&
-                                    initQuestionChoice !==
-                                      selectQuestionOption) ||
-                                    initNotes !== notes ||
-                                    priorReviewNeedsSave)
-                                ) {
-                                  setOpenAlert(true)
-                                } else {
-                                  navigate(
-                                    `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(pillar.name)}/${toSlug(func.function.function)}`,
-                                    {
-                                      state: {
-                                        fismasystemid: system,
-                                        ...datacallStateRef.current,
-                                      },
-                                      replace: true,
-                                    }
-                                  )
-                                  handleListItemClick(func.function.functionid)
-                                }
-                              }
-                            }}
-                          >
-                            <ListItemText
-                              primary={`${text}`}
-                              secondary={
-                                sidebarCarryState === 'unconfirmed'
-                                  ? 'Not yet confirmed'
-                                  : sidebarCarryState === 'updated'
-                                    ? 'Updated'
-                                    : undefined
-                              }
-                              secondaryTypographyProps={{
-                                fontSize: '0.75rem',
-                                color:
-                                  sidebarCarryState === 'unconfirmed'
-                                    ? 'warning.dark'
-                                    : 'success.dark',
-                              }}
-                              sx={{ fontSize: customFontSize }}
-                            />
-                          </ListItemButton>
-                        </ListItem>
-                      )
-                    })}
-                  </ul>
-                </li>
-              ))}
-            </List>
-          </Grid>
-          <Grid item xs={9}>
-            <Box>
+                      - optional
+                    </Box>
+                  </Typography>
+                  <CssTextField
+                    id="questionnaire-notes"
+                    multiline
+                    rows={4}
+                    fullWidth
+                    value={notes}
+                    disabled={isReadOnly}
+                    error={needsNotesUpdate}
+                    helperText={
+                      needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                    }
+                    placeholder={
+                      notePrompt ||
+                      'Link policies or screenshots in your evidence repo.'
+                    }
+                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
+                    onChange={(e) => {
+                      setNotes(e.target.value)
+                      if (draftStatus === 'restored') setDraftStatus('idle')
+                    }}
+                  />
+                </>
+              )}
               <Box
                 sx={{
-                  color: '#5a5a5a',
-                  mb: 0,
-                  borderRadius: 1,
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 1,
+                  mt: 0.5,
                 }}
               >
-                {description}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <AISummaryBadge
+                    show={
+                      selectQuestionOption >= 0 &&
+                      questionScores[selectQuestionOption]
+                        ?.notes_is_ai_summary === true
+                    }
+                  />
+                  {!hasJustificationContext && (
+                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                      {notePrompt
+                        ? notePrompt
+                        : 'Link policies or screenshots in your evidence repo.'}
+                    </Typography>
+                  )}
+                </Box>
+                {/* JustificationField renders its own counter. */}
+                {!hasJustificationContext && !isReadOnly && (
+                  <Typography
+                    sx={{
+                      fontSize: 12,
+                      color:
+                        notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
+                          ? colors.danger
+                          : notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
+                            ? '#A34200'
+                            : colors.neutral500,
+                    }}
+                  >
+                    {notes.length} / {MAX_QUESTIONNAIRE_NOTES_LENGTH}
+                  </Typography>
+                )}
               </Box>
-              {/* The question is the page's main heading — render as <h1>
-                  (keeping the h6 styling) so the page has a level-one heading. */}
-              <Typography variant="h6" component="h1" sx={{ mt: 1, mb: 0 }}>
-                {question}
-              </Typography>
-              {insightsPending && (
-                <Typography
-                  role="status"
-                  variant="caption"
-                  sx={{ color: 'text.secondary' }}
-                >
-                  Checking for prior responses…
-                </Typography>
-              )}
-              {showInsights && currentInsight && (
-                <InsightsPanel
-                  payload={currentInsight}
-                  questionId={currentDatabaseQuestionId}
-                />
-              )}
-              {loadingQuestion ? (
+              {/* Carried-forward confirmation strip, in the same zone where
+                  the prior-response flow surfaces its "review before
+                  continuing" message, so every system shares one review area.
+                  The chip is a role="status" live region, so confirming -
+                  which swaps its label in place - is announced (508). The
+                  button yields the moment the question is dirty (the edit is
+                  the explicit act; Next saves it), and Next itself never
+                  writes on an untouched question (#413). */}
+              {currentCarryState !== 'none' && (
                 <Box
                   sx={{
                     display: 'flex',
-                    justifyContent: 'center',
                     alignItems: 'center',
-                    maxHeight: '100%',
+                    flexWrap: 'wrap',
+                    gap: 1,
+                    mt: 1.5,
                   }}
                 >
-                  <Spinner size="big" />
-                </Box>
-              ) : (
-                <Box>
-                  <Box key={radioKey} sx={{ mb: 2 }}>
-                    {renderRadioGroup(options)}
-                  </Box>
-                  {hasJustificationContext ? (
-                    // Carried-forward prior response and/or an Insights
-                    // suggestion exist: render the review-aware justification
-                    // editor. It owns its own label, char counter, and (for
-                    // CMS calls) the suggestion card.
-                    <JustificationField
-                      key={justificationContextId}
-                      contextId={justificationContextId}
-                      label={notePrompt || 'Justification'}
-                      value={notes}
-                      onChange={(value) => {
-                        setNotes(value)
-                        if (draftStatus === 'restored') setDraftStatus('idle')
-                      }}
-                      insight={currentInsight}
-                      priorResponse={currentPriorResponse}
-                      showInsightSuggestion={showCmsInsights}
-                      viewedDatacall={datacall}
-                      priorReviewState={priorReviewState}
-                      onPriorReview={updatePriorReviewState}
-                      disabled={isReadOnly}
-                      error={needsNotesUpdate}
-                      helperText={
-                        needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
-                      }
-                      maxLength={MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                    />
-                  ) : (
-                    <>
-                      {/* h2 under the question's h1 so the heading order is valid. */}
-                      <Typography variant="h6" component="h2" sx={{ mb: 1 }}>
-                        {notePrompt || ''}
-                      </Typography>
-                      <CssTextField
-                        multiline
-                        rows={4}
-                        fullWidth
-                        value={notes}
-                        disabled={isReadOnly}
-                        error={needsNotesUpdate}
-                        helperText={
-                          needsNotesUpdate
-                            ? NOTES_UPDATE_REQUIRED_MSG
-                            : undefined
-                        }
-                        inputProps={{
-                          maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH,
-                          // The multiline field has no visible <label>; the
-                          // prompt above is styling-only. Give it an accessible
-                          // name (508).
-                          'aria-label': 'Justification notes',
-                        }}
-                        onChange={(e) => {
-                          setNotes(e.target.value)
-                          if (draftStatus === 'restored') setDraftStatus('idle')
-                        }}
-                      />
-                    </>
-                  )}
-                  {/* Sits where the prior-response flow puts its own review
-                      message, so both variants instruct in the same place.
-                      "before continuing" is advisory on purpose: Next is not
-                      blocked on this variant. Plain text, not a live region —
-                      the chip below owns the announcement. */}
-                  {showCarryForwardHelper && (
-                    <Typography
-                      id={CARRY_FORWARD_HELPER_ID}
-                      sx={{ mt: 0.5, fontSize: 12, color: '#8a4b00' }}
-                    >
-                      Review the carried-forward answer and confirm it, or write
-                      a new justification, before continuing.
-                    </Typography>
-                  )}
-                  <Box
-                    sx={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      mt: 0.5,
-                    }}
-                  >
-                    <AISummaryBadge
-                      show={
-                        selectQuestionOption >= 0 &&
-                        questionScores[selectQuestionOption]
-                          ?.notes_is_ai_summary === true
-                      }
-                    />
-                    {!hasJustificationContext && !isReadOnly && (
-                      <Typography
-                        variant="caption"
-                        sx={{
-                          ml: 'auto',
-                          color:
-                            notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                              ? 'error.main'
-                              : notes.length >=
-                                  MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                                ? 'warning.main'
-                                : 'text.secondary',
-                        }}
-                      >
-                        {notes.length}/{MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                      </Typography>
-                    )}
-                  </Box>
-                  {/* Carried-forward confirmation strip, in the same zone
-                      where the prior-response flow surfaces its "review
-                      before continuing" message, so every system shares one
-                      review area. The chip is a role="status" live region, so
-                      confirming — which swaps its label in place — is
-                      announced (508). The button yields the moment the
-                      question is dirty (the edit is the explicit act; Next
-                      saves it), and Next itself never writes on an untouched
-                      question (#413). */}
-                  {currentCarryState !== 'none' && (
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        alignItems: 'center',
-                        flexWrap: 'wrap',
-                        gap: 1,
-                        mt: 1.5,
-                      }}
-                    >
-                      <Chip
-                        role="status"
-                        size="small"
-                        variant="outlined"
-                        color={
-                          currentCarryState === 'unconfirmed'
-                            ? 'warning'
-                            : 'success'
-                        }
-                        // Outlined warning reads at 3.1:1 on white; success
-                        // clears AA on its own (ui#714).
-                        sx={
-                          currentCarryState === 'unconfirmed'
-                            ? outlinedChipSx('warning')
-                            : undefined
-                        }
-                        label={
-                          currentCarryState === 'unconfirmed'
-                            ? 'Carried forward — not yet confirmed'
-                            : 'Updated this data call'
-                        }
-                      />
-                      {showConfirmButton && (
-                        <Button
-                          variant="outlined"
-                          color="success"
-                          size="small"
-                          startIcon={<CheckCircleOutlineIcon />}
-                          onClick={handleConfirmClick}
-                          disabled={confirming}
-                          aria-describedby={
-                            showCarryForwardHelper
-                              ? CARRY_FORWARD_HELPER_ID
-                              : undefined
-                          }
-                          sx={{ textTransform: 'none' }}
-                        >
-                          Confirm this answer is still accurate
-                        </Button>
-                      )}
-                    </Box>
-                  )}
-                  <Box
-                    position="relative"
-                    display="flex"
-                    width="100%"
-                    justifyContent={'space-between'}
-                    sx={{ mt: 1 }}
-                  >
-                    <CmsButton
-                      onClick={() => {
-                        if (
-                          !isReadOnly &&
-                          ((selectQuestionOption !== -1 &&
-                            initQuestionChoice !== selectQuestionOption) ||
-                            initNotes !== notes ||
-                            priorReviewNeedsSave)
-                        ) {
-                          setStepId(
-                            stepFunctionId[functionIdIdx[selectedIndex] - 1]
-                          )
-                          setOpenAlert(true)
-                        } else {
-                          saveGenRef.current++
-                          const id =
-                            stepFunctionId[functionIdIdx[selectedIndex] - 1]
-                          if (questions[id]) {
-                            const q = questions[id]
-                            navigate(
-                              `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
-                              {
-                                state: {
-                                  fismasystemid: system,
-                                  ...datacallStateRef.current,
-                                },
-                                replace: true,
-                              }
-                            )
-                          }
-                          setLoadingQuestion(true)
-                          setQuestionId(id)
-                          setSelectedIndex(id)
-                        }
-                      }}
-                      color="primary"
-                      disabled={selectedIndex === stepFunctionId[0]}
-                      style={{ marginBottom: '8px', marginTop: '8px' }}
-                    >
-                      <ArrowIcon direction="left" />
-                      {` Back`}
-                    </CmsButton>
-                    {/* span: CmsButton cannot hold the Tooltip's ref.
-                        describeChild: without it MUI puts aria-label on that
-                        span, which is prohibited on a roleless element. */}
-                    <Tooltip title={navHintMsg} describeChild>
-                      <span>
-                        <CmsButton
-                          onClick={() => {
-                            // Complete on the open call summarizes instead of
-                            // silently wrapping to question 1. A closed call
-                            // keeps the wrap-around — harmless paging for a
-                            // historical viewer.
-                            if (isLastQuestion && isOpenCall) {
-                              void handleCompleteClick()
-                              return
-                            }
-                            saveGenRef.current++
-                            const id = isLastQuestion
-                              ? stepFunctionId[0]
-                              : stepFunctionId[functionIdIdx[selectedIndex] + 1]
-
-                            if (questions[id]) {
-                              const q = questions[id]
-                              navigate(
-                                `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
-                                {
-                                  state: {
-                                    fismasystemid: system,
-                                    ...datacallStateRef.current,
-                                  },
-                                  replace: true,
-                                }
-                              )
-                            }
-                            if (id !== questionId) setLoadingQuestion(true)
-                            setQuestionId(id)
-                            setSelectedIndex(id)
-                            if (!isReadOnly) {
-                              saveResponse()
-                            }
-                          }}
-                          disabled={
-                            needsNotesUpdate ||
-                            insightsPending ||
-                            priorReviewState === 'pending' ||
-                            priorReviewState === 'initializing'
-                          }
-                          aria-describedby={
-                            navHintMsg ? NAV_HINT_ID : undefined
-                          }
-                          style={{ marginBottom: '8px', marginTop: '8px' }}
-                        >
-                          {isLastQuestion ? (
-                            <Typography>Complete</Typography>
-                          ) : (
-                            <Typography>
-                              Next <ArrowIcon direction="right" />
-                            </Typography>
-                          )}
-                          {/* <NavigateNextIcon sx={{ pt: '2px' }} /> */}
-                        </CmsButton>
-                        {!!navHintMsg && (
-                          <Box
-                            component="span"
-                            id={NAV_HINT_ID}
-                            sx={visuallyHidden}
-                          >
-                            {navHintMsg}
-                          </Box>
-                        )}
-                      </span>
-                    </Tooltip>
-                  </Box>
-                  {draftStatus !== 'idle' && !isReadOnly && (
-                    <Alert
-                      severity={
-                        draftStatus === 'saved'
-                          ? 'success'
-                          : draftStatus === 'error'
-                            ? 'error'
-                            : 'warning'
-                      }
-                      icon={false}
-                      sx={{ mt: 1, py: 0.5 }}
-                    >
-                      {draftStatus === 'saved'
-                        ? 'Draft saved — click Next or Complete to save permanently.'
-                        : draftStatus === 'error'
-                          ? 'Draft could not be saved — click Next or Complete to save permanently.'
-                          : 'Draft restored — click Next or Complete to save permanently.'}
-                    </Alert>
-                  )}
-                  <LastEditedFooter
-                    lastEditedAt={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_at
-                        : null
+                  <Chip
+                    role="status"
+                    size="small"
+                    variant="outlined"
+                    color={
+                      currentCarryState === 'unconfirmed'
+                        ? 'warning'
+                        : 'success'
                     }
-                    lastEditedBy={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_by
-                        : null
+                    // Outlined warning reads at 3.1:1 on white; success
+                    // clears AA on its own (ui#714).
+                    sx={
+                      currentCarryState === 'unconfirmed'
+                        ? outlinedChipSx('warning')
+                        : undefined
+                    }
+                    label={
+                      currentCarryState === 'unconfirmed'
+                        ? 'Carried forward - not yet confirmed'
+                        : 'Updated this data call'
                     }
                   />
+                  {showConfirmButton && (
+                    <Button
+                      variant="outlined"
+                      color="success"
+                      size="small"
+                      startIcon={<CheckCircleOutlineIcon />}
+                      onClick={handleConfirmClick}
+                      disabled={confirming}
+                      aria-describedby={
+                        showCarryForwardHelper
+                          ? CARRY_FORWARD_HELPER_ID
+                          : undefined
+                      }
+                      sx={{ textTransform: 'none' }}
+                    >
+                      Confirm this answer is still accurate
+                    </Button>
+                  )}
                 </Box>
               )}
-            </Box>
-          </Grid>
-          <ConfirmDialog
-            confirmationText={CONFIRMATION_MESSAGE_QUESTION}
-            open={openAlert}
-            onClose={() => setOpenAlert(false)}
-            confirmClick={handleConfirmReturn}
-          />
-          <ConfirmSummaryDialog
-            summary={confirmSummary}
-            onClose={() => setConfirmSummary(null)}
-            onJump={jumpToSummaryEntry}
-          />
-        </Grid>
-      </Container>
+              {/* Sits where the prior-response flow puts its own review
+                  message, so both variants instruct in the same place.
+                  "before continuing" is advisory on purpose: Next is not
+                  blocked on this variant. Plain text, not a live region -
+                  the chip above owns the announcement. */}
+              {showCarryForwardHelper && (
+                <Typography
+                  id={CARRY_FORWARD_HELPER_ID}
+                  sx={{ mt: 0.5, fontSize: 12, color: status.warning.color }}
+                >
+                  Review the carried-forward answer and confirm it, or write a
+                  new justification, before continuing.
+                </Typography>
+              )}
+              {draftStatus !== 'idle' && !isReadOnly && (
+                <Alert
+                  severity={
+                    draftStatus === 'saved'
+                      ? 'success'
+                      : draftStatus === 'error'
+                        ? 'error'
+                        : 'warning'
+                  }
+                  icon={false}
+                  sx={{ mt: 1, py: 0.5 }}
+                >
+                  {draftStatus === 'saved'
+                    ? 'Draft saved - click Next or Complete to save permanently.'
+                    : draftStatus === 'error'
+                      ? 'Draft could not be saved - click Next or Complete to save permanently.'
+                      : 'Draft restored - click Next or Complete to save permanently.'}
+                </Alert>
+              )}
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  mt: 3,
+                  pt: 2,
+                  borderTop: `1px solid ${colors.neutral200}`,
+                }}
+              >
+                <Button
+                  variant="text"
+                  color="primary"
+                  disabled={selectedIndex === stepFunctionId[0]}
+                  onClick={() => {
+                    const id = stepFunctionId[functionIdIdx[selectedIndex] - 1]
+                    if (
+                      !isReadOnly &&
+                      ((selectQuestionOption !== -1 &&
+                        initQuestionChoice !== selectQuestionOption) ||
+                        initNotes !== notes ||
+                        priorReviewNeedsSave)
+                    ) {
+                      setStepId(id)
+                      setOpenAlert(true)
+                      return
+                    }
+                    saveGenRef.current++
+                    if (questions[id]) {
+                      const q = questions[id]
+                      navigate(
+                        `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                        {
+                          state: {
+                            fismasystemid: system,
+                            ...datacallStateRef.current,
+                          },
+                          replace: true,
+                        }
+                      )
+                    }
+                    setLoadingQuestion(true)
+                    setQuestionId(id)
+                    setSelectedIndex(id)
+                  }}
+                  sx={{ fontSize: 13, fontWeight: 600 }}
+                >
+                  {'< Previous'}
+                </Button>
+                <SaveIndicator
+                  lastSavedAt={lastSavedAt}
+                  lastEditedAt={
+                    initQuestionChoice !== -1 &&
+                    questionScores[initQuestionChoice]
+                      ? questionScores[initQuestionChoice].last_edited_at
+                      : null
+                  }
+                  lastEditedBy={
+                    initQuestionChoice !== -1 &&
+                    questionScores[initQuestionChoice]
+                      ? questionScores[initQuestionChoice].last_edited_by
+                      : null
+                  }
+                  isReadOnly={isReadOnly}
+                />
+                {/* Tooltip states that the forward action saves this
+                    question on its own (#705). describeChild so MUI applies
+                    aria-description, not aria-label, over the button text;
+                    the visually-hidden span mirrors it for keyboard/SR users.
+                    Empty title (read-only, or last-on-closed-call) suppresses
+                    the tooltip. */}
+                <Tooltip title={navHintMsg} describeChild>
+                  <span>
+                    <Button
+                      variant="contained"
+                      color="primary"
+                      disabled={
+                        needsNotesUpdate ||
+                        insightsPending ||
+                        priorReviewState === 'pending' ||
+                        priorReviewState === 'initializing'
+                      }
+                      aria-describedby={navHintMsg ? NAV_HINT_ID : undefined}
+                      onClick={() => {
+                        // Complete on the open call summarizes instead of
+                        // silently wrapping to question 1. A closed call keeps
+                        // the wrap-around - harmless paging for a historical
+                        // viewer.
+                        if (isLastQuestion && isOpenCall) {
+                          void handleCompleteClick()
+                          return
+                        }
+                        saveGenRef.current++
+                        const id = isLastQuestion
+                          ? stepFunctionId[0]
+                          : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+                        if (questions[id]) {
+                          const q = questions[id]
+                          navigate(
+                            `/${RouteNames.QUESTIONNAIRE}/${fismaacronym?.toLowerCase()}/${datacall}/${toSlug(q.pillar)}/${toSlug(q.function)}`,
+                            {
+                              state: {
+                                fismasystemid: system,
+                                ...datacallStateRef.current,
+                              },
+                              replace: true,
+                            }
+                          )
+                        }
+                        if (id !== questionId) setLoadingQuestion(true)
+                        setQuestionId(id)
+                        setSelectedIndex(id)
+                        if (!isReadOnly) saveResponse()
+                      }}
+                      sx={{ fontSize: 13 }}
+                    >
+                      {isLastQuestion ? 'Complete' : 'Next question >'}
+                    </Button>
+                    <Box component="span" id={NAV_HINT_ID} sx={visuallyHidden}>
+                      {navHintMsg}
+                    </Box>
+                  </span>
+                </Tooltip>
+              </Box>
+            </>
+          )}
+        </Card>
+        <SectionRail
+          category={currentCategory}
+          selectedIndex={selectedIndex}
+          answeredFunctionIds={answeredFunctionIds}
+          // Sidebar confirmation marker: same classification the question
+          // view's chip reads.
+          carryStateFor={(functionid) =>
+            carryForwardState(scoreByFunction[functionid], isOpenCall)
+          }
+          onFunctionClick={(fn) => {
+            if (currentCategory) navigateToFunction(currentCategory.name, fn)
+          }}
+        />
+      </Box>
+      <ConfirmDialog
+        confirmationText={CONFIRMATION_MESSAGE_QUESTION}
+        open={openAlert}
+        onClose={() => setOpenAlert(false)}
+        confirmClick={handleConfirmReturn}
+      />
+      <ConfirmSummaryDialog
+        summary={confirmSummary}
+        onClose={() => setConfirmSummary(null)}
+        onJump={jumpToSummaryEntry}
+      />
+      {/* Seeds the "To" picker default in ScoreDiffModal. Prefer the call this
+          questionnaire actually resolved (datacallID covers every entry path,
+          including URL deep links where no route state exists); fall back to
+          the route/selected/latest chain during the pre-fetch window. */}
       <ScoreDiffModal
         open={diffModalOpen}
         onClose={() => setDiffModalOpen(false)}
@@ -2110,19 +2225,6 @@ export default function QuestionnarePage() {
         systemAcronym={fismaacronym ?? ''}
         selectedDataCallId={viewedDataCallId}
       />
-      {/* Same modal the dashboard's Pillar Scores action opens. The acronym
-          comes from the resolved system rather than the lowercased URL param so
-          the title matches the dashboard's casing. */}
-      <PillarScoresModal
-        open={pillarScores.open}
-        onClose={() => setPillarScores((prev) => ({ ...prev, open: false }))}
-        systemName={systemName}
-        systemAcronym={
-          systemInfo?.fismaacronym ?? fismaacronym?.toUpperCase() ?? ''
-        }
-        scores={pillarScores.scores}
-        selectedDataCallId={viewedDataCallId}
-      />
-    </>
+    </Box>
   )
 }

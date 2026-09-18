@@ -1,28 +1,23 @@
 import React from 'react'
 import {
-  Chip,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
+  Box,
+  Button,
+  Checkbox,
+  InputAdornment,
+  OutlinedInput,
   Typography,
 } from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
+import Modal from '@/components/ui/Modal'
 import { GridRowId } from '@mui/x-data-grid'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import CustomSnackbar from '../Snackbar/Snackbar'
-import Checkbox from '@mui/material/Checkbox'
-import TextField from '@mui/material/TextField'
-import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete'
-import CheckBoxOutlineBlankIcon from '@mui/icons-material/CheckBoxOutlineBlank'
-import CheckBoxIcon from '@mui/icons-material/CheckBox'
+import SearchIcon from '@mui/icons-material/Search'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import { colors } from '@/theme/tokens'
 import { FismaSystemType } from '@/types'
-const icon = <CheckBoxOutlineBlankIcon fontSize="small" />
-const checkedIcon = <CheckBoxIcon fontSize="small" />
 
 type Props = {
   open: boolean
@@ -37,6 +32,51 @@ type Props = {
   decommSystems: FismaSystemType[]
 }
 
+const searchInputSx = {
+  height: 36,
+  fontSize: 13,
+  '& .MuiOutlinedInput-input': { padding: '0 0' },
+  '& fieldset': { borderColor: colors.neutral200 },
+}
+
+const rowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1,
+  px: 1.25,
+  py: 0.75,
+  borderBottom: `1px solid ${colors.neutral100}`,
+  cursor: 'pointer',
+  '&:last-of-type': { borderBottom: 'none' },
+  '&:hover': { backgroundColor: colors.neutral50 },
+}
+
+const rowTitleSx = {
+  fontSize: 13,
+  fontWeight: 700,
+  color: colors.ink,
+  lineHeight: 1.3,
+}
+
+const rowMetaSx = {
+  fontSize: 12,
+  color: colors.neutral500,
+  lineHeight: 1.3,
+}
+
+/**
+ * Assign FISMA systems modal. Renders the checkbox list described by the
+ * mockup (frame 16) in the shared Modal shell. Checking a row POSTs the
+ * assignment immediately, unchecking opens a confirm dialog before the
+ * DELETE, and the footer Done button just closes - nothing is queued.
+ *
+ * The pickable set comes from GET /users/:id/assignablefismasystems, which
+ * is already scoped to the target user's OpDivs (and intersected with the
+ * caller's OpDivs when the caller is scoped). Current assignments outside
+ * that set - cross-OpDiv orphans or decommissioned systems - still render,
+ * labeled and subdued, so an admin can see and remove them; once unchecked
+ * they leave the list and cannot be re-picked.
+ */
 export default function AssignSystemModal({
   open,
   handleClose,
@@ -49,17 +89,18 @@ export default function AssignSystemModal({
   // Systems the target user is eligible to be assigned - already scoped
   // to their OpDivs (and intersected with the caller's OpDivs when the
   // caller is scoped) by GET /users/:id/assignablefismasystems. Drives
-  // the dropdown filter.
+  // the pickable rows.
   const [assignable, setAssignable] = React.useState<FismaSystemType[]>([])
   const [openSnackBar, setOpenSnackBar] = React.useState<boolean>(false)
   const [pendingUnassign, setPendingUnassign] = React.useState<{
     systemid: number
     nextValue: number[]
   } | null>(null)
+  const [search, setSearch] = React.useState<string>('')
   // Track the userid the current state belongs to so a same-user reopen
-  // keeps chips visible (and just refreshes underneath) while opening for
+  // keeps rows visible (and just refreshes underneath) while opening for
   // a different user clears them BEFORE the new fetches land (no
-  // previous-user chip flash).
+  // previous-user row flash).
   const stateOwnerRef = React.useRef<GridRowId>('')
   React.useEffect(() => {
     if (!open || !userid) return
@@ -71,7 +112,7 @@ export default function AssignSystemModal({
     const controller = new AbortController()
     async function fetchPerUser() {
       // Two parallel reads. allSettled so an assignable-endpoint hiccup
-      // doesn't blank the chip area for an admin trying to remove an
+      // doesn't blank the list for an admin trying to remove an
       // existing assignment.
       const [assignedRes, assignableRes] = await Promise.allSettled([
         axiosInstance.get<{ data: number[] | null }>(
@@ -104,6 +145,12 @@ export default function AssignSystemModal({
     }
   }, [open, userid])
 
+  // Reset search when the modal closes so reopening it doesn't carry over
+  // the previous filter for a different user.
+  React.useEffect(() => {
+    if (!open) setSearch('')
+  }, [open])
+
   // Label map merged from the three metadata sources. The server always
   // filters on the decommissioned flag, so the decommissioned list and
   // the two active lists (global + per-user assignable) never share an
@@ -133,55 +180,55 @@ export default function AssignSystemModal({
     return map
   }, [decommSystems, allSystems, assignable])
 
-  // Composed label, shared by getOptionLabel and renderTags so a chip and
-  // its dropdown row never disagree. Decommissioned entries get the
-  // "(Decommissioned)" suffix. An id missing from all three sources still
-  // gets an identifiable label rather than an empty one - that happens
-  // when the parent's global fetch failed or a system was removed
-  // mid-session, and a blank chip would leave the admin unable to tell
-  // what they are about to unassign.
-  const labelFor = React.useCallback(
-    (option: number): string => {
-      const s = systemMap[option]
-      if (!s) return `Unknown or decommissioned system (id ${option})`
-      const base = `${s.acronym} - ${s.name}`
-      return s.decommissioned ? `${base} (Decommissioned)` : base
-    },
-    [systemMap]
-  )
-
-  // Substring filter that matches on the raw acronym + name rather than the
-  // decorated label. labelFor adds " - " and a "(Decommissioned)" suffix, so
-  // filtering off the label would couple search to that formatting and miss
-  // clean acronym matches. filterOptions below composes this with the
-  // assignable-set narrowing. MUI defaults (ignoreCase, matchFrom: 'any') give
-  // case-insensitive substring matching.
-  const optionFilter = React.useMemo(
-    () =>
-      createFilterOptions<number>({
-        stringify: (option) => {
-          const s = systemMap[option]
-          if (!s) return String(option)
-          return `${s.acronym} ${s.name}`
-        },
-      }),
-    [systemMap]
-  )
-
-  // Union of assignable + currently-assigned ids so MUI's value-vs-
-  // options reconciliation matches every chip (no "None of the options
-  // match" warning). filterOptions below narrows the DROPDOWN back to
-  // the assignable set so out-of-scope orphans are not re-selectable.
-  const optionIds = React.useMemo(() => {
-    const set = new Set<number>()
-    for (const s of assignable) set.add(s.fismasystemid)
-    for (const id of assignedSystems) set.add(id)
-    return Array.from(set)
-  }, [assignable, assignedSystems])
-
   const assignableIds = React.useMemo(
     () => new Set(assignable.map((s) => s.fismasystemid)),
     [assignable]
+  )
+
+  // Rows = the assignable set plus any current assignments outside it
+  // (cross-OpDiv orphans, decommissioned systems), so those stay visible
+  // and removable. Sorted by acronym for scanability.
+  const sortedSystemIds = React.useMemo(() => {
+    const set = new Set<number>()
+    for (const s of assignable) set.add(s.fismasystemid)
+    for (const id of assignedSystems) set.add(id)
+    return Array.from(set).sort((a, b) => {
+      const acrA = systemMap[a]?.acronym || ''
+      const acrB = systemMap[b]?.acronym || ''
+      return acrA.localeCompare(acrB)
+    })
+  }, [assignable, assignedSystems, systemMap])
+
+  // Substring filter on the raw acronym + name (not the decorated label),
+  // so a clean acronym search is never coupled to display formatting.
+  const filteredSystemIds = React.useMemo(() => {
+    const needle = search.trim().toLowerCase()
+    if (!needle) return sortedSystemIds
+    return sortedSystemIds.filter((id) => {
+      const sys = systemMap[id]
+      if (!sys) return false
+      return (
+        sys.name.toLowerCase().includes(needle) ||
+        sys.acronym.toLowerCase().includes(needle)
+      )
+    })
+  }, [sortedSystemIds, systemMap, search])
+
+  /**
+   * Display name for a row: acronym-decorated and suffixed for
+   * decommissioned systems, with a legible fallback for an id missing
+   * from every metadata source (parent fetch failed or system removed
+   * mid-session) so the admin can still tell what they are unassigning.
+   * @param {number} id - The fismasystemid to label.
+   * @returns {string} The display label.
+   */
+  const labelFor = React.useCallback(
+    (id: number): string => {
+      const s = systemMap[id]
+      if (!s) return `Unknown or decommissioned system (id ${id})`
+      return s.decommissioned ? `${s.name} (Decommissioned)` : s.name
+    },
+    [systemMap]
   )
 
   const handleConfirmUnassign = async (confirm: boolean) => {
@@ -200,120 +247,186 @@ export default function AssignSystemModal({
     }
   }
 
+  // Bulk-assign every currently visible (filtered) ASSIGNABLE system that
+  // is not yet assigned. Out-of-scope leftovers in the list are display-only
+  // and never bulk-assigned.
+  const handleSelectAllInScope = async () => {
+    const toAdd = filteredSystemIds.filter(
+      (id) => assignableIds.has(id) && !assignedSystems.includes(id)
+    )
+    if (toAdd.length === 0) return
+    const results = await Promise.allSettled(
+      toAdd.map((id) =>
+        axiosInstance.post(`/users/${userid}/assignedfismasystems`, {
+          fismasystemid: id,
+        })
+      )
+    )
+    const succeeded = toAdd.filter((_, i) => results[i].status === 'fulfilled')
+    if (succeeded.length > 0) {
+      setAssignedSystems((prev) => Array.from(new Set([...prev, ...succeeded])))
+      notify(
+        `Saved - assigned ${succeeded.length} ${
+          succeeded.length === 1 ? 'system' : 'systems'
+        }`,
+        'success'
+      )
+    }
+    const failed = toAdd.length - succeeded.length
+    if (failed > 0) {
+      notify(
+        `${failed} ${failed === 1 ? 'assignment' : 'assignments'} failed`,
+        'error',
+        { autoHideDuration: 2500 }
+      )
+    }
+  }
+
+  const handleToggle = async (systemId: number, checked: boolean) => {
+    if (checked) {
+      // Only assignable systems can be (re-)assigned; out-of-scope rows
+      // exist purely so they can be unassigned.
+      if (!assignableIds.has(systemId)) return
+      try {
+        await axiosInstance.post(`/users/${userid}/assignedfismasystems`, {
+          fismasystemid: systemId,
+        })
+        setAssignedSystems((prev) =>
+          prev.includes(systemId) ? prev : [...prev, systemId]
+        )
+        notify('Saved - assign system', 'success')
+      } catch (error) {
+        if (isAuthHandled(error)) return
+        notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 1500 })
+      }
+    } else {
+      setPendingUnassign({
+        systemid: systemId,
+        nextValue: assignedSystems.filter((id) => id !== systemId),
+      })
+    }
+  }
+
+  const selectedCount = assignedSystems.length
+  const totalCount = sortedSystemIds.length
+
   return (
     <>
-      <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
-        <DialogTitle align="center">
-          <div>
-            <Typography variant="h3">Assign Fisma Systems</Typography>
-          </div>
-        </DialogTitle>
-        <DialogContent sx={{ height: 500 }}>
-          <Autocomplete
-            multiple
-            disableCloseOnSelect
-            limitTags={2}
-            options={optionIds.slice().sort((a: number, b: number) => {
-              const acrA = systemMap[a]?.acronym || ''
-              const acrB = systemMap[b]?.acronym || ''
-              return acrA.localeCompare(acrB)
-            })}
-            disableClearable
-            getOptionLabel={(option: number) => labelFor(option)}
-            // Narrow the DROPDOWN to the assignable set. Options stays
-            // broad so chips for out-of-scope current assignments still
-            // resolve; only the picker is scoped.
-            filterOptions={(options, params) =>
-              optionFilter(options, params).filter((o) => assignableIds.has(o))
+      <Modal
+        open={open}
+        onClose={handleClose}
+        title="Assign FISMA systems"
+        eyebrow={userName || undefined}
+        size="md"
+        dense
+        footer={
+          <>
+            <Button
+              variant="text"
+              color="primary"
+              onClick={handleSelectAllInScope}
+              disabled={filteredSystemIds.every(
+                (id) => !assignableIds.has(id) || assignedSystems.includes(id)
+              )}
+              sx={{ mr: 'auto', textTransform: 'none', fontWeight: 600 }}
+            >
+              Select all in scope
+            </Button>
+            <Button variant="text" color="inherit" onClick={handleClose}>
+              Cancel
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleClose}>
+              Save assignments
+            </Button>
+          </>
+        }
+      >
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+          <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+            Select the FISMA systems this user is responsible for.
+          </Typography>
+
+          <OutlinedInput
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Search by name or acronym"
+            fullWidth
+            sx={searchInputSx}
+            startAdornment={
+              <InputAdornment position="start" sx={{ ml: 1.25, mr: 1 }}>
+                <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
+              </InputAdornment>
             }
-            renderOption={(props, option, { selected }) => {
-              const isAssigned = assignedSystems.includes(option)
-              return (
-                <li {...props}>
-                  <Checkbox
-                    icon={icon}
-                    key={option}
-                    checkedIcon={checkedIcon}
-                    style={{ marginRight: 8 }}
-                    checked={selected || isAssigned}
-                    disabled={isAssigned}
-                  />
-                  {systemMap[option]?.acronym}
-                  {' - '}
-                  {systemMap[option]?.name}
-                </li>
-              )
+            inputProps={{ 'aria-label': 'Search FISMA systems' }}
+          />
+
+          <Box
+            sx={{
+              border: `1px solid ${colors.neutral200}`,
+              borderRadius: 1,
+              maxHeight: 240,
+              overflow: 'auto',
             }}
-            // Custom chip render so decommissioned assignments get a
-            // subdued visual (reduced opacity + italics) that reads as
-            // "this is historical, not active", while remaining deletable
-            // so an admin can still unassign the user from it.
-            renderTags={(value, getTagProps) =>
-              value.map((option, index) => {
-                const isDecommissioned =
-                  systemMap[option]?.decommissioned === true
+          >
+            {filteredSystemIds.length === 0 ? (
+              <Typography
+                sx={{
+                  fontSize: 13,
+                  color: colors.neutral500,
+                  textAlign: 'center',
+                  py: 3,
+                }}
+              >
+                No systems match your search.
+              </Typography>
+            ) : (
+              filteredSystemIds.map((systemId) => {
+                const system = systemMap[systemId]
+                const isAssigned = assignedSystems.includes(systemId)
+                // Decommissioned or cross-OpDiv leftovers render subdued:
+                // present so they can be unassigned, visually "historical".
+                const outOfScope =
+                  !assignableIds.has(systemId) ||
+                  system?.decommissioned === true
                 return (
-                  <Chip
-                    {...getTagProps({ index })}
-                    key={option}
-                    label={labelFor(option)}
-                    sx={
-                      isDecommissioned
-                        ? { opacity: 0.65, fontStyle: 'italic' }
-                        : undefined
-                    }
-                  />
+                  <Box
+                    key={systemId}
+                    component="label"
+                    htmlFor={`assign-system-${systemId}`}
+                    sx={{
+                      ...rowSx,
+                      ...(outOfScope && {
+                        opacity: 0.65,
+                        fontStyle: 'italic',
+                      }),
+                    }}
+                  >
+                    <Checkbox
+                      id={`assign-system-${systemId}`}
+                      checked={isAssigned}
+                      // Out-of-scope rows only support unchecking.
+                      disabled={!isAssigned && outOfScope}
+                      onChange={(e) => handleToggle(systemId, e.target.checked)}
+                      sx={{ p: 0.25 }}
+                    />
+                    <Box sx={{ flex: 1, minWidth: 0 }}>
+                      <Typography sx={rowTitleSx}>
+                        {labelFor(systemId)}
+                      </Typography>
+                      <Typography sx={rowMetaSx}>{system?.acronym}</Typography>
+                    </Box>
+                  </Box>
                 )
               })
-            }
-            value={assignedSystems}
-            onChange={async (_event, newValue) => {
-              const added = newValue.filter(
-                (item) => !assignedSystems.includes(item)
-              )
-              const removed = assignedSystems.filter(
-                (item) => !newValue.includes(item)
-              )
-              if (added.length) {
-                try {
-                  await axiosInstance.post(
-                    apiPaths.users.assignedFismaSystems(userid),
-                    { fismasystemid: added[0] }
-                  )
-                  setAssignedSystems(newValue)
-                  notify('Saved - assign system', 'success')
-                } catch (error) {
-                  if (isAuthHandled(error)) return
-                  notify(ERROR_MESSAGES.tryAgain, 'error', {
-                    autoHideDuration: 1500,
-                  })
-                }
-              } else if (removed.length) {
-                setPendingUnassign({
-                  systemid: removed[0],
-                  nextValue: newValue,
-                })
-              }
-            }}
-            renderInput={(params) => (
-              <TextField
-                {...params}
-                label="Assign FISMA Systems"
-                variant="filled"
-                placeholder="FISMA Systems"
-                InputLabelProps={{
-                  sx: {
-                    marginTop: 0, // Remove the margin top of the label
-                  },
-                }}
-              />
             )}
-          />
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={handleClose}>Close</CmsButton>
-        </DialogActions>
-      </Dialog>
+          </Box>
+
+          <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 0.5 }}>
+            {selectedCount} of {totalCount}{' '}
+            {totalCount === 1 ? 'system' : 'systems'} selected
+          </Typography>
+        </Box>
+      </Modal>
       <CustomSnackbar
         open={openSnackBar}
         handleClose={() => setOpenSnackBar(false)}

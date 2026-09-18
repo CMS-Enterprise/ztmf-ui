@@ -193,13 +193,13 @@ it('renders the reduced set the API serves for the current cycle', async () => {
 
   // The in-scope pillars prove the absences below are the API's reduced set,
   // not a bad render.
-  await screen.findByText('IDENTITY')
-  expect(screen.getByText('NETWORKS')).toBeInTheDocument()
-  expect(screen.getByText('DATA')).toBeInTheDocument()
-  expect(screen.getByText('CROSS CUTTING')).toBeInTheDocument()
+  await screen.findAllByText('Identity')
+  expect(screen.getAllByText('Networks').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Data').length).toBeGreaterThan(0)
+  expect(screen.getAllByText('Cross-cutting').length).toBeGreaterThan(0)
 
-  expect(screen.queryByText('DEVICES')).not.toBeInTheDocument()
-  expect(screen.queryByText('APPLICATIONS')).not.toBeInTheDocument()
+  expect(screen.queryAllByText('Devices')).toHaveLength(0)
+  expect(screen.queryAllByText('Applications')).toHaveLength(0)
   expect(requestedDataCallId()).toBe(String(CURRENT_CALL.datacallid))
 })
 
@@ -207,11 +207,11 @@ it('shows every pillar on a cycle earlier than FY26 for the same SaaS system', a
   mockCtx = makeCtx(HISTORICAL_CALL)
   renderPage()
 
-  await screen.findByText('IDENTITY')
+  await screen.findAllByText('Identity')
   await waitFor(() => {
-    expect(screen.getByText('DEVICES')).toBeInTheDocument()
+    expect(screen.getAllByText('Devices').length).toBeGreaterThan(0)
   })
-  expect(screen.getByText('APPLICATIONS')).toBeInTheDocument()
+  expect(screen.getAllByText('Applications').length).toBeGreaterThan(0)
   expect(requestedDataCallId()).toBe(String(HISTORICAL_CALL.datacallid))
 })
 
@@ -219,10 +219,10 @@ it('asks for a later cycle when that is the one being viewed', async () => {
   mockCtx = makeCtx(FUTURE_CALL, FUTURE_CALL)
   renderPage()
 
-  await screen.findByText('IDENTITY')
+  await screen.findAllByText('Identity')
   expect(requestedDataCallId()).toBe(String(FUTURE_CALL.datacallid))
-  expect(screen.queryByText('DEVICES')).not.toBeInTheDocument()
-  expect(screen.queryByText('APPLICATIONS')).not.toBeInTheDocument()
+  expect(screen.queryAllByText('Devices')).toHaveLength(0)
+  expect(screen.queryAllByText('Applications')).toHaveLength(0)
 })
 
 it('asks for the viewed cycle, not the latest one', async () => {
@@ -231,10 +231,10 @@ it('asks for the viewed cycle, not the latest one', async () => {
   mockCtx = makeCtx(HISTORICAL_CALL, FUTURE_CALL)
   renderPage()
 
-  await screen.findByText('IDENTITY')
+  await screen.findAllByText('Identity')
   expect(requestedDataCallId()).toBe(String(HISTORICAL_CALL.datacallid))
   await waitFor(() => {
-    expect(screen.getByText('DEVICES')).toBeInTheDocument()
+    expect(screen.getAllByText('Devices').length).toBeGreaterThan(0)
   })
 })
 
@@ -251,11 +251,11 @@ it.each([
     mockCtx = makeCtx(call, call, NON_SAAS_SYSTEM)
     renderPage('aws-ex')
 
-    await screen.findByText('IDENTITY')
+    await screen.findAllByText('Identity')
     await waitFor(() => {
-      expect(screen.getByText('DEVICES')).toBeInTheDocument()
+      expect(screen.getAllByText('Devices').length).toBeGreaterThan(0)
     })
-    expect(screen.getByText('APPLICATIONS')).toBeInTheDocument()
+    expect(screen.getAllByText('Applications').length).toBeGreaterThan(0)
     expect(requestedDataCallId()).toBe(String(call.datacallid))
   }
 )
@@ -273,9 +273,9 @@ it('never re-filters the response client-side', async () => {
   })
   renderPage()
 
-  await screen.findByText('IDENTITY')
+  await screen.findAllByText('Identity')
   await waitFor(() => {
-    expect(screen.getByText('DEVICES')).toBeInTheDocument()
+    expect(screen.getAllByText('Devices').length).toBeGreaterThan(0)
   })
-  expect(screen.getByText('APPLICATIONS')).toBeInTheDocument()
+  expect(screen.getAllByText('Applications').length).toBeGreaterThan(0)
 })

@@ -93,6 +93,8 @@ function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
       role,
     } as userData,
     datacenterEnvironments: [],
+    // The score hero picks its aggregate against the shared datacall list.
+    datacalls: [],
     // OpDivs now arrive on the shared Outlet context instead of a per-page GET.
     opdivs: [
       {
@@ -120,13 +122,11 @@ function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
 /**
  * The page-level Edit buttons currently on screen. The target-maturity card
  * renders its own Edit button in view mode (for admins and for an assigned
- * ISSO/ISSM), so match the header button by its CMS design-system class to keep
- * the two apart: only the header one opens the system form.
+ * ISSO/ISSM); the header button reads "Edit system", which keeps the two
+ * apart: only the header one opens the system form.
  */
 function pageEditButtons(): HTMLElement[] {
-  return screen
-    .queryAllByRole('button', { name: 'Edit' })
-    .filter((button) => button.classList.contains('ds-c-button'))
+  return screen.queryAllByRole('button', { name: 'Edit system' })
 }
 
 /** Captures the body of the page's full-system PUT. */
@@ -145,7 +145,7 @@ test.each(WRITE_ADMIN_ROLES)(
     const user = userEvent.setup()
     renderPage(role)
 
-    await screen.findByText('System Identity')
+    await screen.findByText('System identity')
     await user.click(pageEditButtons()[0])
 
     expect(
@@ -159,7 +159,7 @@ test.each(NON_WRITE_ROLES)(
   async (role) => {
     renderPage(role)
 
-    await screen.findByText('System Identity')
+    await screen.findByText('System identity')
     expect(pageEditButtons()).toHaveLength(0)
     // The read view is the only view these tiers reach, and it renders every
     // field as text, so there is no control to disable.
@@ -174,12 +174,12 @@ test('an edited ISSO Name is sent in the save payload', async () => {
   const user = userEvent.setup()
   renderPage('OPDIV_ADMIN')
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await user.click(pageEditButtons()[0])
   const input = await screen.findByRole('textbox', { name: 'ISSO Name' })
   await user.clear(input)
   await user.type(input, 'Firmus Piett')
-  await user.click(screen.getByRole('button', { name: 'Save' }))
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
   expect(captured.body).toHaveProperty('isso_name', 'Firmus Piett')
@@ -190,10 +190,10 @@ test('clearing ISSO Name sends the empty-string clear signal', async () => {
   const user = userEvent.setup()
   renderPage('OPDIV_ADMIN')
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await user.click(pageEditButtons()[0])
   await user.clear(await screen.findByRole('textbox', { name: 'ISSO Name' }))
-  await user.click(screen.getByRole('button', { name: 'Save' }))
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
   // '' clears the stored override via blankToNil so the name derived from the
@@ -210,10 +210,10 @@ test('clearing ISSO Name refetches instead of echoing the draft', async () => {
   const user = userEvent.setup()
   renderPage('OPDIV_ADMIN')
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await user.click(pageEditButtons()[0])
   await user.clear(await screen.findByRole('textbox', { name: 'ISSO Name' }))
-  await user.click(screen.getByRole('button', { name: 'Save' }))
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
   await waitFor(() =>
@@ -230,12 +230,12 @@ test('the post-save refetch preserves the decommissioned view mode', async () =>
   renderPage('OPDIV_ADMIN')
   mockCtx.showDecommissioned = true
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await user.click(pageEditButtons()[0])
   const input = await screen.findByRole('textbox', { name: 'ISSO Name' })
   await user.clear(input)
   await user.type(input, 'Firmus Piett')
-  await user.click(screen.getByRole('button', { name: 'Save' }))
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
   await waitFor(() =>
@@ -248,10 +248,10 @@ test('an untouched ISSO Name is omitted from the save payload', async () => {
   const user = userEvent.setup()
   renderPage('OPDIV_ADMIN')
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await user.click(pageEditButtons()[0])
   await screen.findByRole('textbox', { name: 'ISSO Name' })
-  await user.click(screen.getByRole('button', { name: 'Save' }))
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
   // The detail page shows the resolved name, so sending it back unedited would

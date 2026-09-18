@@ -1,16 +1,7 @@
-import {
-  Container,
-  Typography,
-  Button,
-  Checkbox,
-  ListSubheader,
-  ListItemText,
-} from '@mui/material'
-import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
+import { Container } from '@mui/material'
 import { useLoaderData, useLocation } from 'react-router-dom'
 import { UsaBanner } from '@cmsgov/design-system'
 import { Outlet, Link } from 'react-router-dom'
-import AccountCircleIcon from '@mui/icons-material/AccountCircle'
 import 'core-js/stable/atob'
 import { userData, datacall } from '@/types'
 import { EMPTY_USER } from '@/constants'
@@ -20,16 +11,12 @@ import {
   isUnscopedWriteAdmin,
   hasUnscopedRead,
 } from '@/utils/userRoles'
-import { Box } from '@mui/material'
-import IconButton from '@mui/material/IconButton'
+import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
-import MoreVertIcon from '@mui/icons-material/MoreVert'
+import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
 import { useState, useEffect, useCallback, useMemo } from 'react'
-import {
-  groupDatacallsByYear,
-  parseDatacallName,
-} from '@/utils/datacallGrouping'
+import { groupDatacallsByYear } from '@/utils/datacallGrouping'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
 import type { AuthLoaderData } from '@/router/authLoader'
@@ -50,6 +37,7 @@ import DataCallModal from '../DatacallModal/DataCallModal'
 import Footer from '@/components/Footer/Footer'
 import DevEnvironmentBanner from '@/components/DevEnvironmentBanner/DevEnvironmentBanner'
 import ztmfLogo from '@/assets/ztmf-logo-color.png'
+import { colors, fonts } from '@/theme/tokens'
 import { clearOtherUserDrafts } from '../QuestionnairePage/draftStore'
 /**
  * Component that renders the contents of the Dashboard view.
@@ -77,15 +65,16 @@ export default function Title() {
   // The dashboard aggregates the active year's data calls. activeYear is the
   // selected fiscal year; activeDatacallIds are the toggled-on calls within it
   // (all on by default). See groupDatacallsByYear / #467.
+  // Only the setter is needed now that the year is implied by the selected
+  // call; kept as state so fetchDatacalls' initial-load reset still works.
   const [activeYear, setActiveYear] = useState<number | null>(null)
   const [activeDatacallIds, setActiveDatacallIds] = useState<number[]>([])
-  const [datacallMenuAnchor, setDatacallMenuAnchor] =
-    useState<null | HTMLElement>(null)
   const [latestDeadline, setLatestDeadline] = useState<string>('')
   const [openModal, setOpenModal] = useState<boolean>(false)
   const [openEmailModal, setOpenEmailModal] = useState<boolean>(false)
   const [latestDatacall, setLatestDatacall] = useState<string>('')
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
+  const [dashboardSearch, setDashboardSearch] = useState<string>('')
   const authenticated = loaderData.status === 200
   // Datacenter-environment vocabulary is reference data shared by the system
   // form (dropdown) and the questionnaire pillar filter, so it is fetched
@@ -222,38 +211,66 @@ export default function Title() {
         : null,
     [activeDatacallIds, datacalls]
   )
-  // Selecting a call in a different year switches to that whole year (all on);
-  // within the active year, toggle a call but never leave the year empty.
-  const handleDatacallToggle = (
-    group: (typeof datacallsByYear)[number],
-    call: datacall
-  ) => {
-    if (group.year !== activeYear) {
-      setActiveYear(group.year)
-      setActiveDatacallIds(group.calls.map((c) => c.datacallid))
-      return
-    }
-    setActiveDatacallIds((prev) => {
-      const removing = prev.includes(call.datacallid)
-      if (removing && prev.length === 1) return prev // never empty the year
-      const next = new Set(prev)
-      if (removing) {
-        next.delete(call.datacallid)
-      } else {
-        next.add(call.datacallid)
+  // Single-select adapter for the redesign's DatacallContextCard picker over
+  // the year-grouped multi-call model: picking a call narrows the active set
+  // to just that call (and its year); clearing resets to the latest year with
+  // every call toggled on, which restores the aggregated dashboard view.
+  const setSelectedDatacall = useCallback(
+    (dc: datacall | null) => {
+      if (!dc) {
+        const [firstGroup] = datacallsByYear
+        if (firstGroup) {
+          setActiveYear(firstGroup.year)
+          setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+        } else {
+          setActiveYear(null)
+          setActiveDatacallIds([])
+        }
+        return
       }
-      // Keep the group's deadline order (newest first) so the dashboard merge
-      // deterministically resolves a multi-call system to its newest call.
-      return group.calls.map((c) => c.datacallid).filter((id) => next.has(id))
-    })
-  }
+      const group = datacallsByYear.find((g) =>
+        g.calls.some((c) => c.datacallid === dc.datacallid)
+      )
+      setActiveYear(group?.year ?? null)
+      setActiveDatacallIds([dc.datacallid])
+    },
+    [datacallsByYear]
+  )
+  // Multi-select toggle for the picker's checkbox rows (#467 semantics):
+  // selecting a call in a different year switches to that whole year (all
+  // calls on); within the active year, toggle a call but never leave the
+  // year empty. The dashboard aggregates whatever set is toggled on.
+  const toggleActiveDatacall = useCallback(
+    (dc: datacall) => {
+      const group = datacallsByYear.find((g) =>
+        g.calls.some((c) => c.datacallid === dc.datacallid)
+      )
+      if (!group) return
+      if (group.year !== activeYear) {
+        setActiveYear(group.year)
+        setActiveDatacallIds(group.calls.map((c) => c.datacallid))
+        return
+      }
+      setActiveDatacallIds((prev) => {
+        const removing = prev.includes(dc.datacallid)
+        if (removing && prev.length === 1) return prev // never empty the year
+        const next = new Set(prev)
+        if (removing) {
+          next.delete(dc.datacallid)
+        } else {
+          next.add(dc.datacallid)
+        }
+        // Keep the group's deadline order (newest first) so the dashboard
+        // merge deterministically resolves a multi-call system to its
+        // newest call.
+        return group.calls.map((c) => c.datacallid).filter((id) => next.has(id))
+      })
+    },
+    [datacallsByYear, activeYear]
+  )
 
   const handleClick = (event: React.MouseEvent<HTMLElement>) => {
     setAnchorEl(event.currentTarget)
-  }
-  const handleOption = () => {
-    // setTitlePage(option)
-    setAnchorEl(null)
   }
   const handleClose = () => {
     setAnchorEl(null)
@@ -315,21 +332,84 @@ export default function Title() {
   }
   const isAdmin = checkIsAdmin(userInfo)
   const hasAdminRead = checkHasAdminRead(userInfo)
-  const isSystemDetail = location.pathname.startsWith('/systems/')
   const isHomeRoute = location.pathname === '/'
-  const isQuestionnaireRoute = location.pathname.startsWith('/questionnaire/')
-  const datacallContextNeeded =
-    isHomeRoute || isQuestionnaireRoute || isSystemDetail
-  // Single source of truth for header logo sizing; divider scales with it
-  // so the mark, divider, and wordmark stay vertically centered on resize.
-  const LOGO_HEIGHT = 55
-  // The logo art is vertically asymmetric: the arrow tip extends well above the
-  // letter caps, so the PNG's bounding-box center sits above the wordmark's
-  // optical center. Shift the divider + text down by ~10% of the logo height so
-  // they align to the letters rather than the box. Scales with LOGO_HEIGHT.
-  const LOGO_OPTICAL_OFFSET = Math.round(LOGO_HEIGHT * 0.1)
+  // Initials for the account avatar, from the user's name (or email).
+  const initials =
+    (userInfo.fullname || userInfo.email || '')
+      .split(/\s+/)
+      .filter(Boolean)
+      .slice(0, 2)
+      .map((part) => part[0]?.toUpperCase() ?? '')
+      .join('') || 'U'
+  // Primary navigation, lifted out of the kebab into a visible header row.
+  // Each item keeps the same role gating the old menu used. The kebab now
+  // holds only genuine actions (create/email), never navigation.
+  const navItems = [
+    { label: 'Dashboard', to: Routes.ROOT, active: isHomeRoute, show: true },
+    {
+      label: 'Users',
+      to: Routes.USERS,
+      active: location.pathname.startsWith('/users'),
+      show: hasAdminRead,
+    },
+    {
+      label: 'OpDivs',
+      to: Routes.ADMIN_OPDIVS,
+      active: location.pathname.startsWith('/admin/opdivs'),
+      // OWNER manages OpDivs fully; an HHS admin reaches the page only to
+      // flip the per-OpDiv System Delegate toggle.
+      show: isUnscopedWriteAdmin(userInfo),
+    },
+    {
+      label: 'Events',
+      to: Routes.ADMIN_EVENTS,
+      active: location.pathname.startsWith('/admin/events'),
+      // hasUnscopedRead, not hasAdminRead: the events endpoint 403s an
+      // OpDiv-scoped admin, so scoped tiers do not get the tab.
+      show: hasUnscopedRead(userInfo),
+    },
+  ].filter((item) => item.show)
+  // Every logged-in user gets the account menu (the logout affordance must
+  // always be reachable); the admin-only action items inside are gated
+  // individually, so a non-admin sees just Log out.
+  const hasHeaderActions = true
   return (
     <>
+      {/* Skip link: first tab stop, visually hidden until focused. A button
+          with programmatic focus (not an href="#..." anchor) because the app
+          uses hash routing - an in-page fragment would be swallowed by the
+          router as a navigation. */}
+      {!isSignInRoute && loaderData.status === 200 && (
+        <Box
+          component="button"
+          type="button"
+          onClick={() => {
+            const main = document.getElementById('main-content')
+            if (main) {
+              main.focus()
+              main.scrollIntoView()
+            }
+          }}
+          sx={{
+            position: 'absolute',
+            left: -9999,
+            top: 0,
+            zIndex: 2000,
+            px: 2,
+            py: 1,
+            fontSize: 14,
+            fontWeight: 600,
+            color: colors.white,
+            backgroundColor: colors.primary,
+            border: 'none',
+            borderRadius: `0 0 4px 0`,
+            cursor: 'pointer',
+            '&:focus-visible': { left: 0 },
+          }}
+        >
+          Skip to main content
+        </Box>
+      )}
       {/* Left-align the USA banner's content with the ZTMF logo below it by
           dropping the CMSDS max-width centering and matching the header's
           responsive horizontal padding. */}
@@ -362,146 +442,156 @@ export default function Title() {
         <Box
           sx={{
             display: 'flex',
-            alignItems: 'center',
+            alignItems: 'stretch',
             justifyContent: 'space-between',
-            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
-            py: 1.5,
-            borderBottom: '1px solid rgba(0,0,0,0.12)',
+            px: { xs: 2, sm: 4 },
+            height: 60,
+            borderBottom: `1px solid ${colors.neutral200}`,
             minWidth: 800,
           }}
         >
-          {/* left: ZTMF mark + wordmark */}
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5 }}>
-            <img
-              src={ztmfLogo}
-              alt="ZTMF"
-              style={{ height: LOGO_HEIGHT, width: 'auto', display: 'block' }}
-            />
-            <Box
-              sx={{
-                width: '1px',
-                height: Math.round(LOGO_HEIGHT * 0.7),
-                backgroundColor: 'rgba(0,0,0,0.12)',
-                flexShrink: 0,
-                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
-              }}
-            />
-            <Box
-              sx={{
-                lineHeight: 1.15,
-                transform: `translateY(${LOGO_OPTICAL_OFFSET}px)`,
+          {/* left: ZTMF mark + primary nav */}
+          <Box sx={{ display: 'flex', alignItems: 'stretch', gap: 4 }}>
+            <Link
+              to={Routes.ROOT}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                textDecoration: 'none',
               }}
             >
-              <Typography
-                sx={{
-                  fontSize: 17,
-                  fontWeight: 700,
-                  color: '#102B52',
-                  letterSpacing: '0.2px',
-                  lineHeight: 1.15,
-                }}
-              >
-                Zero Trust Maturity Framework
-              </Typography>
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 600,
-                  // Darkened from #7997AF, which held only 3.06:1 on white.
-                  color: '#4F7290',
-                  letterSpacing: '2px',
-                  textTransform: 'uppercase',
-                  lineHeight: 1.15,
-                }}
-              >
-                Scoring Tool
-              </Typography>
+              <img
+                src={ztmfLogo}
+                alt="ZTMF"
+                style={{ height: 30, width: 'auto', display: 'block' }}
+              />
+            </Link>
+
+            {/* primary nav tabs — underline-active, no pill background.
+                Each link stretches full-height so its 2px bottom border
+                sits flush at the bar's bottom edge; mb: -1px overlaps the
+                header's 1px bottom border so the active underline visually
+                replaces that segment instead of stacking above it. */}
+            <Box
+              component="nav"
+              sx={{
+                display: 'flex',
+                alignItems: 'stretch',
+                gap: 3.5,
+                fontFamily: fonts.base,
+                fontSize: 14,
+                fontWeight: 500,
+              }}
+            >
+              {navItems.map((item) => (
+                <Link
+                  key={item.label}
+                  to={item.to}
+                  style={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    padding: 0,
+                    background: 'transparent',
+                    textDecoration: 'none',
+                    color: item.active ? colors.ink : colors.neutral500,
+                    fontWeight: item.active ? 600 : 500,
+                    borderBottom: `2px solid ${item.active ? colors.primary : 'transparent'}`,
+                    marginBottom: -1,
+                    transition: 'color 120ms ease, border-color 120ms ease',
+                  }}
+                  onMouseEnter={(e) => {
+                    if (!item.active) e.currentTarget.style.color = colors.ink
+                  }}
+                  onMouseLeave={(e) => {
+                    if (!item.active)
+                      e.currentTarget.style.color = colors.neutral500
+                  }}
+                >
+                  {item.label}
+                </Link>
+              ))}
             </Box>
           </Box>
 
-          {/* right: account chip (shown when logged in) */}
+          {/* right: account avatar. For admins it opens the actions menu. */}
           {loaderData.status == 200 && (
             <Box sx={{ display: 'flex', alignItems: 'center' }}>
-              <AccountCircleIcon fontSize={'large'} />
-              {userInfo.fullname && (
-                <span
-                  style={{ verticalAlign: '13px' }}
-                  className="ds-text-body--md"
+              <Tooltip
+                title={
+                  userInfo.fullname
+                    ? `${userInfo.fullname}${idpBadge ? ` (${idpBadge})` : ''}`
+                    : 'Account'
+                }
+              >
+                {/* A real button element (not a role="button" Box) so the
+                    account menu - the only path to Log out - is reachable
+                    and operable by keyboard and announced correctly. */}
+                <Box
+                  component="button"
+                  type="button"
+                  aria-controls={hasHeaderActions ? 'actions-menu' : undefined}
+                  aria-haspopup={hasHeaderActions ? 'true' : undefined}
+                  aria-expanded={
+                    hasHeaderActions ? Boolean(anchorEl) : undefined
+                  }
+                  aria-label={`Account: ${userInfo.fullname || 'user'}`}
+                  onClick={hasHeaderActions ? handleClick : undefined}
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                    p: 0.5,
+                    pr: hasHeaderActions ? 1 : 0.5,
+                    borderRadius: 999,
+                    cursor: hasHeaderActions ? 'pointer' : 'default',
+                    backgroundColor: 'transparent',
+                    font: 'inherit',
+                    border: hasHeaderActions
+                      ? `1px solid ${colors.neutral200}`
+                      : 'none',
+                    ...(hasHeaderActions && {
+                      '&:hover': { backgroundColor: colors.neutral50 },
+                    }),
+                    '&:focus-visible': {
+                      outline: `2px solid ${colors.primary}`,
+                      outlineOffset: 2,
+                    },
+                  }}
                 >
-                  {userInfo.fullname}
-                  {idpBadge && (
-                    <Typography
-                      component="span"
-                      sx={{
-                        color: 'text.secondary',
-                        ml: 0.5,
-                        fontSize: '0.85em',
-                      }}
-                    >
-                      ({idpBadge})
-                    </Typography>
+                  <Box
+                    sx={{
+                      width: 32,
+                      height: 32,
+                      borderRadius: '50%',
+                      backgroundColor: colors.ink900,
+                      color: '#fff',
+                      fontSize: 12,
+                      fontWeight: 700,
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      flexShrink: 0,
+                    }}
+                  >
+                    {initials}
+                  </Box>
+                  {hasHeaderActions && (
+                    <MoreHorizIcon
+                      sx={{ fontSize: 18, color: colors.neutral500 }}
+                    />
                   )}
-                </span>
-              )}
-              {/* Account menu is rendered for every logged-in user so the
-                  logout affordance is always available. The admin-only items
-                  inside remain individually gated; a non-admin sees just
-                  Dashboard and Log out. */}
-              <>
-                <IconButton
-                  aria-label="Account menu"
-                  aria-controls="account-menu"
-                  aria-haspopup="true"
-                  onClick={handleClick}
-                >
-                  <MoreVertIcon />
-                </IconButton>
+                </Box>
+              </Tooltip>
+              {hasHeaderActions && (
                 <Menu
-                  id="account-menu"
+                  id="actions-menu"
                   anchorEl={anchorEl}
                   keepMounted
                   open={Boolean(anchorEl)}
                   onClose={handleClose}
+                  anchorOrigin={{ vertical: 'bottom', horizontal: 'right' }}
+                  transformOrigin={{ vertical: 'top', horizontal: 'right' }}
                 >
-                  <Link
-                    to={Routes.ROOT}
-                    style={{ textDecoration: 'none', color: 'black' }}
-                  >
-                    <MenuItem onClick={() => handleOption()}>
-                      Dashboard
-                    </MenuItem>
-                  </Link>
-                  {hasAdminRead && (
-                    <Link
-                      to={Routes.USERS}
-                      style={{ textDecoration: 'none', color: 'black' }}
-                    >
-                      <MenuItem onClick={() => handleOption()}>Users</MenuItem>
-                    </Link>
-                  )}
-                  {/* Unscoped read (OWNER / HHS admin / HHS read-only), not
-                      hasAdminRead: OpDiv-scoped admins get 403 from the
-                      cross-OpDiv audit endpoint, so they get no entry. */}
-                  {hasUnscopedRead(userInfo) && (
-                    <Link
-                      to={Routes.ADMIN_EVENTS}
-                      style={{ textDecoration: 'none', color: 'black' }}
-                    >
-                      <MenuItem onClick={() => handleOption()}>Events</MenuItem>
-                    </Link>
-                  )}
-                  {/* OWNER manages OpDivs fully; HHS admin reaches the page
-                      only to flip the per-OpDiv System Delegate toggle. */}
-                  {isUnscopedWriteAdmin(userInfo) && (
-                    <Link
-                      to={Routes.ADMIN_OPDIVS}
-                      style={{ textDecoration: 'none', color: 'black' }}
-                    >
-                      <MenuItem onClick={() => handleOption()}>
-                        Manage OpDivs
-                      </MenuItem>
-                    </Link>
-                  )}
                   {isAdmin && (
                     <MenuItem
                       onClick={() => {
@@ -509,7 +599,7 @@ export default function Title() {
                         setOpenModal(true)
                       }}
                     >
-                      Add Fisma System
+                      Add FISMA system
                     </MenuItem>
                   )}
                   {isUnscopedWriteAdmin(userInfo) && (
@@ -519,7 +609,7 @@ export default function Title() {
                         setOpenEmailModal(true)
                       }}
                     >
-                      {'Email Users'}
+                      Email users
                     </MenuItem>
                   )}
                   {isAdmin && (
@@ -529,174 +619,105 @@ export default function Title() {
                         setOpenDataCallModal(true)
                       }}
                     >
-                      Create Datacall
+                      Create datacall
                     </MenuItem>
                   )}
+                  {/* Rendered for every logged-in user so the logout
+                      affordance is always available; the admin items above
+                      remain individually gated. */}
                   <MenuItem onClick={handleLogout}>Log out</MenuItem>
                 </Menu>
-              </>
+              )}
             </Box>
           )}
         </Box>
       )}
-      {/* Datacall sub-bar (shown when datacall context needed, hidden everywhere else) */}
-      {loaderData.status == 200 && datacallContextNeeded && (
-        <Box
+      {/* Datacall context is rendered by each page via the shared
+          DatacallContextCard component, never as chrome. */}
+      {loaderData.serverError ? (
+        <Container
+          maxWidth={false}
           sx={{
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'space-between',
-            px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
-            py: 1,
-            backgroundColor: '#fbfbfd',
-            borderBottom: '1px solid rgba(0,0,0,0.12)',
+            px: { xs: 2, sm: 4 },
             minWidth: 800,
+            // Fill the shell column so the CMS footer sits at the bottom of
+            // short pages; taller content pushes it down (document scroll).
+            flex: 1,
           }}
         >
-          <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-            <Typography
-              variant="subtitle1"
-              component="span"
-              sx={{ fontWeight: 600, whiteSpace: 'nowrap' }}
-            >
-              Datacall:
-            </Typography>
-            {isSystemDetail ? (
-              <Typography variant="subtitle1" component="span">
-                {latestDatacall}
-              </Typography>
-            ) : (
-              datacalls.length > 0 && (
-                <>
-                  <Button
-                    size="small"
-                    variant="outlined"
-                    onClick={(e) => setDatacallMenuAnchor(e.currentTarget)}
-                    endIcon={<ArrowDropDownIcon />}
-                    sx={{
-                      minWidth: 260,
-                      justifyContent: 'space-between',
-                      textTransform: 'none',
-                      color: 'text.primary',
-                      borderColor: 'rgba(0,0,0,0.23)',
-                    }}
-                  >
-                    {activeYear ??
-                      (activeDatacallIds.length ? 'Other' : 'Data call')}
-                    {selectedDatacall
-                      ? ` · ${selectedDatacall.datacall}`
-                      : activeDatacallIds.length > 1
-                        ? ` · ${activeDatacallIds.length} calls`
-                        : ''}
-                  </Button>
-                  <Menu
-                    anchorEl={datacallMenuAnchor}
-                    open={Boolean(datacallMenuAnchor)}
-                    onClose={() => setDatacallMenuAnchor(null)}
-                    MenuListProps={{ 'aria-label': 'Select data call by year' }}
-                  >
-                    {datacallsByYear.flatMap((group) => [
-                      <ListSubheader key={`year-${group.year ?? 'other'}`}>
-                        {group.year ?? 'Other'}
-                      </ListSubheader>,
-                      ...group.calls.map((call) => {
-                        const checked =
-                          group.year === activeYear &&
-                          activeDatacallIds.includes(call.datacallid)
-                        const { tenant } = parseDatacallName(call.datacall)
-                        const isClosed = new Date() > new Date(call.deadline)
-                        const deadlineLabel = new Date(
-                          call.deadline
-                        ).toLocaleDateString('en-US', {
-                          month: 'short',
-                          day: 'numeric',
-                          year: 'numeric',
-                        })
-                        return (
-                          <MenuItem
-                            key={call.datacallid}
-                            dense
-                            onClick={() => handleDatacallToggle(group, call)}
-                          >
-                            <Checkbox
-                              checked={checked}
-                              readOnly
-                              size="small"
-                              sx={{ mr: 1 }}
-                            />
-                            <ListItemText
-                              primary={`${call.datacall} · ${tenant}`}
-                              secondary={`${
-                                isClosed ? 'Closed' : 'Active'
-                              } · deadline ${deadlineLabel}`}
-                            />
-                          </MenuItem>
-                        )
-                      }),
-                    ])}
-                  </Menu>
-                </>
-              )
-            )}
-          </Box>
+          <ServerErrorPage />
+        </Container>
+      ) : loaderData.status !== 200 ? (
+        <Container
+          maxWidth={false}
+          sx={{
+            px: { xs: 2, sm: 4 },
+            minWidth: 800,
+            flex: 1,
+          }}
+        >
+          <LoginPage />
+        </Container>
+      ) : (
+        // Full-bleed gray canvas: the background spans the viewport while the
+        // page content stays padded to the same gutters as the header.
+        <Box
+          component="main"
+          id="main-content"
+          // Focus target for the skip link; -1 keeps it out of the natural
+          // tab order while allowing programmatic focus.
+          tabIndex={-1}
+          sx={{
+            backgroundColor: colors.neutral50,
+            minWidth: 800,
+            outline: 'none',
+            px: { xs: 2, sm: 4 },
+          }}
+        >
+          <Outlet
+            context={{
+              fismaSystems,
+              setFismaSystems,
+              userInfo,
+              latestDataCallId,
+              latestDatacall,
+              latestDeadline,
+              datacalls,
+              activeDatacallIds,
+              selectedDatacall,
+              setSelectedDatacall,
+              toggleActiveDatacall,
+              showDecommissioned,
+              setShowDecommissioned,
+              fetchFismaSystems,
+              dashboardSearch,
+              setDashboardSearch,
+              datacenterEnvironments,
+              opdivs,
+              opdivsLoaded,
+            }}
+          />
         </Box>
       )}
-      <Container
-        maxWidth={false}
-        sx={{
-          px: { xs: 2, sm: 4, md: 8, lg: 12, xl: 16 },
-          minWidth: 800,
-        }}
-      >
-        {loaderData.serverError ? (
-          <ServerErrorPage />
-        ) : loaderData.status !== 200 ? (
-          <LoginPage />
-        ) : (
-          <>
-            <Box component="main">
-              <Outlet
-                context={{
-                  fismaSystems,
-                  setFismaSystems,
-                  userInfo,
-                  latestDataCallId,
-                  latestDatacall,
-                  latestDeadline,
-                  datacalls,
-                  activeDatacallIds,
-                  selectedDatacall,
-                  showDecommissioned,
-                  setShowDecommissioned,
-                  fetchFismaSystems,
-                  datacenterEnvironments,
-                  opdivs,
-                  opdivsLoaded,
-                }}
-              />
-            </Box>
-          </>
-        )}
 
-        <EditSystemModal
-          title={'Add'}
-          open={openModal}
-          onClose={handleCloseModal}
-          system={EMPTY_SYSTEM}
-          mode={'create'}
-          datacenterEnvironments={datacenterEnvironments}
-          opdivs={opdivs}
-        />
-        <EmailModal
-          openModal={openEmailModal}
-          closeModal={handleCloseEmailModal}
-        />
-        <DataCallModal
-          open={openDataCallModal}
-          onClose={handleDataCallClose}
-          onCreated={() => fetchDatacalls(undefined, false)}
-        />
-      </Container>
+      <EditSystemModal
+        title={'Add'}
+        open={openModal}
+        onClose={handleCloseModal}
+        system={EMPTY_SYSTEM}
+        mode={'create'}
+        datacenterEnvironments={datacenterEnvironments}
+        opdivs={opdivs}
+      />
+      <EmailModal
+        openModal={openEmailModal}
+        closeModal={handleCloseEmailModal}
+      />
+      <DataCallModal
+        open={openDataCallModal}
+        onClose={handleDataCallClose}
+        onCreated={() => fetchDatacalls(undefined, false)}
+      />
       <Footer />
     </>
   )

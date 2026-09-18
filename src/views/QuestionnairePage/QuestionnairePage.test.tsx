@@ -263,10 +263,14 @@ test('scores fetch 403 (auth-handled) still commits questions and opens the targ
       )
     ).toBe(true)
   )
-  // Sidebar/URL committed together with the content; not stuck loading.
-  await waitFor(() =>
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
-  )
+  // Sidebar/URL committed together with the content; not stuck loading. The
+  // header carries a persistent completion progressbar, so "not loading" means
+  // that bar is the only progressbar left - the loading spinner is gone.
+  await waitFor(() => {
+    const bars = screen.getAllByRole('progressbar')
+    expect(bars).toHaveLength(1)
+    expect(bars[0]).toHaveAccessibleName(/overall questionnaire completion/i)
+  })
   // Auth-handled path is silent - no "try again" toast fires.
   expect(
     notifyMock.mock.calls.some(
@@ -624,7 +628,7 @@ test('editable to read-only flip disarms an in-flight autosave', async () => {
   // Flush the initial fetch chain (fake timers don't fire microtasks).
   await act(async () => {})
   const notes = (await screen.findByLabelText(
-    'Justification notes'
+    /supporting evidence/i
   )) as HTMLTextAreaElement
 
   // Typing schedules a saveDraft on the debounce timer.
@@ -719,12 +723,12 @@ test('out-of-band scores refresh re-seeds the answer after save-and-back', async
   // Answer Q1, click Next -> POST fires, fetchQuestionScores GET goes in
   // flight (held by scoresGate) and questionId moves to Q2.
   await user.click(baseline)
-  await user.click(screen.getByText(/^Next$/i))
+  await user.click(screen.getByText(/^Next question/i))
   await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1. fetchOptions runs with an empty scores ref (the second
   // /scores call is still pending), so Q1 briefly shows unanswered.
-  await user.click(screen.getByText(/Back/i))
+  await user.click(screen.getByText(/Previous/i))
   const backBaseline = (await screen.findByLabelText(
     /baseline/i
   )) as HTMLInputElement
@@ -778,12 +782,12 @@ test('out-of-band scores refresh does not overwrite an unsaved in-progress edit'
     /baseline/i
   )) as HTMLInputElement
   await user.click(baseline)
-  await user.click(screen.getByText(/^Next$/i))
+  await user.click(screen.getByText(/^Next question/i))
   await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1 - fetchOptions seeds from an empty ref so Q1 shows
   // unanswered, and initQuestionChoice is now -1.
-  await user.click(screen.getByText(/Back/i))
+  await user.click(screen.getByText(/Previous/i))
   await waitFor(() => {
     const el = screen.getByLabelText(/baseline/i) as HTMLInputElement
     expect(el.checked).toBe(false)
@@ -963,6 +967,16 @@ const OPDIV_ROWS = [
 describe('QuestionnairePage justification integration', () => {
   type InsightsResponse = { data: { data: unknown[] } }
 
+  // These integration tests wait for the full questionnaire to load before
+  // asserting the insights gate. CI runners can exceed RTL's 1s default while
+  // rendering that page, even though every mocked request resolves immediately.
+  beforeAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 4000 })
+  })
+  afterAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 1000 })
+  })
+
   // This block is the insights-enabled variant: SSD-EX's OpDiv (9) carries
   // insights_enabled, so the layer is expected on unless a test says otherwise.
   const insightsCtx = (overrides: Record<string, unknown> = {}) =>
@@ -1113,7 +1127,7 @@ describe('QuestionnairePage justification integration', () => {
     // the panel cannot pop in after the user has already advanced.
     const complete = await screen.findByRole('button', { name: 'Complete' })
     expect(
-      await screen.findByText('Checking for prior responses…')
+      await screen.findByText('Checking for prior responses...')
     ).toBeInTheDocument()
     expect(complete).toBeDisabled()
     expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
@@ -1124,7 +1138,7 @@ describe('QuestionnairePage justification integration', () => {
 
     expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
     expect(
-      screen.queryByText('Checking for prior responses…')
+      screen.queryByText('Checking for prior responses...')
     ).not.toBeInTheDocument()
   })
 
@@ -1140,7 +1154,7 @@ describe('QuestionnairePage justification integration', () => {
 
     const complete = await screen.findByRole('button', { name: 'Complete' })
     expect(
-      await screen.findByText('Checking for prior responses…')
+      await screen.findByText('Checking for prior responses...')
     ).toBeInTheDocument()
     expect(complete).toBeDisabled()
 
@@ -1150,7 +1164,7 @@ describe('QuestionnairePage justification integration', () => {
 
     expect(await screen.findByText('Review required')).toBeInTheDocument()
     expect(
-      screen.queryByText('Checking for prior responses…')
+      screen.queryByText('Checking for prior responses...')
     ).not.toBeInTheDocument()
     // Still blocked: the carried-forward response now requires review.
     expect(complete).toBeDisabled()
@@ -1166,7 +1180,7 @@ describe('QuestionnairePage justification integration', () => {
       await screen.findByText('Explain the authentication mechanisms.')
     ).toBeInTheDocument()
     const response = screen.getByRole('textbox', {
-      name: 'Justification notes',
+      name: /supporting evidence/i,
     })
     expect(response).toHaveAttribute('rows', '4')
     expect(
@@ -1305,7 +1319,7 @@ describe('carried-forward confirmation', () => {
     renderAt(DEEP_LINK)
 
     // Question-view badge (role="status" so the flip below is announced).
-    const badge = await screen.findByText('Carried forward — not yet confirmed')
+    const badge = await screen.findByText('Carried forward - not yet confirmed')
     expect(badge).toBeInTheDocument()
     // Sidebar marker for the same fact, on the carried question only.
     expect(screen.getAllByText('Not yet confirmed')).toHaveLength(1)
@@ -1327,7 +1341,7 @@ describe('carried-forward confirmation', () => {
       await screen.findByText('Updated this data call')
     ).toBeInTheDocument()
     expect(
-      screen.queryByText('Carried forward — not yet confirmed')
+      screen.queryByText('Carried forward - not yet confirmed')
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', {
@@ -1341,7 +1355,7 @@ describe('carried-forward confirmation', () => {
 
     renderAt(DEEP_LINK)
 
-    await screen.findByText('Carried forward — not yet confirmed')
+    await screen.findByText('Carried forward - not yet confirmed')
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
 
     // Navigation happened (the next question's options load)...
@@ -1381,7 +1395,7 @@ describe('carried-forward confirmation', () => {
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
     // The badge still shows — the row is still unconfirmed until saved.
     expect(
-      screen.getByText('Carried forward — not yet confirmed')
+      screen.getByText('Carried forward - not yet confirmed')
     ).toBeInTheDocument()
   })
 
@@ -1437,7 +1451,7 @@ describe('carried-forward confirmation', () => {
     renderAt(DEEP_LINK)
 
     expect(
-      await screen.findByText('Carried forward — not yet confirmed')
+      await screen.findByText('Carried forward - not yet confirmed')
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('button', {
@@ -1511,7 +1525,7 @@ describe('carried-forward confirmation', () => {
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     )
     expect(
-      screen.queryByText('Carried forward — not yet confirmed')
+      screen.queryByText('Carried forward - not yet confirmed')
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', {

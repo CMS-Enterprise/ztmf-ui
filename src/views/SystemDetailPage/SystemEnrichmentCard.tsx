@@ -23,6 +23,7 @@ import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import { STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
+import InsightsEmptyState from './InsightsEmptyState'
 
 interface SystemEnrichmentCardProps {
   fismaUid: string
@@ -260,11 +261,7 @@ export default function SystemEnrichmentCard({
   }
 
   if (notFound || !enrichment) {
-    return (
-      <Typography variant="body2" color="text.secondary" sx={{ mt: 1 }}>
-        No ZTMF Insights data found.
-      </Typography>
-    )
+    return <InsightsEmptyState />
   }
 
   const atoColor = getAtoColor(enrichment.ato_expiration_date)

@@ -37,13 +37,12 @@ const mockedNavigate = (router as unknown as { navigate: jest.Mock }).navigate
 const mock = new MockAdapter(axiosInstance)
 
 async function fillAndSubmit() {
-  // CMS design-system controls do not expose accessible names the way
-  // native form elements do, so query by the underlying `name` attribute
-  // which is stable and what the FormData submit reads.
-  const group = document.querySelector(
-    'select[name="email_group"]'
-  ) as HTMLSelectElement
-  await userEvent.selectOptions(group, 'ALL')
+  // The Send To control is a MUI Select rendered as an aria combobox button
+  // (no real <select> element). Open it, then click the "ALL" option.
+  const group = screen.getByRole('combobox', { name: /send to/i })
+  await userEvent.click(group)
+  const option = await screen.findByRole('option', { name: 'ALL' })
+  await userEvent.click(option)
 
   const subject = document.querySelector(
     'input[name="email_subject"]'
@@ -89,17 +88,16 @@ test('offers System Delegate as a targetable email group and posts its key', asy
 
   renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
 
-  const group = document.querySelector(
-    'select[name="email_group"]'
-  ) as HTMLSelectElement
-  // The option renders with the friendly label but carries the raw role key.
-  const option = group.querySelector(
-    'option[value="SYSTEM_DELEGATE"]'
-  ) as HTMLOptionElement
-  expect(option).not.toBeNull()
-  expect(option.textContent).toBe('System Delegate')
+  // The Send To control is a MUI Select (aria combobox), so the option
+  // renders in a listbox with the friendly label while the modal posts the
+  // raw role key.
+  const group = screen.getByRole('combobox', { name: /send to/i })
+  await userEvent.click(group)
+  const option = await screen.findByRole('option', {
+    name: 'System Delegate',
+  })
+  await userEvent.click(option)
 
-  await userEvent.selectOptions(group, 'SYSTEM_DELEGATE')
   await userEvent.type(
     document.querySelector('input[name="email_subject"]') as HTMLInputElement,
     'hello'
@@ -129,12 +127,13 @@ test('offers READONLY_ADMIN as a targetable email group and posts its key', asyn
 
   renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
 
-  const group = document.querySelector(
-    'select[name="email_group"]'
-  ) as HTMLSelectElement
-  expect(group.querySelector('option[value="READONLY_ADMIN"]')).not.toBeNull()
+  // The Send To control is a MUI Select (aria combobox), not a native select,
+  // so open the listbox and click the option.
+  const group = screen.getByRole('combobox', { name: /send to/i })
+  await userEvent.click(group)
+  const option = await screen.findByRole('option', { name: 'READONLY_ADMIN' })
+  await userEvent.click(option)
 
-  await userEvent.selectOptions(group, 'READONLY_ADMIN')
   await userEvent.type(
     document.querySelector('input[name="email_subject"]') as HTMLInputElement,
     'hello'

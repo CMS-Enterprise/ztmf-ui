@@ -308,9 +308,10 @@ export type editSystemModalProps = {
   system: FismaSystemType | null
   mode: string
   // Datacenter-environment and OpDiv vocabularies for the dropdowns. Passed
-  // from Title because the modal renders outside the Outlet and can't read context.
-  datacenterEnvironments: DataCenterEnvironment[]
-  opdivs: OpDiv[]
+  // from Title because the modal renders outside the Outlet and can't read
+  // context. Optional so tests can omit them; production callers pass both.
+  datacenterEnvironments?: DataCenterEnvironment[]
+  opdivs?: OpDiv[]
 }
 
 export type datacallModalProps = {
@@ -419,6 +420,14 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, SystemScoreEntry>
+  /**
+   * Currently selected row ids (fismasystemid). When provided alongside
+   * onSelectionChange, the table renders selection checkboxes. The parent
+   * owns the state so other actions (e.g. Export CSV) can read it.
+   */
+  selectedRows?: number[]
+  /** Called when the user toggles row selection. */
+  onSelectionChange?: (ids: number[]) => void
   // Per-system questionnaire progress for the active data call, keyed by
   // fismasystemid. Optional so the table degrades to an em-dash column if
   // the progress fetch fails - score display must not depend on it.

@@ -1,164 +1,112 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
-import { CustomFooterSaveComponent } from './FismaTable'
-import type { FismaSystemType } from '@/types'
 
-// GridFooterContainer and GridFooter internally call useGridRootProps which
-// requires the MUI DataGrid context. Stub them out for isolated unit tests.
-jest.mock('@mui/x-data-grid', () => ({
-  ...jest.requireActual('@mui/x-data-grid'),
-  GridFooterContainer: ({ children }: { children: React.ReactNode }) => (
-    <div>{children}</div>
-  ),
-  GridFooter: () => <div data-testid="grid-footer" />,
-}))
-
+// axiosConfig reads import.meta, which Jest's CJS transform cannot parse -
+// same import-meta dance as the other view tests.
 jest.mock('@/axiosConfig', () => ({
   __esModule: true,
-  default: { get: jest.fn() },
+  default: { get: jest.fn(), post: jest.fn(), put: jest.fn() },
 }))
 
-const mockAxiosGet = require('@/axiosConfig').default.get as jest.Mock
+import FismaTable from './FismaTable'
 
-// Minimal blob download stubs
-const createObjectURL = jest.fn(() => 'blob:mock')
-const revokeObjectURL = jest.fn()
-Object.defineProperty(window, 'URL', {
-  value: { createObjectURL, revokeObjectURL },
-  writable: true,
-})
+let mockDashboardSearch = ''
 
-const SYSTEMS = [
-  { fismasystemid: 1, fismaname: 'Active A' },
-  { fismasystemid: 2, fismaname: 'Active B' },
-]
+// Provide just enough context for the table to render one system row.
+jest.mock('../Title/Context', () => ({
+  useContextProp: () => ({
+    fismaSystems: [
+      {
+        fismasystemid: 1,
+        fismaname: 'Imperial Star Destroyer',
+        fismaacronym: 'ISD',
+        fismauid: 'ISD-001',
+        mission: 'Sole Galactic Empire flagship',
+        decommissioned: false,
+        opdiv_id: 5,
+      },
+      {
+        fismasystemid: 2,
+        fismaname: 'Death Star',
+        fismaacronym: 'DS',
+        fismauid: 'DS-001',
+        mission: 'Orbital battle station',
+        decommissioned: false,
+        opdiv_id: 7,
+      },
+    ],
+    userInfo: { role: 'OWNER' },
+    // The OpDiv code column resolves ids against this shared context list.
+    opdivs: [
+      { opdiv_id: 5, code: 'CMS', name: 'CMS', active: true },
+      { opdiv_id: 7, code: 'HHS', name: 'HHS', active: true },
+    ],
+    latestDataCallId: 5,
+    selectedDatacall: null,
+    activeDatacallIds: [],
+    datacalls: [],
+    datacenterEnvironments: [],
+    showDecommissioned: false,
+    setShowDecommissioned: jest.fn(),
+    dashboardSearch: mockDashboardSearch,
+    setDashboardSearch: jest.fn(),
+  }),
+}))
 
-const baseProps = {
-  fismaSystems: SYSTEMS as unknown as FismaSystemType[],
-  activeDataCallId: 42,
-  scores: {},
-}
+describe('FismaTable', () => {
+  beforeEach(() => {
+    mockDashboardSearch = ''
+  })
 
-const blobResponse = {
-  headers: {
-    'content-disposition': 'attachment; filename=export.xlsx',
-    'content-type':
-      'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
-  },
-  data: new Blob(),
-}
-
-beforeEach(() => {
-  jest.clearAllMocks()
-  mockAxiosGet.mockResolvedValue(blobResponse)
-})
-
-function renderFooter(
-  selectedRows: number[],
-  extra: {
-    systemCallMap?: Record<number, number[]>
-    chosenCallMap?: Record<number, number>
-  } = {}
-) {
-  return render(
-    <MemoryRouter>
-      <CustomFooterSaveComponent
-        {...baseProps}
-        {...extra}
-        selectedRows={selectedRows}
-      />
-    </MemoryRouter>
-  )
-}
-
-describe('CustomFooterSaveComponent download button', () => {
-  it('is disabled when no rows are selected', () => {
-    renderFooter([])
+  // Smoke test that the table renders a row from the systems list. The score
+  // cell renders <ScoreDisplay>, which is unit-tested separately; the grid's
+  // column virtualization makes asserting far-right cells unreliable under
+  // jsdom, so this guards the leftmost columns only.
+  it('renders a system row from context', async () => {
+    render(
+      <MemoryRouter>
+        <FismaTable scores={{ 1: { score: 4, tier: 'Optimal' } }} />
+      </MemoryRouter>
+    )
     expect(
-      screen.getByRole('button', { name: /download selected system answers/i })
-    ).toBeDisabled()
+      await screen.findByText('Imperial Star Destroyer')
+    ).toBeInTheDocument()
+    // FISMA UID column was dropped in the redesign; Acronym replaces it
+    // as the per-row identifier on the leftmost stripe of cells.
+    expect(screen.getByText('ISD')).toBeInTheDocument()
   })
 
-  it('sends fsids for a partial selection', () => {
-    renderFooter([1])
-    fireEvent.click(
-      screen.getByRole('button', { name: /download selected system answers/i })
+  it('does not render Data center or Data Call columns', async () => {
+    render(
+      <MemoryRouter>
+        <FismaTable scores={{}} />
+      </MemoryRouter>
     )
-    expect(mockAxiosGet).toHaveBeenCalledWith(
-      expect.stringContaining('fsids=1'),
-      expect.objectContaining({ responseType: 'blob' })
-    )
-  })
 
-  it('sends fsids when all visible rows are selected (regression: #375 select-all bug)', () => {
-    // Before the fix: selectedRows.length === fismaSystems.length caused the
-    // condition to short-circuit, sending no fsids and downloading all systems
-    // including those from the opposite decommissioned/active view.
-    renderFooter([1, 2])
-    fireEvent.click(
-      screen.getByRole('button', { name: /download selected system answers/i })
-    )
-    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
-    // Exports against the active datacall (selected or latest), not a stale id
-    expect(calledUrl).toContain('/datacalls/42/export')
-    expect(calledUrl).toContain('fsids=1')
-    expect(calledUrl).toContain('fsids=2')
-    // Must NOT be a bare export URL (no fsids = download everything)
-    expect(calledUrl).not.toMatch(/\/export$/)
-    expect(calledUrl).not.toMatch(/\/export\?$/)
-  })
-
-  it('targets a not-started system displayed call, not the active call', () => {
-    // A not-started system has no score-derived call (empty systemCallMap), but
-    // the dashboard shows it against call 7 (a past-year view). The export must
-    // target 7, not the active call 42 - otherwise a past-year export silently
-    // hits the wrong call once the backend starts returning rows for it.
-    renderFooter([3], { systemCallMap: {}, chosenCallMap: { 3: 7 } })
-    fireEvent.click(
-      screen.getByRole('button', { name: /download selected system answers/i })
-    )
-    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
-    expect(calledUrl).toContain('/datacalls/7/export')
-    expect(calledUrl).not.toContain('/datacalls/42/export')
-    expect(calledUrl).toContain('fsids=3')
-  })
-
-  it('disables export when selected rows display different calls', () => {
-    // Two never-started rows shown against different calls have no single
-    // export target, so the button stays disabled rather than guessing.
-    renderFooter([3, 4], { systemCallMap: {}, chosenCallMap: { 3: 7, 4: 9 } })
     expect(
-      screen.getByRole('button', { name: /download selected system answers/i })
-    ).toBeDisabled()
+      await screen.findByRole('columnheader', { name: 'System' })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Data center' })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('columnheader', { name: 'Data Call' })
+    ).not.toBeInTheDocument()
   })
 
-  it('targets a scored system score-derived call', () => {
-    // A scored system resolves through systemCallMap (calls it has scores in),
-    // not the chosen-call fallback. Pins that the not-started fallback did not
-    // displace the original path.
-    renderFooter([1], { systemCallMap: { 1: [7] } })
-    fireEvent.click(
-      screen.getByRole('button', { name: /download selected system answers/i })
-    )
-    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
-    expect(calledUrl).toContain('/datacalls/7/export')
-    expect(calledUrl).toContain('fsids=1')
-  })
+  it('counts only rows matching the current search', async () => {
+    mockDashboardSearch = 'death'
 
-  it('exports a mixed scored + not-started selection sharing one call', () => {
-    // Scored system 1 has a score in call 7; not-started system 3 is displayed
-    // against call 7. They share one target, so export goes to call 7 with both
-    // ids rather than disabling or splitting.
-    renderFooter([1, 3], {
-      systemCallMap: { 1: [7] },
-      chosenCallMap: { 3: 7 },
-    })
-    fireEvent.click(
-      screen.getByRole('button', { name: /download selected system answers/i })
+    render(
+      <MemoryRouter>
+        <FismaTable scores={{}} />
+      </MemoryRouter>
     )
-    const calledUrl: string = mockAxiosGet.mock.calls[0][0]
-    expect(calledUrl).toContain('/datacalls/7/export')
-    expect(calledUrl).toContain('fsids=1')
-    expect(calledUrl).toContain('fsids=3')
+
+    expect(await screen.findByText('1 system')).toBeInTheDocument()
+    expect(screen.getByText('Death Star')).toBeInTheDocument()
+    expect(
+      screen.queryByText('Imperial Star Destroyer')
+    ).not.toBeInTheDocument()
   })
 })

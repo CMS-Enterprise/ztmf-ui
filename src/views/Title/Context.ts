@@ -17,14 +17,24 @@ type ContextType = {
   latestDeadline: string
   // All data calls (deadline-sorted) for resolving a call id to its name.
   datacalls: datacall[]
-  // The data calls whose scores/progress the dashboard aggregates — the active
+  // The data calls whose scores/progress the dashboard aggregates - the active
   // year's calls, toggleable. selectedDatacall is the single active call when
   // exactly one is on (drives the single-id flows), else null while aggregating.
   activeDatacallIds: number[]
   selectedDatacall: datacall | null
+  // Single-select adapter over the year-grouped model: picking a call narrows
+  // the active set to just that call; null resets to the latest year all-on.
+  setSelectedDatacall: (dc: datacall | null) => void
+  // Multi-select toggle (#467): a call in another year switches to that whole
+  // year all-on; within the active year it toggles, never emptying the year.
+  toggleActiveDatacall: (dc: datacall) => void
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
   fetchFismaSystems: (decommissioned?: boolean) => Promise<void>
+  // Search text driven from the header search box; the dashboard table reads
+  // it as a controlled quick filter so both inputs stay in sync.
+  dashboardSearch: string
+  setDashboardSearch: (value: string) => void
   // Datacenter-environment vocabulary, fetched once at the layout level.
   // Empty until the fetch resolves; consumers fall back to raw values.
   datacenterEnvironments: DataCenterEnvironment[]

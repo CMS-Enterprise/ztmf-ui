@@ -3,20 +3,23 @@
 // props, so the modal itself only fires the two per-user reads on open:
 //   - GET /users/:id/assignedfismasystems (current assignments)
 //   - GET /users/:id/assignablefismasystems (server-scoped picker options)
-// Tests verify:
+// The modal renders a checkbox list: assignable systems plus any current
+// assignments outside that set (cross-scope orphans, decommissioned
+// systems), which stay visible - labeled and subdued - so an admin can
+// still unassign them. Tests verify:
 //   - both per-user reads fire on open,
-//   - the dropdown offers exactly what the assignable endpoint returns,
-//   - decommissioned entries in the passed-in metadata chip with a
-//     "(Decommissioned)" suffix and subdued styling,
-//   - cross-scope orphan assignments chip labeled from the passed-in
+//   - the list offers exactly what the assignable endpoint returns,
+//   - decommissioned entries render with a "(Decommissioned)" suffix and
+//     subdued styling,
+//   - cross-scope orphan assignments render labeled from the passed-in
 //     global list so an admin can still unassign them,
-//   - a failing assignable read degrades gracefully to an empty dropdown,
-//   - reopening for a different user clears the previous chips, but
+//   - a failing assignable read degrades gracefully,
+//   - reopening for a different user clears the previous rows, but
 //     reopening for the same user keeps them visible while the fresh
 //     reads run underneath,
 //   - assign / unassign round-trip to the right endpoints, with unassign
 //     gated behind the confirm dialog, and
-//   - an id absent from every metadata source still chips identifiably.
+//   - an id absent from every metadata source still renders identifiably.
 
 jest.mock('@/router/router', () => ({
   __esModule: true,
@@ -34,7 +37,7 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: instance }
 })
 
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MockAdapter from 'axios-mock-adapter'
 import axiosInstance from '@/axiosConfig'
@@ -85,6 +88,22 @@ function renderModal(
   )
 }
 
+/** All system-row checkboxes currently rendered (excludes dialog buttons). */
+const rowCheckboxes = (): HTMLInputElement[] =>
+  Array.from(
+    document.body.querySelectorAll('input[id^="assign-system-"]')
+  ) as HTMLInputElement[]
+
+/** The row checkbox whose label matches the pattern. */
+const rowCheckbox = (pattern: RegExp): HTMLInputElement =>
+  screen.getByRole('checkbox', { name: pattern }) as HTMLInputElement
+
+/** Scopes queries to the unassign ConfirmDialog. */
+const unassignDialog = async () => {
+  const title = await screen.findByText('Confirm Unassign System')
+  return within(title.closest('[role="dialog"]') as HTMLElement)
+}
+
 beforeEach(() => {
   mock.reset()
 })
@@ -120,7 +139,7 @@ test('fires the two per-user reads on open', async () => {
   ).toBe(false)
 })
 
-test('assigned system flagged decommissioned via props chips with "(Decommissioned)" suffix and subdued styling', async () => {
+test('assigned system flagged decommissioned via props renders with "(Decommissioned)" suffix and subdued styling', async () => {
   const retiredExecutor: FismaSystemType = {
     ...EXECUTOR,
     decommissioned: true,
@@ -137,20 +156,16 @@ test('assigned system flagged decommissioned via props chips with "(Decommission
     decommSystems: [retiredExecutor],
   })
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
+  const label = await screen.findByText(
+    /Super Star Destroyer Executor\s*-\s*Flagship Communication Hub\s*\(Decommissioned\)/i
   )
-  const chip = document.body.querySelector('.MuiChip-root') as HTMLElement
-  expect(chip.textContent).toMatch(
-    /SSD-EX\s*-\s*Super Star Destroyer Executor\s*-\s*Flagship Communication Hub\s*\(Decommissioned\)/i
-  )
-  const chipStyle = window.getComputedStyle(chip)
-  expect(parseFloat(chipStyle.opacity)).toBeLessThan(1)
-  expect(chipStyle.fontStyle).toBe('italic')
+  const row = label.closest('label') as HTMLElement
+  const rowStyle = window.getComputedStyle(row)
+  expect(parseFloat(rowStyle.opacity)).toBeLessThan(1)
+  expect(rowStyle.fontStyle).toBe('italic')
 })
 
-test('dropdown offers exactly the systems the assignable endpoint returns', async () => {
-  const user = userEvent.setup()
+test('list offers exactly the systems the assignable endpoint returns', async () => {
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
   mock
     .onGet(`/users/${USER_ID}/assignablefismasystems`)
@@ -158,20 +173,12 @@ test('dropdown offers exactly the systems the assignable endpoint returns', asyn
 
   renderModal()
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-
-  await waitFor(() =>
-    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
-  )
-  expect(
-    screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
-  ).toBeInTheDocument()
+  expect(await screen.findByText('Death Star')).toBeInTheDocument()
+  expect(screen.getByText('Star Destroyer Chimaera')).toBeInTheDocument()
+  expect(rowCheckboxes()).toHaveLength(2)
 })
 
-test('typing an acronym filters the dropdown to the matching system', async () => {
+test('typing an acronym filters the list to the matching system', async () => {
   // The picker must match on the acronym, not just the system name: typing
   // "ISD" surfaces ISD-CHI and drops DS-1 / Death Star.
   const user = userEvent.setup()
@@ -181,23 +188,15 @@ test('typing an acronym filters the dropdown to the matching system', async () =
     .reply(200, { data: [DS1, CHI] })
 
   renderModal()
+  await screen.findByText('Death Star')
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await waitFor(() =>
-    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  await user.type(
+    screen.getByRole('textbox', { name: /search fisma systems/i }),
+    'ISD'
   )
 
-  await user.type(combobox, 'ISD')
-
-  await waitFor(() =>
-    expect(
-      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
-    ).toBeInTheDocument()
-  )
-  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
+  expect(screen.getByText('Star Destroyer Chimaera')).toBeInTheDocument()
+  expect(screen.queryByText('Death Star')).not.toBeInTheDocument()
 })
 
 test('acronym matching is case-insensitive', async () => {
@@ -208,24 +207,18 @@ test('acronym matching is case-insensitive', async () => {
     .reply(200, { data: [DS1, CHI] })
 
   renderModal()
+  await screen.findByText('Death Star')
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await waitFor(() => expect(screen.getByText(/DS-1/)).toBeInTheDocument())
-
-  await user.type(combobox, 'isd')
-
-  await waitFor(() =>
-    expect(
-      screen.getByText(/ISD-CHI\s*-\s*Star Destroyer Chimaera/i)
-    ).toBeInTheDocument()
+  await user.type(
+    screen.getByRole('textbox', { name: /search fisma systems/i }),
+    'isd'
   )
-  expect(screen.queryByText(/Death Star/i)).not.toBeInTheDocument()
+
+  expect(screen.getByText('Star Destroyer Chimaera')).toBeInTheDocument()
+  expect(screen.queryByText('Death Star')).not.toBeInTheDocument()
 })
 
-test('typing a system name filters the dropdown to the matching system', async () => {
+test('typing a system name filters the list to the matching system', async () => {
   const user = userEvent.setup()
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
   mock
@@ -233,23 +226,18 @@ test('typing a system name filters the dropdown to the matching system', async (
     .reply(200, { data: [DS1, CHI] })
 
   renderModal()
+  await screen.findByText('Star Destroyer Chimaera')
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await waitFor(() => expect(screen.getByText(/ISD-CHI/)).toBeInTheDocument())
-
-  await user.type(combobox, 'Death')
-
-  await waitFor(() =>
-    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
+  await user.type(
+    screen.getByRole('textbox', { name: /search fisma systems/i }),
+    'Death'
   )
-  expect(screen.queryByText(/ISD-CHI/)).not.toBeInTheDocument()
+
+  expect(screen.getByText('Death Star')).toBeInTheDocument()
+  expect(screen.queryByText('Star Destroyer Chimaera')).not.toBeInTheDocument()
 })
 
 test('assignable subsystem name is appended to the label', async () => {
-  const user = userEvent.setup()
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
   mock
     .onGet(`/users/${USER_ID}/assignablefismasystems`)
@@ -257,28 +245,20 @@ test('assignable subsystem name is appended to the label', async () => {
 
   renderModal()
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-
-  await waitFor(() =>
-    expect(
-      screen.getByText(
-        /SSD-EX\s*-\s*Super Star Destroyer Executor\s*-\s*Flagship Communication Hub/i
-      )
-    ).toBeInTheDocument()
-  )
+  expect(
+    await screen.findByText(
+      /Super Star Destroyer Executor\s*-\s*Flagship Communication Hub/i
+    )
+  ).toBeInTheDocument()
 })
 
-test('an out-of-scope orphan assignment chips with a LABEL from the allSystems prop', async () => {
+test('an out-of-scope orphan assignment renders labeled from the allSystems prop', async () => {
   // Piett is currently assigned to Executor (1002). The server excludes
   // Executor from his per-user assignable set (its OpDiv is no longer in
   // his scope), but the parent-supplied allSystems prop still carries it
-  // as an active system. The chip must render labeled - the admin needs
-  // to see WHICH system they are unassigning - even though the DROPDOWN
-  // must not offer it as a re-selection target.
-  const user = userEvent.setup()
+  // as an active system. The row must render labeled - the admin needs to
+  // see WHICH system they are unassigning - checked, and once unchecked it
+  // cannot be re-picked (it leaves the list entirely).
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [1002] })
@@ -288,27 +268,15 @@ test('an out-of-scope orphan assignment chips with a LABEL from the allSystems p
 
   renderModal({ allSystems: [DS1, EXECUTOR] })
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-  const chip = document.body.querySelector('.MuiChip-root') as HTMLElement
-  expect(chip.textContent).toMatch(
-    /SSD-EX\s*-\s*Super Star Destroyer Executor/i
-  )
-
-  const combobox = screen.getByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await waitFor(() =>
-    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
-  )
-  const listbox = document.body.querySelector('.MuiAutocomplete-listbox')
-  expect(listbox?.textContent ?? '').not.toMatch(/SSD-EX/)
+  const orphan = await screen.findByText(/Super Star Destroyer Executor/i)
+  expect(orphan).toBeInTheDocument()
+  const orphanCheckbox = rowCheckbox(/super star destroyer executor/i)
+  expect(orphanCheckbox.checked).toBe(true)
+  // The assignable system renders as a normal pickable row alongside it.
+  expect(rowCheckbox(/death star/i).checked).toBe(false)
 })
 
-test('empty assignable response shows no dropdown options; existing chips still render', async () => {
-  const user = userEvent.setup()
+test('empty assignable response offers no pickable rows; existing assignments still render', async () => {
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [1001] })
@@ -318,22 +286,15 @@ test('empty assignable response shows no dropdown options; existing chips still 
 
   renderModal({ allSystems: [DS1] })
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-
-  const combobox = screen.getByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await waitFor(() =>
-    expect(screen.getByText(/No options/i)).toBeInTheDocument()
-  )
+  // The existing assignment renders (checked); nothing else is offered.
+  const assigned = await screen.findByText('Death Star')
+  expect(assigned).toBeInTheDocument()
+  await waitFor(() => expect(rowCheckboxes()).toHaveLength(1))
+  expect(rowCheckboxes()[0].checked).toBe(true)
 })
 
-test('an assignable-endpoint failure degrades gracefully to empty options', async () => {
+test('an assignable-endpoint failure degrades gracefully to the assigned rows', async () => {
   jest.spyOn(console, 'error').mockImplementation(() => {})
-  const user = userEvent.setup()
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [1001] })
@@ -341,21 +302,13 @@ test('an assignable-endpoint failure degrades gracefully to empty options', asyn
 
   renderModal({ allSystems: [DS1] })
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-
-  const combobox = screen.getByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await waitFor(() =>
-    expect(screen.getByText(/No options/i)).toBeInTheDocument()
-  )
+  // The assignment is still visible and removable even with no options.
+  expect(await screen.findByText('Death Star')).toBeInTheDocument()
+  await waitFor(() => expect(rowCheckboxes()).toHaveLength(1))
   ;(console.error as jest.Mock).mockRestore?.()
 })
 
-test('assigned system present in the assignable set renders a labeled chip', async () => {
+test('assigned system present in the assignable set renders a labeled checked row', async () => {
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [1002] })
@@ -365,21 +318,17 @@ test('assigned system present in the assignable set renders a labeled chip', asy
 
   renderModal()
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-  const chip = document.body.querySelector('.MuiChip-root') as HTMLElement
-  expect(chip.textContent).toMatch(
-    /SSD-EX\s*-\s*Super Star Destroyer Executor/i
-  )
+  expect(
+    await screen.findByText(/Super Star Destroyer Executor/i)
+  ).toBeInTheDocument()
+  expect(rowCheckbox(/super star destroyer executor/i).checked).toBe(true)
 })
 
-test('an id absent from every metadata source still chips identifiably', async () => {
-  // Defense in depth for the blank-chip failure mode. The parent's global
+test('an id absent from every metadata source still renders identifiably', async () => {
+  // Defense in depth for the blank-row failure mode. The parent's global
   // reads are allSettled, so a failure there leaves an out-of-scope orphan
-  // with no label source at all. The chip must still say something an
-  // admin can act on - a blank chip gives no way to tell what is being
-  // unassigned.
+  // with no label source at all. The row must still say something an admin
+  // can act on - a blank row gives no way to tell what is being unassigned.
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [9999] })
@@ -389,23 +338,15 @@ test('an id absent from every metadata source still chips identifiably', async (
 
   renderModal({ allSystems: [], decommSystems: [] })
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-  const label = document.body.querySelector(
-    '.MuiChip-label'
-  ) as HTMLElement | null
-  expect(label).not.toBeNull()
-  expect(label!.textContent).toMatch(
-    /Unknown or decommissioned system \(id 9999\)/
-  )
+  expect(
+    await screen.findByText(/Unknown or decommissioned system \(id 9999\)/)
+  ).toBeInTheDocument()
 })
 
-test('an already-assigned system shows in the dropdown as checked and disabled', async () => {
-  // Guards against double-assigning: the row stays visible (so the admin
-  // can see it is already granted) but cannot be re-selected. Removal goes
-  // through the chip, not the dropdown row.
-  const user = userEvent.setup()
+test('an already-assigned system shows as checked alongside pickable rows', async () => {
+  // Guards against double-assigning: the assigned row is already checked
+  // (re-checking is impossible), while an unassigned option in the same
+  // list stays selectable.
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [1001] })
@@ -414,39 +355,17 @@ test('an already-assigned system shows in the dropdown as checked and disabled',
     .reply(200, { data: [DS1, CHI] })
 
   renderModal()
+  await screen.findByText('Death Star')
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-
-  // DS-1 is both a chip and a dropdown row here, so scope the lookup to
-  // the listbox rather than matching on text across the whole dialog.
-  await waitFor(() =>
-    expect(
-      document.body.querySelectorAll('.MuiAutocomplete-listbox li').length
-    ).toBe(2)
-  )
-  const rows = Array.from(
-    document.body.querySelectorAll('.MuiAutocomplete-listbox li')
-  )
-  const checkboxFor = (pattern: RegExp) => {
-    const li = rows.find((r) => pattern.test(r.textContent ?? ''))
-    expect(li).toBeDefined()
-    return li!.querySelector('input[type="checkbox"]') as HTMLInputElement
-  }
-
-  const assignedCheckbox = checkboxFor(/DS-1/)
+  const assignedCheckbox = rowCheckbox(/death star/i)
   expect(assignedCheckbox.checked).toBe(true)
-  expect(assignedCheckbox.disabled).toBe(true)
 
-  // An unassigned option in the same list stays selectable.
-  const freeCheckbox = checkboxFor(/ISD-CHI/)
+  const freeCheckbox = rowCheckbox(/star destroyer chimaera/i)
   expect(freeCheckbox.checked).toBe(false)
   expect(freeCheckbox.disabled).toBe(false)
 })
 
-test('selecting an option POSTs the assignment and chips it', async () => {
+test('checking a row POSTs the assignment and marks it checked', async () => {
   const user = userEvent.setup()
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
   mock
@@ -455,25 +374,20 @@ test('selecting an option POSTs the assignment and chips it', async () => {
   mock.onPost(`/users/${USER_ID}/assignedfismasystems`).reply(200, {})
 
   renderModal()
+  await screen.findByText('Death Star')
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await user.click(await screen.findByText(/DS-1\s*-\s*Death Star/i))
+  await user.click(rowCheckbox(/death star/i))
 
   await waitFor(() => expect(mock.history.post.length).toBe(1))
   expect(JSON.parse(mock.history.post[0].data)).toEqual({
     fismasystemid: 1001,
   })
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
+  await waitFor(() => expect(rowCheckbox(/death star/i).checked).toBe(true))
 })
 
-test('a failed assign POST leaves the chip off rather than showing a false success', async () => {
+test('a failed assign POST leaves the row unchecked rather than showing a false success', async () => {
   // The optimistic value is only committed after the POST resolves, so a
-  // rejected write must not leave a chip implying the grant landed.
+  // rejected write must not leave a checked row implying the grant landed.
   const user = userEvent.setup()
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
   mock
@@ -482,18 +396,15 @@ test('a failed assign POST leaves the chip off rather than showing a false succe
   mock.onPost(`/users/${USER_ID}/assignedfismasystems`).reply(500)
 
   renderModal()
+  await screen.findByText('Death Star')
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-  await user.click(await screen.findByText(/DS-1\s*-\s*Death Star/i))
+  await user.click(rowCheckbox(/death star/i))
 
   await waitFor(() => expect(mock.history.post.length).toBe(1))
-  expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(0)
+  expect(rowCheckbox(/death star/i).checked).toBe(false)
 })
 
-test('removing a chip asks for confirmation and DELETEs only on confirm', async () => {
+test('unchecking a row asks for confirmation and DELETEs only on confirm', async () => {
   const user = userEvent.setup()
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
@@ -504,32 +415,27 @@ test('removing a chip asks for confirmation and DELETEs only on confirm', async 
   mock.onDelete(`/users/${USER_ID}/assignedfismasystems/1001`).reply(200, {})
 
   renderModal()
+  await screen.findByText('Death Star')
+  await waitFor(() => expect(rowCheckbox(/death star/i).checked).toBe(true))
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-  await user.click(
-    document.body.querySelector('.MuiChip-deleteIcon') as HTMLElement
-  )
+  await user.click(rowCheckbox(/death star/i))
 
   // Confirm dialog names the system and the user so the admin can see
   // exactly what they are about to revoke.
-  const prompt = await screen.findByText(
-    /unassign DS-1\s*-\s*Death Star from Admiral Piett/i
-  )
-  expect(prompt).toBeInTheDocument()
+  const dialog = await unassignDialog()
+  expect(
+    dialog.getByText(/unassign DS-1\s*-\s*Death Star from Admiral Piett/i)
+  ).toBeInTheDocument()
   // Nothing is written until the admin confirms.
   expect(mock.history.delete.length).toBe(0)
 
-  await user.click(screen.getByRole('button', { name: /^confirm$/i }))
+  await user.click(dialog.getByRole('button', { name: /^confirm$/i }))
 
   await waitFor(() => expect(mock.history.delete.length).toBe(1))
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(0)
-  )
+  await waitFor(() => expect(rowCheckbox(/death star/i).checked).toBe(false))
 })
 
-test('cancelling the unassign prompt keeps the chip and writes nothing', async () => {
+test('cancelling the unassign prompt keeps the row checked and writes nothing', async () => {
   const user = userEvent.setup()
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
@@ -540,23 +446,22 @@ test('cancelling the unassign prompt keeps the chip and writes nothing', async (
   mock.onDelete(`/users/${USER_ID}/assignedfismasystems/1001`).reply(200, {})
 
   renderModal()
+  await screen.findByText('Death Star')
+  await waitFor(() => expect(rowCheckbox(/death star/i).checked).toBe(true))
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-  await user.click(
-    document.body.querySelector('.MuiChip-deleteIcon') as HTMLElement
-  )
-  await screen.findByText(/unassign DS-1/i)
-  await user.click(screen.getByRole('button', { name: /^cancel$/i }))
+  await user.click(rowCheckbox(/death star/i))
+  const dialog = await unassignDialog()
+  await user.click(dialog.getByRole('button', { name: /^cancel$/i }))
 
   expect(mock.history.delete.length).toBe(0)
-  expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
+  // The dialog fades out and un-hides the modal beneath it; wait for the
+  // row to be queryable again before asserting its state.
+  await waitFor(() => expect(rowCheckbox(/death star/i).checked).toBe(true))
 })
 
 test('a decommissioned assignment is still removable', async () => {
   // The subdued styling marks it as historical, but an admin must still be
-  // able to revoke it - that is the whole point of keeping the chip
+  // able to revoke it - that is the whole point of keeping the row
   // rendered rather than dropping unknown-to-assignable ids.
   const user = userEvent.setup()
   const retiredExecutor: FismaSystemType = {
@@ -572,25 +477,23 @@ test('a decommissioned assignment is still removable', async () => {
   mock.onDelete(`/users/${USER_ID}/assignedfismasystems/1002`).reply(200, {})
 
   renderModal({ allSystems: [DS1], decommSystems: [retiredExecutor] })
+  await screen.findByText(/\(Decommissioned\)/)
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
-  const deleteIcon = document.body.querySelector('.MuiChip-deleteIcon')
-  expect(deleteIcon).not.toBeNull()
+  const checkbox = rowCheckbox(/super star destroyer executor/i)
+  expect(checkbox.disabled).toBe(false)
+  await user.click(checkbox)
 
-  await user.click(deleteIcon as HTMLElement)
-  await screen.findByText(/unassign SSD-EX/i)
-  await user.click(screen.getByRole('button', { name: /^confirm$/i }))
+  const dialog = await unassignDialog()
+  expect(dialog.getByText(/unassign SSD-EX/i)).toBeInTheDocument()
+  await user.click(dialog.getByRole('button', { name: /^confirm$/i }))
 
   await waitFor(() => expect(mock.history.delete.length).toBe(1))
 })
 
-test('a failing assigned read still leaves the dropdown usable', async () => {
-  // Inverse of the assignable-failure case: the chip source is gone but
-  // the picker options survive, so the admin can still grant access.
+test('a failing assigned read still leaves the picker usable', async () => {
+  // Inverse of the assignable-failure case: the assignment source is gone
+  // but the picker options survive, so the admin can still grant access.
   jest.spyOn(console, 'error').mockImplementation(() => {})
-  const user = userEvent.setup()
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(500)
   mock
     .onGet(`/users/${USER_ID}/assignablefismasystems`)
@@ -598,20 +501,13 @@ test('a failing assigned read still leaves the dropdown usable', async () => {
 
   renderModal()
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-
-  await waitFor(() =>
-    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
-  )
-  expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(0)
+  expect(await screen.findByText('Death Star')).toBeInTheDocument()
+  expect(screen.getByText('Star Destroyer Chimaera')).toBeInTheDocument()
+  expect(rowCheckboxes().every((cb) => !cb.checked)).toBe(true)
   ;(console.error as jest.Mock).mockRestore?.()
 })
 
-test('dropdown options are ordered by acronym regardless of response order', async () => {
-  const user = userEvent.setup()
+test('rows are ordered by acronym regardless of response order', async () => {
   mock.onGet(`/users/${USER_ID}/assignedfismasystems`).reply(200, { data: [] })
   // Deliberately reverse-sorted on the wire.
   mock
@@ -619,30 +515,22 @@ test('dropdown options are ordered by acronym regardless of response order', asy
     .reply(200, { data: [EXECUTOR, CHI, DS1] })
 
   renderModal()
+  await screen.findByText('Death Star')
 
-  const combobox = await screen.findByRole('combobox', {
-    name: /assign fisma systems/i,
-  })
-  await user.click(combobox)
-
-  await waitFor(() =>
-    expect(screen.getByText(/DS-1\s*-\s*Death Star/i)).toBeInTheDocument()
-  )
-  const rows = Array.from(
-    document.body.querySelectorAll('.MuiAutocomplete-listbox li')
-  ).map((li) => (li.textContent ?? '').trim())
-  expect(rows).toHaveLength(3)
-  // DS-1 < ISD-CHI < SSD-EX
-  expect(rows[0]).toMatch(/^DS-1/)
-  expect(rows[1]).toMatch(/^ISD-CHI/)
-  expect(rows[2]).toMatch(/^SSD-EX/)
+  // DS-1 (1001) < ISD-CHI (1101) < SSD-EX (1002)
+  const ids = rowCheckboxes().map((cb) => cb.id)
+  expect(ids).toEqual([
+    'assign-system-1001',
+    'assign-system-1101',
+    'assign-system-1002',
+  ])
 })
 
-test('reopening for a different user clears the previous chips before new fetches resolve', async () => {
+test('reopening for a different user clears the previous rows before new fetches resolve', async () => {
   // User A resolves with an assignment; user B's fetches are held so we
   // can observe the intermediate state. The stateOwnerRef check clears
-  // chips when the userid changes - otherwise user A's chip would linger
-  // until user B's response arrived.
+  // rows when the userid changes - otherwise user A's assignment would
+  // linger until user B's response arrived.
   const OTHER_USER_ID = '33333333-3333-3333-3333-333333333333'
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
@@ -663,9 +551,7 @@ test('reopening for a different user clears the previous chips before new fetche
 
   const utils = renderModal()
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
+  await waitFor(() => expect(rowCheckboxes()).toHaveLength(1))
 
   utils.rerender(
     <AssignSystemModal
@@ -677,19 +563,17 @@ test('reopening for a different user clears the previous chips before new fetche
       decommSystems={[]}
     />
   )
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(0)
-  )
+  await waitFor(() => expect(rowCheckboxes()).toHaveLength(0))
 
   releaseB()
 })
 
-test('reopening for the SAME user keeps chips visible while fresh fetches run', async () => {
-  // Same-user reopen: the modal must NOT blank the chip area while the
-  // refresh reads are in flight. Contrast with the different-user test
-  // above - that path clears; this path preserves. Perceived latency
-  // matters most here: an admin who opens the picker, closes it, and
-  // reopens should see chips instantly.
+test('reopening for the SAME user keeps rows visible while fresh fetches run', async () => {
+  // Same-user reopen: the modal must NOT blank the list while the refresh
+  // reads are in flight. Contrast with the different-user test above -
+  // that path clears; this path preserves. Perceived latency matters most
+  // here: an admin who opens the picker, closes it, and reopens should see
+  // the assignments instantly.
   mock
     .onGet(`/users/${USER_ID}/assignedfismasystems`)
     .reply(200, { data: [1002] })
@@ -699,9 +583,7 @@ test('reopening for the SAME user keeps chips visible while fresh fetches run', 
 
   const utils = renderModal()
 
-  await waitFor(() =>
-    expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
-  )
+  await waitFor(() => expect(rowCheckboxes()).toHaveLength(1))
   // Flush the second state setter (setAssignable) from the initial
   // Promise.allSettled so the rerender below doesn't race a lingering
   // update outside act(). The waitFor above only confirms one of the two.
@@ -746,7 +628,8 @@ test('reopening for the SAME user keeps chips visible while fresh fetches run', 
     )
   })
 
-  // Chip stays visible during the in-flight refresh - no empty flash.
-  expect(document.body.querySelectorAll('.MuiChip-root').length).toBe(1)
+  // Rows stay visible during the in-flight refresh - no empty flash.
+  expect(rowCheckboxes()).toHaveLength(1)
+  expect(rowCheckboxes()[0].checked).toBe(true)
   releaseReopen()
 })

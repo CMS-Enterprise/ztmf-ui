@@ -2,32 +2,30 @@ import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
+import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
 import EditIcon from '@mui/icons-material/Edit'
 import BlockIcon from '@mui/icons-material/Block'
-import RestoreIcon from '@mui/icons-material/RestoreFromTrash'
-import Tooltip from '@mui/material/Tooltip'
 import {
-  Dialog,
-  DialogActions,
-  DialogContent,
+  Autocomplete,
   FormControlLabel,
+  InputBase,
+  OutlinedInput,
   Switch,
   TextField,
-  Typography,
 } from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
-import CustomDialogTitle from '@/components/DialogTitle/CustomDialogTitle'
-import {
-  DataGrid,
-  GridActionsCellItem,
-  GridColDef,
-  GridToolbarContainer,
-  GridToolbarQuickFilter,
-} from '@mui/x-data-grid'
+import Field, { fieldInputSx } from '@/components/ui/Field'
+import SearchIcon from '@mui/icons-material/Search'
+import Modal from '@/components/ui/Modal'
+import CompactSwitchLabel from '@/components/ui/CompactSwitchLabel'
+import { DataGrid, GridActionsCellItem, GridColDef } from '@mui/x-data-grid'
 import useAccessibleGrid from '@/hooks/useAccessibleGrid'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
+import PageHeader from '@/components/ui/PageHeader'
+import StatusChip, { CodeBadge } from '@/components/ui/StatusChip'
+import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
+import { colors, radius } from '@/theme/tokens'
 import { useContextProp } from '../Title/Context'
 import { Routes } from '@/router/constants'
 import { useCreateOpDiv, useUpdateOpDiv, type OpDivInput } from '@/utils/opdivs'
@@ -43,35 +41,122 @@ const NAME_MAX = 128
 type FormState = { code: string; name: string; is_parent: boolean }
 const EMPTY_FORM: FormState = { code: '', name: '', is_parent: false }
 
-function CreateToolbar({
-  onCreate,
-  canCreate,
-}: {
-  onCreate: () => void
-  canCreate: boolean
-}) {
+type TypeFilter = 'all' | 'parent' | 'child'
+
+const TYPE_FILTER_OPTIONS: {
+  value: Exclude<TypeFilter, 'all'>
+  label: string
+}[] = [
+  { value: 'parent', label: 'Parent' },
+  { value: 'child', label: 'Child' },
+]
+
+interface OpDivsToolbarProps {
+  search: string
+  setSearch: (value: string) => void
+  typeFilter: TypeFilter
+  setTypeFilter: (value: TypeFilter) => void
+  showDeactivated: boolean
+  setShowDeactivated: (value: boolean) => void
+}
+
+/**
+ * Toolbar inside the Manage OpDivs table card. Mirrors the Dashboard /
+ * Users table toolbars: search input + Type filter + "Show deactivated"
+ * toggle, all right-aligned and sharing a uniform 30px row.
+ */
+function OpDivsToolbar({
+  search,
+  setSearch,
+  typeFilter,
+  setTypeFilter,
+  showDeactivated,
+  setShowDeactivated,
+}: OpDivsToolbarProps) {
   return (
-    <GridToolbarContainer sx={{ justifyContent: 'space-between' }}>
-      <GridToolbarQuickFilter debounceMs={250} />
-      {canCreate && (
-        <Button
-          color="primary"
-          startIcon={<AddIcon />}
-          onClick={onCreate}
-          sx={{ color: '#5666b8' }}
-        >
-          Create OpDiv
-        </Button>
-      )}
-    </GridToolbarContainer>
+    <Box
+      sx={{
+        display: 'flex',
+        alignItems: 'center',
+        justifyContent: 'flex-end',
+        gap: 1.5,
+        px: 2.25,
+        py: 1.5,
+        borderBottom: `1px solid ${colors.neutral200}`,
+      }}
+    >
+      <Box
+        sx={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 1,
+          px: 1.5,
+          height: 30,
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: `${radius.md}px`,
+        }}
+      >
+        <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
+        <InputBase
+          placeholder="Search by code or name..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          sx={{ fontSize: 13, width: 220 }}
+          inputProps={{ 'aria-label': 'Search OpDivs' }}
+        />
+      </Box>
+      <Autocomplete
+        size="small"
+        options={TYPE_FILTER_OPTIONS}
+        getOptionLabel={(opt) => opt.label}
+        isOptionEqualToValue={(option, value) => option.value === value.value}
+        value={
+          typeFilter === 'all'
+            ? null
+            : TYPE_FILTER_OPTIONS.find((opt) => opt.value === typeFilter) ??
+              null
+        }
+        onChange={(_event, opt) =>
+          setTypeFilter((opt?.value ?? 'all') as TypeFilter)
+        }
+        sx={{
+          width: 140,
+          '& .MuiInputBase-root': {
+            height: 30,
+            fontSize: 13,
+            py: '0 !important',
+          },
+          '& .MuiAutocomplete-input': { py: '0 !important' },
+        }}
+        renderInput={(params) => (
+          <TextField
+            {...params}
+            placeholder="Type"
+            inputProps={{
+              ...params.inputProps,
+              'aria-label': 'Filter by type',
+            }}
+          />
+        )}
+      />
+      <CompactSwitchLabel
+        checked={showDeactivated}
+        onChange={setShowDeactivated}
+        label="Show deactivated"
+      />
+    </Box>
   )
 }
 
 export default function OpDivAdmin() {
   const navigate = useNavigate()
   const accessibleGrid = useAccessibleGrid()
-  const { userInfo, opdivs: rows, opdivsLoaded } = useContextProp()
-
+  const {
+    userInfo,
+    fismaSystems,
+    opdivs: rows,
+    opdivsLoaded,
+  } = useContextProp()
   // OWNER manages OpDivs fully (create / edit / activate). HHS admin reaches
   // the page only to flip the per-OpDiv System Delegate toggle - every other
   // control stays OWNER-only. The backend enforces both boundaries (OpDiv
@@ -86,6 +171,13 @@ export default function OpDivAdmin() {
   const [form, setForm] = useState<FormState>(EMPTY_FORM)
   const [fieldErrors, setFieldErrors] = useState<Record<string, string>>({})
   const [pendingToggle, setPendingToggle] = useState<OpDiv | null>(null)
+  // Toolbar filter state: search threads into the DataGrid as a quick-filter,
+  // type narrows the row set client-side so the /opdivs response shape stays
+  // unchanged. showDeactivated swaps the visible set between active-only and
+  // deactivated-only, mirroring the Users / Dashboard toggles.
+  const [search, setSearch] = useState<string>('')
+  const [typeFilter, setTypeFilter] = useState<TypeFilter>('all')
+  const [showDeactivated, setShowDeactivated] = useState<boolean>(false)
   const [pendingDelegateToggle, setPendingDelegateToggle] =
     useState<OpDiv | null>(null)
   // All three invalidate the shared OpDiv list on success, so the grid and
@@ -194,6 +286,43 @@ export default function OpDivAdmin() {
     }
   }
 
+  // Count of FISMA systems per OpDiv for the "Systems" column. Read directly
+  // off the systems list the root loader hydrates into context, so no extra
+  // fetch is needed.
+  const systemCountByOpDiv = useMemo(() => {
+    const counts: Record<number, number> = {}
+    for (const sys of fismaSystems) {
+      if (sys.opdiv_id) counts[sys.opdiv_id] = (counts[sys.opdiv_id] ?? 0) + 1
+    }
+    return counts
+  }, [fismaSystems])
+
+  // Client-side filter: status (active vs deactivated) + Type. Search threads
+  // through DataGrid's quick filter so it can match Code, Name, Type and
+  // Systems uniformly.
+  const filteredRows = useMemo(() => {
+    return rows.filter((r) => {
+      if (showDeactivated ? r.active : !r.active) return false
+      if (typeFilter !== 'all') {
+        const wantParent = typeFilter === 'parent'
+        if (r.is_parent !== wantParent) return false
+      }
+      return true
+    })
+  }, [rows, typeFilter, showDeactivated])
+  const quickFilterValues = search.trim()
+    ? search.trim().split(/\s+/)
+    : undefined
+
+  // Subtitle counts shown under the page title.
+  const activeCount = rows.filter((r) => r.active).length
+  const deactivatedCount = rows.filter((r) => !r.active).length
+  const subtitleParts: string[] = []
+  if (activeCount > 0) subtitleParts.push(`${activeCount} active`)
+  if (deactivatedCount > 0)
+    subtitleParts.push(`${deactivatedCount} deactivated`)
+  const subtitle = subtitleParts.length > 0 ? subtitleParts.join(' · ') : ''
+
   const handleConfirmDelegateToggle = async (confirm: boolean) => {
     const target = pendingDelegateToggle
     setPendingDelegateToggle(null)
@@ -216,19 +345,84 @@ export default function OpDivAdmin() {
 
   const columns: GridColDef[] = useMemo(() => {
     const cols: GridColDef[] = [
-      { field: 'code', headerName: 'Code', flex: 0.6 },
-      { field: 'name', headerName: 'Name', flex: 1.4 },
+      {
+        field: 'code',
+        headerName: 'Code',
+        flex: 0.6,
+        minWidth: 110,
+        renderCell: (params) => (
+          <CodeBadge code={params.row.code} muted={!params.row.active} />
+        ),
+      },
+      {
+        field: 'name',
+        headerName: 'Name',
+        flex: 1.4,
+        minWidth: 200,
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              fontWeight: 600,
+              fontSize: 14,
+              color: params.row.active ? colors.ink : colors.neutral500,
+            }}
+          >
+            {params.row.name}
+          </Typography>
+        ),
+      },
       {
         field: 'is_parent',
-        headerName: 'Parent',
-        flex: 0.4,
-        valueGetter: (params) => (params.row.is_parent ? 'Yes' : 'No'),
+        headerName: 'Type',
+        flex: 0.8,
+        minWidth: 130,
+        // Data model only has is_parent (boolean) - no parent_id reference -
+        // so "Child" is the best we can offer without a backend change. When
+        // parent_id lands we can show "Child of {parentCode}".
+        valueGetter: (params) => (params.row.is_parent ? 'Parent' : 'Child'),
+        renderCell: (params) => (
+          <Typography
+            sx={{
+              fontSize: 13,
+              color: params.row.active ? colors.neutral700 : colors.neutral500,
+            }}
+          >
+            {params.row.is_parent ? 'Parent' : 'Child'}
+          </Typography>
+        ),
+      },
+      {
+        field: 'systems',
+        headerName: 'Systems',
+        flex: 0.7,
+        minWidth: 110,
+        valueGetter: (params) => systemCountByOpDiv[params.row.opdiv_id] ?? 0,
+        renderCell: (params) => {
+          const count = systemCountByOpDiv[params.row.opdiv_id] ?? 0
+          return (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: params.row.active ? colors.ink : colors.neutral500,
+              }}
+            >
+              {count} {count === 1 ? 'system' : 'systems'}
+            </Typography>
+          )
+        },
       },
       {
         field: 'active',
         headerName: 'Status',
-        flex: 0.5,
-        valueGetter: (params) => (params.row.active ? 'Active' : 'Inactive'),
+        flex: 0.7,
+        minWidth: 120,
+        valueGetter: (params) => (params.row.active ? 'Active' : 'Deactivated'),
+        renderCell: (params) =>
+          params.row.active ? (
+            <StatusChip label="Active" kind="active" />
+          ) : (
+            <StatusChip label="Deactivated" kind="neutral" />
+          ),
       },
       {
         field: 'system_delegate_enabled',
@@ -261,134 +455,214 @@ export default function OpDivAdmin() {
         field: 'actions',
         type: 'actions',
         headerName: 'Actions',
-        width: 120,
+        headerAlign: 'right',
+        align: 'right',
+        // Wider so a "Reactivate" text button fits on deactivated rows and
+        // the edit + deactivate icon pair still has breathing room on active.
+        width: 140,
         getActions: (params) => {
           const row = params.row as OpDiv
+          if (!row.active) {
+            // Deactivated row: show a single "Reactivate" outline button per
+            // the mock, matching the Resend pattern on invited users.
+            return [
+              <Button
+                key={`reactivate-${row.opdiv_id}`}
+                variant="outlined"
+                size="small"
+                sx={{
+                  minHeight: 28,
+                  py: 0.25,
+                  px: 1.5,
+                  fontSize: 13,
+                  color: colors.primary,
+                  borderColor: colors.neutral200,
+                }}
+                onClick={() => setPendingToggle(row)}
+              >
+                Reactivate
+              </Button>,
+            ]
+          }
           return [
             <GridActionsCellItem
               key={`edit-${row.opdiv_id}`}
-              icon={<EditIcon />}
-              label="Edit"
+              icon={
+                <EditIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+              }
+              label="Edit OpDiv"
               onClick={() => openEdit(row)}
               color="inherit"
             />,
-            <Tooltip
-              key={`toggle-${row.opdiv_id}`}
-              title={row.active ? 'Deactivate' : 'Activate'}
-              placement="right-start"
-            >
-              <GridActionsCellItem
-                icon={
-                  row.active ? (
-                    <BlockIcon sx={{ color: 'black' }} />
-                  ) : (
-                    <RestoreIcon sx={{ color: 'black' }} />
-                  )
-                }
-                label={row.active ? 'Deactivate' : 'Activate'}
-                onClick={() => setPendingToggle(row)}
-                color="inherit"
-              />
-            </Tooltip>,
+            <GridActionsCellItem
+              key={`deactivate-${row.opdiv_id}`}
+              icon={
+                <BlockIcon fontSize="small" sx={{ color: colors.neutral700 }} />
+              }
+              label="Deactivate OpDiv"
+              onClick={() => setPendingToggle(row)}
+              color="inherit"
+            />,
           ]
         },
       })
     }
     return cols
-  }, [canManage, canToggleDelegate])
+  }, [systemCountByOpDiv, canManage, canToggleDelegate])
 
   if (!canAccess) return null
 
   return (
-    <>
-      <BreadCrumbs />
-      <Typography variant="h3" sx={{ mb: 2 }}>
-        Manage OpDivs
-      </Typography>
-      <Box sx={{ height: 600, width: '100%', mb: 2 }}>
-        <DataGrid
-          {...accessibleGrid}
-          aria-label="Operating Divisions"
-          rows={rows}
-          columns={columns}
-          // Without this the grid's "No rows" overlay reads as "no OpDivs
-          // exist" while the shared list is still in flight.
-          loading={!opdivsLoaded}
-          getRowId={(row) => row.opdiv_id}
-          initialState={{
-            sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },
-          }}
-          slots={{ toolbar: CreateToolbar }}
-          slotProps={{
-            toolbar: { onCreate: openCreate, canCreate: canManage },
-          }}
-          disableColumnSelector
-          sx={{
-            '& .MuiDataGrid-columnHeaders': {
-              backgroundColor: '#004297',
-              color: '#fff',
-            },
-            '& .MuiDataGrid-sortIcon': { color: '#fff' },
-            '& .MuiDataGrid-menuIconButton': { color: '#fff' },
-          }}
+    <Box
+      sx={{
+        pt: 3,
+        pb: 4,
+        // Natural document flow: the grid renders at its full height
+        // (autoHeight) and the page scrolls, pushing the CMS footer down.
+        boxSizing: 'border-box',
+      }}
+    >
+      <PageHeader
+        title="Manage OpDivs"
+        subtitle={subtitle || undefined}
+        breadcrumbs={<BreadCrumbs />}
+        actions={
+          // Create stays OWNER-only; an HHS admin lands here just for the
+          // System Delegate toggle.
+          canManage ? (
+            <Button
+              variant="contained"
+              color="primary"
+              startIcon={<AddIcon />}
+              onClick={openCreate}
+            >
+              Create OpDiv
+            </Button>
+          ) : undefined
+        }
+      />
+      <Box
+        sx={{
+          backgroundColor: colors.white,
+          border: `1px solid ${colors.neutral200}`,
+          borderRadius: `${radius.card}px`,
+          overflow: 'hidden',
+        }}
+      >
+        <OpDivsToolbar
+          search={search}
+          setSearch={setSearch}
+          typeFilter={typeFilter}
+          setTypeFilter={setTypeFilter}
+          showDeactivated={showDeactivated}
+          setShowDeactivated={setShowDeactivated}
         />
+        {/* Fixed grid height (parity with main): rows scroll inside the
+            grid while the page scrolls around the card. */}
+        <Box sx={{ height: 600, width: '100%' }}>
+          <DataGrid
+            {...accessibleGrid}
+            aria-label="Operating Divisions"
+            rows={filteredRows}
+            columns={columns}
+            // Shared list may still be in flight (Title owns the fetch, #701);
+            // show the loading overlay instead of a "No rows" flash.
+            loading={!opdivsLoaded}
+            getRowId={(row) => row.opdiv_id}
+            getRowHeight={() => 64}
+            filterModel={{ items: [], quickFilterValues }}
+            initialState={{
+              sorting: { sortModel: [{ field: 'code', sort: 'asc' }] },
+              pagination: { paginationModel: { pageSize: 25, page: 0 } },
+            }}
+            pageSizeOptions={[25, 50, 100]}
+            slots={{ footer: DataGridPaginationFooter }}
+            disableColumnSelector
+            // Table has its own search + filters in the toolbar; hide every
+            // per-column 3-dot menu (its filter popup overlaps with the CMS
+            // DSG global stylesheet too).
+            disableColumnMenu
+            disableRowSelectionOnClick
+            sx={{
+              height: '100%',
+              border: 'none',
+              backgroundColor: colors.white,
+              '& .MuiDataGrid-columnHeaders': {
+                backgroundColor: colors.neutral50,
+              },
+              '& .MuiDataGrid-cell': {
+                borderBottom: `1px solid ${colors.neutral100}`,
+              },
+            }}
+          />
+        </Box>
       </Box>
 
-      <Dialog
+      <Modal
         open={dialogOpen}
         onClose={closeDialog}
-        maxWidth="sm"
-        fullWidth
-        aria-label={editing ? 'Edit OpDiv' : 'Create OpDiv'}
+        title={editing ? 'Edit OpDiv' : 'Create OpDiv'}
+        size="sm"
+        disableBackdropClose
+        footer={
+          <>
+            <Button variant="text" color="inherit" onClick={closeDialog}>
+              Cancel
+            </Button>
+            <Button variant="contained" color="primary" onClick={handleSave}>
+              {editing ? 'Save changes' : 'Create OpDiv'}
+            </Button>
+          </>
+        }
       >
-        <CustomDialogTitle title={editing ? 'Edit OpDiv' : 'Create OpDiv'} />
-        <DialogContent>
-          <Box sx={{ display: 'flex', flexDirection: 'column' }}>
-            <TextField
-              label="Code"
-              required
+        <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+          <Field
+            id="opdiv-code"
+            label="Code"
+            required
+            error={fieldErrors.code}
+            helperText={`1-${CODE_MAX} characters`}
+          >
+            <OutlinedInput
+              id="opdiv-code"
               fullWidth
-              variant="standard"
-              margin="normal"
               value={form.code}
               onChange={(e) => setForm({ ...form, code: e.target.value })}
               error={!!fieldErrors.code}
-              helperText={fieldErrors.code ?? `1-${CODE_MAX} characters`}
               inputProps={{ maxLength: CODE_MAX }}
-              InputLabelProps={{ sx: { marginTop: 0 } }}
+              sx={fieldInputSx}
             />
-            <TextField
-              label="Name"
-              required
+          </Field>
+          <Field
+            id="opdiv-name"
+            label="Name"
+            required
+            error={fieldErrors.name}
+            helperText={`1-${NAME_MAX} characters`}
+          >
+            <OutlinedInput
+              id="opdiv-name"
               fullWidth
-              variant="standard"
-              margin="normal"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               error={!!fieldErrors.name}
-              helperText={fieldErrors.name ?? `1-${NAME_MAX} characters`}
               inputProps={{ maxLength: NAME_MAX }}
-              InputLabelProps={{ sx: { marginTop: 0 } }}
+              sx={fieldInputSx}
             />
-            <FormControlLabel
-              sx={{ mt: 2 }}
-              control={
-                <Switch
-                  checked={form.is_parent}
-                  onChange={(e) =>
-                    setForm({ ...form, is_parent: e.target.checked })
-                  }
-                />
-              }
-              label="Parent (department) row"
-            />
-          </Box>
-        </DialogContent>
-        <DialogActions>
-          <CmsButton onClick={closeDialog}>Cancel</CmsButton>
-          <CmsButton onClick={handleSave}>Save</CmsButton>
-        </DialogActions>
-      </Dialog>
+          </Field>
+          <FormControlLabel
+            control={
+              <Switch
+                checked={form.is_parent}
+                onChange={(e) =>
+                  setForm({ ...form, is_parent: e.target.checked })
+                }
+              />
+            }
+            label="Parent (department) row"
+          />
+        </Box>
+      </Modal>
 
       <ConfirmDialog
         title={
@@ -429,6 +703,6 @@ export default function OpDivAdmin() {
           pendingDelegateToggle?.system_delegate_enabled ? 'Disable' : 'Enable'
         }
       />
-    </>
+    </Box>
   )
 }
