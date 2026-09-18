@@ -197,7 +197,7 @@ function TableToolbar({
                 placeholder="Search systems"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                sx={{ fontSize: 13, width: 150 }}
+                sx={{ fontSize: 13, width: 250, minWidth: 150 }}
                 inputProps={{ 'aria-label': 'Search systems' }}
               />
             </Box>
