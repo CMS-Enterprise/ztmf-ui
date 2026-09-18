@@ -210,6 +210,36 @@ function TableToolbar({
               gap: 1,
             }}
           >
+            {/* Both call-scoped toggles gray out when the open call is not in
+              view (ui#639): "Not updated only" is a current-cycle laggard
+              signal with nothing to match, and "Open data call only" would
+              empty the grid. The span wrappers keep the tooltips firing on the
+              disabled controls. */}
+            <Tooltip title={callScopeHint}>
+              <span>
+                <CompactSwitchLabel
+                  checked={openCallOnly}
+                  onChange={setOpenCallOnly}
+                  label="Open data call only"
+                  disabled={!openCallInView}
+                />
+              </span>
+            </Tooltip>
+            <Tooltip title={callScopeHint}>
+              <span>
+                <CompactSwitchLabel
+                  checked={notUpdatedOnly}
+                  onChange={setNotUpdatedOnly}
+                  label="Not updated only"
+                  disabled={!openCallInView}
+                />
+              </span>
+            </Tooltip>
+            <CompactSwitchLabel
+              checked={showDecommissioned}
+              onChange={setShowDecommissioned}
+              label="Show decommissioned"
+            />
             {/* Environment facet only renders when the rows span more than one
               category - a single-value filter costs toolbar width for nothing. */}
             {envOptions.length > 1 && (
@@ -280,36 +310,6 @@ function TableToolbar({
                   }}
                 />
               )}
-            />
-            {/* Both call-scoped toggles gray out when the open call is not in
-              view (ui#639): "Not updated only" is a current-cycle laggard
-              signal with nothing to match, and "Open data call only" would
-              empty the grid. The span wrappers keep the tooltips firing on the
-              disabled controls. */}
-            <Tooltip title={callScopeHint}>
-              <span>
-                <CompactSwitchLabel
-                  checked={openCallOnly}
-                  onChange={setOpenCallOnly}
-                  label="Open data call only"
-                  disabled={!openCallInView}
-                />
-              </span>
-            </Tooltip>
-            <Tooltip title={callScopeHint}>
-              <span>
-                <CompactSwitchLabel
-                  checked={notUpdatedOnly}
-                  onChange={setNotUpdatedOnly}
-                  label="Not updated only"
-                  disabled={!openCallInView}
-                />
-              </span>
-            </Tooltip>
-            <CompactSwitchLabel
-              checked={showDecommissioned}
-              onChange={setShowDecommissioned}
-              label="Show decommissioned"
             />
           </Box>
         </Box>
