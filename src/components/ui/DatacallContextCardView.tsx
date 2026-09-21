@@ -62,7 +62,7 @@ export type DatacallContextCardViewProps = {
   /**
    * The data calls the dashboard is currently aggregating (the active
    * year's toggled-on calls). Drives the aggregate summary shown while no
-   * single call is selected, the checkbox states, and the Opens/Closes
+   * single call is selected, the checkbox states, and the date
    * range on the right.
    */
   activeDatacallIds?: number[]
@@ -133,8 +133,8 @@ export default function DatacallContextCardView({
     ? `${aggregateYear ? `FY${aggregateYear}` : 'All'} - ${activeCalls.length} calls`
     : ''
 
-  // Opens/Closes: the selected call's own window, or the span across the
-  // aggregated calls (earliest open to latest close).
+  // The selected call's own window, or the span across the aggregated calls
+  // (earliest open to latest close).
   const windowCalls = selectedDatacall ? [selectedDatacall] : activeCalls
   const opensAt = windowCalls.reduce<string | undefined>(
     (min, dc) => (!min || dc.datecreated < min ? dc.datecreated : min),
@@ -148,6 +148,9 @@ export default function DatacallContextCardView({
   const isClosed = windowCalls.length
     ? windowCalls.every((dc) => new Date() > new Date(dc.deadline))
     : false
+  const now = Date.now()
+  const hasOpened = opensAt != null && new Date(opensAt).getTime() <= now
+  const hasClosed = closesAt != null && new Date(closesAt).getTime() < now
 
   const pillLabel =
     selectedDatacall?.datacall ?? (aggregating ? aggregateSummary : '-')
@@ -385,11 +388,11 @@ export default function DatacallContextCardView({
           </span>
         )}
         <span>
-          Opens{' '}
+          {hasOpened ? 'Opened' : 'Opens'}{' '}
           <strong style={{ color: colors.ink }}>{formatDate(opensAt)}</strong>
         </span>
         <span>
-          Closes{' '}
+          {hasClosed ? 'Closed' : 'Closes'}{' '}
           <strong style={{ color: colors.ink }}>{formatDate(closesAt)}</strong>
         </span>
       </Box>
