@@ -107,3 +107,39 @@ it('routes to the selected data call questionnaire for this system', async () =>
     deadline: '2025-05-07T12:00:00Z',
   })
 })
+
+it('keeps the comparison modal independent from the selected data call', async () => {
+  mockGet.mockImplementation((url: string) => {
+    if (url.startsWith('/scores/aggregate')) {
+      return Promise.resolve({
+        data: {
+          data: [
+            { datacallid: 3, systemscore: 3, pillarscores: [] },
+            { datacallid: 5, systemscore: 2, pillarscores: [] },
+          ],
+        },
+      })
+    }
+    if (url === '/datacalls') {
+      return Promise.resolve({ data: { data: mockContext.datacalls } })
+    }
+    return Promise.resolve({ data: { data: [] } })
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/systems/:fismasystemid/pillar-scores',
+        element: <PillarScoresPage />,
+      },
+    ],
+    { initialEntries: ['/systems/1002/pillar-scores'] }
+  )
+  render(<RouterProvider router={router} />)
+
+  await userEvent.click(
+    await screen.findByRole('button', { name: 'Compare datacalls' })
+  )
+  await screen.findByRole('dialog')
+
+  expect(mockContext.setSelectedDatacall).not.toHaveBeenCalled()
+})

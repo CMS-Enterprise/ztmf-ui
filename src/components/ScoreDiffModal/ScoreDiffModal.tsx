@@ -50,13 +50,6 @@ interface ScoreDiffModalProps {
   systemName: string
   systemAcronym: string
   selectedDataCallId?: number
-  /**
-   * Optional callback fired whenever the user changes the From or To picker.
-   * Lets a parent page (e.g. the Pillar Scores page) thread the user's
-   * comparison selection back into its own trend/delta rendering so the
-   * "vs previous" lookups stop being statically N-1.
-   */
-  onComparisonChange?: (from: datacall | null, to: datacall | null) => void
 }
 
 const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
@@ -66,7 +59,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   systemName,
   systemAcronym,
   selectedDataCallId,
-  onComparisonChange,
 }) => {
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [fromDatacall, setFromDatacall] = useState<datacall | null>(null)
@@ -135,9 +127,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
         const fromDefault = toIndex >= 0 ? sorted[toIndex + 1] ?? null : null
         setToDatacall(toDefault)
         setFromDatacall(fromDefault)
-        // Notify the parent of the initial defaults so its page-level trend
-        // reflects what the user is about to see in the modal.
-        onComparisonChange?.(fromDefault, toDefault)
       } catch (err) {
         if (isAuthHandled(err)) return
         console.error('Error fetching datacalls:', err)
@@ -406,10 +395,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
               }
               value={fromDatacall ?? undefined}
               onChange={(_, dc) => {
-                if (dc) {
-                  setFromDatacall(dc)
-                  onComparisonChange?.(dc, toDatacall)
-                }
+                if (dc) setFromDatacall(dc)
               }}
               renderOption={(props, option) =>
                 renderOption(props, option, latestId)
@@ -449,10 +435,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
               }
               value={toDatacall ?? undefined}
               onChange={(_, dc) => {
-                if (dc) {
-                  setToDatacall(dc)
-                  onComparisonChange?.(fromDatacall, dc)
-                }
+                if (dc) setToDatacall(dc)
               }}
               renderOption={(props, option) =>
                 renderOption(props, option, latestId)

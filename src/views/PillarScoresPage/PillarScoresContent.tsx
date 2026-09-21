@@ -20,13 +20,6 @@ export interface PillarScoresContentProps {
   /** Human-readable name of the previous datacall, used in the trend line. */
   previousDatacallName?: string
   /**
-   * Datacall id to use as the trend baseline. Overrides the implicit
-   * "most recent prior datacall on this system" lookup; lets the parent
-   * page tie the trend to the user's pick from the Compare Datacalls
-   * modal. Falls back to the implicit lookup when undefined.
-   */
-  comparisonFromDatacallId?: number
-  /**
    * Data-call reference list. When present, the latest/previous fallbacks
    * order by deadline (the real "newest" - historical loads can carry a
    * higher datacallid than the current call); id order is the fallback
@@ -58,7 +51,6 @@ export default function PillarScoresContent({
   fismasystemid,
   currentDatacallName,
   previousDatacallName,
-  comparisonFromDatacallId,
   datacalls,
 }: PillarScoresContentProps) {
   // Score datacallids ordered newest-first. Deadline order via the shared
@@ -91,20 +83,17 @@ export default function PillarScoresContent({
         scores[0]
       : null
 
-  // Previous-score lookup respects the parent's explicit comparison pick
-  // (driven by the Compare Datacalls modal) and falls back to the next
-  // older call (deadline order) on this system when nothing's been picked.
+  // Compare the selected call with the next older scored call. The detailed
+  // Compare Datacalls modal is intentionally transient and does not mutate
+  // this page-level baseline.
   const previousScore = useMemo(() => {
     if (!latestScore) return undefined
-    if (typeof comparisonFromDatacallId === 'number') {
-      return scores.find((s) => s.datacallid === comparisonFromDatacallId)
-    }
     const idx = orderedCallIds.indexOf(latestScore.datacallid)
     const prevId = idx >= 0 ? orderedCallIds[idx + 1] : undefined
     return prevId != null
       ? scores.find((s) => s.datacallid === prevId)
       : undefined
-  }, [scores, latestScore, comparisonFromDatacallId, orderedCallIds])
+  }, [scores, latestScore, orderedCallIds])
 
   const hasValidData = Boolean(
     latestScore &&
