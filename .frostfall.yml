@@ -70,6 +70,37 @@ tests:
     path: '/#/systems/1002'
     waitFor: '#enrichment-synced-at'
 
+  # The answer-history drawer (ztmf-misc#392), the app's first Drawer - the
+  # theme's MuiDrawer override had never been exercised before it.
+  #
+  # SSD-EX (1002) rather than DS-1: the seed's answer-history fixture lives on
+  # 1002, on the question its questionnaire lands on, so the trigger is present
+  # without navigating. See the fixture comment in _test_data_empire.sql for
+  # why it is not on DS-1.
+  - id: answer-history-drawer
+    # Deep-linked rather than landing on the questionnaire's first question:
+    # PILLAR_FUNCTION_MAP orders by function NAME, and the empire seed's names
+    # match nothing in it (the ordering problem ztmf-misc#393 exists to fix), so
+    # which question loads first is not something to pin a scan on.
+    path: '/#/questionnaire/system/1002/Audit_Fields_Smoke_Cycle/identity/imperial-identity-verification'
+    scan: false
+    steps:
+      # The link hangs off the "Last edited by ..." caption, so its presence
+      # already proves the questionnaire payload and the audit fields loaded.
+      - waitFor: '#view-answer-history'
+      - click: '#view-answer-history'
+      # Only mounts once the drawer is open AND the revisions read resolved.
+      - waitFor: '#answer-history-title'
+      # Same reason as the modal below: scanning mid-transition measures text
+      # blended with the backdrop and reads as a contrast failure that vanishes
+      # on the next run. MUI's slide transition is comparable to the Dialog's.
+      - wait: 400ms
+      - scan:
+          label: drawer-open
+          # MUI puts role="presentation" on the Drawer root, not role="dialog",
+          # so this scopes by id rather than by role.
+          scope: '#answer-history-panel'
+
   - id: pillar-scores-modal
     path: /
     scan: false

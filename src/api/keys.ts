@@ -101,6 +101,8 @@ export const apiPaths = {
     root: '/scores',
     detail: (scoreId: ApiId) => `/scores/${scoreId}`,
     confirm: (scoreId: ApiId) => `/scores/${scoreId}/confirm`,
+    revisions: (scoreId: ApiId) => `/scores/${scoreId}/revisions`,
+    undo: (scoreId: ApiId) => `/scores/${scoreId}/revisions/undo`,
     list: (
       datacallId: ApiId,
       systemId: ApiId | undefined,
@@ -235,6 +237,11 @@ export const queryKeys = {
   },
   scores: {
     all: ['scores'] as const,
+    detail: (scoreId: ApiId) => ['scores', 'detail', keyId(scoreId)] as const,
+    // Hangs off the detail segment so invalidating a score also drops its
+    // history, matching the fisma-systems delegates sub-resource shape.
+    revisions: (scoreId: ApiId) =>
+      ['scores', 'detail', keyId(scoreId), 'revisions'] as const,
     list: (datacallId: ApiId, systemId: ApiId, includeFunctionOption = false) =>
       [
         'scores',
