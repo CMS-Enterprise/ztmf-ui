@@ -1,5 +1,6 @@
 import {
   carryForwardState,
+  isQuestionComplete,
   canConfirmCarryForward,
   buildScoreByFunction,
   buildConfirmSummary,
@@ -56,6 +57,26 @@ describe('carryForwardState', () => {
 
   it('renders nothing without an answer row', () => {
     expect(carryForwardState(undefined, true)).toBe('none')
+  })
+})
+
+describe('isQuestionComplete', () => {
+  it('does not count an unconfirmed carried-forward answer on an open call', () => {
+    expect(isQuestionComplete(score({ status: 'not_started' }), true)).toBe(
+      false
+    )
+  })
+
+  it('counts an updated answer on an open call', () => {
+    expect(isQuestionComplete(score({ status: 'done' }), true)).toBe(true)
+  })
+
+  it('preserves row-based completion for closed calls and missing status data', () => {
+    expect(isQuestionComplete(score({ status: 'not_started' }), false)).toBe(
+      true
+    )
+    expect(isQuestionComplete(score(), true)).toBe(true)
+    expect(isQuestionComplete(undefined, true)).toBe(false)
   })
 })
 

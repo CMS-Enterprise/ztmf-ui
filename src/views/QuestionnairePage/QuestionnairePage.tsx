@@ -50,6 +50,7 @@ import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import {
   carryForwardState,
+  isQuestionComplete,
   canConfirmCarryForward,
   buildScoreByFunction,
   buildConfirmSummary,
@@ -1553,21 +1554,19 @@ export default function QuestionnarePage() {
   // violate React's rules-of-hooks ordering. Cheap O(n) over the pillar
   // list, which has < 10 elements.
   const totalQuestions = categories.reduce((acc, p) => acc + p.steps.length, 0)
-  // Answered count = number of score rows for this (system, datacall). The
-  // map is keyed by functionoptionid; each question has exactly one picked
-  // option, so size === answered question count.
-  const totalAnswered = Object.keys(questionScores).length
-  // Set of functionids that have a score row, derived from the embedded
-  // functionoption.functionid on each score row (present because we fetched
-  // with ?include=functionoption). Drives per-pillar progress counts in the
-  // left rail and per-question checkmarks in the right rail.
+  // Completion requires more than an answer row on an open call: a
+  // carried-forward `not_started` row stays incomplete until it is confirmed
+  // or edited. Closed calls and pre-status responses preserve the legacy
+  // row-presence behavior through isQuestionComplete.
   const answeredFunctionIds = new Set<number>()
   for (const id in questionScores) {
     const row = questionScores[Number(id)] as QuestionScores & {
       functionoption?: { functionid?: number }
     }
     const fid = row.functionoption?.functionid
-    if (typeof fid === 'number') answeredFunctionIds.add(fid)
+    if (typeof fid === 'number' && isQuestionComplete(row, isOpenCall)) {
+      answeredFunctionIds.add(fid)
+    }
   }
   const answeredCountInCategory = (cat: Category): number =>
     cat.steps.reduce(
@@ -1575,6 +1574,13 @@ export default function QuestionnarePage() {
         answeredFunctionIds.has(s.function.functionid) ? acc + 1 : acc,
       0
     )
+  // Score history can include functions that are no longer applicable after an
+  // environment or scope change. Count only the same category steps used by
+  // totalQuestions so the top progress numerator cannot exceed its denominator.
+  const totalAnswered = categories.reduce(
+    (acc, cat) => acc + answeredCountInCategory(cat),
+    0
+  )
   const currentCategory = categories.find((c) =>
     c.steps.some((s) => s.function.functionid === selectedIndex)
   )

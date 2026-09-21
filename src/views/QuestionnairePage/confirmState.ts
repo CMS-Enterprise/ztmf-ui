@@ -25,6 +25,17 @@ export const carryForwardState = (
 }
 
 /**
+ * Whether an answer counts toward questionnaire completion. On an open call,
+ * carried-forward rows remain incomplete until their status is updated. Closed
+ * calls and pre-status API responses retain the legacy row-presence behavior.
+ */
+export const isQuestionComplete = (
+  score: QuestionScores | undefined,
+  isOpenCall: boolean
+): boolean =>
+  Boolean(score) && carryForwardState(score, isOpenCall) !== 'unconfirmed'
+
+/**
  * Whether the inline Confirm button renders. It is the explicit act for an
  * untouched carried-forward answer, so it hides whenever another act owns the
  * write: dirty edits (Next saves those), a pending prior-response review (the

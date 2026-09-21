@@ -1249,6 +1249,19 @@ describe('carried-forward confirmation', () => {
     },
   })
 
+  const doneOutsideQuestionnaire = () => ({
+    ...done7001(),
+    scoreid: 6999,
+    functionoptionid: 999,
+    functionoption: {
+      functionoptionid: 999,
+      functionid: 7999,
+      score: 1,
+      optionname: 'Baseline',
+      description: 'No longer applicable',
+    },
+  })
+
   const DEVICES_LINK =
     '/questionnaire/ssd-ex/FY2026_Q1/devices/imperial-device-management'
 
@@ -1323,6 +1336,8 @@ describe('carried-forward confirmation', () => {
     expect(badge).toBeInTheDocument()
     // Sidebar marker for the same fact, on the carried question only.
     expect(screen.getAllByText('Not yet confirmed')).toHaveLength(1)
+    expect(screen.getByText('0 of 2')).toBeInTheDocument()
+    expect(screen.getByText('0 of 1 answered')).toBeInTheDocument()
 
     // The explicit act: exactly one confirm PUT, no answer PUT/POST.
     fireEvent.click(
@@ -1348,6 +1363,17 @@ describe('carried-forward confirmation', () => {
         name: 'Confirm this answer is still accurate',
       })
     ).not.toBeInTheDocument()
+    expect(screen.getByText('1 of 2')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1 answered')).toBeInTheDocument()
+  })
+
+  it('excludes score rows outside the current questionnaire from the top progress count', async () => {
+    installScoreMocks([done7001(), doneOutsideQuestionnaire()])
+
+    renderAt(DEVICES_LINK)
+
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+    expect(screen.queryByText('2 of 2')).not.toBeInTheDocument()
   })
 
   it('keeps Next write-free on an untouched carried-forward question (#413)', async () => {
