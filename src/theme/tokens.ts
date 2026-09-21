@@ -97,12 +97,13 @@ export const fonts = {
   mono: "'JetBrains Mono', ui-monospace, 'Cascadia Mono', Menlo, Monaco, Consolas, monospace",
 } as const
 
-/** Modal width presets, matched to the design's sm/md/lg/xl contract. */
+/** Modal width presets, matched to the design's named-size contract. */
 export const modalWidth = {
   sm: 420,
   md: 560,
   lg: 720,
   xl: 920,
+  xxl: 1200,
 } as const
 
 const tokens = { colors, status, tierDot, radius, space, fonts, modalWidth }

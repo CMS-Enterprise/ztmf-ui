@@ -23,7 +23,7 @@ export type ModalProps = {
   children: ReactNode
   /** Footer content, typically Cancel plus a primary action. */
   footer?: ReactNode
-  /** One of the four allowed widths. Defaults to md. */
+  /** One of the allowed modal widths. Defaults to md. */
   size?: ModalSize
   /** Prevent closing on backdrop click (use for forms with unsaved input). */
   disableBackdropClose?: boolean
@@ -39,7 +39,7 @@ export type ModalProps = {
  * The single modal shell every dialog in the app renders through.
  *
  * One shape, one close affordance (X top-right, always), one footer layout
- * (actions right-aligned, Cancel left of the primary), and one of four fixed
+ * (actions right-aligned, Cancel left of the primary), and a named fixed
  * widths. Replaces the three drifting modal styles the audit found. MUI Dialog
  * supplies the focus trap and return-focus-on-close behavior.
  * @param {ModalProps} props - Open state, handlers, header, body and footer.

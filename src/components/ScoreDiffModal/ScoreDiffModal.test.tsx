@@ -173,6 +173,13 @@ describe('ScoreDiffModal', () => {
     expect(screen.getByText(/MS - Compare/)).toBeInTheDocument()
   })
 
+  it('uses the extra-wide dialog size for the comparison table', () => {
+    setupMocks()
+    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+
+    expect(screen.getByRole('dialog')).toHaveStyle({ width: '1200px' })
+  })
+
   it('shows a spinner while datacalls are loading', () => {
     mockGet.mockReturnValue(new Promise(() => {}))
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)

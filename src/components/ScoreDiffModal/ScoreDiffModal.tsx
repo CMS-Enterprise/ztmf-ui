@@ -330,7 +330,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     <Modal
       open={open}
       onClose={onClose}
-      size="xl"
+      size="xxl"
       eyebrow={systemAcronym ? `${systemAcronym} - Compare` : 'Compare'}
       title={`Compare datacalls - ${systemName}`}
       footer={
