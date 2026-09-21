@@ -7,11 +7,12 @@ import Divider from '@mui/material/Divider'
 import Drawer from '@mui/material/Drawer'
 import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
+import { visuallyHidden } from '@mui/utils'
 import CloseIcon from '@mui/icons-material/Close'
 import UndoIcon from '@mui/icons-material/Undo'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import AnswerSideCell from '@/components/AnswerSideCell/AnswerSideCell'
-import { undoButtonLabel } from './undoState'
+import { undoButtonLabel, undoPreview } from './undoState'
 import type { ScoreRevision } from '@/types'
 
 export const ANSWER_HISTORY_TITLE_ID = 'answer-history-title'
@@ -187,15 +188,20 @@ export default function AnswerHistoryPanel({
           </Box>
 
           {rev.undoable && rev === head ? (
-            <Button
-              size="small"
-              variant="outlined"
-              sx={{ mt: 1, textTransform: 'none' }}
-              disabled={isUndoing}
-              onClick={() => onUndo(rev.revisionid)}
-            >
-              {undoButtonLabel(rev.kind)}
-            </Button>
+            <Box sx={{ mt: 1 }}>
+              <UndoAnswerButton
+                head={rev}
+                disabled={isUndoing}
+                onUndo={onUndo}
+                // Built from the row below the head, whose `new` side is by
+                // definition this head's `prev`.
+                preview={undoPreview({
+                  restoresOptionName: rev.prev?.optionname,
+                  restoresNotes: !!rev.prev?.notes,
+                  savedAt: revisions[1]?.createdat,
+                })}
+              />
+            </Box>
           ) : (
             rev.reason && (
               <Typography
@@ -213,10 +219,18 @@ export default function AnswerHistoryPanel({
   )
 }
 
+export const UNDO_PREVIEW_ID = 'undo-action-preview'
+
 type UndoButtonProps = {
   head: { revisionid: number; kind: ScoreRevision['kind'] }
   disabled: boolean
   onUndo: (revisionid: number) => void
+  /**
+   * What the action will restore, announced through aria-describedby. Omitted
+   * when it cannot be described, in which case no describedby is emitted
+   * rather than one pointing at empty text.
+   */
+  preview?: string
 }
 
 /**
@@ -224,17 +238,34 @@ type UndoButtonProps = {
  * render the same action and must stay labelled the same way. Whether it is
  * offered at all is canUndoAnswer's decision, not this component's.
  */
-export function UndoAnswerButton({ head, disabled, onUndo }: UndoButtonProps) {
+export function UndoAnswerButton({
+  head,
+  disabled,
+  onUndo,
+  preview,
+}: UndoButtonProps) {
   return (
-    <Button
-      variant="outlined"
-      size="small"
-      startIcon={<UndoIcon />}
-      onClick={() => onUndo(head.revisionid)}
-      disabled={disabled}
-      sx={{ textTransform: 'none' }}
-    >
-      {undoButtonLabel(head.kind)}
-    </Button>
+    <>
+      <Button
+        variant="outlined"
+        size="small"
+        startIcon={<UndoIcon />}
+        onClick={() => onUndo(head.revisionid)}
+        disabled={disabled}
+        aria-describedby={preview ? UNDO_PREVIEW_ID : undefined}
+        sx={{ textTransform: 'none' }}
+      >
+        {undoButtonLabel(head.kind)}
+      </Button>
+      {/* Hidden rather than visible: the value being restored is already on
+          screen in the drawer, and repeating it beside the button would be
+          noise for sighted users. A three-word label is the problem only for
+          someone who cannot see the row it acts on. */}
+      {preview && (
+        <Box component="span" id={UNDO_PREVIEW_ID} sx={visuallyHidden}>
+          {preview}
+        </Box>
+      )}
+    </>
   )
 }

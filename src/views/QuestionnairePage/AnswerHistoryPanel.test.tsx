@@ -67,6 +67,48 @@ it('offers the undo action on the head and reports the revision it targets', () 
   expect(props.onUndo).toHaveBeenCalledWith(91)
 })
 
+/**
+ * The label alone is three words, so without a description a screen-reader
+ * user is told an action exists but nothing about the value it lands on. The
+ * association is what matters here, not the copy: an id that nothing points at
+ * announces as nothing.
+ */
+it('describes what the undo restores, and links it to the button', () => {
+  renderWithProviders(
+    <AnswerHistoryPanel
+      {...props}
+      revisions={[
+        revision(),
+        revision({
+          revisionid: 90,
+          revision_no: 1,
+          kind: 'create',
+          prev: null,
+        }),
+      ]}
+    />
+  )
+
+  const button = screen.getByRole('button', { name: 'Undo last change' })
+  expect(button).toHaveAccessibleDescription(
+    /Restores the answer "Traditional" and its justification/
+  )
+})
+
+it('omits the description when the restored option cannot be named', () => {
+  renderWithProviders(
+    <AnswerHistoryPanel
+      {...props}
+      revisions={[revision({ prev: { ...side(), optionname: undefined } })]}
+    />
+  )
+
+  // Pointing at empty text would be worse than pointing at nothing.
+  expect(
+    screen.getByRole('button', { name: 'Undo last change' })
+  ).not.toHaveAttribute('aria-describedby')
+})
+
 it('labels an undo of a confirm for what it is', () => {
   renderWithProviders(
     <AnswerHistoryPanel

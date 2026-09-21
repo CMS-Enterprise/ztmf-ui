@@ -55,7 +55,7 @@ import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import LastEditedFooter from './LastEditedFooter'
 import AnswerHistoryPanel, { UndoAnswerButton } from './AnswerHistoryPanel'
-import { canUndoAnswer } from './undoState'
+import { canUndoAnswer, undoPreview } from './undoState'
 import {
   useAnswerHistory,
   classifyUndoError,
@@ -736,6 +736,9 @@ export default function QuestionnarePage() {
       ? `${currentSavedScore.last_edited_at ?? ''}|${currentSavedScore.status ?? ''}`
       : null,
   })
+  // The head revision and the one below it: head.prev is what an undo restores,
+  // and the earlier row's createdat is when that value was saved.
+  const [undoTarget, undoPrior] = answerHistory.history.data?.revisions ?? []
   const showUndoButton = canUndoAnswer({
     headUndoable: answerHistory.head?.undoable ?? false,
     state: currentCarryState,
@@ -2058,6 +2061,11 @@ export default function QuestionnarePage() {
                           head={answerHistory.head}
                           disabled={answerHistory.undo.isPending}
                           onUndo={handleUndoClick}
+                          preview={undoPreview({
+                            restoresOptionName: undoTarget?.prev?.optionname,
+                            restoresNotes: !!undoTarget?.prev?.notes,
+                            savedAt: undoPrior?.createdat,
+                          })}
                         />
                       )}
                     </Box>

@@ -1,4 +1,4 @@
-import { canUndoAnswer, undoButtonLabel } from './undoState'
+import { canUndoAnswer, undoButtonLabel, undoPreview } from './undoState'
 import { canConfirmCarryForward, type CarryForwardState } from './confirmState'
 
 const STATES: CarryForwardState[] = ['unconfirmed', 'updated', 'none']
@@ -117,5 +117,45 @@ describe('Confirm and Undo are mutually exclusive', () => {
     // The same answer once edited this cycle: Undo only.
     expect(canConfirmCarryForward({ ...settled, state: 'updated' })).toBe(false)
     expect(canUndoAnswer({ ...settled, state: 'updated' })).toBe(true)
+  })
+})
+
+describe('undoPreview', () => {
+  it('names the answer, its justification and when it was saved', () => {
+    expect(
+      undoPreview({
+        restoresOptionName: 'Traditional',
+        restoresNotes: true,
+        savedAt: '2026-03-03T00:00:00Z',
+      })
+    ).toMatch(
+      /^Restores the answer "Traditional" and its justification, saved .+\.$/
+    )
+  })
+
+  it('omits the justification clause when the restored side had no notes', () => {
+    const preview = undoPreview({
+      restoresOptionName: 'Advanced',
+      restoresNotes: false,
+      savedAt: '2026-03-03T00:00:00Z',
+    })
+    expect(preview).toContain('Restores the answer "Advanced"')
+    expect(preview).not.toContain('justification')
+  })
+
+  it('drops the date rather than rendering an invalid one', () => {
+    expect(
+      undoPreview({
+        restoresOptionName: 'Advanced',
+        restoresNotes: false,
+        savedAt: 'not-a-date',
+      })
+    ).toBe('Restores the answer "Advanced".')
+  })
+
+  // The caller omits aria-describedby entirely rather than pointing at an
+  // empty element, which a screen reader would announce as nothing.
+  it('returns undefined when the restored option cannot be named', () => {
+    expect(undoPreview({ restoresNotes: true })).toBeUndefined()
   })
 })

@@ -55,3 +55,31 @@ export const canUndoAnswer = (s: {
  */
 export const undoButtonLabel = (headKind: string | undefined): string =>
   headKind === 'confirm' ? 'Undo confirmation' : 'Undo last change'
+
+/**
+ * What the Undo button will do, for screen-reader users who otherwise get a
+ * three-word label and no indication of the value it lands on.
+ *
+ * Built from the revision list rather than the head projection: the head
+ * carries no sides, but `head.prev` is by definition the `new` side of the
+ * revision before it, so the pair is already on the client. Returns undefined
+ * when there is nothing useful to say, in which case the caller omits
+ * aria-describedby entirely rather than pointing at empty text.
+ */
+export const undoPreview = (s: {
+  /** The option the undo restores, from the head revision's prev side. */
+  restoresOptionName?: string
+  /** Whether that side carried a justification. */
+  restoresNotes: boolean
+  /** When that value was saved - the createdat of the revision before the head. */
+  savedAt?: string
+}): string | undefined => {
+  if (!s.restoresOptionName) return undefined
+  const when = s.savedAt ? new Date(s.savedAt) : undefined
+  const saved =
+    when && !isNaN(when.getTime())
+      ? `, saved ${when.toLocaleDateString(undefined, { dateStyle: 'long' })}`
+      : ''
+  const justification = s.restoresNotes ? ' and its justification' : ''
+  return `Restores the answer "${s.restoresOptionName}"${justification}${saved}.`
+}
