@@ -129,6 +129,27 @@ function pageEditButtons(): HTMLElement[] {
   return screen.queryAllByRole('button', { name: 'Edit system' })
 }
 
+test('read mode exposes symmetric peer navigation and keeps the contextual pillar shortcut', async () => {
+  renderPage('OPDIV_ADMIN')
+
+  await screen.findByText('System identity')
+  const questionnaire = screen.getByRole('link', { name: 'Questionnaire' })
+  const pillarScores = screen.getByRole('link', { name: 'Pillar scores' })
+
+  expect(questionnaire).toHaveAttribute('href', '/questionnaire/ssd-ex')
+  expect(pillarScores).toHaveAttribute('href', '/systems/42/pillar-scores')
+  expect(
+    questionnaire.compareDocumentPosition(pillarScores) &
+      Node.DOCUMENT_POSITION_FOLLOWING
+  ).toBeTruthy()
+  expect(
+    screen.getByRole('button', { name: 'View pillar breakdown' })
+  ).toBeInTheDocument()
+  expect(
+    screen.queryByRole('link', { name: 'View questionnaire' })
+  ).not.toBeInTheDocument()
+})
+
 /** Captures the body of the page's full-system PUT. */
 function captureSave() {
   const captured: { body?: Record<string, unknown> } = {}

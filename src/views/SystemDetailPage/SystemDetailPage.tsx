@@ -671,7 +671,7 @@ export default function SystemDetailPage() {
     />
   )
 
-  // Header actions vary by mode: View questionnaire + Edit system in read,
+  // Header actions vary by mode: peer navigation + Edit system in read,
   // Cancel + Save in edit. Edit gates on admin and on not being mid-save.
   const headerActions = isEditing ? (
     <>
@@ -709,7 +709,16 @@ export default function SystemDetailPage() {
         // button look. Pin the link states to the button's own color.
         sx={{ '&:link, &:visited': { color: 'primary.main' } }}
       >
-        View questionnaire
+        Questionnaire
+      </Button>
+      <Button
+        variant="outlined"
+        color="primary"
+        component={RouterLink}
+        to={`/systems/${system.fismasystemid}/pillar-scores`}
+        sx={{ '&:link, &:visited': { color: 'primary.main' } }}
+      >
+        Pillar scores
       </Button>
       {isAdmin && (
         <Button variant="contained" color="primary" onClick={handleEdit}>

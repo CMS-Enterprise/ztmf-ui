@@ -69,7 +69,33 @@ export function PageHeader({
           )}
         </Box>
         {actions && (
-          <Box sx={{ display: 'flex', gap: 1.5, flexShrink: 0 }}>{actions}</Box>
+          <Box
+            sx={{
+              display: 'flex',
+              gap: 1.5,
+              flexShrink: 0,
+              // CMS Design System applies its focus ring to every focused
+              // anchor, while MUI limits it to keyboard focus. Normalize both
+              // link-backed and button-backed header actions to MUI's
+              // focus-visible signal so mouse clicks and keyboard navigation
+              // behave consistently without removing the accessible indicator.
+              '& .MuiButton-root:focus:not(.Mui-focusVisible)': {
+                outline: 'none',
+              },
+              '& .MuiButton-outlinedPrimary:focus': {
+                color: colors.primary,
+                backgroundColor: 'transparent',
+              },
+              '& .MuiButton-root.Mui-focusVisible': {
+                boxShadow:
+                  '0 0 0 3px var(--color-focus-light, #fff), 0 0 4px 6px var(--color-focus-dark, #bd13b8)',
+                outline: '3px solid transparent',
+                outlineOffset: 3,
+              },
+            }}
+          >
+            {actions}
+          </Box>
         )}
       </Box>
     </Box>
