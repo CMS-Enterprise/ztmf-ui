@@ -160,6 +160,21 @@ it('renders its own error rather than leaving an empty panel', () => {
   )
 })
 
+/**
+ * MUI renders the Drawer root with role="presentation", which strips
+ * semantics, so aria-labelledby placed there is discarded and the panel
+ * announces as nothing. Dialog applies both to its own Paper automatically;
+ * Drawer does not. axe does not flag a missing dialog role on a custom panel,
+ * so the frostfall gate cannot stand in for this.
+ */
+it('exposes dialog semantics and its accessible name', () => {
+  renderWithProviders(<AnswerHistoryPanel {...props} />)
+
+  const dialog = screen.getByRole('dialog')
+  expect(dialog).toHaveAttribute('aria-modal', 'true')
+  expect(dialog).toHaveAccessibleName('Answer history')
+})
+
 it('closes from the header control', () => {
   renderWithProviders(<AnswerHistoryPanel {...props} />)
 

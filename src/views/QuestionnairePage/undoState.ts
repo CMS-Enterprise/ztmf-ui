@@ -32,9 +32,11 @@ export const canUndoAnswer = (s: {
   // answer that was changed this cycle, which is exactly when the chip says
   // "Updated this data call".
   //
-  // Consequence: redo of an undo that landed on not_started is not reachable
-  // from the strip. It stays reachable from the history drawer, which renders
-  // the head row's own action.
+  // Note this clause is now belt-and-braces rather than the only guard: the
+  // server marks an undo head not-undoable outright (reasonIsUndo), so
+  // headUndoable is already false in that case. It still earns its place for
+  // the confirm path, where the head IS undoable and the chip would otherwise
+  // offer Confirm and Undo together.
   s.state === 'updated' &&
   s.hasScore &&
   !s.dirty &&

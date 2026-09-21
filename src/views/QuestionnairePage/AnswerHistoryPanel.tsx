@@ -91,11 +91,18 @@ export default function AnswerHistoryPanel({
       anchor="right"
       open={open}
       onClose={onClose}
-      aria-labelledby={ANSWER_HISTORY_TITLE_ID}
-      // MUI's Drawer root carries role="presentation", not role="dialog", so
-      // the accessibility scan scopes to this id rather than a role selector.
+      // Dialog semantics go on the Paper, not the Drawer. MUI renders the
+      // Drawer root with role="presentation", which strips semantics, so an
+      // aria-labelledby placed there is discarded and the panel announces as
+      // nothing. Dialog does this for its own Paper automatically; Drawer does
+      // not. axe will not catch it either - a missing dialog role on a custom
+      // panel is an omission, not a violation - so the frostfall scan passing
+      // is not evidence this is right.
       PaperProps={{
         id: 'answer-history-panel',
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': ANSWER_HISTORY_TITLE_ID,
         sx: { width: { xs: '100%', sm: 460 }, p: 2 },
       }}
     >

@@ -52,7 +52,15 @@ export default function AnswerSideCell({ side }: Props) {
           <Typography
             variant="caption"
             display="block"
-            sx={{ color: 'text.secondary', fontStyle: 'italic' }}
+            // Justifications are multi-paragraph in practice, and without this
+            // they collapse into one run-on block. That was survivable in the
+            // diff modal; it is not in the history drawer, which is the only
+            // place a prior note can be read back after an undo.
+            sx={{
+              color: 'text.secondary',
+              fontStyle: 'italic',
+              whiteSpace: 'pre-wrap',
+            }}
           >
             {side.notes}
           </Typography>
