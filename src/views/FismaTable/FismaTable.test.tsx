@@ -1,4 +1,5 @@
 import { render, screen } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 
 // axiosConfig reads import.meta, which Jest's CJS transform cannot parse -
@@ -23,6 +24,7 @@ jest.mock('../Title/Context', () => ({
         fismauid: 'ISD-001',
         mission: 'Sole Galactic Empire flagship',
         datacenterenvironment: 'Imperial Cloud',
+        fips: 'Moderate',
         decommissioned: false,
         opdiv_id: 5,
       },
@@ -33,6 +35,7 @@ jest.mock('../Title/Context', () => ({
         fismauid: 'DS-001',
         mission: 'Orbital battle station',
         datacenterenvironment: 'Battle Station',
+        fips: 'High',
         decommissioned: false,
         opdiv_id: 7,
       },
@@ -78,7 +81,24 @@ describe('FismaTable', () => {
     expect(screen.getByText('ISD')).toBeInTheDocument()
   })
 
-  it('does not render Data center or Data Call columns', async () => {
+  it('shows the complete system identity when hovering its table cell', async () => {
+    const user = userEvent.setup()
+    render(
+      <MemoryRouter>
+        <FismaTable scores={{}} />
+      </MemoryRouter>
+    )
+
+    await user.hover(
+      await screen.findByRole('link', { name: 'Imperial Star Destroyer' })
+    )
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      'Imperial Star Destroyer - Sole Galactic Empire flagship'
+    )
+  })
+
+  it('renders Data center and FIPS columns but not the removed Data Call column', async () => {
     render(
       <MemoryRouter>
         <FismaTable scores={{}} />
@@ -89,8 +109,12 @@ describe('FismaTable', () => {
       await screen.findByRole('columnheader', { name: 'System' })
     ).toBeInTheDocument()
     expect(
-      screen.queryByRole('columnheader', { name: 'Data center' })
-    ).not.toBeInTheDocument()
+      screen.getByRole('columnheader', { name: 'Data center' })
+    ).toBeInTheDocument()
+    // The grid virtualizes FIPS just beyond jsdom's visible columns. The
+    // restored Data center + FIPS pair raises the complete column model from
+    // seven to nine even though only the nearer header mounts here.
+    expect(screen.getByRole('grid')).toHaveAttribute('aria-colcount', '9')
     expect(
       screen.queryByRole('columnheader', { name: 'Data Call' })
     ).not.toBeInTheDocument()

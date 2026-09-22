@@ -672,33 +672,47 @@ export default function FismaTable({
       renderCell: (params: GridRenderCellParams) => {
         const subtitle = params.row.mission || params.row.component || ''
         return (
-          <Box>
-            <Link
-              to={`/systems/${params.row.fismasystemid}`}
-              style={{
-                color: colors.ink,
-                fontWeight: 600,
-                fontSize: 14,
-                textDecoration: 'none',
-                display: 'block',
-              }}
-              onClick={(e) => e.stopPropagation()}
-            >
-              {params.row.fismaname}
-            </Link>
-            {subtitle && (
-              <Typography
-                sx={{
-                  fontSize: 12,
-                  fontWeight: 500,
-                  color: colors.neutral500,
-                  mt: 0.25,
+          <Tooltip
+            title={
+              subtitle
+                ? `${params.row.fismaname} - ${subtitle}`
+                : params.row.fismaname
+            }
+            placement="top"
+            arrow
+          >
+            <Box sx={{ width: '100%', minWidth: 0, overflow: 'hidden' }}>
+              <Link
+                to={`/systems/${params.row.fismasystemid}`}
+                style={{
+                  color: colors.ink,
+                  fontWeight: 600,
+                  fontSize: 14,
+                  textDecoration: 'none',
+                  display: 'block',
+                  overflow: 'hidden',
+                  textOverflow: 'ellipsis',
+                  whiteSpace: 'nowrap',
                 }}
+                onClick={(e) => e.stopPropagation()}
               >
-                {subtitle}
-              </Typography>
-            )}
-          </Box>
+                {params.row.fismaname}
+              </Link>
+              {subtitle && (
+                <Typography
+                  noWrap
+                  sx={{
+                    fontSize: 12,
+                    fontWeight: 500,
+                    color: colors.neutral500,
+                    mt: 0.25,
+                  }}
+                >
+                  {subtitle}
+                </Typography>
+              )}
+            </Box>
+          </Tooltip>
         )
       },
     },
@@ -721,6 +735,46 @@ export default function FismaTable({
       ),
     },
     {
+      field: 'datacenterenvironment',
+      headerName: 'Data center',
+      flex: 1,
+      minWidth: 130,
+      valueGetter: (params) => envLabel(params.row.datacenterenvironment),
+      renderCell: (params) => {
+        const value = String(params.value || '-')
+        return (
+          <Tooltip title={value} placement="top" arrow>
+            <Typography
+              noWrap
+              sx={{ width: '100%', fontSize: 13, color: colors.neutral700 }}
+            >
+              {value}
+            </Typography>
+          </Tooltip>
+        )
+      },
+    },
+    {
+      field: 'fips',
+      headerName: 'FIPS',
+      flex: 0.7,
+      minWidth: 90,
+      valueGetter: (params) => params.row.fips ?? '',
+      renderCell: (params) => {
+        const value = String(params.value || '-')
+        return (
+          <Tooltip title={value} placement="top" arrow>
+            <Typography
+              noWrap
+              sx={{ width: '100%', fontSize: 13, color: colors.neutral700 }}
+            >
+              {value}
+            </Typography>
+          </Tooltip>
+        )
+      },
+    },
+    {
       // Bound directly to the backend-resolved isso_name (populated for both
       // CMS and HHS systems). Replaces the old issoemail.split('@') derivation,
       // which rendered blank for HHS systems and crashed the sort on null
@@ -730,11 +784,19 @@ export default function FismaTable({
       flex: 1.1,
       minWidth: 140,
       valueGetter: (value) => value.row.isso_name ?? '',
-      renderCell: (params) => (
-        <Typography sx={{ fontSize: 13, color: colors.ink }}>
-          {params.row.isso_name || '-'}
-        </Typography>
-      ),
+      renderCell: (params) => {
+        const value = params.row.isso_name || '-'
+        return (
+          <Tooltip title={value} placement="top" arrow>
+            <Typography
+              noWrap
+              sx={{ width: '100%', fontSize: 13, color: colors.ink }}
+            >
+              {value}
+            </Typography>
+          </Tooltip>
+        )
+      },
     },
     {
       field: 'opdiv',
@@ -795,8 +857,8 @@ export default function FismaTable({
     {
       field: 'actions',
       headerName: 'Actions',
-      headerAlign: 'right',
-      align: 'right',
+      headerAlign: 'center',
+      align: 'center',
       width: 130,
       minWidth: 130,
       hideable: false,
