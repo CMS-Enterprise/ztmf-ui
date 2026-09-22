@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import { Box, Button, CircularProgress } from '@mui/material'
 import PageHeader from '@/components/ui/PageHeader'
@@ -7,6 +7,7 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import PillarScoresContent from './PillarScoresContent'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
@@ -27,6 +28,7 @@ export default function PillarScoresPage() {
   const { fismasystemid } = useParams()
   const {
     fismaSystems,
+    setFismaSystems,
     selectedDatacall,
     latestDataCallId,
     datacalls,
@@ -39,6 +41,38 @@ export default function PillarScoresPage() {
   const [scores, setScores] = useState<ScoreAggregate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [compareOpen, setCompareOpen] = useState<boolean>(false)
+
+  // A system reached by URL may be absent from the active-only context list
+  // (decommissioned, or a deep link). Fetch it by id as SystemDetailPage does,
+  // so nothing downstream renders the "System" placeholder.
+  const triedFetch = useRef(false)
+  const [retryingFetch, setRetryingFetch] = useState(false)
+  useEffect(() => {
+    const controller = new AbortController()
+    if (fismaSystems.length > 0 && !system && !triedFetch.current) {
+      triedFetch.current = true
+      setRetryingFetch(true)
+      async function load() {
+        try {
+          const res = await axiosInstance.get(
+            apiPaths.fismaSystems.detail(systemId),
+            { signal: controller.signal }
+          )
+          const data = res.data?.data
+          if (data) setFismaSystems((prev) => [...prev, data])
+        } catch {
+          if (controller.signal.aborted) return
+          // No such system; fall through to the placeholder.
+        } finally {
+          if (!controller.signal.aborted) setRetryingFetch(false)
+        }
+      }
+      load()
+    }
+    return () => {
+      controller.abort()
+    }
+  }, [fismaSystems, system, systemId, setFismaSystems])
 
   useEffect(() => {
     if (!systemId) return
@@ -94,6 +128,18 @@ export default function PillarScoresPage() {
     (dc) => dc.datacallid === previousDatacallId
   )?.datacall
   const subtitle = systemName
+
+  // Wait for the lookup to settle so the header never flashes the placeholder.
+  const resolvingSystem =
+    !system &&
+    (fismaSystems.length === 0 || retryingFetch || !triedFetch.current)
+  if (resolvingSystem) {
+    return (
+      <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
+        <CircularProgress />
+      </Box>
+    )
+  }
 
   return (
     <Box sx={{ py: 4 }}>

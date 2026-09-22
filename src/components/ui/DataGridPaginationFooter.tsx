@@ -49,7 +49,7 @@ export function DataGridPaginationFooter({
 }: DataGridPaginationFooterProps) {
   const apiRef = useGridApiContext()
   const model = useGridSelector(apiRef, gridPaginationModelSelector)
-  const pageCount = useGridSelector(apiRef, gridPageCountSelector)
+  const filteredPageCount = useGridSelector(apiRef, gridPageCountSelector)
   const filteredCount = useGridSelector(
     apiRef,
     gridFilteredTopLevelRowCountSelector
@@ -59,6 +59,12 @@ export function DataGridPaginationFooter({
   const rowCount = rowCountProp ?? filteredCount
   const start = rowCount === 0 ? 0 : model.page * model.pageSize + 1
   const end = Math.min((model.page + 1) * model.pageSize, rowCount)
+  // gridPageCountSelector counts the loaded rows, which in server mode is one
+  // page, so paging off it would strand every later page (ui#739).
+  const pageCount =
+    rowCountProp != null
+      ? Math.ceil(rowCountProp / (model.pageSize || 1))
+      : filteredPageCount
 
   return (
     <Box

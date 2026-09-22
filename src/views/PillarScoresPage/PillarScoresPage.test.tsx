@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import PillarScoresPage from './PillarScoresPage'
@@ -26,6 +26,7 @@ const mockContext = {
     },
   ],
   selectedDatacall,
+  setFismaSystems: jest.fn(),
   setSelectedDatacall: jest.fn(),
   toggleActiveDatacall: jest.fn(),
   latestDataCallId: 5,
@@ -106,6 +107,43 @@ it('routes to the selected data call questionnaire for this system', async () =>
     datacall: 'FY2025 Q3',
     deadline: '2025-05-07T12:00:00Z',
   })
+})
+
+it('resolves a system missing from the active list by id instead of leaking the placeholder', async () => {
+  // A decommissioned system or deep link is absent from the active-only
+  // context list; the page must fetch it by id rather than render "System".
+  mockGet.mockImplementation((url: string) => {
+    if (url === '/fismasystems/1001') {
+      return Promise.resolve({
+        data: {
+          data: {
+            fismasystemid: 1001,
+            fismaacronym: 'DS',
+            fismaname: 'Death Star',
+          },
+        },
+      })
+    }
+    return Promise.resolve({ data: { data: [] } })
+  })
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/systems/:fismasystemid/pillar-scores',
+        element: <PillarScoresPage />,
+      },
+    ],
+    { initialEntries: ['/systems/1001/pillar-scores'] }
+  )
+  render(<RouterProvider router={router} />)
+
+  await waitFor(() =>
+    expect(mockGet).toHaveBeenCalledWith(
+      '/fismasystems/1001',
+      expect.anything()
+    )
+  )
+  expect(mockContext.setFismaSystems).toHaveBeenCalledWith(expect.any(Function))
 })
 
 it('keeps the comparison modal independent from the selected data call', async () => {
