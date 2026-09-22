@@ -147,99 +147,166 @@ function TableToolbar({
       <Box
         sx={{
           display: 'grid',
-          gridTemplateColumns:
-            'max-content max-content minmax(0, 1fr) max-content',
           alignItems: 'center',
+          gridTemplateAreas: `
+            "meta clear"
+            "search search"
+            "filters filters"
+          `,
+          gridTemplateColumns: 'minmax(0, 1fr) max-content',
           columnGap: 2,
+          rowGap: 1,
           px: 2.25,
           py: 1.5,
           borderBottom: `1px solid ${colors.neutral200}`,
+          '@media (min-width: 1100px)': {
+            gridTemplateAreas: `
+              "meta search clear"
+              "meta filters clear"
+            `,
+            gridTemplateColumns: 'max-content minmax(240px, 1fr) max-content',
+          },
         }}
       >
-        <Typography sx={{ fontSize: 15, fontWeight: 600 }}>
-          FISMA systems
-        </Typography>
-        <Typography
-          sx={{ fontSize: 12, fontWeight: 500, color: colors.neutral500 }}
-        >
-          {count} {count === 1 ? 'system' : 'systems'}
-        </Typography>
         <Box
           sx={{
-            display: 'grid',
-            gridTemplateRows: 'repeat(2, 30px)',
-            gap: 1,
+            gridArea: 'meta',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'flex-start',
+            justifyContent: 'center',
+            alignSelf: 'stretch',
+            gap: 0.25,
             minWidth: 0,
           }}
         >
+          <Typography
+            sx={{ fontSize: 15, fontWeight: 600, whiteSpace: 'nowrap' }}
+          >
+            FISMA systems
+          </Typography>
+          <Typography
+            sx={{
+              fontSize: 12,
+              fontWeight: 500,
+              color: colors.neutral500,
+              whiteSpace: 'nowrap',
+            }}
+          >
+            {count} {count === 1 ? 'system' : 'systems'}
+          </Typography>
+        </Box>
+        <Box
+          sx={{
+            gridArea: 'search',
+            display: 'flex',
+            alignItems: 'center',
+            justifySelf: 'end',
+            gap: 1,
+            px: 1.5,
+            height: 30,
+            width: '100%',
+            minWidth: 0,
+            boxSizing: 'border-box',
+            border: `1px solid ${colors.neutral200}`,
+            borderRadius: `${radius.md}px`,
+            '@media (min-width: 1100px)': {
+              width: '50%',
+            },
+          }}
+        >
+          <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
+          <InputBase
+            placeholder="Search systems"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            sx={{ fontSize: 13, flex: 1, minWidth: 0 }}
+            inputProps={{ 'aria-label': 'Search systems' }}
+          />
+        </Box>
+        <Box
+          sx={{
+            gridArea: 'filters',
+            display: 'flex',
+            flexDirection: 'column',
+            alignItems: 'stretch',
+            gap: 1,
+            minWidth: 0,
+            '@media (min-width: 1100px)': {
+              flexDirection: 'row',
+              alignItems: 'center',
+              justifyContent: 'flex-end',
+            },
+          }}
+        >
+          {/* Both call-scoped toggles gray out when the open call is not in
+              view (ui#639): "Not updated only" is a current-cycle laggard
+              signal with nothing to match, and "Open data call only" would
+              empty the grid. The span wrappers keep the tooltips firing on the
+              disabled controls. */}
           <Box
             sx={{
               display: 'flex',
-              alignItems: 'center',
-              gap: 1,
-              justifyContent: 'flex-end',
+              flexDirection: { xs: 'column', sm: 'row' },
+              flexWrap: 'wrap',
+              alignItems: { xs: 'flex-start', sm: 'center' },
+              gap: { xs: 1, sm: 2 },
               minWidth: 0,
+              '@media (min-width: 1100px)': {
+                flexWrap: 'nowrap',
+                gap: 1,
+                flexShrink: 0,
+              },
             }}
           >
-            <Box
-              sx={{
-                display: 'flex',
-                alignItems: 'center',
-                gap: 1,
-                px: 1.5,
-                height: 30,
-                border: `1px solid ${colors.neutral200}`,
-                borderRadius: `${radius.md}px`,
-              }}
-            >
-              <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
-              <InputBase
-                placeholder="Search systems"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                sx={{ fontSize: 13, width: 250, minWidth: 150 }}
-                inputProps={{ 'aria-label': 'Search systems' }}
+            <Box sx={{ display: 'flex', minWidth: 0, flexShrink: 0 }}>
+              <Tooltip title={callScopeHint}>
+                <span>
+                  <CompactSwitchLabel
+                    checked={openCallOnly}
+                    onChange={setOpenCallOnly}
+                    label="Open data call only"
+                    disabled={!openCallInView}
+                  />
+                </span>
+              </Tooltip>
+            </Box>
+            <Box sx={{ display: 'flex', minWidth: 0, flexShrink: 0 }}>
+              <Tooltip title={callScopeHint}>
+                <span>
+                  <CompactSwitchLabel
+                    checked={notUpdatedOnly}
+                    onChange={setNotUpdatedOnly}
+                    label="Not updated only"
+                    disabled={!openCallInView}
+                  />
+                </span>
+              </Tooltip>
+            </Box>
+            <Box sx={{ display: 'flex', minWidth: 0, flexShrink: 0 }}>
+              <CompactSwitchLabel
+                checked={showDecommissioned}
+                onChange={setShowDecommissioned}
+                label="Show decommissioned"
               />
             </Box>
           </Box>
           <Box
             sx={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'flex-end',
+              display: 'grid',
+              gridTemplateColumns: {
+                xs: 'minmax(0, 1fr)',
+                sm: 'repeat(2, minmax(220px, 1fr))',
+              },
               gap: 1,
+              minWidth: 0,
+              '@media (min-width: 1100px)': {
+                display: 'flex',
+                alignItems: 'center',
+                flexShrink: 0,
+              },
             }}
           >
-            {/* Both call-scoped toggles gray out when the open call is not in
-              view (ui#639): "Not updated only" is a current-cycle laggard
-              signal with nothing to match, and "Open data call only" would
-              empty the grid. The span wrappers keep the tooltips firing on the
-              disabled controls. */}
-            <Tooltip title={callScopeHint}>
-              <span>
-                <CompactSwitchLabel
-                  checked={openCallOnly}
-                  onChange={setOpenCallOnly}
-                  label="Open data call only"
-                  disabled={!openCallInView}
-                />
-              </span>
-            </Tooltip>
-            <Tooltip title={callScopeHint}>
-              <span>
-                <CompactSwitchLabel
-                  checked={notUpdatedOnly}
-                  onChange={setNotUpdatedOnly}
-                  label="Not updated only"
-                  disabled={!openCallInView}
-                />
-              </span>
-            </Tooltip>
-            <CompactSwitchLabel
-              checked={showDecommissioned}
-              onChange={setShowDecommissioned}
-              label="Show decommissioned"
-            />
             {/* Environment facet only renders when the rows span more than one
               category - a single-value filter costs toolbar width for nothing. */}
             {envOptions.length > 1 && (
@@ -248,7 +315,14 @@ function TableToolbar({
                 options={envOptions}
                 value={envFilter === 'all' ? null : envFilter}
                 onChange={(_event, env) => setEnvFilter(env ?? 'all')}
-                sx={{ width: 170, ...compactAutocompleteSx }}
+                sx={{
+                  width: '100%',
+                  '@media (min-width: 1100px)': {
+                    width: 170,
+                    flexShrink: 0,
+                  },
+                  ...compactAutocompleteSx,
+                }}
                 renderInput={(params) => (
                   <TextField
                     {...params}
@@ -299,7 +373,14 @@ function TableToolbar({
                   </li>
                 )
               }}
-              sx={{ width: 180, ...compactAutocompleteSx }}
+              sx={{
+                width: '100%',
+                '@media (min-width: 1100px)': {
+                  width: 180,
+                  flexShrink: 0,
+                },
+                ...compactAutocompleteSx,
+              }}
               renderInput={(params) => (
                 <TextField
                   {...params}
@@ -320,7 +401,11 @@ function TableToolbar({
           onClick={handleClearAll}
           disabled={!hasActiveFilters}
           sx={{
-            justifySelf: 'end',
+            gridArea: 'clear',
+            justifySelf: 'stretch',
+            alignSelf: 'stretch',
+            flexShrink: 0,
+            whiteSpace: 'nowrap',
             fontSize: 13,
             fontWeight: 600,
             textTransform: 'none',

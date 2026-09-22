@@ -88,7 +88,9 @@ export function CompactSwitchLabel({
       }
       label={
         typeof label === 'string' ? (
-          <Typography sx={{ fontSize: 13 }}>{label}</Typography>
+          <Typography sx={{ fontSize: 13, whiteSpace: 'nowrap' }}>
+            {label}
+          </Typography>
         ) : (
           label
         )

@@ -22,6 +22,7 @@ jest.mock('../Title/Context', () => ({
         fismaacronym: 'ISD',
         fismauid: 'ISD-001',
         mission: 'Sole Galactic Empire flagship',
+        datacenterenvironment: 'Imperial Cloud',
         decommissioned: false,
         opdiv_id: 5,
       },
@@ -31,6 +32,7 @@ jest.mock('../Title/Context', () => ({
         fismaacronym: 'DS',
         fismauid: 'DS-001',
         mission: 'Orbital battle station',
+        datacenterenvironment: 'Battle Station',
         decommissioned: false,
         opdiv_id: 7,
       },
@@ -108,5 +110,27 @@ describe('FismaTable', () => {
     expect(
       screen.queryByText('Imperial Star Destroyer')
     ).not.toBeInTheDocument()
+  })
+
+  it('renders each toolbar control once without changing filter semantics', async () => {
+    render(
+      <MemoryRouter>
+        <FismaTable scores={{}} />
+      </MemoryRouter>
+    )
+
+    expect(await screen.findByLabelText('Search systems')).toBeInTheDocument()
+    expect(
+      screen.getByRole('checkbox', { name: 'Open data call only' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('checkbox', { name: 'Not updated only' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('checkbox', { name: 'Show decommissioned' })
+    ).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter by environment')).toBeInTheDocument()
+    expect(screen.getByLabelText('Filter by OpDiv')).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'Clear filters' })).toBeDisabled()
   })
 })
