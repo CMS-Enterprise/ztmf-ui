@@ -39,7 +39,7 @@ export type ActionsCellProps = {
  * MUI column-header filter popup never gets a chance to render against the
  * CMS DSG global styles.
  * @param {ActionsCellProps} props - Per-row callbacks.
- * @returns {JSX.Element} The right-aligned icon row with a popover menu.
+ * @returns {JSX.Element} The centered icon row with a popover menu.
  */
 export default function ActionsCell({
   onEdit,
@@ -56,7 +56,7 @@ export default function ActionsCell({
       sx={{
         display: 'flex',
         alignItems: 'center',
-        justifyContent: 'flex-end',
+        justifyContent: 'center',
         gap: 0.5,
         width: '100%',
       }}

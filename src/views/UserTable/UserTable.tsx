@@ -681,8 +681,8 @@ export default function UserTable() {
     {
       field: 'actions',
       headerName: 'Actions',
-      headerAlign: 'right',
-      align: 'right',
+      headerAlign: 'center',
+      align: 'center',
       // Wide enough to fit either "Save" + "Cancel" text buttons in edit mode
       // or the edit-icon + kebab pair in read mode without clipping.
       width: 170,

@@ -455,8 +455,8 @@ export default function OpDivAdmin() {
         field: 'actions',
         type: 'actions',
         headerName: 'Actions',
-        headerAlign: 'right',
-        align: 'right',
+        headerAlign: 'center',
+        align: 'center',
         // Wider so a "Reactivate" text button fits on deactivated rows and
         // the edit + deactivate icon pair still has breathing room on active.
         width: 140,
