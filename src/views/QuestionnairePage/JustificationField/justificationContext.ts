@@ -108,7 +108,7 @@ export function priorResponseFor(
   }
   return {
     label: lastDatacall
-      ? `Last year's response — ${lastDatacall.replaceAll('_', ' ')}`
+      ? `Last year's response - ${lastDatacall.replaceAll('_', ' ')}`
       : "Last year's ISSO response",
     text,
   }

@@ -209,7 +209,7 @@ export default function SystemDetailPage() {
           setDecommissionedByName(res.data?.data?.fullname || userId)
         } catch {
           if (controller.signal.aborted) return
-          // User may have been removed — fall back to UUID
+          // User may have been removed - fall back to UUID
           setDecommissionedByName(userId)
         }
       }

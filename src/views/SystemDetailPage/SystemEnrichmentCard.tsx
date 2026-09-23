@@ -158,7 +158,7 @@ function FieldDisplay({
         {label}
       </Typography>
       <Typography variant="body1" sx={{ wordBreak: 'break-word' }}>
-        {value || '—'}
+        {value || '-'}
       </Typography>
     </Box>
   )
@@ -371,7 +371,7 @@ export default function SystemEnrichmentCard({
 
   return (
     <Grid container spacing={3}>
-      {/* Row 1: Identity, Status, Organization — 3 across on md+ */}
+      {/* Row 1: Identity, Status, Organization - 3 across on md+ */}
       <Grid item xs={12} md={5}>
         <Card variant="outlined" sx={{ height: '100%' }}>
           <CardHeader
@@ -430,7 +430,7 @@ export default function SystemEnrichmentCard({
                 variant="body1"
                 sx={atoColor ? { color: atoColor } : undefined}
               >
-                {formatDate(enrichment.ato_expiration_date) || '—'}
+                {formatDate(enrichment.ato_expiration_date) || '-'}
               </Typography>
             </Box>
             {enrichment.decommission_date && (
@@ -464,7 +464,7 @@ export default function SystemEnrichmentCard({
         </Card>
       </Grid>
 
-      {/* Row 2: Contacts — full width, fields horizontal */}
+      {/* Row 2: Contacts - full width, fields horizontal */}
       <Grid item xs={12}>
         <Card variant="outlined">
           <CardHeader
@@ -496,7 +496,7 @@ export default function SystemEnrichmentCard({
                             variant="body1"
                             sx={{ wordBreak: 'break-word' }}
                           >
-                            {name ?? email ?? '—'}
+                            {name ?? email ?? '-'}
                           </Typography>
                           {name && email && (
                             <Typography

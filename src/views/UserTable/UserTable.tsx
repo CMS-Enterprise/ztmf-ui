@@ -291,7 +291,7 @@ export default function UserTable() {
               opdivIds: opdivIdsToGrant,
             })
             updatedRow.assignedopdivids = opdivIdsToGrant
-            // Backend recomputes identity_provider after OpDiv grants — leave blank
+            // Backend recomputes identity_provider after OpDiv grants - leave blank
             // until refreshUserRow returns the authoritative value.
             createdUserIdToRefresh = String(createdUser.userid)
           } catch (grantError) {

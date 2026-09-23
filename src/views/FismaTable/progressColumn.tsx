@@ -81,7 +81,7 @@ function ProgressState({
  *     way the past-call branch treats it as zero.
  * @param {object} props - Component props.
  * @param {ScoreProgress | undefined} props.entry - The system's progress row;
- *   undefined renders an em-dash (progress fetch failed or not covered).
+ *   undefined renders a dash (progress fetch failed or not covered).
  * @param {boolean} [props.isCurrentCall=true] - Whether the row's displayed call
  *   is the current/active one. Defaults true so callers without call context
  *   keep the original current-cycle rendering.
@@ -94,10 +94,10 @@ export function ProgressCell({
   entry: ScoreProgress | undefined
   isCurrentCall?: boolean
 }) {
-  // The em-dash is decoration; the hidden text is the announcement.
+  // The dash is decoration; the hidden text is the announcement.
   const noData = (
     <span>
-      <span aria-hidden>—</span>
+      <span aria-hidden>-</span>
       <span
         style={{
           position: 'absolute',
@@ -165,7 +165,7 @@ export function ProgressCell({
   }
   const updated = entry.questionsupdated > 0
   // Zero updates splits two materially different states: carried-forward
-  // answers awaiting confirmation vs no answers at all — a blanket "Not
+  // answers awaiting confirmation vs no answers at all - a blanket "Not
   // updated" read as data loss to ISSOs who had just reviewed everything.
   // Coalesce as the past-call branch does, so both branches read the count the
   // same way rather than one trusting the type and the other guarding against

@@ -4,7 +4,7 @@ import type { ScoreProgress } from '@/types'
  * True when the system has no questionnaire this data call (no functions apply
  * to its environment). The backend intentionally returns these systems as
  * `0/0`; the frontend owns the display decision, and they are not actionable
- * triage items — there is nothing to nudge.
+ * triage items - there is nothing to nudge.
  * @param {ScoreProgress | undefined} entry - The system's progress row.
  * @returns {boolean} True when the system has zero applicable questions.
  */
@@ -16,11 +16,11 @@ export function hasNoQuestionnaire(entry: ScoreProgress | undefined): boolean {
  * Sort key for the Data Call Progress column. Ascending sort is the triage
  * order OpDiv Admins want, most-urgent first:
  *
- *   -1  not updated but HAS a questionnaire  (needs a nudge — top of the list)
+ *   -1  not updated but HAS a questionnaire  (needs a nudge - top of the list)
  *   0..1 partially updated, by completion fraction
  *   1   fully updated (a complete system lands at exactly 1)
- *   1.5 no questionnaire applies (0/0 — nothing to do, not a laggard)
- *   2   no progress data (fetch failed or system not covered — unknown, last)
+ *   1.5 no questionnaire applies (0/0 - nothing to do, not a laggard)
+ *   2   no progress data (fetch failed or system not covered - unknown, last)
  *
  * The 0/0 (no-questionnaire) case is classified BEFORE the not-updated branch:
  * such a system is technically "not updated," but it has nothing to update, so
@@ -84,9 +84,9 @@ export function progressTooltip(
     return 'No questionnaire applies to this system'
   if (entry.questionsupdated > 0) return 'Updated (time unavailable)'
   // Mirrors the chip's carried-forward split: answers exist but none count
-  // as updated yet — awaiting confirmation, not missing. Current call only:
+  // as updated yet - awaiting confirmation, not missing. Current call only:
   // a closed call has nothing left to confirm.
   if (!opts.pastCall && (entry.questionsanswered ?? 0) > 0)
-    return 'Answers carried forward from a previous data call — not yet confirmed'
+    return 'Answers carried forward from a previous data call - not yet confirmed'
   return 'No updates this data call'
 }

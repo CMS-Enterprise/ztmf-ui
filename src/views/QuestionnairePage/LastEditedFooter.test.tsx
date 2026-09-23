@@ -39,7 +39,7 @@ describe('LastEditedFooter', () => {
         lastEditedBy={editor}
       />
     )
-    const caption = screen.getByText(/Last edited by John Smith \(ISSO\) —/)
+    const caption = screen.getByText(/Last edited by John Smith \(ISSO\) -/)
     expect(caption).toBeInTheDocument()
   })
 
@@ -51,7 +51,7 @@ describe('LastEditedFooter', () => {
         lastEditedBy={{ name, email, userid }}
       />
     )
-    const caption = screen.getByText(/Last edited by John Smith —/)
+    const caption = screen.getByText(/Last edited by John Smith -/)
     expect(caption).toBeInTheDocument()
     expect(caption.textContent).not.toMatch(/\(/)
   })

@@ -41,7 +41,7 @@ export const isSubstantialNotesChange = (
  * updates the notes.
  *
  * The rule fires only when the user actually flipped an already-answered
- * response — first-time answers on a fresh data call short-circuit false
+ * response - first-time answers on a fresh data call short-circuit false
  * (`initQuestionChoice === -1`) so a new data call does not force a note
  * on every question. Clearing an existing note also fires the rule: an
  * explanation must ride along with the changed answer, so wiping the

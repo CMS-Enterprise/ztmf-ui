@@ -78,7 +78,7 @@ jest.mock('@/utils/notify', () => {
 // Stub the insights panel and option badges with recognizable text so the
 // justification-integration tests can assert their presence/absence without
 // depending on the real panel's internals. OptionInsightBadges renders nothing
-// when no insight is passed, matching the real component — so the existing
+// when no insight is passed, matching the real component - so the existing
 // effect-path tests (which run with insights disabled) are unaffected.
 jest.mock('./InsightsPanel/InsightsPanel', () => {
   const react = require('react')
@@ -342,14 +342,14 @@ test('read-only session evicts the current-question draft on mount', async () =>
 // ---------------------------------------------------------------------------
 // 2c. Time-spent view pings (#368): every session emits one 'events/view' per
 //     opened question with the DB questionid. The payload carries no readonly
-//     flag — editor-vs-viewer is decided server-side from role + deadline.
+//     flag - editor-vs-viewer is decided server-side from role + deadline.
 // ---------------------------------------------------------------------------
 
 const viewPings = () =>
   axios.post.mock.calls.filter((c: unknown[]) => c[0] === apiPaths.events.view)
 
 // The store declines rather than deletes, but the no-edits clear fires
-// whenever on-screen values match the server's — exactly what a declined load
+// whenever on-screen values match the server's - exactly what a declined load
 // leaves behind. Without the guard, opening the question deletes the entry.
 test('does not clear a draft the store declined to read', async () => {
   loadDraftMock.mockResolvedValue(null)
@@ -486,7 +486,7 @@ test('records an events/view ping in a read-only session too', async () => {
 
   renderAt(DEEP_LINK)
 
-  // Read-only viewers are captured too (#368) — the ping still fires; whether
+  // Read-only viewers are captured too (#368) - the ping still fires; whether
   // it counts as viewer time is decided server-side, so the body is identical.
   await waitFor(() => expect(viewPings()).toHaveLength(1))
   expect(viewPings()[0][1]).toEqual({
@@ -1046,7 +1046,7 @@ describe('QuestionnairePage justification integration', () => {
     expect(complete).toBeDisabled()
 
     // Accepting the required review must land even though the text equals
-    // the seeded prior response — via the confirm endpoint, since the old
+    // the seeded prior response - via the confirm endpoint, since the old
     // identical-body answer PUT was silently discarded by the backend's
     // no-op guard. Insert alone performs no write (like the
     // insights-suggestion card's Insert); the resolved review lands on the
@@ -1065,7 +1065,7 @@ describe('QuestionnairePage justification integration', () => {
     await waitFor(() =>
       expect(axios.put).toHaveBeenCalledWith(apiPaths.scores.confirm(5001))
     )
-    // The unchanged answer body must NOT be re-PUT — that path re-stamps
+    // The unchanged answer body must NOT be re-PUT - that path re-stamps
     // nothing server-side and would clear notes_is_ai_summary on a real
     // change-detection miss.
     expect(axios.put).not.toHaveBeenCalledWith(
@@ -1088,7 +1088,7 @@ describe('QuestionnairePage justification integration', () => {
       await screen.findByText('Suggested justification')
     ).toBeInTheDocument()
     expect(
-      await screen.findByText("Last year's response — FY2025 Q1")
+      await screen.findByText("Last year's response - FY2025 Q1")
     ).toBeInTheDocument()
   })
 
@@ -1196,7 +1196,7 @@ describe('QuestionnairePage justification integration', () => {
 
 describe('carried-forward confirmation', () => {
   // CI runners execute this suite ~3x slower than a dev machine, and these
-  // tests each begin by awaiting a full page load — RTL's default 1s
+  // tests each begin by awaiting a full page load - RTL's default 1s
   // findBy/waitFor timeout flaked there while the question was still
   // loading. Raise the async ceiling for this block only; passing tests are
   // unaffected (they resolve as soon as the DOM settles).
@@ -1288,7 +1288,7 @@ describe('carried-forward confirmation', () => {
   }
 
   // Serves a mutable scores list and, like the real backend, flips the
-  // targeted row to done when the confirm endpoint is hit — so the refetch
+  // targeted row to done when the confirm endpoint is hit - so the refetch
   // after a confirm returns the confirmed row instead of resurrecting the
   // original fixture. Insights/OpDiv rows default to empty (the non-CMS
   // variant); pass them to exercise the prior-response card.
@@ -1419,7 +1419,7 @@ describe('carried-forward confirmation', () => {
     // The guidance retires with the button: once the user is editing, telling
     // them to write a new justification describes what they are already doing.
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
-    // The badge still shows — the row is still unconfirmed until saved.
+    // The badge still shows - the row is still unconfirmed until saved.
     expect(
       screen.getByText('Carried forward - not yet confirmed')
     ).toBeInTheDocument()
@@ -1583,8 +1583,8 @@ describe('carried-forward confirmation', () => {
       COMPLETE_HINT_MSG
     )
     // The Tooltip's own wiring lands on the span wrapper CmsButton forces (it
-    // cannot hold a ref). aria-label there would be prohibited — a roleless
-    // element must not be named — so describeChild has to stay on.
+    // cannot hold a ref). aria-label there would be prohibited - a roleless
+    // element must not be named - so describeChild has to stay on.
     expect(complete.parentElement).not.toHaveAttribute('aria-label')
 
     await userEvent.unhover(complete)
@@ -1595,7 +1595,7 @@ describe('carried-forward confirmation', () => {
     // Keyboard users reach it too: the hint is not hover-only. MUI opens on
     // focus only when the last input was a key, and it tracks that in
     // module-level state (@mui/utils useIsFocusVisible) that any earlier
-    // mousedown in this file latches off — so model the real sequence, keydown
+    // mousedown in this file latches off - so model the real sequence, keydown
     // then focus, rather than focusing alone.
     fireEvent.keyDown(document.body, { key: 'Tab' })
     act(() => complete.focus())
@@ -1691,7 +1691,7 @@ describe('carried-forward confirmation', () => {
       screen.getByText('0 of 2 answers counted as updated for this data call.')
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Carried forward — needs confirmation (1)')
+      screen.getByText('Carried forward - needs confirmation (1)')
     ).toBeInTheDocument()
     expect(screen.getByText('Unanswered (1)')).toBeInTheDocument()
 
@@ -1708,7 +1708,7 @@ describe('carried-forward confirmation', () => {
     // The jump link navigates to the listed question.
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Identity — Imperial Identity Verification',
+        name: 'Identity - Imperial Identity Verification',
       })
     )
     await waitFor(() =>

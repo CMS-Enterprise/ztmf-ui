@@ -467,7 +467,7 @@ export default function Title() {
               />
             </Link>
 
-            {/* primary nav tabs — underline-active, no pill background.
+            {/* primary nav tabs - underline-active, no pill background.
                 Each link stretches full-height so its 2px bottom border
                 sits flush at the bar's bottom edge; mb: -1px overlaps the
                 header's 1px bottom border so the active underline visually

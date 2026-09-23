@@ -10,8 +10,8 @@ import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
  */
 const MAX_SCORE = 5
 
-/** Em-dash shown for the value when a system has not been assessed. */
-const EM_DASH = '—'
+/** Dash shown for the value when a system has not been assessed. */
+const EMPTY_VALUE = '-'
 
 /** Props for {@link ScoreDisplay}. */
 export type ScoreDisplayProps = {
@@ -36,7 +36,7 @@ export type ScoreDisplayProps = {
  * This replaces the old table treatment where a bare numeric score sat in a
  * bordered cell that looked editable. The bar and tier word give a non-color
  * signal alongside the tier color so the meaning survives in greyscale. A
- * not-assessed system renders a dashed empty track, an em-dash value, and
+ * not-assessed system renders a dashed empty track, a dash value, and
  * muted text so the row visually recedes.
  * @param {ScoreDisplayProps} props - Score, tier and layout options.
  * @returns {JSX.Element} The score read-out.
@@ -151,7 +151,7 @@ function ScoreBar({
 }
 
 /**
- * The monospace numeric value, or an em-dash when not assessed.
+ * The monospace numeric value, or a dash when not assessed.
  * @param {object} props - Score and assessed state.
  * @returns {JSX.Element} The value span.
  */
@@ -173,7 +173,9 @@ function ScoreValue({
         minWidth: 34,
       }}
     >
-      {notAssessed || typeof score !== 'number' ? EM_DASH : score.toFixed(2)}
+      {notAssessed || typeof score !== 'number'
+        ? EMPTY_VALUE
+        : score.toFixed(2)}
     </Box>
   )
 }

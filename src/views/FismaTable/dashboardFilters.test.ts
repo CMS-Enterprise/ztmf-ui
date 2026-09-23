@@ -8,7 +8,7 @@ import {
   EMPTY_DASHBOARD_FILTERS,
 } from './dashboardFilters'
 
-// Minimal rows — only the fields the filter reads. Cast through unknown, the
+// Minimal rows - only the fields the filter reads. Cast through unknown, the
 // repo's pattern for grid-row fixtures.
 const ROWS = [
   { fismasystemid: 1, datacenterenvironment: 'aws', opdiv_id: 10 },

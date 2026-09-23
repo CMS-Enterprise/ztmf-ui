@@ -157,7 +157,7 @@ export default function QuestionnarePage() {
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
   const [questions, setQuestions] = React.useState<Record<number, Question>>([])
   // ZTMF Insights keyed by DB questionid. Empty for every "off" case (OpDiv not
-  // enabled, not entitled, not yet synced) — the endpoint returns [] and the
+  // enabled, not entitled, not yet synced) - the endpoint returns [] and the
   // panel simply never renders, leaving the page unchanged.
   const [insightsByQuestion, setInsightsByQuestion] = React.useState<
     Map<number, InsightPayload>
@@ -264,7 +264,7 @@ export default function QuestionnarePage() {
   // Returns the fresh map alongside committing it to state, so a caller that
   // must reason over the authoritative data in the same tick (the Complete
   // summary) does not have to read a not-yet-rendered state value. undefined
-  // on failure — callers fall back to the state they already had.
+  // on failure - callers fall back to the state they already had.
   const fetchQuestionScores = async (
     systemId: number | string | undefined,
     setQuestionScores: (scores: questionScoreMap) => void
@@ -315,7 +315,7 @@ export default function QuestionnarePage() {
     // prior-answer) for disabled OpDivs while leaving the baseline treatment
     // intact. The Insights panel, suggestion, and per-option insight badges are
     // each separately gated (showInsights / showInsightSuggestion /
-    // showInsightBadges) — all derive from showCmsInsights.
+    // showInsightBadges) - all derive from showCmsInsights.
     return (
       <QuestionRadioGroup
         options={options}
@@ -431,7 +431,7 @@ export default function QuestionnarePage() {
   // datacall segment already carries the cycle across navigations, and writing
   // these values into location.state from the fetch effect's own navigate()
   // would flip the routeDatacall* deps from undefined to defined and re-run
-  // the whole fetch — every cold deep-link used to hit /questions and /scores
+  // the whole fetch - every cold deep-link used to hit /questions and /scores
   // twice (#524 review).
   const datacallStateRef = React.useRef<{
     datacallid?: number
@@ -443,7 +443,7 @@ export default function QuestionnarePage() {
     decommissionedSystems?.find((s) => s.fismasystemid === system)
   const systemName = systemInfo?.fismaname ?? fismaacronym ?? ''
 
-  // Fetch ZTMF Insights for this system once (not per question — one call
+  // Fetch ZTMF Insights for this system once (not per question - one call
   // returns every question's row). The initial lookup briefly blocks submission
   // so a carried-forward response cannot be submitted before its required
   // review UI is known. Failures and empty responses then leave the map empty.
@@ -488,7 +488,7 @@ export default function QuestionnarePage() {
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
-      // User explicitly chose to abandon unsaved edits — clear the draft so it
+      // User explicitly chose to abandon unsaved edits - clear the draft so it
       // doesn't reappear if they navigate back to this question.
       clearCurrentDraft()
       setLoadingQuestion(true)
@@ -596,7 +596,7 @@ export default function QuestionnarePage() {
     priorReviewNeedsSave,
   }
 
-  // Carried-forward confirmation state, read from scores.status — the same
+  // Carried-forward confirmation state, read from scores.status - the same
   // persisted fact the Data Call Progress fraction counts. Open call only:
   // historical rows are legitimately not_started forever. Read-only sessions
   // see the badges but never the Confirm button.
@@ -623,7 +623,7 @@ export default function QuestionnarePage() {
   })
   // Derived from the button so the sentence and the action it describes cannot
   // drift apart. !currentPriorResponse suppresses it on insights questions,
-  // where the card owns the explanation — a resolved review unblocks the
+  // where the card owns the explanation - a resolved review unblocks the
   // button, so nothing else would.
   const showCarryForwardHelper = showConfirmButton && !currentPriorResponse
   const [confirming, setConfirming] = React.useState(false)
@@ -632,7 +632,7 @@ export default function QuestionnarePage() {
     React.useState<ConfirmSummary | null>(null)
 
   // The explicit act behind "Confirm this answer is still accurate": flips
-  // the row's status to done via the confirm endpoint — the ordinary PUT
+  // the row's status to done via the confirm endpoint - the ordinary PUT
   // cannot express agreement, its no-op guard (correctly) drops an unchanged
   // body (#412/#413). Shared with saveResponse's resolved-review path.
   const confirmScoreById = async (id: number): Promise<boolean> => {
@@ -686,7 +686,7 @@ export default function QuestionnarePage() {
       // Re-seed the current question's saved state from the fresh map. The
       // old Complete re-seeded implicitly by navigating to question 1; this
       // one stays put, and without a re-seed a just-POSTed answer would
-      // still read as unsaved (scoreid 0) — a second Complete would POST a
+      // still read as unsaved (scoreid 0) - a second Complete would POST a
       // duplicate row and double-weight the question in the pillar average.
       const sel = deriveScoreSelection(
         optionsRef.current.map((o) => Number(o.value)),
@@ -742,7 +742,7 @@ export default function QuestionnarePage() {
       })
     ) {
       // Nothing changed on the answer fields. A resolved required review is
-      // still an affirmative act that must land — the ordinary PUT's no-op
+      // still an affirmative act that must land - the ordinary PUT's no-op
       // guard would silently drop an identical body, so route it through the
       // confirm endpoint.
       if (resolvedPriorReview && scoreid) {
@@ -838,7 +838,7 @@ export default function QuestionnarePage() {
             // data-call segment. Falls through to the selected/latest call when
             // the segment is absent or unrecognized. (#500)
             //
-            // These branches leave datacallStateRef empty — see its declaration.
+            // These branches leave datacallStateRef empty - see its declaration.
             // The cycle rides in the URL segment written by the canonical
             // navigate below, so it survives re-runs and in-survey navigation
             // without route state; a stale ref from a previous dashboard-opened
@@ -964,7 +964,7 @@ export default function QuestionnarePage() {
               // Update sidebar/nav state immediately so the question list
               // renders while scores are still loading. setQuestions,
               // setDatacallID, and setQuestionId are deferred to the batch
-              // below — after scores arrive — so the questionId effect fires
+              // below - after scores arrive - so the questionId effect fires
               // exactly once with the correct scores already in the ref.
               setFunctionIdIdx(funcIdToIdx)
               setStepFunctionId(sortedFuncId)
@@ -1116,7 +1116,7 @@ export default function QuestionnarePage() {
           const sys = systemRef.current
           const uid = userInfo.userid
           if (controller.signal.aborted) return
-          // Reset per question — a declined entry belongs to one question, and a
+          // Reset per question - a declined entry belongs to one question, and a
           // stale true here would suppress a legitimate clear on the next one.
           declinedDraftRef.current = false
           // Read-only sessions never load the draft again, so evict any lingering
@@ -1138,7 +1138,7 @@ export default function QuestionnarePage() {
           if (controller.signal.aborted) return
           if (draft) {
             if (draft.selectQuestionOption === -1) {
-              // Notes-only draft — restore notes without pre-selecting an answer.
+              // Notes-only draft - restore notes without pre-selecting an answer.
               setNotes(draft.notes)
               setDraftStatus('restored')
             } else if (
@@ -1152,14 +1152,14 @@ export default function QuestionnarePage() {
               setNotes(draft.notes)
               setDraftStatus('restored')
             } else {
-              // Draft references an option that no longer exists — evict it.
+              // Draft references an option that no longer exists - evict it.
               if (sys && questionId && datacallID > 0)
                 await clearDraft(uid, sys, questionId, datacallID)
               if (controller.signal.aborted) return
               setDraftStatus('idle')
             }
           } else {
-            // Tell "none stored" from "one we declined" — the no-edits clear
+            // Tell "none stored" from "one we declined" - the no-edits clear
             // below would delete the latter. A ref, not draftStatus:
             // that gets reset to 'idle' and 'error', re-arming the clear.
             if (!isReadOnly && sys && questionId && datacallID > 0) {
@@ -1217,7 +1217,7 @@ export default function QuestionnarePage() {
           questionid: viewedQuestionId,
         })
       } catch {
-        // Analytics only — swallow errors (including auth-handled ones).
+        // Analytics only - swallow errors (including auth-handled ones).
       }
     })()
   }, [system, datacallID, viewedQuestionId])
@@ -1225,7 +1225,7 @@ export default function QuestionnarePage() {
   // Debounced draft save: 1 second after the user pauses editing, persist
   // the current answer and notes to localStorage so a reload can recover them.
   // Only fires when the user has actually changed something from the server-side
-  // initial values — prevents question-load state transitions from being
+  // initial values - prevents question-load state transitions from being
   // mistakenly recorded as drafts on questions the user never touched.
   React.useEffect(() => {
     if (
@@ -1242,7 +1242,7 @@ export default function QuestionnarePage() {
     if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
       pendingDraftRef.current = null
       saveGenRef.current++
-      // Skip clearDraft when a draft was just restored from storage — the draft
+      // Skip clearDraft when a draft was just restored from storage - the draft
       // values matching the server state does not mean the user reverted manually.
       // Clearing it here would delete a valid in-progress draft on every page load
       // when the server happens to be at the same state as the draft.
@@ -1284,7 +1284,7 @@ export default function QuestionnarePage() {
         // and replaces the ref with a NEW object under the SAME generation
         // (saveGenRef only moves on explicit clears), so a generation check
         // here would let the older save's completion discard the newer edit's
-        // payload while its own debounce is still pending — and an unmount in
+        // payload while its own debounce is still pending - and an unmount in
         // that window would then flush nothing (#640 review). Gated on `saved`
         // so a failed write stays in the ref for the unmount flush to retry.
         if (saved && pendingDraftRef.current === pending)
@@ -1358,7 +1358,7 @@ export default function QuestionnarePage() {
   }, [isReadOnly])
 
   // Re-seed the current question's answer when the scores map refreshes out of
-  // band — e.g. the user saves a question then navigates back before that save's
+  // band - e.g. the user saves a question then navigates back before that save's
   // scores GET resolves, so the questionId effect seeded from a stale snapshot.
   // Only runs when idle (the questionId effect owns seeding while loading) with no
   // unsaved edits and no restored draft, so an in-progress change is never
@@ -1383,7 +1383,7 @@ export default function QuestionnarePage() {
       optionsRef.current.map((o) => Number(o.value)),
       questionScoresRef.current
     )
-    // No change from the last-seeded state — nothing to correct.
+    // No change from the last-seeded state - nothing to correct.
     if (sel.choice === u.initQuestionChoice && sel.notes === u.initNotes) return
     setOptions((prev) =>
       prev.map((o) => ({
@@ -1457,7 +1457,7 @@ export default function QuestionnarePage() {
       findSystemsByAcronym(fismaSystems, fismaacronym).length > 1 ||
       findSystemsByAcronym(decommissionedSystems ?? [], fismaacronym).length > 1
     // Cold load (paste / refresh / bookmark): the systems list may still be in
-    // flight, so :fismaacronym can't be resolved yet — and if it missed the
+    // flight, so :fismaacronym can't be resolved yet - and if it missed the
     // active list, the decommissioned list is being checked before concluding
     // not-found. Show a spinner until both have answered; only then is the
     // link genuinely unresolvable. (#500 / #524 review)
@@ -1632,7 +1632,7 @@ export default function QuestionnarePage() {
     selectedIndex === stepFunctionId[stepFunctionId.length - 1]
   // The forward button's hint, empty wherever it would misstate the behavior.
   // A read-only session never saves, so neither variant applies. Complete's
-  // wording holds only on an open call — a closed call keeps the old wrap-around
+  // wording holds only on an open call - a closed call keeps the old wrap-around
   // to question 1 instead of saving and summarizing. Next is unconditional
   // because it behaves the same on open and closed calls.
   const navHintMsg = isReadOnly

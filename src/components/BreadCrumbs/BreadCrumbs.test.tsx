@@ -18,7 +18,7 @@ describe('BreadCrumbs', () => {
 
   it('capitalizes lowercase segments and replaces hyphen with space by default', () => {
     renderAt('/questionnaire/aco-ms')
-    // 'aco-ms' becomes 'Aco ms' — the case that prompted the segmentLabels
+    // 'aco-ms' becomes 'Aco ms' - the case that prompted the segmentLabels
     // override on the questionnaire page.
     expect(screen.getByText('Aco ms')).toBeInTheDocument()
   })

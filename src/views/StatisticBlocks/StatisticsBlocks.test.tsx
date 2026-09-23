@@ -58,7 +58,7 @@ const tileHint = (label: string): string => {
   return (nodes[2]?.textContent ?? '').trim()
 }
 
-describe('StatisticsBlocks — ztmf-ui#633 selection-scoped scoring', () => {
+describe('StatisticsBlocks - ztmf-ui#633 selection-scoped scoring', () => {
   afterEach(() => {
     mockFismaSystems = []
   })

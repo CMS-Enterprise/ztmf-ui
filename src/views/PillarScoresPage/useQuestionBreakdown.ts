@@ -57,9 +57,9 @@ function pillarRank(name: string | undefined): number {
  *
  * Two endpoints feed this:
  *
- *   1. /fismasystems/{id}/questions  — question text + pillar + function
+ *   1. /fismasystems/{id}/questions  - question text + pillar + function
  *      name, keyed by functionid (each question has exactly one function).
- *   2. /scores?datacallid=...&fismasystemid=...&include=functionoption — the
+ *   2. /scores?datacallid=...&fismasystemid=...&include=functionoption - the
  *      picked option per question, carrying functionid + the raw 0-4 score.
  *
  * Rows are joined on functionid, the score is shifted (+1) onto the 1-5

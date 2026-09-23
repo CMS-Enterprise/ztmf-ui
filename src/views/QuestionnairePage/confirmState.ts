@@ -2,8 +2,8 @@ import type { QuestionScores, ScoreStatus, FismaQuestion } from '@/types'
 
 /**
  * Carried-forward confirmation state, derived from the persisted
- * scores.status column — the same fact the Data Call Progress fraction
- * counts — so the badge, Confirm button, sidebar markers, and Complete
+ * scores.status column - the same fact the Data Call Progress fraction
+ * counts - so the badge, Confirm button, sidebar markers, and Complete
  * summary can never disagree with the number the user is shown. Pure, so the
  * classification rules live in one place (mirrors saveGuard.ts).
  */
@@ -87,7 +87,7 @@ export type ConfirmSummary = {
   /**
    * True when at least one row carries status. False = the backend does not
    * serve it, so the updated count and unconfirmed list would be lies built
-   * from absence — callers must render neither. The unanswered list stays
+   * from absence - callers must render neither. The unanswered list stays
    * valid (derived from row presence, not status).
    */
   hasStatusData: boolean
@@ -135,7 +135,7 @@ export const buildConfirmSummary = (
           summary.updated++
           break
         // 'none' (no status served): answered, but neither confirmable nor
-        // countable as updated — deliberately absent from every bucket.
+        // countable as updated - deliberately absent from every bucket.
       }
     }
   }

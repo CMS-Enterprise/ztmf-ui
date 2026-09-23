@@ -564,7 +564,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
                               hour: 'numeric',
                               minute: '2-digit',
                             })
-                          : '—'}
+                          : '-'}
                       </TableCell>
                     </TableRow>
                   ))}

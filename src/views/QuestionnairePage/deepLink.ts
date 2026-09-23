@@ -46,9 +46,9 @@ export const encodeDatacallSlug = (name: string) =>
 
 // Resolve the URL's data-call segment back to its datacall by re-encoding each
 // candidate name and comparing case-insensitively (consistent with the other
-// resolvers — a case-mangled shared URL should still land on the right cycle,
+// resolvers - a case-mangled shared URL should still land on the right cycle,
 // not silently fall back to the latest one). undefined when absent or
-// unrecognized — callers fall back to the selected/latest call.
+// unrecognized - callers fall back to the selected/latest call.
 export function resolveDatacallBySlug(
   datacalls: datacall[],
   slug: string | undefined
@@ -76,7 +76,7 @@ type CategoryLike = {
 // Resolve the :pillar/:function URL params to a concrete function within the
 // loaded categories, so a deep link opens the named question instead of always
 // snapping to the first one. undefined when either param is missing or does not
-// match any loaded pillar/function — callers fall back to categories[0].
+// match any loaded pillar/function - callers fall back to categories[0].
 export function resolveFunctionTarget(
   categories: CategoryLike[],
   pillarSlug: string | undefined,

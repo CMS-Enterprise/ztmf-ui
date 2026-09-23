@@ -191,7 +191,7 @@ describe('ProgressCell', () => {
     expect(screen.getByText('Not started')).toBeInTheDocument()
   })
 
-  it('renders an em-dash when progress data is missing', () => {
+  it('renders a dash when progress data is missing', () => {
     render(<ProgressCell entry={undefined} />)
     expect(screen.getByText('No progress data')).toBeInTheDocument()
   })
@@ -282,7 +282,7 @@ describe('ProgressCell', () => {
   // --- Carried-forward wording on the current call ---
 
   it('reads Awaiting confirmation for a current-call system with carried answers and zero updates', () => {
-    // The answers exist (carried forward) but none count as updated —
+    // The answers exist (carried forward) but none count as updated -
     // "0/41 Not updated" read as data loss; the chip says the actual state.
     render(
       <ProgressCell
@@ -345,7 +345,7 @@ describe('ProgressCell', () => {
 
   it('describes the carried-forward state in the tooltip', () => {
     expect(progressTooltip({ ...untouchedEntry, questionsanswered: 41 })).toBe(
-      'Answers carried forward from a previous data call — not yet confirmed'
+      'Answers carried forward from a previous data call - not yet confirmed'
     )
     // No answers at all keeps the plain no-updates line.
     expect(progressTooltip({ ...untouchedEntry, questionsanswered: 0 })).toBe(

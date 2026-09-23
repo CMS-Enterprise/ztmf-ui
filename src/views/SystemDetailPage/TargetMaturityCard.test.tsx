@@ -68,9 +68,9 @@ test('no target set renders the Advanced default with the default caption', () =
   expect(
     screen.getByRole('heading', { level: 2, name: 'Target Maturity Level' })
   ).toBeInTheDocument()
-  expect(screen.getByText('3 — Advanced (default)')).toBeInTheDocument()
+  expect(screen.getByText('3 - Advanced (default)')).toBeInTheDocument()
   expect(
-    screen.getByText(/Default — no target has been set/)
+    screen.getByText(/Default - no target has been set/)
   ).toBeInTheDocument()
   // No form controls in view mode
   expect(screen.queryByLabelText('Target level')).not.toBeInTheDocument()
@@ -86,9 +86,9 @@ test('explicit target renders tier chip and justification', () => {
       target_maturity_justification: 'Internet-facing HVA.',
     },
   })
-  expect(screen.getByText('4 — Optimal')).toBeInTheDocument()
+  expect(screen.getByText('4 - Optimal')).toBeInTheDocument()
   expect(screen.getByText('Internet-facing HVA.')).toBeInTheDocument()
-  expect(screen.queryByText(/Default — no target/)).not.toBeInTheDocument()
+  expect(screen.queryByText(/Default - no target/)).not.toBeInTheDocument()
 })
 
 // ---------------------------------------------------------------------------
@@ -138,9 +138,9 @@ test('only Initial, Advanced, and Optimal are offered - no Traditional', async (
   await user.click(screen.getByLabelText('Target level'))
   const options = await screen.findAllByRole('option')
   expect(options.map((o) => o.textContent)).toEqual([
-    '2 — Initial',
-    '3 — Advanced (default)',
-    '4 — Optimal',
+    '2 - Initial',
+    '3 - Advanced (default)',
+    '4 - Optimal',
   ])
 })
 
@@ -167,7 +167,7 @@ test('Save is disabled when the draft is dirty but the justification is empty', 
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   // Pick a different tier so isDirty flips true
   await user.click(screen.getByLabelText('Target level'))
-  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
@@ -185,7 +185,7 @@ test('successful save PUTs to /target-maturity, calls onSaved, exits edit mode',
   const { onSaved } = renderCard()
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
-  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
   await user.type(
     screen.getByLabelText('Justification'),
     'Internet-facing HVA.'
@@ -220,7 +220,7 @@ test('save trims the justification before sending', async () => {
   renderCard()
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
-  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
   await user.type(screen.getByLabelText('Justification'), '  trimmed  ')
   await user.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -234,7 +234,7 @@ test('over-limit justification blocks Save and shows the length error', async ()
   renderCard()
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
-  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
   const field = screen.getByLabelText('Justification') as HTMLInputElement
   // userEvent.type on a 1001-char string is very slow; write directly
   // via fireEvent through the underlying input.
@@ -271,7 +271,7 @@ test('Cancel with dirty draft opens the ConfirmDialog; confirming discards', asy
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   // Dirty the draft: swap tier + add justification
   await user.click(screen.getByLabelText('Target level'))
-  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
   await user.type(screen.getByLabelText('Justification'), 'draft')
 
   await user.click(screen.getByRole('button', { name: /^cancel$/i }))
@@ -300,7 +300,7 @@ test('200 with no body surfaces an error and keeps the user in edit mode', async
   const { onSaved } = renderCard()
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
-  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
   await user.type(screen.getByLabelText('Justification'), 'reason')
   await user.click(screen.getByRole('button', { name: /^save$/i }))
 
@@ -319,7 +319,7 @@ test('server error keeps the user in edit mode and does not call onSaved', async
   const { onSaved } = renderCard()
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
-  await user.click(await screen.findByRole('option', { name: '4 — Optimal' }))
+  await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
   await user.type(screen.getByLabelText('Justification'), 'reason')
   await user.click(screen.getByRole('button', { name: /^save$/i }))
 

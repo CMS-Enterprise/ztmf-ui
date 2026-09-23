@@ -3,9 +3,9 @@ export type QuestionDraft = {
   notes: string
 }
 
-// Shape written to localStorage — callers only see QuestionDraft.
+// Shape written to localStorage - callers only see QuestionDraft.
 type StoredDraft = {
-  v: number // format version — entries with a mismatched version are ignored, not deleted
+  v: number // format version - entries with a mismatched version are ignored, not deleted
   iv: string
   ciphertext: string
   savedAt: number
@@ -16,35 +16,35 @@ const DRAFT_TTL_MS = 14 * 24 * 60 * 60 * 1000 // 14 days
 const DRAFT_PREFIX = 'ztmf_draft_'
 
 // IndexedDB database that holds one non-extractable CryptoKey per user.
-// Non-extractable keys cannot be exported via JS API — an attacker needs a
+// Non-extractable keys cannot be exported via JS API - an attacker needs a
 // live browser session, not just a disk dump of the profile directory.
 const DB_NAME = 'ztmf-draft-keys'
-// Bumping is safe on its own — openKeyDB's guard keeps the store and its keys.
+// Bumping is safe on its own - openKeyDB's guard keeps the store and its keys.
 // Rolling back past a bump strands them (VersionError), so loadDraft declines.
 const DB_VERSION = 1
 const KEY_STORE = 'keys'
 
-// In-memory caches — avoids round-trips on repeated reads/writes within a session.
+// In-memory caches - avoids round-trips on repeated reads/writes within a session.
 // keyCache holds the in-flight key-resolution *promise* (not the resolved key) so
 // concurrent callers in one session share a single key instead of each racing to
-// generate and persist their own — see getOrCreateDeviceKey.
+// generate and persist their own - see getOrCreateDeviceKey.
 const keyCache = new Map<string, Promise<CryptoKey>>()
 const hashedIdCache = new Map<string, string>()
 
-// Exported for test isolation only — clears both in-memory caches.
+// Exported for test isolation only - clears both in-memory caches.
 export function __resetKeyCache(): void {
   keyCache.clear()
   hashedIdCache.clear()
 }
 
-// Exported for test isolation only — seeds the key cache directly, bypassing IDB
+// Exported for test isolation only - seeds the key cache directly, bypassing IDB
 // (IndexedDB is unavailable in JSDOM). Wrapped in a resolved promise to match the
 // cache's Promise<CryptoKey> shape.
 export function __setKeyForTesting(userid: string, key: CryptoKey): void {
   keyCache.set(userid, Promise.resolve(key))
 }
 
-// Exported for test isolation only — seeds the hash cache with a predictable value.
+// Exported for test isolation only - seeds the hash cache with a predictable value.
 export function __setHashedIdForTesting(userid: string, hash: string): void {
   hashedIdCache.set(userid, hash)
 }
@@ -60,13 +60,13 @@ function openKeyDB(): Promise<IDBDatabase> {
         db.createObjectStore(KEY_STORE)
       }
     }
-    // A blocked upgrade fires neither success nor error — reject rather than hang.
+    // A blocked upgrade fires neither success nor error - reject rather than hang.
     let blocked = false
     req.onblocked = () => {
       blocked = true
       reject(new Error('key store upgrade blocked'))
     }
-    // Once the blocking tab closes, success fires on an already-settled promise —
+    // Once the blocking tab closes, success fires on an already-settled promise -
     // close that connection or the stray handle blocks the next upgrade in turn.
     req.onsuccess = () => {
       if (blocked) {
@@ -82,7 +82,7 @@ function openKeyDB(): Promise<IDBDatabase> {
 // Resolves the per-device key from IndexedDB, creating it on first use. Generate
 // the candidate before opening the transaction: awaiting generateKey mid-transaction
 // lets IDB auto-commit and throw on the put. The single readwrite transaction
-// re-checks for an existing key and keeps it if present — IndexedDB serializes
+// re-checks for an existing key and keeps it if present - IndexedDB serializes
 // overlapping transactions on one store, so two tabs can't both persist a key and
 // clobber each other (the loser's drafts would fail to decrypt after reload and
 // be silently evicted). idbKey is the hashed userid, matching the localStorage
@@ -91,7 +91,7 @@ async function resolveDeviceKey(userid: string): Promise<CryptoKey> {
   const idbKey = await hashUserId(userid)
   const candidate = await crypto.subtle.generateKey(
     { name: 'AES-GCM', length: 256 },
-    false, // non-extractable — cannot be exported as raw bytes via JS
+    false, // non-extractable - cannot be exported as raw bytes via JS
     ['encrypt', 'decrypt']
   )
   const db = await openKeyDB()
@@ -111,7 +111,7 @@ async function resolveDeviceKey(userid: string): Promise<CryptoKey> {
         // store.put can throw synchronously (e.g. DataCloneError, or an inactive
         // transaction). This runs in an event callback after the executor
         // returned, so an uncaught throw would leave the promise pending and hang
-        // saveDraft/loadDraft — reject explicitly instead.
+        // saveDraft/loadDraft - reject explicitly instead.
         try {
           const putReq = store.put(candidate, idbKey)
           putReq.onsuccess = () => resolve(candidate)
@@ -128,7 +128,7 @@ async function resolveDeviceKey(userid: string): Promise<CryptoKey> {
 
 // Returns the per-user non-extractable AES-GCM key. The in-flight promise is
 // memoized (not just the resolved key) so concurrent callers in one session share
-// one resolution — otherwise each generates its own key and all but one are
+// one resolution - otherwise each generates its own key and all but one are
 // orphaned, taking their encrypted drafts with them on the next reload.
 async function getOrCreateDeviceKey(userid: string): Promise<CryptoKey> {
   const cached = keyCache.get(userid)
@@ -138,7 +138,7 @@ async function getOrCreateDeviceKey(userid: string): Promise<CryptoKey> {
   try {
     return await promise
   } catch (err) {
-    keyCache.delete(userid) // don't cache a rejection — let the next caller retry
+    keyCache.delete(userid) // don't cache a rejection - let the next caller retry
     throw err
   }
 }
@@ -274,7 +274,7 @@ export const loadDraft = async (
     const expired =
       typeof stored.savedAt === 'number' &&
       Date.now() - stored.savedAt > DRAFT_TTL_MS
-    // Declined, not deleted — deleting makes a bump or rollback destroy drafts
+    // Declined, not deleted - deleting makes a bump or rollback destroy drafts
     // Expired ones still go, so declining isn't unbounded retention.
     if (stored.v !== DRAFT_VERSION) {
       if (expired)
@@ -295,7 +295,7 @@ export const loadDraft = async (
       return null
     }
     const draft = await decryptDraft(key, stored.iv, stored.ciphertext)
-    // Runtime shape guard — evict and ignore if the decrypted payload doesn't
+    // Runtime shape guard - evict and ignore if the decrypted payload doesn't
     // match the expected structure (format migration, bit-flip, schema change).
     if (
       typeof draft?.selectQuestionOption !== 'number' ||
@@ -306,7 +306,7 @@ export const loadDraft = async (
     }
     return draft
   } catch {
-    // Only unreadable entries reach here — bad JSON, or ciphertext that won't
+    // Only unreadable entries reach here - bad JSON, or ciphertext that won't
     // decrypt under a key we did resolve. Evict so it isn't retried all TTL.
     try {
       await clearDraft(userid, fismasystemid, functionid, datacallid)
@@ -319,7 +319,7 @@ export const loadDraft = async (
 
 // Call after loadDraft returned null: every other null path evicts, so a
 // surviving entry is one it declined and the caller must not clean up.
-// Presence, not version — the key-store decline has a valid version.
+// Presence, not version - the key-store decline has a valid version.
 export const hasDeclinedDraft = async (
   userid: string,
   fismasystemid: number,

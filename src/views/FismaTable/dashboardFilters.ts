@@ -21,7 +21,7 @@ export type DashboardFilterState = {
   openCallOnly: boolean
 }
 
-/** An empty filter state — nothing selected, everything passes. */
+/** An empty filter state - nothing selected, everything passes. */
 export const EMPTY_DASHBOARD_FILTERS: DashboardFilterState = {
   environments: [],
   opdivIds: [],
@@ -72,7 +72,7 @@ export function isOpenCallInView(
  * True when a system is a genuine "Not updated" laggard for the active data
  * call: it has a questionnaire but zero functions updated. Reuses the column's
  * own classifier (`progressSortValue === -1`) so the filter and the Data Call
- * Progress chip never disagree — the 0/0 "N/A" case and systems with no
+ * Progress chip never disagree - the 0/0 "N/A" case and systems with no
  * progress data are intentionally excluded.
  *
  * "Not updated" is a current-cycle laggard signal, so it only applies to the

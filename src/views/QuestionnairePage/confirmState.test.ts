@@ -44,7 +44,7 @@ describe('carryForwardState', () => {
     expect(carryForwardState(score({ status: 'done' }), true)).toBe('updated')
   })
 
-  it('renders nothing on a past call — historical rows are legitimately not_started forever', () => {
+  it('renders nothing on a past call - historical rows are legitimately not_started forever', () => {
     expect(carryForwardState(score({ status: 'not_started' }), false)).toBe(
       'none'
     )
@@ -92,7 +92,7 @@ describe('canConfirmCarryForward', () => {
     expect(canConfirmCarryForward(confirmable)).toBe(true)
   })
 
-  it('hides while dirty — the edit is the explicit act and Next saves it', () => {
+  it('hides while dirty - the edit is the explicit act and Next saves it', () => {
     expect(canConfirmCarryForward({ ...confirmable, dirty: true })).toBe(false)
   })
 
@@ -135,7 +135,7 @@ describe('buildScoreByFunction', () => {
     expect(byFunction[7]?.functionoptionid).toBe(100)
   })
 
-  it('skips rows without functionoption — they cannot be attributed to a question', () => {
+  it('skips rows without functionoption - they cannot be attributed to a question', () => {
     expect(buildScoreByFunction({ 100: score() })).toEqual({})
   })
 })

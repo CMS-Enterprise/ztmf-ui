@@ -248,7 +248,7 @@ export default function TargetMaturityCard({
               />
               {!hasExplicitTarget && (
                 <Typography variant="caption" color="text.secondary">
-                  Default — no target has been set for this system yet
+                  Default - no target has been set for this system yet
                 </Typography>
               )}
             </Box>
@@ -258,7 +258,7 @@ export default function TargetMaturityCard({
                   Justification
                 </Typography>
                 <Typography variant="body1">
-                  {system.target_maturity_justification || '—'}
+                  {system.target_maturity_justification || '-'}
                 </Typography>
               </Box>
             )}

@@ -23,7 +23,7 @@ export default function LastEditedFooter({
   if (!lastEditedAt || !lastEditedBy || !lastEditedBy.name) return null
 
   const { name, email, role } = lastEditedBy
-  const caption = `Last edited by ${name}${role ? ` (${role})` : ''} — ${formatHumanDate(lastEditedAt)}`
+  const caption = `Last edited by ${name}${role ? ` (${role})` : ''} - ${formatHumanDate(lastEditedAt)}`
   const tooltip = `${email} · ${lastEditedAt}`
 
   return (

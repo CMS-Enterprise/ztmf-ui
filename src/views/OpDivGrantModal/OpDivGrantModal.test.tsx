@@ -489,7 +489,7 @@ test('a reconnect mid-edit keeps the picker and Save usable', async () => {
 
 test('save button is disabled while the request is in flight', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [] })
-  // Never resolves — keeps the request in-flight so we can assert the disabled state.
+  // Never resolves - keeps the request in-flight so we can assert the disabled state.
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(() => new Promise(() => {}))
 
   renderModal()
@@ -502,7 +502,7 @@ test('save button is disabled while the request is in flight', async () => {
 })
 
 test('save button is disabled until the initial grant fetch resolves', async () => {
-  // GET never resolves — keeps the modal in loading state indefinitely.
+  // GET never resolves - keeps the modal in loading state indefinitely.
   mock
     .onGet(`/users/${USER_ID}/assignedopdivs`)
     .reply(() => new Promise(() => {}))
@@ -518,7 +518,7 @@ test('save button stays disabled when the initial grant fetch fails', async () =
 
   renderModal()
 
-  // Wait for the full error path to settle — snackbar proves .catch ran and
+  // Wait for the full error path to settle - snackbar proves .catch ran and
   // setFetchFailed(true) has committed, not just that the GET was sent.
   await screen.findByText(ERROR_MESSAGES.tryAgain)
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
@@ -588,7 +588,7 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
     />
   )
 
-  // Second GET resolves successfully — Save must re-enable.
+  // Second GET resolves successfully - Save must re-enable.
   await waitFor(() =>
     expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
   )
@@ -681,7 +681,7 @@ test('a failed read on a new target is reported, not swallowed by the first one'
 })
 
 test('stale fetch from a prior user is discarded when userid changes', async () => {
-  // User A's fetch is intentionally slow — held until we manually release it.
+  // User A's fetch is intentionally slow - held until we manually release it.
   let resolveUserA!: () => void
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(
     () =>
@@ -696,7 +696,7 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
   const onChanged = jest.fn()
   const { rerender } = renderModal()
 
-  // Switch to user B before user A's fetch resolves — triggers effect cleanup.
+  // Switch to user B before user A's fetch resolves - triggers effect cleanup.
   rerender(
     <OpDivGrantModal
       open={true}
@@ -714,7 +714,7 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
   // User B's fetches have resolved (Save enabled); user A's is still pending.
   await waitForReady()
 
-  // Release user A's stale fetch — the cancelled flag should swallow the result.
+  // Release user A's stale fetch - the cancelled flag should swallow the result.
   resolveUserA()
 
   // Save must send user B's grant (opdiv 2), not user A's stale grant (opdiv 1).

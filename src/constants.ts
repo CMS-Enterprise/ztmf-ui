@@ -29,7 +29,7 @@ export const ERROR_MESSAGES = {
 }
 
 // Short UI status strings for snackbar toasts on save/create flows. Distinct
-// from ERROR_MESSAGES because these are not errors — they are user-facing
+// from ERROR_MESSAGES because these are not errors - they are user-facing
 // status indicators returned by the operation. Keeping them grouped avoids
 // the naming collision with ERROR_MESSAGES.notSaved (which is the long-form
 // session-expired warning).

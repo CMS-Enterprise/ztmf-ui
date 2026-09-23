@@ -8,7 +8,7 @@ import { apiPaths } from '@/api/keys'
 // Deep-link integration test for #500: a questionnaire URL reached by paste /
 // refresh / bookmark (no router location.state) must resolve the system from
 // :fismaacronym, the cycle from the datacall segment, and open the named
-// :pillar/:function — not fail to load or snap to the first function.
+// :pillar/:function - not fail to load or snap to the first function.
 
 // config.ts reads import.meta.env, which jest can't parse; only the insight
 // feature flag is reachable from this page, so a minimal default is enough.
@@ -69,7 +69,7 @@ beforeEach(() => {
       fullname: 'Grand Moff Tarkin',
       role: 'OWNER',
     } as userData,
-    // Latest is call 5; the deep link below names call 4 — so a scores query
+    // Latest is call 5; the deep link below names call 4 - so a scores query
     // for datacallid=4 proves the cycle was resolved from the URL, not defaulted.
     latestDataCallId: 5,
     latestDatacall: 'Audit Fields Smoke Cycle',
