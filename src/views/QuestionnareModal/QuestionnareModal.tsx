@@ -18,7 +18,6 @@ import TextField from '@mui/material/TextField'
 import NavigateNextIcon from '@mui/icons-material/NavigateNext'
 import NavigateBeforeIcon from '@mui/icons-material/NavigateBefore'
 import {
-  FismaQuestion,
   QuestionOption,
   SystemDetailsModalProps,
   QuestionScores,
@@ -33,8 +32,10 @@ import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
 import { MAX_QUESTIONNAIRE_NOTES_LENGTH, STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { sortPillars } from '@/utils/sortPillars'
-import { sortFunctions } from '@/utils/sortFunctions'
+import {
+  groupQuestionsByPillar,
+  type Category,
+} from '@/utils/groupQuestionsByPillar'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin } from '@/utils/userRoles'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
@@ -63,10 +64,6 @@ const CssTextField = styled(TextField)({
   },
 })
 
-type Category = {
-  name: string
-  steps: FismaQuestion[]
-}
 type questionScoreMap = {
   [key: number]: QuestionScores
 }
@@ -282,20 +279,10 @@ export default function QuestionnareModal({
             { signal: controller.signal }
           )
           const data = questionsRes.data.data
-          const organizedData: Record<string, FismaQuestion[]> = {}
-          data.forEach((question: FismaQuestion) => {
-            if (!organizedData[question.pillar.pillar]) {
-              organizedData[question.pillar.pillar] = []
-            }
-            organizedData[question.pillar.pillar].push(question)
-          })
           // The API applied the reduced-pillar rule for the cycle requested
-          // above (ztmf#545).
-          const sortedPillars = sortPillars(Object.keys(organizedData))
-          const categoriesData: Category[] = sortedPillars.map((pillar) => ({
-            name: pillar,
-            steps: sortFunctions(pillar, organizedData[pillar]),
-          }))
+          // above (ztmf#545) and returns the questionnaire in order
+          // (ztmf-misc#393).
+          const categoriesData: Category[] = groupQuestionsByPillar(data)
           setCategories(categoriesData)
           if (data.length > 0) {
             setQuestionId(categoriesData[0]['steps'][0].function.functionid)
