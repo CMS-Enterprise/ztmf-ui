@@ -33,6 +33,7 @@ import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { colors, radius } from '@/theme/tokens'
 import { EXTENDED_METADATA_SUBHEADER } from '@/constants'
 import { getFieldsBySection, type FieldConfig } from './fieldConfig'
+import { formatDate } from '@/utils/dates'
 
 /**
  * In-page edit view for the System Detail page. Renders the card-grouped
@@ -384,9 +385,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                       Decommissioned on
                     </Typography>
                     <Typography sx={{ fontSize: 14, color: colors.ink }}>
-                      {new Date(
-                        system.decommissioned_date
-                      ).toLocaleDateString()}
+                      {formatDate(system.decommissioned_date)}
                     </Typography>
                   </Box>
                 )}
@@ -423,7 +422,7 @@ export default function SystemDetailEditView(props: SystemDetailEditViewProps) {
                     }}
                   >
                     Previously reactivated on{' '}
-                    {new Date(system.reactivated_date).toLocaleDateString()}
+                    {formatDate(system.reactivated_date)}
                     {system.reactivated_by &&
                       ` by ${reactivatedByName || system.reactivated_by}`}
                     {system.reactivation_notes

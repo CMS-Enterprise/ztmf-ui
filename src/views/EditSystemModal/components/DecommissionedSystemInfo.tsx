@@ -2,6 +2,7 @@ import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import type { FismaSystemType } from '@/types'
+import { formatDate } from '@/utils/dates'
 
 /** Props for {@link DecommissionedSystemInfo}. */
 export interface DecommissionedSystemInfoProps {
@@ -45,7 +46,7 @@ export default function DecommissionedSystemInfo({
           variant="caption"
           sx={{ display: 'block', ml: 2, color: 'text.secondary' }}
         >
-          Date: {new Date(system.decommissioned_date).toLocaleDateString()}
+          Date: {formatDate(system.decommissioned_date)}
         </Typography>
       )}
       {system?.decommissioned_by && (
@@ -79,8 +80,7 @@ export default function DecommissionedSystemInfo({
               color: 'text.secondary',
             }}
           >
-            Previously reactivated on{' '}
-            {new Date(system.reactivated_date).toLocaleDateString()}
+            Previously reactivated on {formatDate(system.reactivated_date)}
             {system?.reactivated_by &&
               ` by ${reactivatedByName || system.reactivated_by}`}
             {system?.reactivation_notes

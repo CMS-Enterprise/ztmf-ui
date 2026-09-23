@@ -31,6 +31,7 @@ import type {
   FismaQuestion,
   questionPillar,
 } from '@/types'
+import { formatDate, formatDateTime } from '@/utils/dates'
 
 const datacallsCache: { data: datacall[] | null; timestamp: number | null } = {
   data: null,
@@ -261,10 +262,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     const isLatest = option.datacallid === latestId
     const isClosed = new Date() > new Date(option.deadline)
     const { key, ...rest } = props
-    const deadlineLabel = new Date(option.deadline).toLocaleDateString(
-      'en-US',
-      { month: 'short', day: 'numeric', year: 'numeric' }
-    )
+    const deadlineLabel = formatDate(option.deadline)
     return (
       <li key={key} {...rest}>
         <Box sx={{ width: '100%' }}>
@@ -555,17 +553,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
                           ? `${entry.changed_by.name} (${entry.changed_by.role})`
                           : 'Unknown'}
                       </TableCell>
-                      <TableCell>
-                        {entry.changed_at
-                          ? new Date(entry.changed_at).toLocaleString('en-US', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                              hour: 'numeric',
-                              minute: '2-digit',
-                            })
-                          : '-'}
-                      </TableCell>
+                      <TableCell>{formatDateTime(entry.changed_at)}</TableCell>
                     </TableRow>
                   ))}
                 </React.Fragment>

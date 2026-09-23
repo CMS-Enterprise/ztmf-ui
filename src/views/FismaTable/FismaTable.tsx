@@ -49,6 +49,7 @@ import { CodeBadge } from '@/components/ui/StatusChip'
 import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
 import CompactSwitchLabel from '@/components/ui/CompactSwitchLabel'
 import { colors, fonts, radius } from '@/theme/tokens'
+import { formatDate } from '@/utils/dates'
 
 // Short aliases for OpDiv codes longer than the 6-char column budget.
 const OPDIV_ALIASES: Record<string, string> = { REBELLION: 'REBEL' }
@@ -1087,10 +1088,7 @@ export default function FismaTable({
         <ListSubheader>Open which data call?</ListSubheader>
         {callPicker?.calls.map((call) => {
           const isClosed = new Date() > new Date(call.deadline)
-          const deadlineLabel = new Date(call.deadline).toLocaleDateString(
-            'en-US',
-            { month: 'short', day: 'numeric', year: 'numeric' }
-          )
+          const deadlineLabel = formatDate(call.deadline)
           return (
             <MenuItem
               key={call.datacallid}

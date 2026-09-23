@@ -20,6 +20,7 @@ import {
   isCrossFieldHidden,
 } from '@/utils/systemMetadataVocab'
 import SystemDetailCard from './SystemDetailCard'
+import { formatDate } from '@/utils/dates'
 
 /**
  * Highest possible zero trust score on the user-facing scale, used to
@@ -200,9 +201,7 @@ export default function SystemDetailReadView({
             rows={[
               {
                 label: 'Decommissioned on',
-                value: system.decommissioned_date
-                  ? new Date(system.decommissioned_date).toLocaleDateString()
-                  : '-',
+                value: formatDate(system.decommissioned_date),
               },
               {
                 label: 'Decommissioned by',

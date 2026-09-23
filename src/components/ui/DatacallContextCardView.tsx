@@ -16,19 +16,8 @@ import {
   groupDatacallsByYear,
   parseDatacallName,
 } from '@/utils/datacallGrouping'
+import { formatDate } from '@/utils/dates'
 import type { datacall } from '@/types'
-
-/** Formats an ISO date string as e.g. "May 1, 2026". */
-function formatDate(value: string | undefined): string {
-  if (!value) return '-'
-  const parsed = new Date(value)
-  if (isNaN(parsed.getTime())) return '-'
-  return parsed.toLocaleDateString('en-US', {
-    month: 'short',
-    day: 'numeric',
-    year: 'numeric',
-  })
-}
 
 /** Props for {@link DatacallContextCardView}. */
 export type DatacallContextCardViewProps = {
@@ -279,13 +268,7 @@ export default function DatacallContextCardView({
                 const checked = activeDatacallIds.includes(option.datacallid)
                 const closed = new Date() > new Date(option.deadline)
                 const { tenant } = parseDatacallName(option.datacall)
-                const deadlineLabel = new Date(
-                  option.deadline
-                ).toLocaleDateString('en-US', {
-                  month: 'short',
-                  day: 'numeric',
-                  year: 'numeric',
-                })
+                const deadlineLabel = formatDate(option.deadline)
                 return (
                   <MenuItem
                     key={option.datacallid}

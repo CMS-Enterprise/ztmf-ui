@@ -280,7 +280,7 @@ test('formats a timestamp-format ATO expiration date instead of "Invalid Date"',
   renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText('Test Package')).toBeInTheDocument()
-  expect(screen.getByText('12/13/2026')).toBeInTheDocument()
+  expect(screen.getByText('Dec 13, 2026')).toBeInTheDocument()
   expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
 })
 

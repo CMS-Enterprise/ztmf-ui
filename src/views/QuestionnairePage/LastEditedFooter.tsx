@@ -1,19 +1,11 @@
 import Tooltip from '@mui/material/Tooltip'
 import Typography from '@mui/material/Typography'
 import { LastEditedBy } from '@/types'
+import { formatDateTime } from '@/utils/dates'
 
 type Props = {
   lastEditedAt?: string | null
   lastEditedBy?: LastEditedBy | null
-}
-
-function formatHumanDate(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
 }
 
 export default function LastEditedFooter({
@@ -23,7 +15,7 @@ export default function LastEditedFooter({
   if (!lastEditedAt || !lastEditedBy || !lastEditedBy.name) return null
 
   const { name, email, role } = lastEditedBy
-  const caption = `Last edited by ${name}${role ? ` (${role})` : ''} - ${formatHumanDate(lastEditedAt)}`
+  const caption = `Last edited by ${name}${role ? ` (${role})` : ''} - ${formatDateTime(lastEditedAt, lastEditedAt)}`
   const tooltip = `${email} · ${lastEditedAt}`
 
   return (

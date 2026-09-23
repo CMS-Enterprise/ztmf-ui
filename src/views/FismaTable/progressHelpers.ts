@@ -1,4 +1,5 @@
 import type { ScoreProgress } from '@/types'
+import { formatDateTime } from '@/utils/dates'
 
 /**
  * True when the system has no questionnaire this data call (no functions apply
@@ -75,8 +76,8 @@ export function progressTooltip(
 ): string {
   if (!entry) return 'No progress data for this data call'
   if (entry.lastupdatedat) {
-    const at = new Date(entry.lastupdatedat)
-    if (!isNaN(at.getTime())) return `Last updated ${at.toLocaleString()}`
+    const at = formatDateTime(entry.lastupdatedat, '')
+    if (at) return `Last updated ${at}`
   }
   // No usable timestamp: describe the state without contradicting the chip.
   if (opts.completed) return 'Data call complete'

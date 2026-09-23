@@ -33,6 +33,7 @@ import Field, { fieldInputSx } from '@/components/ui/Field'
 import StatusChip, { type StatusKind } from '@/components/ui/StatusChip'
 import { colors, radius } from '@/theme/tokens'
 import { getTodayISO, addMonthsISO } from '@/utils/decommission'
+import { formatDate } from '@/utils/dates'
 
 // Same shape UserTable validates against; the backend is the authority, this
 // only catches obvious typos before the round-trip.
@@ -76,8 +77,7 @@ function delegateStatus(iso: string | null): {
 
 function formatExpiry(iso: string | null): string {
   if (!iso) return 'No expiration'
-  const d = new Date(iso)
-  return isNaN(d.getTime()) ? iso : d.toLocaleDateString()
+  return formatDate(iso, iso)
 }
 
 function candidateLabel(o: DelegateCandidate): string {

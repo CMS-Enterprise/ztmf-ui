@@ -1,4 +1,5 @@
 import type { FismaQuestion } from '@/types'
+import { formatDateTime } from '@/utils/dates'
 
 /**
  * Shape of a pillar group as the Questionnaire page builds it: just the
@@ -62,8 +63,5 @@ export function relativeTimeFrom(d: Date): string {
   if (minutes < 60) return `${minutes} min ago`
   const hours = Math.floor(minutes / 60)
   if (hours < 24) return `${hours} hr ago`
-  return d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
+  return formatDateTime(d)
 }

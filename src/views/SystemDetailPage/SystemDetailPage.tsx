@@ -44,6 +44,7 @@ import {
   crossFieldClears,
 } from '@/utils/systemMetadataVocab'
 import SystemDelegatesSection from './SystemDelegatesSection'
+import { formatDate } from '@/utils/dates'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
@@ -551,9 +552,7 @@ export default function SystemDetailPage() {
 
   // Build decommission confirmation text
   const getDecommissionConfirmText = (): string => {
-    const dateDisplay = new Date(
-      decommissionDate + 'T00:00:00.000Z'
-    ).toLocaleDateString()
+    const dateDisplay = formatDate(decommissionDate)
     const truncated = truncateNotes(decommissionNotes)
     const notesSuffix = truncated ? ` Notes: "${truncated}"` : ''
 

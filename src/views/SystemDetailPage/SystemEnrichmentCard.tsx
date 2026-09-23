@@ -24,6 +24,7 @@ import { apiPaths, queryKeys } from '@/api/keys'
 import { STATUS_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import InsightsEmptyState from './InsightsEmptyState'
+import { formatDate, formatDateTime } from '@/utils/dates'
 
 interface SystemEnrichmentCardProps {
   fismaUid: string
@@ -201,16 +202,10 @@ function getAtoColor(dateStr: string | null): string | undefined {
   return undefined
 }
 
-function parseDate(dateStr: string): Date {
-  if (dateStr.includes('T')) return new Date(dateStr)
-  return parseDateOnly(dateStr)
-}
-
-function formatDate(dateStr: string | null): string | null {
+/** Callers distinguish "absent" from "-", so this returns null, not EMPTY. */
+function formatEnrichmentDate(dateStr: string | null): string | null {
   if (!dateStr) return null
-  const date = parseDate(dateStr)
-  if (isNaN(date.getTime())) return null
-  return date.toLocaleDateString()
+  return formatDate(dateStr, '') || null
 }
 
 // normalizeDCE mirrors the backend report's comparison (ztmf#239): trimmed,
@@ -430,13 +425,13 @@ export default function SystemEnrichmentCard({
                 variant="body1"
                 sx={atoColor ? { color: atoColor } : undefined}
               >
-                {formatDate(enrichment.ato_expiration_date) || '-'}
+                {formatEnrichmentDate(enrichment.ato_expiration_date) || '-'}
               </Typography>
             </Box>
             {enrichment.decommission_date && (
               <FieldDisplay
                 label="Decommission Date"
-                value={formatDate(enrichment.decommission_date)}
+                value={formatEnrichmentDate(enrichment.decommission_date)}
               />
             )}
           </CardContent>
@@ -574,9 +569,9 @@ export default function SystemEnrichmentCard({
           variant="caption"
           color="text.secondary"
         >
-          Data as of: {new Date(enrichment.synced_at).toLocaleString()}
+          Data as of: {formatDateTime(enrichment.synced_at)}
           {enrichment.last_modified_date &&
-            ` · Last modified in CFACTS: ${formatDate(enrichment.last_modified_date)}`}
+            ` · Last modified in CFACTS: ${formatEnrichmentDate(enrichment.last_modified_date)}`}
         </Typography>
       </Grid>
     </Grid>

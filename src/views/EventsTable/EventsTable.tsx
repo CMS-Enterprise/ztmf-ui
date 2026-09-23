@@ -21,6 +21,7 @@ import { colors, radius } from '@/theme/tokens'
 import { endOfDayISO, startOfDayISO } from './dateBounds'
 import { resourceLabel } from './resourceLabels'
 import { actionLabel } from './actionLabels'
+import { formatDateTime } from '@/utils/dates'
 
 // The complete set of values that appear in events.action (see the backend's
 // event-action constants). Display gating only; the endpoint accepts any
@@ -254,7 +255,7 @@ export default function EventsTable() {
         width: 200,
         sortable: false,
         valueFormatter: (params) =>
-          params.value ? new Date(params.value as string).toLocaleString() : '',
+          formatDateTime(params.value as string | undefined, ''),
       },
       {
         field: 'userfullname',

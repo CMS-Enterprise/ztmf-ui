@@ -27,6 +27,7 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import { EXTENDED_METADATA_KEYS } from '@/views/SystemDetailPage/fieldConfig'
 import { buildExtendedDiff } from '@/utils/systemMetadataVocab'
 import type { FismaSystemType } from '@/types'
+import { formatDate } from '@/utils/dates'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -405,8 +406,8 @@ export default function EditSystemModal({
           }
           confirmationText={
             system?.decommissioned
-              ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
-              : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. An admin can later reactivate the system if needed.`
+              ? `Update decommission details for "${system?.fismaname}" to ${formatDate(decommissionDate)}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
+              : `Are you sure you want to decommission "${system?.fismaname}" on ${formatDate(decommissionDate)}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. An admin can later reactivate the system if needed.`
           }
           open={openDecommissionAlert}
           onClose={() => setOpenDecommissionAlert(false)}
