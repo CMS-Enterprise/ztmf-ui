@@ -280,3 +280,34 @@ it('never re-filters the response client-side', async () => {
   })
   expect(screen.getByText('APPLICATIONS')).toBeInTheDocument()
 })
+
+// The sidebar's pillar headings, in DOM order.
+const sidebarPillars = () =>
+  Array.from(document.querySelectorAll('.MuiListSubheader-root')).map(
+    (el) => el.textContent
+  )
+
+it('renders pillars in the order the API served them', async () => {
+  // Deliberately not the CISA sequence. The client-side pillar sort deleted in
+  // ztmf-misc#393 would have re-ranked this to Identity, Networks, Data,
+  // CrossCutting, hiding whatever the API actually said.
+  mockCtx = makeCtx(CURRENT_CALL)
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({
+        data: {
+          data: questionsFor(['Data', 'CrossCutting', 'Identity', 'Networks']),
+        },
+      })
+    return Promise.resolve({ data: { data: [] } })
+  })
+  renderPage()
+
+  await waitFor(() => expect(sidebarPillars()).toHaveLength(4))
+  expect(sidebarPillars()).toEqual([
+    'DATA',
+    'CROSS CUTTING',
+    'IDENTITY',
+    'NETWORKS',
+  ])
+})

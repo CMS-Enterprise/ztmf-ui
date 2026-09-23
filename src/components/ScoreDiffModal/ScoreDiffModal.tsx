@@ -28,7 +28,6 @@ import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
-import { PILLAR_ORDER, PILLAR_FUNCTION_MAP } from '@/constants'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import type {
   datacall,
@@ -172,7 +171,10 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     fetchQuestions()
   }, [open, fismasystemid])
 
-  // Group and sort diff results by pillar order.
+  // Group diff results by pillar, ranked by the API's pillars.ordr.
+  // Rows already arrive in questionnaire order (scorediff.go sorts by
+  // pillars.ordr, questions.ordr, functions.ordr, functionid) and grouping
+  // preserves it, so entries need no sort of their own (ztmf-misc#393).
   // Falls back to a flat list under a single group when pillar info
   // is not yet available (e.g. questions fetch still in-flight).
   const groupedResults = useMemo(() => {
@@ -191,24 +193,12 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
       }
       groups.get(pillar.pillarid)!.entries.push(entry)
     })
-    const pillarRank = (name: string) => {
-      const i = PILLAR_ORDER.indexOf(name)
-      return i === -1 ? Number.MAX_SAFE_INTEGER : i
-    }
-    const fnRank = (pillarName: string, fnName: string) => {
-      const i = (PILLAR_FUNCTION_MAP[pillarName] ?? []).indexOf(fnName)
-      return i === -1 ? Number.MAX_SAFE_INTEGER : i
-    }
+    // pillarid breaks ties so two pillars sharing an order still render
+    // deterministically rather than in Map insertion order.
     const sorted = Array.from(groups.values()).sort(
-      (a, b) => pillarRank(a.pillar.pillar) - pillarRank(b.pillar.pillar)
+      (a, b) =>
+        a.pillar.order - b.pillar.order || a.pillar.pillarid - b.pillar.pillarid
     )
-    sorted.forEach((group) => {
-      group.entries.sort(
-        (a, b) =>
-          fnRank(group.pillar.pillar, a.function) -
-          fnRank(group.pillar.pillar, b.function)
-      )
-    })
     if (uncategorized.length > 0) {
       sorted.push({
         pillar: { pillar: 'Other', pillarid: -1, order: 999 },

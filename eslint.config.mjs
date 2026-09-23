@@ -63,6 +63,29 @@ export default tseslint.config(
 
       semi: 'off',
       'no-debugger': 'error',
+      // The questionnaire's order is served by the API (ztmf-misc#393). These
+      // name-keyed maps dropped any renamed or newly added function to the
+      // bottom of its pillar; keep them from coming back.
+      'no-restricted-imports': [
+        'error',
+        {
+          paths: [
+            {
+              name: '@/constants',
+              importNames: ['PILLAR_ORDER', 'PILLAR_FUNCTION_MAP'],
+              message:
+                'Questionnaire ordering comes from the API. Group with groupQuestionsByPillar and trust the row order.',
+            },
+          ],
+          patterns: [
+            {
+              group: ['**/utils/sortPillars', '**/utils/sortFunctions'],
+              message:
+                'Deleted in ztmf-misc#393. Group with groupQuestionsByPillar and trust the row order.',
+            },
+          ],
+        },
+      ],
       '@typescript-eslint/ban-ts-comment': 'off',
       '@typescript-eslint/no-explicit-any': 'warn',
       '@typescript-eslint/no-empty-object-type': 'off',

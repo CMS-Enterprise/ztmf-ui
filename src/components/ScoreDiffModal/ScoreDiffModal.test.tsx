@@ -59,6 +59,7 @@ const QUESTIONS: FismaQuestion[] = [
       function: 'Authentication-Users',
       description: '',
       datacenterenvironment: '',
+      order: 101,
     },
   },
   {
@@ -71,6 +72,7 @@ const QUESTIONS: FismaQuestion[] = [
       function: 'PolicyEnforcement',
       description: '',
       datacenterenvironment: '',
+      order: 201,
     },
   },
 ]
@@ -284,7 +286,7 @@ describe('ScoreDiffModal', () => {
     expect(await screen.findAllByText('No answer')).toHaveLength(1)
   })
 
-  it('renders pillar group headers ordered by PILLAR_ORDER', async () => {
+  it('renders pillar group headers ordered by pillar.order', async () => {
     // Devices entry arrives first; Identity should still render before Devices
     setupMocks([DEVICES_ENTRY, DIFF_ENTRY])
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
