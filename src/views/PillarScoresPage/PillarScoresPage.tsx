@@ -11,8 +11,10 @@ import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
-import { RouteNames } from '@/router/constants'
-import { encodeDatacallSlug } from '@/views/QuestionnairePage/deepLink'
+import {
+  encodeDatacallSlug,
+  questionnairePath,
+} from '@/views/QuestionnairePage/deepLink'
 import { hasSystemAccess } from '@/utils/userRoles'
 import type { ScoreAggregate } from '@/types'
 
@@ -164,9 +166,11 @@ export default function PillarScoresPage() {
             )}
             <Button
               component={RouterLink}
-              to={`/${RouteNames.QUESTIONNAIRE}/${systemAcronym.toLowerCase()}/${encodeDatacallSlug(currentDatacall?.datacall ?? '')}`}
+              to={questionnairePath(
+                systemId,
+                currentDatacall && encodeDatacallSlug(currentDatacall.datacall)
+              )}
               state={{
-                fismasystemid: systemId,
                 datacallid: currentDatacall?.datacallid,
                 datacall: currentDatacall?.datacall,
                 deadline: currentDatacall?.deadline,

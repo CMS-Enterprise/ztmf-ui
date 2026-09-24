@@ -49,6 +49,12 @@ const router = createHashRouter([
         errorElement: <ErrorBoundary />,
       },
       {
+        path: Routes.QUESTIONNAIRE_LEGACY,
+        id: RouteIds.QUESTIONNAIRE_LEGACY,
+        element: <QuestionnarePage />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
         path: Routes.SYSTEM_DETAIL,
         id: RouteIds.SYSTEM_DETAIL,
         element: <SystemDetailPage />,

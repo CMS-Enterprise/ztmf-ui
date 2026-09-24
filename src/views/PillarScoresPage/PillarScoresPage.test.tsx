@@ -88,7 +88,7 @@ it('routes to the selected data call questionnaire for this system', async () =>
         element: <PillarScoresPage />,
       },
       {
-        path: '/questionnaire/:fismaacronym/:datacallid?',
+        path: '/questionnaire/system/:fismasystemid/:datacallid?',
         element: <div>questionnaire</div>,
       },
     ],
@@ -100,9 +100,12 @@ it('routes to the selected data call questionnaire for this system', async () =>
     await screen.findByRole('link', { name: 'Questionnaire' })
   )
 
-  expect(router.state.location.pathname).toBe('/questionnaire/ssd-ex/FY2025_Q3')
+  // Keyed on the system id, so the URL alone names the system; route state
+  // only carries the chosen data call.
+  expect(router.state.location.pathname).toBe(
+    '/questionnaire/system/1002/FY2025_Q3'
+  )
   expect(router.state.location.state).toEqual({
-    fismasystemid: 1002,
     datacallid: 3,
     datacall: 'FY2025 Q3',
     deadline: '2025-05-07T12:00:00Z',

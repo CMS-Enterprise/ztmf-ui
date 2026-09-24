@@ -136,7 +136,7 @@ test('read mode exposes symmetric peer navigation and keeps the contextual pilla
   const questionnaire = screen.getByRole('link', { name: 'Questionnaire' })
   const pillarScores = screen.getByRole('link', { name: 'Pillar scores' })
 
-  expect(questionnaire).toHaveAttribute('href', '/questionnaire/ssd-ex')
+  expect(questionnaire).toHaveAttribute('href', '/questionnaire/system/42')
   expect(pillarScores).toHaveAttribute('href', '/systems/42/pillar-scores')
   expect(
     questionnaire.compareDocumentPosition(pillarScores) &

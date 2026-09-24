@@ -1,5 +1,6 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import _ from 'lodash'
 
@@ -546,7 +547,16 @@ export default function SystemDetailPage() {
         })
         return
       }
-      notify(parsed.message, 'error')
+      // Reactivation can be refused with a field map (ztmf#587: a live system
+      // took this one's acronym while it was decommissioned). The top-level
+      // error is just "invalid input", and the reactivate dialog has no
+      // acronym input to attach the reason to, so surface the reasons in the
+      // toast instead of the generic message.
+      const fieldReasons = Object.values(parsed.fieldErrors ?? {})
+      notify(
+        fieldReasons.length > 0 ? fieldReasons.join(' ') : parsed.message,
+        'error'
+      )
     }
   }
 
@@ -697,12 +707,11 @@ export default function SystemDetailPage() {
         variant="outlined"
         color="primary"
         // A real router link rather than onClick + navigate, so open-in-new-
-        // tab and copy-link work (ui#640). Same-tab clicks still carry the
-        // system id via route state; a new tab resolves it from the acronym
-        // in the URL (the questionnaire's deep-link path).
+        // tab and copy-link work (ui#640). The questionnaire route is keyed on
+        // fismasystemid, same as this page, so the URL alone opens this exact
+        // system and no route state is needed.
         component={RouterLink}
-        to={`/questionnaire/${system.fismaacronym.toLowerCase()}`}
-        state={{ fismasystemid: system.fismasystemid }}
+        to={questionnairePath(system.fismasystemid)}
         // Renders as a real <a>, so the CMS design system's global a:visited
         // rule would repaint the label purple after a click and break the
         // button look. Pin the link states to the button's own color.

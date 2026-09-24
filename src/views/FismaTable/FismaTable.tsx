@@ -23,8 +23,8 @@ import {
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import SearchIcon from '@mui/icons-material/Search'
 import { useNavigate, Link } from 'react-router-dom'
-import { RouteNames } from '@/router/constants'
 import { useContextProp } from '../Title/Context'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import VisibilityIcon from '@mui/icons-material/Visibility'
 import QuestionAnswerOutlinedIcon from '@mui/icons-material/QuestionAnswerOutlined'
 import BarChartIcon from '@mui/icons-material/BarChart'
@@ -551,17 +551,16 @@ export default function FismaTable({
   const [callPicker, setCallPicker] = useState<{
     anchor: HTMLElement
     fismasystemid: number
-    fismaacronym: string
     calls: datacall[]
   } | null>(null)
+  // The questionnaire route is keyed on fismasystemid (#732); the chosen call
+  // rides along in route state.
   const openQuestionnaire = (
     fismasystemid: number,
-    fismaacronym: string,
     call: datacall | undefined
   ) => {
-    navigate(`/${RouteNames.QUESTIONNAIRE}/${fismaacronym.toLowerCase()}`, {
+    navigate(questionnairePath(fismasystemid), {
       state: {
-        fismasystemid,
         datacallid: call?.datacallid ?? activeDataCallId,
         datacall: call?.datacall,
         deadline: call?.deadline,
@@ -894,14 +893,12 @@ export default function FismaTable({
                       setCallPicker({
                         anchor: event.currentTarget,
                         fismasystemid: params.row.fismasystemid,
-                        fismaacronym: params.row.fismaacronym,
                         calls: rowCallObjs,
                       })
                       return
                     }
                     openQuestionnaire(
                       params.row.fismasystemid,
-                      params.row.fismaacronym,
                       resolveQuestionnaireCall(
                         params.row.fismasystemid,
                         chosenCallMap,
@@ -1093,11 +1090,7 @@ export default function FismaTable({
             <MenuItem
               key={call.datacallid}
               onClick={() => {
-                openQuestionnaire(
-                  callPicker.fismasystemid,
-                  callPicker.fismaacronym,
-                  call
-                )
+                openQuestionnaire(callPicker.fismasystemid, call)
                 setCallPicker(null)
               }}
             >
