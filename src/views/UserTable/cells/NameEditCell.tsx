@@ -1,7 +1,12 @@
 import * as React from 'react'
 import Box from '@mui/material/Box'
 import InputBase from '@mui/material/InputBase'
-import { GridRenderEditCellParams, useGridApiContext } from '@mui/x-data-grid'
+import {
+  GridApi,
+  GridRenderEditCellParams,
+  useGridApiContext,
+  useGridSelector,
+} from '@mui/x-data-grid'
 import { colors, radius } from '@/theme/tokens'
 import { avatarColor, initialsFor } from '../helpers'
 
@@ -17,6 +22,15 @@ import { avatarColor, initialsFor } from '../helpers'
 export default function NameEditCell(props: GridRenderEditCellParams) {
   const { id, value, row } = props
   const apiRef = useGridApiContext()
+  // `value` is this cell's own (fullname) edit value. The email belongs to the
+  // hidden email column, so read its live edit value from the grid's edit
+  // state. `row` is the unedited row: binding the input to row.email snapped
+  // every keystroke back to the saved address, so nothing could be typed.
+  const emailEditValue = useGridSelector(
+    apiRef,
+    (state: GridApi['state']) =>
+      state.editRows[id]?.email?.value as string | undefined
+  )
   const onNameChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     apiRef.current.setEditCellValue({
       id,
@@ -91,7 +105,7 @@ export default function NameEditCell(props: GridRenderEditCellParams) {
         />
         <InputBase
           placeholder="Email"
-          value={row.email ?? ''}
+          value={emailEditValue ?? row.email ?? ''}
           onChange={onEmailChange}
           sx={{
             fontSize: 12,
