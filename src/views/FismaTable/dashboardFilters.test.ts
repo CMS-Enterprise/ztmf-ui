@@ -4,10 +4,11 @@ import {
   isNotUpdated,
   hasNoActiveFilters,
   isOpenCallInView,
+  applyDashboardSearch,
   EMPTY_DASHBOARD_FILTERS,
 } from './dashboardFilters'
 
-// Minimal rows — only the fields the filter reads. Cast through unknown, the
+// Minimal rows - only the fields the filter reads. Cast through unknown, the
 // repo's pattern for grid-row fixtures.
 const ROWS = [
   { fismasystemid: 1, datacenterenvironment: 'aws', opdiv_id: 10 },
@@ -203,4 +204,47 @@ test('a row whose environment is not in the category map is excluded when env fi
     filters({ environments: ['Cloud'] })
   )
   expect(out).toHaveLength(0)
+})
+
+describe('dashboard search', () => {
+  const rows = [
+    {
+      fismasystemid: 1,
+      fismaname: 'Imperial Star Destroyer',
+      fismaacronym: 'ISD',
+      mission: 'Galactic flagship',
+      component: '',
+      isso_name: 'Bevel Lemelisk',
+      opdiv_id: 10,
+    },
+    {
+      fismasystemid: 2,
+      fismaname: 'Death Star',
+      fismaacronym: 'DS',
+      mission: '',
+      component: 'Battle Station',
+      isso_name: 'Wilhuff Tarkin',
+      opdiv_id: 20,
+    },
+  ] as unknown as FismaSystemType[]
+  const opdivCodes = { 10: 'CMS', 20: 'HHS' }
+
+  test('matches visible system fields and OpDiv codes case-insensitively', () => {
+    expect(applyDashboardSearch(rows, 'destroyer', opdivCodes)).toEqual([
+      rows[0],
+    ])
+    expect(applyDashboardSearch(rows, 'tarkin', opdivCodes)).toEqual([rows[1]])
+    expect(applyDashboardSearch(rows, 'hhs', opdivCodes)).toEqual([rows[1]])
+  })
+
+  test('requires every search term to match the row', () => {
+    expect(applyDashboardSearch(rows, 'imperial cms', opdivCodes)).toEqual([
+      rows[0],
+    ])
+    expect(applyDashboardSearch(rows, 'imperial hhs', opdivCodes)).toEqual([])
+  })
+
+  test('returns the original rows when the search is blank', () => {
+    expect(applyDashboardSearch(rows, '   ', opdivCodes)).toBe(rows)
+  })
 })

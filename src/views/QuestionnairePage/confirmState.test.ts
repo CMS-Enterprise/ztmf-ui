@@ -1,5 +1,6 @@
 import {
   carryForwardState,
+  isQuestionComplete,
   canConfirmCarryForward,
   buildScoreByFunction,
   buildConfirmSummary,
@@ -43,7 +44,7 @@ describe('carryForwardState', () => {
     expect(carryForwardState(score({ status: 'done' }), true)).toBe('updated')
   })
 
-  it('renders nothing on a past call — historical rows are legitimately not_started forever', () => {
+  it('renders nothing on a past call - historical rows are legitimately not_started forever', () => {
     expect(carryForwardState(score({ status: 'not_started' }), false)).toBe(
       'none'
     )
@@ -59,6 +60,26 @@ describe('carryForwardState', () => {
   })
 })
 
+describe('isQuestionComplete', () => {
+  it('does not count an unconfirmed carried-forward answer on an open call', () => {
+    expect(isQuestionComplete(score({ status: 'not_started' }), true)).toBe(
+      false
+    )
+  })
+
+  it('counts an updated answer on an open call', () => {
+    expect(isQuestionComplete(score({ status: 'done' }), true)).toBe(true)
+  })
+
+  it('preserves row-based completion for closed calls and missing status data', () => {
+    expect(isQuestionComplete(score({ status: 'not_started' }), false)).toBe(
+      true
+    )
+    expect(isQuestionComplete(score(), true)).toBe(true)
+    expect(isQuestionComplete(undefined, true)).toBe(false)
+  })
+})
+
 describe('canConfirmCarryForward', () => {
   const confirmable = {
     state: 'unconfirmed' as const,
@@ -71,7 +92,7 @@ describe('canConfirmCarryForward', () => {
     expect(canConfirmCarryForward(confirmable)).toBe(true)
   })
 
-  it('hides while dirty — the edit is the explicit act and Next saves it', () => {
+  it('hides while dirty - the edit is the explicit act and Next saves it', () => {
     expect(canConfirmCarryForward({ ...confirmable, dirty: true })).toBe(false)
   })
 
@@ -114,7 +135,7 @@ describe('buildScoreByFunction', () => {
     expect(byFunction[7]?.functionoptionid).toBe(100)
   })
 
-  it('skips rows without functionoption — they cannot be attributed to a question', () => {
+  it('skips rows without functionoption - they cannot be attributed to a question', () => {
     expect(buildScoreByFunction({ 100: score() })).toEqual({})
   })
 })

@@ -175,7 +175,7 @@ describe('needsNotesUpdateForChoiceChange', () => {
   it('returns true when the choice changed and the notes were cleared', () => {
     // Wiping the notes counts as a "substantial change" from the prior text,
     // but the intent is that an explanation must ride along with the changed
-    // answer — an empty notes field cannot slip past the guard.
+    // answer - an empty notes field cannot slip past the guard.
     expect(
       needsNotesUpdateForChoiceChange({
         selectQuestionOption: 7,

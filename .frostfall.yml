@@ -52,12 +52,12 @@ tests:
     waitFor: '.MuiDataGrid-root'
 
   # The questionnaire, the app's one long editable form. DS-1 is the Death Star
-  # in the Empire seed, which has answers for the open call. The <h1> is the
-  # question text itself, so it only exists once the questionnaire payload has
-  # rendered - no separate anchor element needed.
+  # in the Empire seed, which has answers for the open call. Wait for a native
+  # answer radio, which only renders after the current question's choices have
+  # loaded; PageHeader's h1 renders earlier while that payload is still pending.
   - id: questionnaire
     path: '/#/questionnaire/DS-1'
-    waitFor: 'h1'
+    waitFor: 'input[name="radio-choices"]'
 
   # System detail page incl. the ZTMF Insights enrichment cards.
   # 1002 = the Executor in the Empire seed: active, sdl_sync_enabled, and has
@@ -70,22 +70,12 @@ tests:
     path: '/#/systems/1002'
     waitFor: '#enrichment-synced-at'
 
-  - id: pillar-scores-modal
-    path: /
-    scan: false
-    steps:
-      - waitFor: '.MuiDataGrid-root'
-      - click: '[aria-label^="View Pillar Scores"]'
-      # The title only exists once the modal is open AND scores have loaded.
-      - waitFor: '#pillar-scores-modal-title'
-      # The title mounts when the Dialog's fade STARTS. Scanning mid-fade
-      # measures text blended with the backdrop, which reads as a contrast
-      # failure that disappears on the next run - not something to hand an
-      # enforcing build. MUI's enter transition is 225ms.
-      - wait: 400ms
-      - scan:
-          label: modal-open
-          scope: '[role=dialog]'
+  # Dedicated redesigned page (the old pillar-scores modal no longer exists).
+  # The radar's labelled image mounts only after the seeded score payload has
+  # loaded, so the scan covers the populated page rather than its spinner.
+  - id: pillar-scores
+    path: '/#/systems/1002/pillar-scores'
+    waitFor: '[role="img"][aria-label^="Radar chart"]'
 
 profiles:
   # CI attaches to a running vite server just like local runs do - the app

@@ -49,7 +49,7 @@ function maturityLabel(score?: number | null): string | null {
 }
 
 // Disclaimer on the "Aligns with ARS Controls" section. Alignment is a mapping of
-// automated evidence to ARS controls — not an assessed control determination.
+// automated evidence to ARS controls - not an assessed control determination.
 // CFACTS stays the system of record, so a green chip here must not be read as the
 // control being satisfied for authorization purposes.
 const ARS_ALIGN_DISCLAIMER =
@@ -57,10 +57,10 @@ const ARS_ALIGN_DISCLAIMER =
 
 // Panel-level framing for everything the panel shows. The findings are automated
 // evidence meant to sharpen an ISSO's own assessment, not a maturity
-// determination — this stays visible whether or not the details drawer is open so
+// determination - this stays visible whether or not the details drawer is open so
 // the framing can never be missed by scrolling past a collapsed section.
 export const ISSO_DETERMINATION_DISCLAIMER =
-  "These automated findings are intended to give ISSOs better tools for assessing their system's maturity. They are decision-support only — the final maturity determination is the ISSO's responsibility."
+  "These automated findings are intended to give ISSOs better tools for assessing their system's maturity. They are decision-support only - the final maturity determination is the ISSO's responsibility."
 
 // Suggested-pill tint keyed by score. Mirrors the prototype's trad/init/adv/opt
 // palette. Unknown/blank score renders neutral.
@@ -83,8 +83,8 @@ type SourceConfig = {
 // solid vs greyed chip; it is derived from the source's own availability flag /
 // key presence rather than assuming every source contributed.
 function buildSources(p: InsightPayload): SourceConfig[] {
-  // Chip order MUST match the drawer's section order (below). Kion sits last — it
-  // usually has the most checks — with SecurityHub second-to-last; CFACTS leads
+  // Chip order MUST match the drawer's section order (below). Kion sits last - it
+  // usually has the most checks - with SecurityHub second-to-last; CFACTS leads
   // because its ARS-control coverage renders first in the drawer.
   return [
     {
@@ -137,7 +137,7 @@ function isFloor(floorSource: string | null | undefined, label: string) {
 }
 
 // Score badge inside a source chip. Shows the maturity WORD ("Initial"), not the
-// bare number — a numeric badge next to a source name reads as a finding count
+// bare number - a numeric badge next to a source name reads as a finding count
 // ("2 findings") rather than the maturity tier it is. Fixed width so every badge
 // is the same size, wide enough for the longest label ("Traditional").
 function ScoreBadge({
@@ -150,8 +150,8 @@ function ScoreBadge({
   active: boolean
 }) {
   const label = active
-    ? maturityLabel(score) ?? (score != null ? `Score ${score}` : '—')
-    : '—'
+    ? maturityLabel(score) ?? (score != null ? `Score ${score}` : '-')
+    : '-'
   return (
     <Box
       component="span"
@@ -168,8 +168,8 @@ function ScoreBadge({
         color: '#fff',
         lineHeight: 1,
         flexShrink: 0,
-        // Inactive badge uses a mid grey (not #ccc) so the white "—" clears
-        // WCAG AA (4.5:1) — #ccc failed at ~1.6:1.
+        // Inactive badge uses a mid grey (not #ccc) so the white "-" clears
+        // WCAG AA (4.5:1) - #ccc failed at ~1.6:1.
         bgcolor: active ? color : '#6c757d',
       }}
     >
@@ -181,7 +181,7 @@ function ScoreBadge({
 function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
   const title = src.active
     ? `${src.label}${src.score != null ? `: ${maturityLabel(src.score) ?? `Score ${src.score}`}` : ''}${
-        floor ? ' — drives the suggested score' : ''
+        floor ? ' - drives the suggested score' : ''
       }`
     : `${src.label}: no data for this system`
 
@@ -202,7 +202,7 @@ function SourceChip({ src, floor }: { src: SourceConfig; floor: boolean }) {
           fontWeight: 600,
           bgcolor: floor ? '#fffdf5' : '#fff',
           border: floor ? '1.5px solid #b08d00' : '1px solid #ddd',
-          // Inactive label a compliant mid grey at full opacity — the old
+          // Inactive label a compliant mid grey at full opacity - the old
           // #888 @ 0.4 opacity blended to ~3:1 on white and failed AA.
           color: floor ? '#7d6608' : src.active ? '#333' : '#595959',
         }}
@@ -275,13 +275,13 @@ export function OptionInsightBadges({
           // Names the ISSO rather than "you": the badge renders for whoever is
           // viewing the questionnaire (ISSM, admin, read-only), so second person
           // would assign the determination to the wrong role.
-          title="The answer the automated evidence points to — the final maturity determination is the ISSO's"
+          title="The answer the automated evidence points to - the final maturity determination is the ISSO's"
           placement="top"
           arrow
         >
           <Box
             component="span"
-            aria-label="ZTMF Insights — the answer the automated evidence points to; the final maturity determination is the ISSO's"
+            aria-label="ZTMF Insights - the answer the automated evidence points to; the final maturity determination is the ISSO's"
             sx={{
               px: 0.75,
               py: 0.125,
@@ -309,7 +309,7 @@ export function OptionInsightBadges({
         >
           <Box
             component="span"
-            aria-label={`${priorLabel} — the answer you gave in a prior data call`}
+            aria-label={`${priorLabel} - the answer you gave in a prior data call`}
             sx={{
               px: 0.75,
               py: 0.125,
@@ -340,7 +340,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
 
   const sources = buildSources(payload)
   // "Based on" is derived from the active source chips, NOT the backend
-  // evidence_sources string — that string still lists "ARS", which is the control
+  // evidence_sources string - that string still lists "ARS", which is the control
   // catalog, not a source. Deriving keeps the line consistent with the chip row.
   const basedOnSources = sources.filter((s) => s.active).map((s) => s.label)
   const suggestedScore = payload.suggested_score
@@ -391,10 +391,10 @@ function InsightsPanelInner({ payload, questionId }: Props) {
   // shape + level). When a source ships its passing array we render an ARS-style
   // pass/fail block ("N of M checks passed" + ✓/✗ chips); until then it falls
   // back to the plain failing FindingRows. Generic over all three finding-sources
-  // — Kion is live, sechub/hardenize light up when their arrays land, no code
+  // - Kion is live, sechub/hardenize light up when their arrays land, no code
   // change. `hasPassing` keys on the array being PRESENT (even empty) so an
   // all-failing source with a shipped passing array still reads "0 of M".
-  // Feed section order matches the chip order: Hardenize, SecurityHub, Kion — Kion
+  // Feed section order matches the chip order: Hardenize, SecurityHub, Kion - Kion
   // last because it usually has the most checks.
   const feedSources = (
     [
@@ -414,7 +414,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
   const anyFeedBlock = feedSources.some((s) => s.hasPassing)
 
   // Every source chip that carries data must have a matching section explaining its
-  // score — a scored chip with no section reads as "passed, but no reason why".
+  // score - a scored chip with no section reads as "passed, but no reason why".
   // Hardenize renders a section whenever it has data (even clean, where the reason
   // IS the absence of failures); CFACTS renders its reasoning/auth (or, failing
   // that, its score) whenever it has any of its own signal.
@@ -422,7 +422,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
     payload.has_hardenize_data === true ||
     payload.hardenize_suggested_score != null
   // The CFACTS chip scores off cfacts_suggested_score ?? ars_control_score, so the
-  // section falls back the same way — but only to ars_control_score when there's no
+  // section falls back the same way - but only to ars_control_score when there's no
   // ARS Controls section (controlsTotal === 0) to already serve as the reason.
   // Otherwise a scored CFACTS chip could have no matching section at all.
   const cfactsScore =
@@ -456,7 +456,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
         my: 2,
       }}
     >
-      {/* FIPS baseline strip — lives at the top of the insights panel so it's
+      {/* FIPS baseline strip - lives at the top of the insights panel so it's
           gated on insight data like everything else here (no insight → no
           panel → no strip). Only shown when there's headroom above the
           baseline (ceiling < 4). */}
@@ -513,7 +513,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
             >
               {maturityLabel(baselineCeiling(payload.fips_ceiling))}
             </Box>
-            . Higher maturity levels are available — teams that go above
+            . Higher maturity levels are available - teams that go above
             baseline are encouraged to document what&rsquo;s driving that
             maturity.
           </Box>
@@ -583,7 +583,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
 
       <Collapse in={open} unmountOnExit>
         <Box sx={{ mt: 1.5, pt: 1.5, borderTop: '1px solid #e0e4f0' }}>
-          {/* "Based on" leads the drawer — the active source chips that produced
+          {/* "Based on" leads the drawer - the active source chips that produced
               this insight, before any per-source detail. */}
           {basedOnSources.length > 0 && (
             <Typography sx={{ fontSize: 12, color: '#555', mb: 0.75 }}>
@@ -594,7 +594,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
             </Typography>
           )}
 
-          {/* CFACTS — its own section. Shown whenever CFACTS has any of its own
+          {/* CFACTS - its own section. Shown whenever CFACTS has any of its own
               signal (reasoning, auth methods, or a score) so a scored CFACTS chip
               always has a matching "why". */}
           {cfactsText && (
@@ -628,7 +628,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
             // Hardenize (the only non-block source): a scored chip must have a
             // section. Failing findings render as rows (with affected domains).
             // When there are none but the source has data, still render the section
-            // and state WHY it passed — scanned clean — rather than showing nothing.
+            // and state WHY it passed - scanned clean - rather than showing nothing.
             if (s.failing.length > 0) {
               return s.failing.map((f, i) => (
                 <FindingRow
@@ -648,15 +648,15 @@ function InsightsPanelInner({ payload, questionId }: Props) {
                 <Box component="span" sx={{ fontWeight: 600, color: '#333' }}>
                   {s.label}:
                 </Box>{' '}
-                no failing findings — scanned clean
+                no failing findings - scanned clean
                 {hzLabel ? `, scored ${hzLabel}` : ''}
               </Typography>
             )
           })}
 
-          {/* ARS Controls — the cross-source control union, at the bottom and
+          {/* ARS Controls - the cross-source control union, at the bottom and
               framed as alignment: the ARS controls the evidence touches, each
-              rolled up weakest-link. No "N of M" count — the union denominator is
+              rolled up weakest-link. No "N of M" count - the union denominator is
               not the official ARS total, so the chips carry the state instead. */}
           {controlsTotal > 0 && (
             <Box sx={{ mb: 0.75 }}>
@@ -736,7 +736,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
         </Box>
       </Collapse>
 
-      {/* ISSO determination disclaimer — persistent, outside the Collapse, so it
+      {/* ISSO determination disclaimer - persistent, outside the Collapse, so it
           is shown with the findings whether or not the drawer is open. Colors are
           an explicit fg/bg pair rather than inherited text so the note keeps its
           contrast wherever the panel is embedded, and it carries a border (not
@@ -765,7 +765,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
           sx={{
             fontSize: 11.5,
             lineHeight: 1.5,
-            // 6.6:1 on the panel's #f8f9fe — comfortably AA for small text.
+            // 6.6:1 on the panel's #f8f9fe - comfortably AA for small text.
             color: '#4a4f5c',
           }}
         >
@@ -779,7 +779,7 @@ function InsightsPanelInner({ payload, questionId }: Props) {
 // Error boundary around the panel: a render throw (e.g. an opaque payload field
 // arriving in an unexpected shape) degrades to rendering nothing instead of
 // bubbling to the route's errorElement and replacing the entire questionnaire
-// with an error page. The panel is purely additive — failing to render it must
+// with an error page. The panel is purely additive - failing to render it must
 // never take down the page.
 class InsightPanelBoundary extends React.Component<
   { children: React.ReactNode },
@@ -803,8 +803,8 @@ export default function InsightsPanel(props: Props) {
 }
 
 // A single ARS control ID pill. Three states: satisfied (green ✓), unsatisfied
-// (grey ○ — informational, applicable-but-not-satisfied, no alarm), failing
-// (red ✗ — a source found the control failing).
+// (grey ○ - informational, applicable-but-not-satisfied, no alarm), failing
+// (red ✗ - a source found the control failing).
 type ControlChipVariant = 'satisfied' | 'unsatisfied' | 'failing' | 'conflict'
 const CONTROL_CHIP_STYLE: Record<
   ControlChipVariant,
@@ -842,16 +842,16 @@ const CONTROL_CHIP_STYLE: Record<
 // Plain-language reason behind each ARS chip's state, surfaced on hover and as the
 // chip's accessible name. The rollup assigns a control exactly one of satisfied /
 // not-satisfied / failing (weakest-link across sources), so the variant fully
-// determines why it's coloured the way it is — no per-control text needed. Ordered
+// determines why it's coloured the way it is - no per-control text needed. Ordered
 // passed / not-assessed / failed to match ✓ / ○ / ✗.
 const CONTROL_CHIP_HELP: Record<ControlChipVariant, string> = {
   satisfied:
-    'Satisfied — an evidence source passed this control and none failed it.',
+    'Satisfied - an evidence source passed this control and none failed it.',
   unsatisfied:
-    'Not satisfied — applies to this question (per CFACTS) but no source has confirmed it satisfied.',
-  failing: 'Failing — an evidence source found this control failing.',
+    'Not satisfied - applies to this question (per CFACTS) but no source has confirmed it satisfied.',
+  failing: 'Failing - an evidence source found this control failing.',
   conflict:
-    'Sources disagree — at least one passed this control and at least one failed it. Counted as failing (weakest-link); review the failing check.',
+    'Sources disagree - at least one passed this control and at least one failed it. Counted as failing (weakest-link); review the failing check.',
 }
 
 function ControlChip({
@@ -862,7 +862,7 @@ function ControlChip({
 }: {
   id: string
   variant: ControlChipVariant
-  // When set, the chip label carries a hover with the fuller context — used by
+  // When set, the chip label carries a hover with the fuller context - used by
   // the feed pass/fail chips, whose label is the check name and whose hover holds
   // the description, mapped control, and met/failed state. May be a rich
   // (multi-line) node.
@@ -882,12 +882,12 @@ function ControlChip({
       component="span"
       // role="img" + aria-label carries the pass/fail context to screen readers:
       // the ✓/○/✗ marker and colour are otherwise the only place the state lives
-      // and neither is exposed to AT. A role is required — aria-label on a
+      // and neither is exposed to AT. A role is required - aria-label on a
       // role-less generic span is not reliably announced (NVDA/VoiceOver).
       role="img"
       aria-label={effectiveAriaLabel}
       // tabIndex makes the chip keyboard-focusable so the MUI Tooltip (which
-      // listens for focus, not just hover) reaches keyboard-only sighted users —
+      // listens for focus, not just hover) reaches keyboard-only sighted users -
       // the hover text would otherwise be mouse-only (508 / WCAG 1.4.13, 2.1.1).
       tabIndex={0}
       sx={{
@@ -947,12 +947,12 @@ function CheckTooltip({
   const slug = asText(finding?.id) ?? asText(finding?.title)
   // The chip label now carries the check name (its code/slug), so the hover leads
   // with the human sentence, then the control it maps to, its severity, and the
-  // met/failed state — what a reviewer needs to judge the finding. Kion puts that
+  // met/failed state - what a reviewer needs to judge the finding. Kion puts that
   // sentence in `description`, SecurityHub in `title`; lead with whichever is
   // present so both feeds read the same. The slug is only a last-resort title so
   // the hover never names nothing.
   const name = asText(finding?.description) ?? asText(finding?.title)
-  // "How to fix" — the same remediation text FindingRow shows. Kion/SecurityHub
+  // "How to fix" - the same remediation text FindingRow shows. Kion/SecurityHub
   // render as chips now, so the card that used to carry this is only reached by
   // Hardenize; without it here the remediation is unreachable for those sources.
   // It also carries the substance when a dictionary description is a bare label
@@ -975,7 +975,7 @@ function CheckTooltip({
     .filter(Boolean)
     .join(' · ')
   // Affected hosts (Hardenize-only). When Hardenize renders as chips, its findings'
-  // domains must live in the hover — chips have no room for the FindingRow's "N
+  // domains must live in the hover - chips have no room for the FindingRow's "N
   // domains" affordance, so without this the affected hosts would be lost. Kion and
   // SecurityHub carry no instances, so this is empty for them.
   const domains = (Array.isArray(finding?.instances) ? finding.instances : [])
@@ -1015,7 +1015,7 @@ function CheckTooltip({
               sx={{ fontSize: 10, lineHeight: 1.5, opacity: 0.85 }}
             >
               {d.domain}
-              {d.detail ? ` — ${d.detail}` : ''}
+              {d.detail ? ` - ${d.detail}` : ''}
             </Box>
           ))}
         </Box>
@@ -1024,19 +1024,19 @@ function CheckTooltip({
   )
 }
 
-// ARS-style pass/fail block for one finding-source — the SINGLE rendering path
+// ARS-style pass/fail block for one finding-source - the SINGLE rendering path
 // for every finding-source, so all questions look uniform (no fallback to the
 // old verbose FindingRow list). One ✓/✗ chip per check: passing from
-// `{source}_passing` (green — no finding), failing from `findings.{source}`
-// (red — has a finding), labeled by the check name (finding slug) with the
+// `{source}_passing` (green - no finding), failing from `findings.{source}`
+// (red - has a finding), labeled by the check name (finding slug) with the
 // description + mapped control + met/failed state in the hover. Reviewers asked
 // to see the finding itself, not the control it rolls up to, so the name is on
-// the chip and the control moved into the tooltip. Rollup is per-check — the
+// the chip and the control moved into the tooltip. Rollup is per-check - the
 // same control can repeat because each check is distinct.
 //
 // Header adapts to what shipped: when the passing array is present we can state
 // the full "N of M checks passed"; when it's absent (source has only failing
-// findings, passing not yet emitted) we DON'T fabricate a pass count — we label
+// findings, passing not yet emitted) we DON'T fabricate a pass count - we label
 // the failing checks honestly instead. Both render the same chip row, so the
 // look is uniform regardless. Normalizes to the full count everywhere once the
 // backend emits `{source}_passing` on every question.
@@ -1069,7 +1069,7 @@ function FeedCheckBlock({
   // page: InsightPayload itself carries no question identity (fismasystemid /
   // questionid live on the Insight wrapper), but the callsite that renders the
   // panel has it. Deriving a key from the rendered check set instead would alias
-  // whenever two questions share the same checks — exactly the leak being fixed.
+  // whenever two questions share the same checks - exactly the leak being fixed.
   //
   // Adjusted during render rather than in an effect: an effect runs after commit,
   // so the next question would paint expanded for a frame before collapsing, and
@@ -1099,12 +1099,12 @@ function FeedCheckBlock({
     const nist = asText(f?.nist_controls)
     const slug = asText(f?.id) ?? asText(f?.title)
     const desc = asText(f?.description) ?? asText(f?.title)
-    // Fold pass/fail into the accessible name — the ✓/✗ + color is the only other
+    // Fold pass/fail into the accessible name - the ✓/✗ + color is the only other
     // place that distinction lives, and neither is exposed to a screen reader (508).
     // Remediation joins it too: the chip carries its own aria-label, so the
     // tooltip's node content is never announced, and without this the "how to fix"
     // text the hover shows would be sighted-only.
-    // Failing checks only, matching CheckTooltip — see the note there.
+    // Failing checks only, matching CheckTooltip - see the note there.
     const remediation =
       !pass && CONFIG.INSIGHTS_SUGGEST_FIX_ENABLED
         ? asText(f?.remediation)
@@ -1116,11 +1116,11 @@ function FeedCheckBlock({
       remediation ? `How to fix: ${remediation}` : undefined,
     ]
       .filter(Boolean)
-      .join(' — ')
+      .join(' - ')
     return (
       <ControlChip
         key={key}
-        id={slug ?? nist ?? '—'}
+        id={slug ?? nist ?? '-'}
         variant={pass ? 'satisfied' : 'failing'}
         tooltip={
           <CheckTooltip finding={f} pass={pass} inferredPass={inferredPass} />
@@ -1178,7 +1178,7 @@ function FeedCheckBlock({
   )
 }
 
-// Hardenize instance `detail` is inconsistent — a stringified JSON object
+// Hardenize instance `detail` is inconsistent - a stringified JSON object
 // ({"Error message":"..."}), plain text ("Dangling DNS record: ..."), or empty
 // ({}). Surface something readable: JSON objects → their values joined; plain
 // text as-is; empty → nothing.
@@ -1192,37 +1192,37 @@ function formatHardenizeDetail(detail?: string): string | undefined {
       return vals.length ? vals.join('; ') : undefined
     }
   } catch {
-    /* not JSON — fall through to raw text */
+    /* not JSON - fall through to raw text */
   }
   return t
 }
 
 // TEMPORARY stopgap severity glossary shown on hover when a finding has no
 // dictionary description yet. The long-term home for this copy is the findings
-// dictionary / Snowflake view (ztmf-insights#32) — remove this map once the
+// dictionary / Snowflake view (ztmf-insights#32) - remove this map once the
 // dictionary covers findings and the scoring-treatment classification lands.
 const SEVERITY_HELP: Record<string, string> = {
   error:
-    'A failing check — the scanner found a condition that does not meet the control. Review the finding and affected hosts; some (e.g. connection failures) may reflect reachability rather than a security weakness.',
-  critical: 'A critical failing check — remediate urgently.',
-  high: 'A high-severity failing check — prioritize remediation.',
+    'A failing check - the scanner found a condition that does not meet the control. Review the finding and affected hosts; some (e.g. connection failures) may reflect reachability rather than a security weakness.',
+  critical: 'A critical failing check - remediate urgently.',
+  high: 'A high-severity failing check - prioritize remediation.',
   warning: 'A moderate issue worth addressing, lower priority than an error.',
   medium: 'A moderate issue worth addressing, lower priority than high/error.',
   low: 'A low-severity or informational finding.',
   notice:
-    'An informational notice — a best-practice observation, not a failing check.',
+    'An informational notice - a best-practice observation, not a failing check.',
   powerup:
-    'A recommended enhancement, not a failure — an opportunity to further harden this host beyond the baseline.',
+    'A recommended enhancement, not a failure - an opportunity to further harden this host beyond the baseline.',
   inconclusive:
-    'Inconclusive — the scanner could not reach the host to test it, often because the domain is private/internal or retired. This is not a pass or a fail and does not count against the score.',
+    'Inconclusive - the scanner could not reach the host to test it, often because the domain is private/internal or retired. This is not a pass or a fail and does not count against the score.',
   unknown:
-    'Inconclusive — the scanner could not reach the host to test it, often because the domain is private/internal or retired. This is not a pass or a fail and does not count against the score.',
+    'Inconclusive - the scanner could not reach the host to test it, often because the domain is private/internal or retired. This is not a pass or a fail and does not count against the score.',
 }
 function severityHelp(sev?: string): string | undefined {
   return SEVERITY_HELP[(sev ?? '').toLowerCase()]
 }
 
-// Plain-text words for a control's net state and each evidence line — shared by the
+// Plain-text words for a control's net state and each evidence line - shared by the
 // hover and the accessible name so sighted and AT users read the same thing.
 const CONTROL_STATE_WORD: Record<ControlRollupState, string> = {
   satisfied: 'satisfied',
@@ -1241,10 +1241,10 @@ function controlEvidenceLine(e: ControlEvidence): string {
 // its own line (below), but a screen reader gets one string per evidence entry,
 // so it has to ride along here or it would be sighted-only.
 function controlEvidenceSpoken(e: ControlEvidence): string {
-  return `${controlEvidenceLine(e)}${e.description ? ` — ${e.description}` : ''}`
+  return `${controlEvidenceLine(e)}${e.description ? ` - ${e.description}` : ''}`
 }
 // Accessible name folds the net state, the conflict note, and every source line
-// into one string — the ✓/○/✗/⚠ marker and colour are otherwise the only place the
+// into one string - the ✓/○/✗/⚠ marker and colour are otherwise the only place the
 // state and its provenance live, and neither reaches a screen reader (508).
 function controlAriaLabel(c: ControlRollup): string {
   const head = c.conflict
@@ -1264,7 +1264,7 @@ function ControlTooltip({ control }: { control: ControlRollup }) {
       </Box>
       {control.conflict && (
         <Box sx={{ fontSize: 10, mt: 0.5, color: '#ffd9a0', lineHeight: 1.5 }}>
-          ⚠ Sources disagree — counted as {CONTROL_STATE_WORD[control.state]}{' '}
+          ⚠ Sources disagree - counted as {CONTROL_STATE_WORD[control.state]}{' '}
           (weakest-link). Review the failing check to resolve.
         </Box>
       )}
@@ -1276,7 +1276,7 @@ function ControlTooltip({ control }: { control: ControlRollup }) {
           >
             {controlEvidenceLine(e)}
             {/* The sentence gets its own indented line rather than being tacked
-                onto the slug line — a control with several evidence entries would
+                onto the slug line - a control with several evidence entries would
                 otherwise wrap into an unreadable block, and the slug is what a
                 reviewer scans for first. */}
             {e.description && (
@@ -1300,7 +1300,7 @@ function FindingRow({
   source: string
   finding: InsightFinding
 }) {
-  // The payload is opaque — a findings array could contain a null/non-object
+  // The payload is opaque - a findings array could contain a null/non-object
   // element. Guard so it degrades to nothing instead of throwing on field
   // access (which the boundary would turn into a blanked panel).
   if (!finding || typeof finding !== 'object') return null
@@ -1330,7 +1330,7 @@ function FindingRow({
         {domains.map((d, i) => (
           <Box key={`${d.domain}-${i}`} sx={{ fontSize: 11, lineHeight: 1.5 }}>
             {d.domain}
-            {d.detail ? ` — ${d.detail}` : ''}
+            {d.detail ? ` - ${d.detail}` : ''}
           </Box>
         ))}
       </Box>

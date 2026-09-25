@@ -235,7 +235,7 @@ test('scoped caller: a caller-scope fetch failure disables the modal and blocks 
 
   await screen.findByText(ERROR_MESSAGES.tryAgain)
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
-  expect(screen.getByRole('combobox')).toBeDisabled()
+  expect(screen.getByLabelText('Search OpDivs')).toBeDisabled()
   expect(mock.history.put).toHaveLength(0)
 })
 
@@ -250,7 +250,9 @@ test('scoped caller: an empty caller scope blocks save without a fetch error', a
   renderModal()
 
   // Picker enabled proves the load finished (not a loading/fetchFailed state)...
-  await waitFor(() => expect(screen.getByRole('combobox')).toBeEnabled())
+  await waitFor(() =>
+    expect(screen.getByLabelText('Search OpDivs')).toBeEnabled()
+  )
   // ...but Save stays disabled because the caller has no scope to grant from.
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
   expect(mock.history.put).toHaveLength(0)
@@ -305,8 +307,9 @@ test('labels a grant to a non-assignable OpDiv from the full label map', async (
 
   renderModal()
 
-  // The chip renders the label map entry, not a blank chip or a raw id.
-  expect(await screen.findByText('ZZZ - Parent Division')).toBeInTheDocument()
+  // The row renders the label map entry (code badge + name), not a raw id.
+  expect(await screen.findByText('ZZZ')).toBeInTheDocument()
+  expect(screen.getByText('Parent Division')).toBeInTheDocument()
 })
 
 // A grant to an OpDiv missing from the label map falls back to "OpDiv #{id}"
@@ -319,10 +322,11 @@ test('falls back to "OpDiv #{id}" for a grant missing from the label map', async
   expect(await screen.findByText('OpDiv #77')).toBeInTheDocument()
 })
 
-// A non-assignable grant (99) resolves as a chip but must NOT be offered in the
-// dropdown - filterOptions narrows the selectable set to the assignable OpDivs
-// so it can't be re-selected.
-test('dropdown excludes a non-assignable grant even though it chips', async () => {
+// The list is the union of assignable OpDivs and current grants: a
+// non-assignable grant (99) renders because the target holds it, and once the
+// row is unchecked locally it cannot be re-added by any other row - nothing
+// non-assignable and un-granted is ever offered.
+test('list offers assignable OpDivs plus current grants only', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [99] })
 
   renderModal()
@@ -330,13 +334,11 @@ test('dropdown excludes a non-assignable grant even though it chips', async () =
   // narrowed against the caller's fresh scope.
   await waitForReady()
 
-  // Open the dropdown.
-  await userEvent.click(screen.getByRole('combobox'))
-
-  // Assignable OpDivs are offered...
-  expect(await screen.findByRole('option', { name: /AAA/ })).toBeInTheDocument()
-  // ...but the non-assignable grant is filtered out of the selectable options.
-  expect(screen.queryByRole('option', { name: /ZZZ/ })).not.toBeInTheDocument()
+  // Assignable OpDivs are offered as rows...
+  expect(screen.getByText('Division A')).toBeInTheDocument()
+  expect(screen.getByText('Division B')).toBeInTheDocument()
+  // ...and nothing outside assignable + granted appears (id 77 has no grant).
+  expect(screen.queryByText('OpDiv #77')).not.toBeInTheDocument()
 })
 
 // A grant outside the caller's own backend scope (99 here is held by the target
@@ -350,15 +352,17 @@ test('scoped caller: a chip outside the caller scope is not deletable', async ()
   renderModal()
   await waitForReady()
 
-  const inScope = screen
-    .getByText('AAA - Division A')
-    .closest('.MuiChip-root') as HTMLElement
-  const outOfScope = screen
-    .getByText('ZZZ - Parent Division')
-    .closest('.MuiChip-root') as HTMLElement
+  // Rows render as labelled checkboxes; a locked (out-of-scope) row disables
+  // its checkbox so the grant cannot be toggled into a silent no-op.
+  const inScope = await screen.findByRole('checkbox', {
+    name: /division a/i,
+  })
+  const outOfScope = screen.getByRole('checkbox', {
+    name: /parent division/i,
+  })
 
-  expect(inScope.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
-  expect(outOfScope.querySelector('.MuiChip-deleteIcon')).toBeNull()
+  expect(inScope).toBeEnabled()
+  expect(outOfScope).toBeDisabled()
 })
 
 // A caller-held grant that is merely non-assignable now (99 in callerGrantIds
@@ -371,11 +375,11 @@ test('scoped caller: a caller-held but non-assignable chip stays deletable', asy
   renderModal()
   await waitForReady()
 
-  const heldNonAssignable = screen
-    .getByText('ZZZ - Parent Division')
-    .closest('.MuiChip-root') as HTMLElement
+  const heldNonAssignable = await screen.findByRole('checkbox', {
+    name: /parent division/i,
+  })
 
-  expect(heldNonAssignable.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
+  expect(heldNonAssignable).toBeEnabled()
 })
 
 // An unscoped caller's removal really revokes, so their out-of-scope chip must
@@ -385,11 +389,11 @@ test('unscoped caller: an out-of-scope grant chip stays deletable', async () => 
 
   renderModal({ enforceCallerScope: false })
 
-  const outOfScope = (await screen.findByText('ZZZ - Parent Division')).closest(
-    '.MuiChip-root'
-  ) as HTMLElement
+  const outOfScope = await screen.findByRole('checkbox', {
+    name: /parent division/i,
+  })
 
-  expect(outOfScope.querySelector('.MuiChip-deleteIcon')).not.toBeNull()
+  expect(outOfScope).toBeEnabled()
 })
 
 test('success: modal closes and onChanged fires after save', async () => {
@@ -465,10 +469,9 @@ test('a reconnect mid-edit keeps the picker and Save usable', async () => {
     mock.history.get.filter((g) => g.url === `/users/${USER_ID}/assignedopdivs`)
   expect(targetGets()).toHaveLength(1)
 
-  await user.click(screen.getByRole('combobox'))
-  await user.click(await screen.findByRole('option', { name: /BBB/ }))
-  await user.keyboard('{Escape}')
-  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
+  const bbbCheckbox = screen.getByRole('checkbox', { name: /Division B/i })
+  await user.click(bbbCheckbox)
+  expect(bbbCheckbox).toBeChecked()
 
   // Coming back online must not restart the load: the modal disables the
   // picker and Save for any in-flight read, which would strand the edit.
@@ -480,13 +483,13 @@ test('a reconnect mid-edit keeps the picker and Save usable', async () => {
 
   expect(targetGets()).toHaveLength(1)
   expect(screen.getByRole('button', { name: /^save$/i })).toBeEnabled()
-  expect(screen.getByRole('combobox')).toBeEnabled()
-  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
+  expect(bbbCheckbox).toBeEnabled()
+  expect(bbbCheckbox).toBeChecked()
 })
 
 test('save button is disabled while the request is in flight', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(200, { data: [] })
-  // Never resolves — keeps the request in-flight so we can assert the disabled state.
+  // Never resolves - keeps the request in-flight so we can assert the disabled state.
   mock.onPut(`/users/${USER_ID}/opdivs`).reply(() => new Promise(() => {}))
 
   renderModal()
@@ -499,7 +502,7 @@ test('save button is disabled while the request is in flight', async () => {
 })
 
 test('save button is disabled until the initial grant fetch resolves', async () => {
-  // GET never resolves — keeps the modal in loading state indefinitely.
+  // GET never resolves - keeps the modal in loading state indefinitely.
   mock
     .onGet(`/users/${USER_ID}/assignedopdivs`)
     .reply(() => new Promise(() => {}))
@@ -515,31 +518,37 @@ test('save button stays disabled when the initial grant fetch fails', async () =
 
   renderModal()
 
-  // Wait for the full error path to settle — snackbar proves .catch ran and
+  // Wait for the full error path to settle - snackbar proves .catch ran and
   // setFetchFailed(true) has committed, not just that the GET was sent.
   await screen.findByText(ERROR_MESSAGES.tryAgain)
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
-test('autocomplete picker is disabled while the initial grant fetch is in flight', async () => {
+test('list controls are disabled while the initial grant fetch is in flight', async () => {
   mock
     .onGet(`/users/${USER_ID}/assignedopdivs`)
     .reply(() => new Promise(() => {}))
 
   renderModal()
 
-  expect(screen.getByRole('combobox')).toBeDisabled()
+  // The redesign renders a search box + a loading notice instead of an
+  // Autocomplete; both the search input and Save stay disabled mid-flight.
+  expect(screen.getByLabelText('Search OpDivs')).toBeDisabled()
+  expect(screen.getByText(/loading opdivs/i)).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
-test('autocomplete picker is disabled when the initial grant fetch fails', async () => {
+test('list controls are disabled when the initial grant fetch fails', async () => {
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(500)
 
   renderModal()
 
   // Snackbar proves .catch ran and setFetchFailed(true) has committed.
   await screen.findByText(ERROR_MESSAGES.tryAgain)
-  expect(screen.getByRole('combobox')).toBeDisabled()
+  expect(screen.getByLabelText('Search OpDivs')).toBeDisabled()
+  expect(
+    screen.getByText(/could not load this user's opdivs/i)
+  ).toBeInTheDocument()
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
@@ -579,7 +588,7 @@ test('closing after a fetch failure resets error state so Save re-enables on reo
     />
   )
 
-  // Second GET resolves successfully — Save must re-enable.
+  // Second GET resolves successfully - Save must re-enable.
   await waitFor(() =>
     expect(screen.getByRole('button', { name: /^save$/i })).not.toBeDisabled()
   )
@@ -610,10 +619,8 @@ test('staged edits do not follow the dialog to a different user', async () => {
   await waitForReady()
 
   // Stage an edit for user A without saving it.
-  await user.click(screen.getByRole('combobox'))
-  await user.click(await screen.findByRole('option', { name: /BBB/ }))
-  await user.keyboard('{Escape}')
-  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
+  await user.click(screen.getByRole('checkbox', { name: /Division B/i }))
+  expect(screen.getByRole('checkbox', { name: /Division B/i })).toBeChecked()
 
   // Point the same open dialog at user B.
   rerender(
@@ -633,8 +640,10 @@ test('staged edits do not follow the dialog to a different user', async () => {
 
   // User B's own grant renders, and user A's staged pick is gone. Saving here
   // would otherwise write A's selection onto B.
-  expect(screen.getByText('BBB - Division B')).toBeInTheDocument()
-  expect(screen.queryByText('AAA - Division A')).not.toBeInTheDocument()
+  expect(screen.getByRole('checkbox', { name: /Division B/i })).toBeChecked()
+  expect(
+    screen.getByRole('checkbox', { name: /Division A/i })
+  ).not.toBeChecked()
   await user.click(screen.getByRole('button', { name: /^save$/i }))
   await waitFor(() => expect(mock.history.put).toHaveLength(1))
   expect(JSON.parse(mock.history.put[0].data)).toEqual({ opdiv_ids: [2] })
@@ -672,7 +681,7 @@ test('a failed read on a new target is reported, not swallowed by the first one'
 })
 
 test('stale fetch from a prior user is discarded when userid changes', async () => {
-  // User A's fetch is intentionally slow — held until we manually release it.
+  // User A's fetch is intentionally slow - held until we manually release it.
   let resolveUserA!: () => void
   mock.onGet(`/users/${USER_ID}/assignedopdivs`).reply(
     () =>
@@ -687,7 +696,7 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
   const onChanged = jest.fn()
   const { rerender } = renderModal()
 
-  // Switch to user B before user A's fetch resolves — triggers effect cleanup.
+  // Switch to user B before user A's fetch resolves - triggers effect cleanup.
   rerender(
     <OpDivGrantModal
       open={true}
@@ -705,7 +714,7 @@ test('stale fetch from a prior user is discarded when userid changes', async () 
   // User B's fetches have resolved (Save enabled); user A's is still pending.
   await waitForReady()
 
-  // Release user A's stale fetch — the cancelled flag should swallow the result.
+  // Release user A's stale fetch - the cancelled flag should swallow the result.
   resolveUserA()
 
   // Save must send user B's grant (opdiv 2), not user A's stale grant (opdiv 1).

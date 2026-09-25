@@ -143,6 +143,10 @@ function renderPage() {
     [
       { path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> },
       { path: '/systems/:fismasystemid', element: <div>system detail</div> },
+      {
+        path: '/systems/:fismasystemid/pillar-scores',
+        element: <div>pillar scores</div>,
+      },
     ],
     { initialEntries: ['/questionnaire/system/1002'] }
   )
@@ -167,62 +171,24 @@ it('navigates to the system detail page keyed on fismasystemid', async () => {
 it('suppresses System Info when the role fails the system-access gate', async () => {
   mockCtx = makeCtx(undefined)
   renderPage()
-  // Compare Datacalls is ungated, so its presence proves the header rendered
+  // Compare datacalls is ungated, so its presence proves the header rendered
   // and only the gated button is missing.
-  await screen.findByRole('button', { name: 'Compare Datacalls' })
+  await screen.findByRole('button', { name: 'Compare datacalls' })
   expect(
     screen.queryByRole('link', { name: 'System Info' })
   ).not.toBeInTheDocument()
 })
 
-it('fetches the pillar aggregate for this system and opens the modal', async () => {
-  renderPage()
-  const button = await screen.findByRole('button', { name: 'Pillar Scores' })
-  expect(aggregateCalls()).toHaveLength(0)
+it('opens the pillar-scores route for this system without an extra fetch', async () => {
+  // Pillar scores is a route in this app, not a modal, so the header button
+  // navigates to the same destination as the dashboard's Pillar Scores action
+  // and fetching stays with that page.
+  const { router } = renderPage()
+  const button = await screen.findByRole('button', { name: 'Pillar scores' })
   await userEvent.click(button)
 
-  await waitFor(() =>
-    expect(
-      aggregateCalls().some(
-        (u) =>
-          u.includes('fismasystemid=1002') && u.includes('include_pillars=true')
-      )
-    ).toBe(true)
-  )
-  // Acronym in the title comes from the resolved system, not the lowercased
-  // URL param, so it matches the dashboard's casing.
-  expect(
-    await screen.findByText(
-      /Super Star Destroyer Executor Command Systems \(SSD-EX\) - Pillar Scores/
-    )
-  ).toBeInTheDocument()
-})
-
-it('keeps the modal closed when the aggregate fetch fails', async () => {
-  mockGet.mockImplementation((url: string) => {
-    if (url.includes('/scores/aggregate'))
-      return Promise.reject(new Error('boom'))
-    if (url.includes('/questions'))
-      return Promise.resolve({ data: { data: QUESTIONS } })
-    return Promise.resolve({ data: { data: [] } })
-  })
-  jest.spyOn(console, 'error').mockImplementation(() => {})
-
-  renderPage()
-  await userEvent.click(
-    await screen.findByRole('button', { name: 'Pillar Scores' })
-  )
-
-  await waitFor(() => expect(aggregateCalls()).not.toHaveLength(0))
-  // An empty modal would read as "this system has no scores"; nothing opens and
-  // the user is told instead.
-  await waitFor(() =>
-    expect(notifyMock).toHaveBeenCalledWith(
-      expect.stringContaining('error occurred'),
-      'error'
-    )
-  )
-  expect(screen.queryByText(/- Pillar Scores/)).not.toBeInTheDocument()
+  expect(router.state.location.pathname).toBe('/systems/1002/pillar-scores')
+  expect(aggregateCalls()).toHaveLength(0)
 })
 
 it('offers a way back from the no-questionnaire state', async () => {
@@ -259,7 +225,7 @@ it('flushes a pending draft when the page unmounts mid-debounce', async () => {
   })
 
   const { unmount } = renderPage()
-  const notesField = await screen.findByLabelText('Justification notes')
+  const notesField = await screen.findByLabelText(/supporting evidence/i)
 
   await userEvent.type(notesField, 'Imperial posture note')
   // Nothing written yet: the save is debounced 1s and no timer has fired.
@@ -302,7 +268,7 @@ it('does not lose a newer edit made while an earlier save is in flight', async (
   })
 
   const { unmount } = renderPage()
-  const notesField = await screen.findByLabelText('Justification notes')
+  const notesField = await screen.findByLabelText(/supporting evidence/i)
 
   // Edit A; let its 1s debounce fire so saveDraft(A) is genuinely in flight.
   await userEvent.type(notesField, 'A')

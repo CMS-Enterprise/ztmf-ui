@@ -308,9 +308,10 @@ export type editSystemModalProps = {
   system: FismaSystemType | null
   mode: string
   // Datacenter-environment and OpDiv vocabularies for the dropdowns. Passed
-  // from Title because the modal renders outside the Outlet and can't read context.
-  datacenterEnvironments: DataCenterEnvironment[]
-  opdivs: OpDiv[]
+  // from Title because the modal renders outside the Outlet and can't read
+  // context. Optional so tests can omit them; production callers pass both.
+  datacenterEnvironments?: DataCenterEnvironment[]
+  opdivs?: OpDiv[]
 }
 
 export type datacallModalProps = {
@@ -419,8 +420,16 @@ export type FormValidHelperText = {
 
 export type FismaTableProps = {
   scores: Record<number, SystemScoreEntry>
+  /**
+   * Currently selected row ids (fismasystemid). When provided alongside
+   * onSelectionChange, the table renders selection checkboxes. The parent
+   * owns the state so other actions (e.g. Export CSV) can read it.
+   */
+  selectedRows?: number[]
+  /** Called when the user toggles row selection. */
+  onSelectionChange?: (ids: number[]) => void
   // Per-system questionnaire progress for the active data call, keyed by
-  // fismasystemid. Optional so the table degrades to an em-dash column if
+  // fismasystemid. Optional so the table degrades to a dash column if
   // the progress fetch fails - score display must not depend on it.
   progress?: Record<number, ScoreProgress>
   // Which active data call(s) each system has scores in, keyed by
@@ -505,7 +514,7 @@ export type ScoreDiffEntry = {
 // Evidence-backed maturity suggestion per system x question, synced daily
 // from Snowflake. The endpoint returns [] for every "should not show" case
 // (OpDiv not enabled, caller not entitled, not yet synced), so the UI is
-// driven purely off row presence — see InsightsPanel.
+// driven purely off row presence - see InsightsPanel.
 //
 // `payload` is an opaque, additive document owned by the pipeline. Treat
 // every key as optional and render defensively; the string index signature
@@ -586,7 +595,7 @@ export type InsightPayload = {
   // or []. `ars_satisfied_controls` length == `ars_controls_satisfied`.
   ars_satisfied_controls?: string[] | null
   // Applicable-but-not-satisfied controls (applicable − satisfied). Informational,
-  // rendered greyed — distinct from `ars_failing_controls` (explicit fails).
+  // rendered greyed - distinct from `ars_failing_controls` (explicit fails).
   // satisfied + not_satisfied == ars_controls_total when the pipeline emits them.
   ars_not_satisfied_controls?: string[] | null
   ars_failing_controls?: string[] | null
@@ -602,7 +611,7 @@ export type InsightPayload = {
 
   // FIPS maturity baseline (ztmf-ui#547). `fips_ceiling` is the highest maturity
   // tier this system's FIPS impact level needs (Low→2, Moderate→3, High/HVA→4);
-  // an answer option scoring above it is "above baseline" — warned but still
+  // an answer option scoring above it is "above baseline" - warned but still
   // selectable. `fips_impact_level` drives the "FIPS LOW" badge / divider text.
   // Fallback for a system with no FIPS on file: level null + ceiling 4, so the
   // rule (score > ceiling) warns on nothing and the UI never breaks.

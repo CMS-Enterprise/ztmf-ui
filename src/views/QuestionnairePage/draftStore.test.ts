@@ -309,7 +309,7 @@ describe('loadDraft', () => {
       DRAFT
     )
     // Copy user-a ciphertext (encrypted with keyA) into user-b slot.
-    // loadDraft for user-b will try keyB — decrypt fails → null.
+    // loadDraft for user-b will try keyB - decrypt fails → null.
     const raw = localStorage.getItem(`ztmf_draft_${H_USER_A}_1_2_3`)!
     localStorage.setItem(`ztmf_draft_${H_USER_B}_1_2_3`, raw)
     const result = await loadDraft(
@@ -439,7 +439,7 @@ describe('loadDraft', () => {
       await loadDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
     ).toBeNull()
 
-    // From storage, not `raw` — a deleted entry must fail here, not be re-created.
+    // From storage, not `raw` - a deleted entry must fail here, not be re-created.
     const survived = JSON.parse(localStorage.getItem(EXPECTED_KEY)!)
     localStorage.setItem(
       EXPECTED_KEY,
@@ -574,7 +574,7 @@ describe('loadDraft', () => {
   })
 })
 
-// Each case drives loadDraft first — the caller only asks in its null branch.
+// Each case drives loadDraft first - the caller only asks in its null branch.
 describe('hasDeclinedDraft', () => {
   const ask = () =>
     hasDeclinedDraft(USER, IDS.fismasystemid, IDS.functionid, IDS.datacallid)
@@ -823,7 +823,7 @@ describe('device key persistence (IndexedDB)', () => {
     // Fire concurrent saves for different questions before any key exists, so
     // each save triggers key creation while the others are still resolving.
     // Regression: previously each concurrent caller generated and persisted its
-    // own key, orphaning every draft not encrypted with the last-written key —
+    // own key, orphaning every draft not encrypted with the last-written key -
     // they then failed to decrypt after reload and were silently evicted.
     const fns = [1, 2, 3, 4]
     const results = await Promise.all(
@@ -837,7 +837,7 @@ describe('device key persistence (IndexedDB)', () => {
     expect(results).toEqual([true, true, true, true])
 
     // Simulate a reload: in-memory cache is gone, IndexedDB persists. Every draft
-    // must still decrypt — i.e. the key that encrypted it is the one persisted.
+    // must still decrypt - i.e. the key that encrypted it is the one persisted.
     __resetKeyCache()
     for (const functionid of fns) {
       await expect(loadDraft(IDB_USER, SYS, functionid, DC)).resolves.toEqual({
