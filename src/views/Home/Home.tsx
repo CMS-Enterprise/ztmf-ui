@@ -81,6 +81,7 @@ export default function HomePageContainer() {
     setFismaSystems,
     userInfo,
     datacenterEnvironments,
+    opdivs,
   } = useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const datacallName = selectedDatacall?.datacall ?? ''
@@ -318,6 +319,9 @@ export default function HomePageContainer() {
         system={EMPTY_SYSTEM}
         mode="create"
         datacenterEnvironments={datacenterEnvironments}
+        // The modal's owning-OpDiv selector is required and lists these
+        // (active only); without them it renders empty and blocks the save.
+        opdivs={opdivs}
       />
     </Box>
   )
