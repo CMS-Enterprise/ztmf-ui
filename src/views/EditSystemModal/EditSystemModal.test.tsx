@@ -34,6 +34,7 @@ import axiosInstance from '@/axiosConfig'
 import { notify } from '@/utils/notify'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import EditSystemModal from './EditSystemModal'
+import { EMPTY_SYSTEM } from './emptySystem'
 
 const mock = new MockAdapter(axiosInstance)
 const notifyMock = notify as jest.Mock
@@ -427,5 +428,82 @@ describe('EditSystemModal extended-metadata clearing', () => {
     // '' clears via blankToNil; null would read as "leave unchanged" and the
     // clear would silently no-op.
     expect(captured.body).toHaveProperty('cloud_vendor', '')
+  })
+})
+
+describe('owning-OpDiv selector', () => {
+  const MANY_OPDIVS: OpDiv[] = [
+    {
+      opdiv_id: 15,
+      code: 'EMPIRE',
+      name: 'Galactic Empire',
+      is_parent: false,
+      active: true,
+      system_delegate_enabled: true,
+    },
+    {
+      opdiv_id: 16,
+      code: 'IMPNAVY',
+      name: 'Imperial Navy',
+      is_parent: false,
+      active: true,
+      system_delegate_enabled: false,
+    },
+    {
+      opdiv_id: 18,
+      code: 'SEP',
+      name: 'Separatist Alliance',
+      is_parent: false,
+      active: false,
+      system_delegate_enabled: false,
+    },
+  ]
+
+  function renderAdd() {
+    return renderWithProviders(
+      <EditSystemModal
+        title="Add"
+        open
+        onClose={jest.fn()}
+        system={EMPTY_SYSTEM}
+        mode="create"
+        opdivs={MANY_OPDIVS}
+      />
+    )
+  }
+
+  test('typing filters the OpDivs by code or name', async () => {
+    const user = userEvent.setup()
+    renderAdd()
+
+    const opdiv = await screen.findByRole('combobox', { name: /OpDiv/ })
+    await user.type(opdiv, 'navy')
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'IMPNAVY - Imperial Navy',
+    ])
+
+    await user.clear(opdiv)
+    await user.type(opdiv, 'emp')
+    expect(screen.getAllByRole('option').map((o) => o.textContent)).toEqual([
+      'EMPIRE - Galactic Empire',
+    ])
+  })
+
+  test('picking an option selects that OpDiv; inactive ones are not offered', async () => {
+    const user = userEvent.setup()
+    renderAdd()
+
+    const opdiv = await screen.findByRole('combobox', { name: /OpDiv/ })
+    await user.click(opdiv)
+    const offered = screen.getAllByRole('option').map((o) => o.textContent)
+    expect(offered).toEqual([
+      'EMPIRE - Galactic Empire',
+      'IMPNAVY - Imperial Navy',
+    ])
+
+    await user.click(
+      screen.getByRole('option', { name: 'IMPNAVY - Imperial Navy' })
+    )
+    expect(opdiv).toHaveValue('IMPNAVY - Imperial Navy')
   })
 })

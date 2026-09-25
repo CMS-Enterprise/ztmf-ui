@@ -4,6 +4,8 @@ import Grid from '@mui/material/Grid'
 import OutlinedInput from '@mui/material/OutlinedInput'
 import Select from '@mui/material/Select'
 import MenuItem from '@mui/material/MenuItem'
+import Autocomplete from '@mui/material/Autocomplete'
+import TextField from '@mui/material/TextField'
 import Field, { fieldInputSx } from '@/components/ui/Field'
 import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
 import { TEXTFIELD_HELPER_TEXT } from '@/constants'
@@ -99,30 +101,41 @@ export default function SystemFormFields({
             showError('opdiv_id') ? formValidErrorText.opdiv_id : undefined
           }
         >
-          <Select
+          {/* Searchable: the list runs to dozens of OpDivs, so typing part of
+              a code or name filters it instead of scrolling. */}
+          <Autocomplete
             id="opdiv_id"
-            labelId="opdiv_id-label"
             fullWidth
-            value={editedFismaSystem.opdiv_id ?? ''}
-            error={showError('opdiv_id')}
-            onChange={(e) => {
-              const val = e.target.value === '' ? null : Number(e.target.value)
+            options={opdivs}
+            value={
+              opdivs.find((o) => o.opdiv_id === editedFismaSystem.opdiv_id) ??
+              null
+            }
+            onChange={(_, option) => {
+              const val = option?.opdiv_id ?? null
               markTouched('opdiv_id')
               setEditedFismaSystem((prev) => ({ ...prev, opdiv_id: val }))
               setFormValid((prev) => ({ ...prev, opdiv_id: val != null }))
             }}
-            sx={{
-              height: 38,
-              fontSize: 14,
-              '& fieldset': { borderColor: colors.border },
-            }}
-          >
-            {opdivs.map((o) => (
-              <MenuItem key={o.opdiv_id} value={o.opdiv_id}>
-                {o.code} - {o.name}
-              </MenuItem>
-            ))}
-          </Select>
+            getOptionLabel={(o) => `${o.code} - ${o.name}`}
+            isOptionEqualToValue={(a, b) => a.opdiv_id === b.opdiv_id}
+            noOptionsText="No matching OpDivs"
+            renderInput={(params) => (
+              <TextField
+                {...params}
+                placeholder="Search by code or name"
+                error={showError('opdiv_id')}
+                sx={{
+                  '& .MuiOutlinedInput-root': {
+                    height: 38,
+                    fontSize: 14,
+                    py: 0,
+                  },
+                  '& fieldset': { borderColor: colors.border },
+                }}
+              />
+            )}
+          />
         </Field>
       </Grid>
       <Grid item xs={12} md={6}>
