@@ -1,0 +1,84 @@
+import Box from '@mui/material/Box'
+import Tooltip from '@mui/material/Tooltip'
+import Typography from '@mui/material/Typography'
+import CheckCircleIcon from '@mui/icons-material/CheckCircle'
+import { colors } from '@/theme/tokens'
+import LastEditedFooter from '../LastEditedFooter'
+import { relativeTimeFrom } from '../helpers'
+
+/** Audit info passed back to the tooltip from the score row. */
+export type SaveIndicatorEditor = {
+  userid: string
+  name: string
+  email: string
+  role?: string
+}
+
+/** Props for {@link SaveIndicator}. */
+export type SaveIndicatorProps = {
+  /** Local time of the most recent successful save in this session. */
+  lastSavedAt: Date | null
+  /** Server-side last edit timestamp on the currently-displayed score. */
+  lastEditedAt?: string | null
+  /** Server-side last edit author on the currently-displayed score. */
+  lastEditedBy?: SaveIndicatorEditor | null
+  /** When true, render "Read-only" instead of the saved-time line. */
+  isReadOnly: boolean
+}
+
+/**
+ * Bottom-of-card save-status indicator. Shows the auto-save state to the
+ * user as a small green check + "Saved <relative time> by <editor>" line.
+ * The editor name is shown inline (not just on hover) so the audit answers
+ * "who made this change", matching the pre-redesign footer; the hover
+ * tooltip carries the rest of the detail (role, email, exact time).
+ * Switches to a quiet "Read-only" tag when the user has no edit permissions.
+ *
+ * The full audit detail lives in {@link LastEditedFooter}, which we reuse in
+ * the tooltip so the page does not maintain two separate audit displays.
+ * @param {SaveIndicatorProps} props - Component props.
+ * @returns {JSX.Element} The save indicator.
+ */
+export default function SaveIndicator({
+  lastSavedAt,
+  lastEditedAt,
+  lastEditedBy,
+  isReadOnly,
+}: SaveIndicatorProps) {
+  if (isReadOnly) {
+    return (
+      <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+        Read-only
+      </Typography>
+    )
+  }
+  const savedTime = lastSavedAt
+    ? `Saved ${relativeTimeFrom(lastSavedAt)}`
+    : 'Saved automatically'
+  // Surface the editor beside the timestamp when the server reports one, so
+  // the change is attributed at a glance rather than only on hover.
+  const editorName = lastEditedBy?.name?.trim()
+  const text = editorName ? `${savedTime} by ${editorName}` : savedTime
+  const tooltipBody =
+    lastEditedBy && lastEditedAt ? (
+      <LastEditedFooter
+        lastEditedAt={lastEditedAt}
+        lastEditedBy={lastEditedBy as unknown as never}
+      />
+    ) : null
+  return (
+    <Tooltip title={tooltipBody ?? ''}>
+      {/* aria-live announces "Saved just now" to screen readers after each
+          autosave without stealing focus (WCAG 4.1.3 status messages). */}
+      <Box
+        aria-live="polite"
+        sx={{ display: 'inline-flex', alignItems: 'center', gap: 0.5 }}
+      >
+        <CheckCircleIcon sx={{ fontSize: 12, color: colors.up }} />
+        <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+          {text}
+        </Typography>
+      </Box>
+    </Tooltip>
+  )
+}

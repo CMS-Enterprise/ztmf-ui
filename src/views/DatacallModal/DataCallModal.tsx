@@ -1,53 +1,31 @@
 import React from 'react'
-import {
-  Button as CmsButton,
-  TextField as CMSTextField,
-  SingleInputDateField,
-} from '@cmsgov/design-system'
-import {
-  Box,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  IconButton,
-  DialogActions,
-  Typography,
-  // FormControlLabel,
-  // FormControl,
-} from '@mui/material'
-import CloseRoundedIcon from '@mui/icons-material/CloseRounded'
+import { Box, Button, OutlinedInput } from '@mui/material'
+import Modal from '@/components/ui/Modal'
+import Field, { fieldInputSx } from '@/components/ui/Field'
 import { datacallModalProps } from '@/types'
-import './DatacallModal.css'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { radius } from '@/theme/tokens'
 
 // Accepts both the CMS quarterly cadence (FYYYYY QN) and the HHS annual
 // ZTM cadence (FYYY ZTM). Widened when the HHS onboarding mock addon
 // introduced FY23/FY24/FY25 ZTM datacall names.
 const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q[1-4]|ZTM)$/
 const DATACALL_MAX_LENGTH = 10 // "FY2025 ZTM" = 10 chars; longest valid form
-const DEADLINE_PATTERN = /^(\d{2})\/(\d{2})\/(\d{4})$/
+const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
 
-// Verifies MM/DD/YYYY is a real calendar date - Date.parse silently rolls
-// impossible dates over (02/30 -> Mar 2, 04/31 -> May 1), which would
-// otherwise let the user submit a wrong date without any feedback. Reject
-// unless the parsed date's month/day round-trip exactly.
-function isValidCalendarDate(mdY: string): boolean {
-  const match = mdY.match(DEADLINE_PATTERN)
-  if (!match) return false
-  const month = Number(match[1])
-  const day = Number(match[2])
-  const year = Number(match[3])
-  const d = new Date(year, month - 1, day)
-  return (
-    d.getFullYear() === year &&
-    d.getMonth() === month - 1 &&
-    d.getDate() === day
-  )
-}
-
+/**
+ * Create-datacall modal. Renders through the shared Modal shell and uses
+ * label-above-input fields that resist the global CMS Design System
+ * resets. The native date input constrains the deadline to real calendar
+ * dates, so no impossible-date rollover check is needed here.
+ * @param {datacallModalProps} props - Open state, close handler, and the
+ *   optional onCreated callback fired after a successful create so the
+ *   caller can refresh its data-call list.
+ * @returns {JSX.Element} The create-datacall modal.
+ */
 export default function DataCallModal({
   open,
   onClose,
@@ -62,9 +40,11 @@ export default function DataCallModal({
   // duplicate datacalls server-side.
   const [submitting, setSubmitting] = React.useState<boolean>(false)
 
-  // Reset state when the modal is closed so the next open starts clean.
-  // Prevents stale errors and half-typed input from bleeding across sessions
-  // (see feedback: modals clear validation on close).
+  // Modals stay mounted across open/close so React preserves their state.
+  // Without this reset, a user who triggers a validation error (e.g. blurs
+  // an invalid date), closes the modal, and reopens it would still see the
+  // red error from the previous session. Reset on the open->false edge so
+  // the next open starts with the same empty/valid state as a fresh mount.
   React.useEffect(() => {
     if (!open) {
       setDatacall('')
@@ -75,77 +55,47 @@ export default function DataCallModal({
     }
   }, [open])
 
-  const datacallHint = () => {
-    return (
-      <Typography>
-        Please use the format:{' '}
-        <span>
-          FY<i>XXXX</i> Q<i>X</i>
-        </span>{' '}
-        or{' '}
-        <span>
-          FY<i>XX</i> ZTM
-        </span>
-      </Typography>
-    )
-  }
-  // Validates on every change so the user is never left with a disabled
-  // Create button and no explanation. Empty input still resets the error
-  // (an untouched field should not scream at the user).
   function isValidFormat(input: string) {
-    if (input.length === 0) {
+    // Below the shortest valid form, stay quiet: the user is mid-typing.
+    if (input.length < DATACALL_MIN_LENGTH) {
       setDatacallError('')
       return
     }
-    if (DATACALL_NAME_PATTERN.test(input)) {
-      setDatacallError('')
-    } else {
-      setDatacallError('Invalid datacall format')
-    }
+    setDatacallError(
+      DATACALL_NAME_PATTERN.test(input) ? '' : 'Invalid datacall format'
+    )
   }
+
   const handleDatacallChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setDatacall(value)
     isValidFormat(value.toUpperCase())
   }
-  // Fires "Required" only on blur - matches the standard form UX where an
-  // untouched field stays quiet on mount and only complains once the user
-  // has engaged with it and left it empty. The on-change path (above) still
-  // reports format errors as-you-type without touching this branch.
+
+  // Fires "required" only on blur - an untouched field stays quiet on mount
+  // and only complains once the user has engaged with it and left it empty.
+  // The on-change path (above) still reports format errors as-you-type.
   const handleDatacallBlur = () => {
     if (datacall.length === 0) {
       setDatacallError('Datacall name is required')
     }
   }
-  // Deadline validation mirrors the blur logic but only fires once the
-  // input has reached the 10-char MM/DD/YYYY shape - partial input stays
-  // quiet so the field does not flash red on every keystroke.
-  const validateDeadlineValue = (value: string) => {
-    if (value.length < 10) {
-      setDeadlineError('')
-      return
-    }
-    if (!isValidCalendarDate(value)) {
-      setDeadlineError('Invalid Deadline')
-      return
-    }
-    setDeadlineError('')
-  }
+
   const validateDeadline = (e: React.FocusEvent<HTMLInputElement>) => {
     const value = e.target.value
     if (value.length === 0) {
       setDeadlineError('Deadline is required')
       return
     }
-    if (value.length === 10 && isValidCalendarDate(value)) {
+    if (value.length === 10 && !isNaN(Date.parse(value))) {
       setDeadline(value)
       setDeadlineError('')
     } else {
       setDeadlineError('Invalid Deadline')
     }
   }
-  const submitDatacall = async (e: React.FormEvent<HTMLFormElement>) => {
-    e.preventDefault()
+
+  const submitDatacall = async () => {
     if (submitting) return
     setSubmitting(true)
     try {
@@ -179,98 +129,82 @@ export default function DataCallModal({
     }
   }
 
-  const nameValid = DATACALL_NAME_PATTERN.test(datacall.toUpperCase())
-  const deadlineComplete = deadline.length === 10 && !deadlineError
-  const isCreateDisabled =
-    !nameValid ||
-    !deadlineComplete ||
-    datacallError.length !== 0 ||
-    deadlineError.length !== 0 ||
-    submitting
+  const canSubmit =
+    DATACALL_NAME_PATTERN.test(datacall.toUpperCase()) &&
+    deadline.length === 10 &&
+    datacallError.length === 0 &&
+    deadlineError.length === 0 &&
+    !submitting
+
   return (
-    <Dialog
+    <Modal
       open={open}
       onClose={onClose}
-      maxWidth="sm"
-      fullWidth
-      sx={{
-        '& .MuiDialog-paper': {
-          borderRadius: 0,
-          boxShadow: '3px 3px 5px',
-        },
-      }}
-    >
-      <DialogTitle id="datacall-dialog-title">
-        <Box
-          sx={{ display: 'flex', justifyContent: 'space-between', mb: 1 }}
-          className={'ds-u-font-size--2xl ds-u-font-weight--bold'}
-        >
-          {'Create a datacall'}
-          <IconButton
-            size="large"
-            sx={{
-              p: 0,
-              borderRadius: 0,
-              '&:hover': {
-                backgroundColor: 'white',
-              },
-            }}
-            onClick={() => {
-              // setTimeout(() => {
-              //   resetEmailInputs()
-              // }, 200)
-              onClose()
-            }}
-          >
-            <CloseRoundedIcon
-              fontSize="large"
-              sx={{ color: 'rgb(90, 90, 90)' }}
-            />
-          </IconButton>
-        </Box>
-      </DialogTitle>
-      <form onSubmit={submitDatacall}>
-        <DialogContent sx={{ pt: 0 }}>
-          <CMSTextField
-            label="Please enter a datacall name"
-            maxLength={DATACALL_MAX_LENGTH}
-            hint={datacallHint()}
-            name="datacall"
-            onChange={handleDatacallChange}
-            onBlur={handleDatacallBlur}
-            labelClassName="datacall-label"
-            errorMessage={datacallError}
-          />
-          <SingleInputDateField
-            label="Please enter a deadline date for this datacall"
-            hint={"Please include the '/'"}
-            name="deadline-date"
-            errorMessage={deadlineError}
-            maxLength={10}
-            onBlur={validateDeadline}
-            onChange={(e) => {
-              setDeadline(e)
-              validateDeadlineValue(e)
-            }}
-            value={deadline}
-          />
-        </DialogContent>
-        <DialogActions
-          sx={{
-            justifyContent: 'flex-start',
-            ml: 3,
-            mb: 1,
-          }}
-        >
-          <CmsButton
-            variation="solid"
-            type="submit"
-            disabled={isCreateDisabled}
+      title="Create datacall"
+      eyebrow="New datacall"
+      size="sm"
+      disableBackdropClose
+      footer={
+        <>
+          <Button variant="text" color="inherit" onClick={onClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            disabled={!canSubmit}
+            onClick={submitDatacall}
+            sx={{ borderRadius: `${radius.button}px` }}
           >
             {submitting ? 'Creating...' : 'Create'}
-          </CmsButton>
-        </DialogActions>
-      </form>
-    </Dialog>
+          </Button>
+        </>
+      }
+    >
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
+        <Field
+          id="datacall-name"
+          label="Name"
+          required
+          error={datacallError}
+          helperText="Use the format FYXXXX QX (FY2024 Q1) or FYXX ZTM (FY25 ZTM)."
+        >
+          <OutlinedInput
+            id="datacall-name"
+            name="datacall"
+            fullWidth
+            value={datacall}
+            inputProps={{
+              maxLength: DATACALL_MAX_LENGTH,
+              'aria-label': 'Datacall name',
+            }}
+            onChange={handleDatacallChange}
+            onBlur={handleDatacallBlur}
+            error={!!datacallError}
+            sx={fieldInputSx}
+          />
+        </Field>
+
+        <Field
+          id="datacall-deadline"
+          label="Deadline"
+          required
+          error={deadlineError}
+        >
+          <OutlinedInput
+            id="datacall-deadline"
+            name="deadline-date"
+            type="date"
+            fullWidth
+            value={deadline}
+            inputProps={{ 'aria-label': 'Datacall deadline' }}
+            onBlur={validateDeadline}
+            onChange={(e) => setDeadline(e.target.value)}
+            error={!!deadlineError}
+            sx={fieldInputSx}
+          />
+        </Field>
+      </Box>
+    </Modal>
   )
 }

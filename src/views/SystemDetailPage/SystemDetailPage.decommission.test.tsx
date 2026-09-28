@@ -98,6 +98,9 @@ function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
     ],
     fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
+    datacalls: [],
+    selectedDatacall: null,
+    latestDataCallId: 0,
   }
   return renderWithProviders(
     <Routes>
@@ -107,12 +110,9 @@ function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
   )
 }
 
-/** The header Edit button (matched by the CMS design-system class). */
-function clickEdit(user: ReturnType<typeof userEvent.setup>) {
-  const editBtn = screen
-    .queryAllByRole('button', { name: 'Edit' })
-    .filter((b) => b.classList.contains('ds-c-button'))[0]
-  return user.click(editBtn)
+/** The page header's Edit system button, which opens the admin edit view. */
+async function clickEdit(user: ReturnType<typeof userEvent.setup>) {
+  await user.click(await screen.findByRole('button', { name: 'Edit system' }))
 }
 
 test('decommissioning an active system DELETEs with the chosen date, notifies, and updates state', async () => {
@@ -126,7 +126,7 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
   renderPage(system)
   const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
 
   await user.click(
@@ -162,7 +162,7 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
   // The page leaves edit mode, so the form's Save control is gone.
   await waitFor(() =>
     expect(
-      screen.queryByRole('button', { name: 'Save' })
+      screen.queryByRole('button', { name: 'Save changes' })
     ).not.toBeInTheDocument()
   )
 })
@@ -176,7 +176,7 @@ test('cancelling the decommission confirmation issues no DELETE', async () => {
   const user = userEvent.setup()
   renderPage(BASE_SYSTEM)
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
   await user.click(
     await screen.findByRole('checkbox', { name: /Decommission System/i })
@@ -211,12 +211,12 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
   renderPage(decommissioned)
   const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
 
   // A decommissioned system shows Reactivate; opening its form then confirming.
   await user.click(
-    await screen.findByRole('button', { name: 'Reactivate System' })
+    await screen.findByRole('button', { name: 'Reactivate system' })
   )
   await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
 
@@ -328,9 +328,9 @@ test('a 400 on save routes the field error inline and keeps editing', async () =
   const user = userEvent.setup()
   renderPage(BASE_SYSTEM)
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
-  await user.click(await screen.findByRole('button', { name: 'Save' }))
+  await user.click(await screen.findByRole('button', { name: 'Save changes' }))
 
   expect(await screen.findByText('FISMA Name is required')).toBeInTheDocument()
 })
@@ -341,7 +341,7 @@ test('a 404 on decommission surfaces the system-not-found error', async () => {
   renderPage(BASE_SYSTEM)
   const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
   await user.click(
     await screen.findByRole('checkbox', { name: /Decommission System/i })
@@ -379,10 +379,10 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
   renderPage(decommissioned)
   const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
   await user.click(
-    await screen.findByRole('button', { name: 'Reactivate System' })
+    await screen.findByRole('button', { name: 'Reactivate system' })
   )
   await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
   const dialog = await screen.findByRole('dialog')
@@ -422,10 +422,10 @@ test('a reactivate refused for a taken acronym shows the backend reason, not "in
   renderPage(decommissioned)
   const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
   await user.click(
-    await screen.findByRole('button', { name: 'Reactivate System' })
+    await screen.findByRole('button', { name: 'Reactivate system' })
   )
   await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
   const dialog = await screen.findByRole('dialog')
@@ -440,7 +440,7 @@ test('toggling data-lake sync in edit mode updates the draft', async () => {
   const user = userEvent.setup()
   renderPage(BASE_SYSTEM)
 
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await clickEdit(user)
   // The SDL sync toggle drives onSdlSyncToggle on the edited draft.
   const toggle = await screen.findByRole('checkbox', {

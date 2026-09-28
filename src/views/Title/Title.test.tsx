@@ -13,7 +13,11 @@ jest.mock('react-router-dom', () => ({
   __esModule: true,
   useLoaderData: jest.fn(),
   useLocation: jest.fn(),
-  Link: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  // Render a real anchor so each nav label is its own element (a bare
+  // fragment collapses the sibling labels into one concatenated text node).
+  Link: ({ children, to }: { children: React.ReactNode; to?: string }) => (
+    <a href={typeof to === 'string' ? to : '/'}>{children}</a>
+  ),
   Outlet: () => <div>OUTLET</div>,
 }))
 
@@ -148,7 +152,7 @@ describe('Title logout affordance', () => {
   it('renders the account menu with Log out for an admin user', async () => {
     renderTitleFor('OWNER')
 
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^account:/i }))
 
     expect(
       await screen.findByRole('menuitem', { name: /log out/i })
@@ -160,7 +164,7 @@ describe('Title logout affordance', () => {
     // was gated on hasAdminRead - non-admins had no signout affordance.
     renderTitleFor('ISSO')
 
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^account:/i }))
 
     expect(
       await screen.findByRole('menuitem', { name: /log out/i })
@@ -175,32 +179,27 @@ describe('Title logout affordance', () => {
   })
 
   it.each(['OWNER', 'HHS_ADMIN', 'HHS_READONLY_ADMIN'] as UserRole[])(
-    'shows the Events entry for the unscoped-read tier %s',
+    'shows the Events nav link for the unscoped-read tier %s',
     async (role) => {
       renderTitleFor(role)
 
-      await userEvent.click(
-        screen.getByRole('button', { name: /account menu/i })
-      )
-
+      // Events is a top-level nav link, gated on hasUnscopedRead.
       expect(
-        await screen.findByRole('menuitem', { name: /^events$/i })
+        await screen.findByRole('link', { name: 'Events' })
       ).toBeInTheDocument()
     }
   )
 
   it.each(['OPDIV_ADMIN', 'OPDIV_READONLY_ADMIN', 'ISSO'] as UserRole[])(
-    'hides the Events entry from the scoped tier %s the endpoint 403s',
+    'hides the Events nav link from the scoped tier %s',
     async (role) => {
       renderTitleFor(role)
 
-      await userEvent.click(
-        screen.getByRole('button', { name: /account menu/i })
-      )
-
-      await screen.findByRole('menuitem', { name: /log out/i })
+      // Wait for the header to settle, then confirm the link never rendered:
+      // the events endpoint 403s a scoped tier, so the tab is gated out.
+      await screen.findByRole('button', { name: /^account:/i })
       expect(
-        screen.queryByRole('menuitem', { name: /^events$/i })
+        screen.queryByRole('link', { name: 'Events' })
       ).not.toBeInTheDocument()
     }
   )
@@ -208,7 +207,7 @@ describe('Title logout affordance', () => {
   it('calls the logout endpoint and lands the user on the sign-in page', async () => {
     renderTitleFor('ISSO')
 
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^account:/i }))
     await userEvent.click(
       await screen.findByRole('menuitem', { name: /log out/i })
     )
@@ -244,7 +243,7 @@ describe('Title logout affordance', () => {
     const errSpy = jest.spyOn(console, 'error').mockImplementation(() => {})
     renderTitleFor('ISSO')
 
-    await userEvent.click(screen.getByRole('button', { name: /account menu/i }))
+    await userEvent.click(screen.getByRole('button', { name: /^account:/i }))
     await userEvent.click(
       await screen.findByRole('menuitem', { name: /log out/i })
     )

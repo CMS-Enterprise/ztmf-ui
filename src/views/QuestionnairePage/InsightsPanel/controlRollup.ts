@@ -30,7 +30,7 @@ export function severityStyle(sev?: string): { bg: string; fg: string } {
 
 // The state of one control in the ARS Controls rollup. `unsatisfied` = CFACTS says
 // the control applies here but nothing has confirmed it satisfied (may be
-// unassessed) — informational, not an alarm.
+// unassessed) - informational, not an alarm.
 export type ControlRollupState = 'satisfied' | 'unsatisfied' | 'failing'
 
 // One piece of evidence behind a control's state: which source spoke to it, the
@@ -43,7 +43,7 @@ export type ControlEvidence = {
   // The check's human sentence, carried alongside the slug. A control chip is
   // labeled with the control id, so without this its hover would name the check
   // only by slug (`account-without-compliant-password-policy`) and the reader
-  // would have to decode it — the check chips have shown this sentence since
+  // would have to decode it - the check chips have shown this sentence since
   // they were introduced.
   description?: string
 }
@@ -70,7 +70,7 @@ const CONTROL_RANK: Record<ControlRollupState, number> = {
 
 // Sources whose "passing" entries are inferred from the absence of a finding
 // rather than observed as a pass. SecurityHub's vendor feed carries only FAILED
-// records — it never emits a PASSED one — so `sechub_passing` is derived upstream
+// records - it never emits a PASSED one - so `sechub_passing` is derived upstream
 // as "mapped control with no active failure". That cannot distinguish "evaluated
 // and passed" from "never scanned", so on a partially scanned system it would
 // otherwise assert controls are met on the strength of checks that never ran.
@@ -83,7 +83,7 @@ const CONTROL_RANK: Record<ControlRollupState, number> = {
 export const INFERRED_PASS_SOURCES: ReadonlySet<string> = new Set(['sechub'])
 
 // The ARS Controls total is the UNION of every ARS control any evidence source
-// touches — CFACTS applicable/failing controls PLUS the NIST control each Kion,
+// touches - CFACTS applicable/failing controls PLUS the NIST control each Kion,
 // SecurityHub, and Hardenize check maps to. Each control keeps its full evidence
 // list, nets to a weakest-link state, and is flagged `conflict` when at least one
 // source passes it AND at least one source fails it (e.g. SC-12: Kion passes
@@ -133,12 +133,12 @@ export function rollupControls(
       : null
   // CFACTS assesses the ARS-framework controls (the ars_* fields carry CFACTS's
   // satisfied / applicable-but-not-satisfied / failing coverage). ARS is the
-  // control catalog, not a source — CFACTS is the source of this coverage. These
+  // control catalog, not a source - CFACTS is the source of this coverage. These
   // arrays are plain control-id strings (unlike nist_controls, which may arrive as
   // an array and needs asText coercion), so filter to strings: a non-string
   // element would otherwise coerce to a junk chip ("42", "[object Object]").
   const isStr = (v: unknown): v is string => typeof v === 'string'
-  // ars_not_satisfied is a SUPERSET of ars_failing — a failing control appears in
+  // ars_not_satisfied is a SUPERSET of ars_failing - a failing control appears in
   // both. Subtract the failing ids so the control isn't listed twice in the hover
   // (once "not assessed", once "failed"); the net state is failing either way.
   const arsFailingIds = new Set(arr(payload.ars_failing_controls).filter(isStr))
@@ -163,7 +163,7 @@ export function rollupControls(
   for (const src of ['kion', 'sechub', 'hardenize'] as const) {
     const label = SRC_LABEL[src]
     // An inferred pass is the absence of a finding, not evidence the control is
-    // met — counting it as `satisfied` would flip a control from "not assessed"
+    // met - counting it as `satisfied` would flip a control from "not assessed"
     // to green on the strength of a check that may never have run.
     if (!INFERRED_PASS_SOURCES.has(src)) {
       arr((payload as Record<string, unknown>)[`${src}_passing`]).forEach(
@@ -174,7 +174,7 @@ export function rollupControls(
             label,
             'satisfied',
             asText(o?.id) ?? asText(o?.title),
-            // Kion puts the sentence in `description`, SecurityHub in `title` —
+            // Kion puts the sentence in `description`, SecurityHub in `title` -
             // same fallback CheckTooltip uses, so both hovers read alike.
             asText(o?.description) ?? asText(o?.title)
           )

@@ -12,8 +12,8 @@ import {
 } from './fipsBaseline'
 
 // Maturity answer options as a native-radio fieldset (not CMSDS ChoiceList) so
-// we can layer the FIPS baseline treatment — a per-option box, an in-list
-// divider, and per-option badges — which a flat ChoiceList can't express. Native
+// we can layer the FIPS baseline treatment - a per-option box, an in-list
+// divider, and per-option badges - which a flat ChoiceList can't express. Native
 // <input type="radio"> keeps keyboard operation and the focus ring for free
 // (508); styling is MUI-only so the CMSDS CSS/JS version drift never touches it.
 //
@@ -107,8 +107,8 @@ export default function QuestionRadioGroup({
         {options.map((o, i) => {
           const above =
             hasBaseline && o.score != null && isAboveBaseline(o.score, ceiling)
-          // The option at the ceiling is the baseline level — "where you should
-          // be" — marked with a dotted box. Above-baseline options have no box.
+          // The option at the ceiling is the baseline level - "where you should
+          // be" - marked with a dotted box. Above-baseline options have no box.
           const atBaseline = hasBaseline && o.score === ceiling
           const boxed = atBaseline
           const id = `${name}-${o.value}`
@@ -191,7 +191,7 @@ export default function QuestionRadioGroup({
                   {o.label}
                   {/* Non-color cue for AT: expose the baseline relationship to
                       assistive tech regardless of the visible (color) treatment.
-                      Suppressed when the option is selected — the visible chip
+                      Suppressed when the option is selected - the visible chip
                       below is focusable and carries the same aria-label, so this
                       would double-announce on the selected above-baseline row. */}
                   {above && !selectedAbove && (
@@ -201,14 +201,14 @@ export default function QuestionRadioGroup({
                   )}
                   {atBaseline && (
                     <Tooltip
-                      title={`Your baseline — the maturity level a ${level}-impact system is expected to reach`}
+                      title={`Your baseline - the maturity level a ${level}-impact system is expected to reach`}
                       placement="top"
                       arrow
                     >
                       <Box
                         component="span"
                         tabIndex={0}
-                        aria-label={`${level} baseline — your system's expected maturity level`}
+                        aria-label={`${level} baseline - your system's expected maturity level`}
                         sx={{
                           display: 'inline-block',
                           verticalAlign: 'middle',
@@ -232,14 +232,14 @@ export default function QuestionRadioGroup({
                   )}
                   {above && selectedAbove && (
                     <Tooltip
-                      title={`Above your ${level} baseline — optional, not required to reach; worth documenting what's driving it`}
+                      title={`Above your ${level} baseline - optional, not required to reach; worth documenting what's driving it`}
                       placement="top"
                       arrow
                     >
                       <Box
                         component="span"
                         tabIndex={0}
-                        aria-label={`above the ${level} baseline — optional`}
+                        aria-label={`above the ${level} baseline - optional`}
                         sx={{
                           display: 'inline-block',
                           verticalAlign: 'middle',
@@ -277,7 +277,7 @@ export default function QuestionRadioGroup({
 
       {/* Live region is always mounted (only its content toggles) so screen
           readers reliably announce the notice when an above-baseline option is
-          selected — a region added at the same tick as its text is sometimes
+          selected - a region added at the same tick as its text is sometimes
           skipped. */}
       <Box role="status" aria-live="polite">
         {selectedAbove && (

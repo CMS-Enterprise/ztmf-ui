@@ -1,9 +1,16 @@
 import { useState, useEffect, useMemo, useRef } from 'react'
-import { useParams } from 'react-router-dom'
-import { Box, CircularProgress, Divider, Typography } from '@mui/material'
+import { useParams, Link as RouterLink } from 'react-router-dom'
+import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
+import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import _ from 'lodash'
 
-import { FismaSystemType, FormValidType, FormValidHelperText } from '@/types'
+import {
+  FismaSystemType,
+  FormValidType,
+  FormValidHelperText,
+  ScoreAggregate,
+} from '@/types'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
@@ -17,6 +24,9 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import PageHeader from '@/components/ui/PageHeader'
+import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
+import { StatusChip, CodeBadge } from '@/components/ui/StatusChip'
 import { getTodayISO, truncateNotes } from '@/utils/decommission'
 import {
   isAdmin as checkIsAdmin,
@@ -26,7 +36,6 @@ import {
   hasSystemAccess,
 } from '@/utils/userRoles'
 
-import SystemDetailHeader from './SystemDetailHeader'
 import SystemDetailReadView from './SystemDetailReadView'
 import SystemDetailEditView from './SystemDetailEditView'
 import TargetMaturityCard from './TargetMaturityCard'
@@ -35,8 +44,8 @@ import {
   buildExtendedDiff,
   crossFieldClears,
 } from '@/utils/systemMetadataVocab'
-import SystemEnrichmentCard from './SystemEnrichmentCard'
 import SystemDelegatesSection from './SystemDelegatesSection'
+import { formatDate } from '@/utils/dates'
 
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
@@ -44,6 +53,9 @@ export default function SystemDetailPage() {
     fismaSystems,
     setFismaSystems,
     userInfo,
+    selectedDatacall,
+    latestDataCallId,
+    datacalls,
     datacenterEnvironments,
     fetchFismaSystems,
     showDecommissioned,
@@ -52,6 +64,7 @@ export default function SystemDetailPage() {
 
   const isAdmin = checkIsAdmin(userInfo)
   const systemId = fismasystemid ? Number(fismasystemid) : NaN
+  const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   // Target maturity is the one field pair an assigned ISSO may write; the
   // TargetMaturityCard owns its own edit/save lifecycle and this flag only
   // gates the Edit affordance on that card. The page-level Edit button
@@ -106,6 +119,32 @@ export default function SystemDetailPage() {
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
   const [openDecommissionDialog, setOpenDecommissionDialog] = useState(false)
   const [openReactivateDialog, setOpenReactivateDialog] = useState(false)
+
+  // Score aggregates across every datacall for this system. Used to render the
+  // overall score, the pillar snapshot, and the trend line in the score hero.
+  // Mirrors the PillarScoresPage call (include_pillars=true).
+  const [scores, setScores] = useState<ScoreAggregate[]>([])
+  useEffect(() => {
+    if (!systemId) return
+    const controller = new AbortController()
+    async function fetchScores() {
+      try {
+        const res = await axiosInstance.get(
+          `/scores/aggregate?fismasystemid=${systemId}&include_pillars=true`,
+          { signal: controller.signal }
+        )
+        setScores(res.data?.data ?? [])
+      } catch (error) {
+        if (controller.signal.aborted) return
+        if (isAuthHandled(error)) return
+        console.error('Failed to load system scores', error)
+      }
+    }
+    fetchScores()
+    return () => {
+      controller.abort()
+    }
+  }, [systemId])
 
   // Decommission-specific state
   const [decommissionDate, setDecommissionDate] = useState('')
@@ -172,7 +211,7 @@ export default function SystemDetailPage() {
           setDecommissionedByName(res.data?.data?.fullname || userId)
         } catch {
           if (controller.signal.aborted) return
-          // User may have been removed — fall back to UUID
+          // User may have been removed - fall back to UUID
           setDecommissionedByName(userId)
         }
       }
@@ -523,9 +562,7 @@ export default function SystemDetailPage() {
 
   // Build decommission confirmation text
   const getDecommissionConfirmText = (): string => {
-    const dateDisplay = new Date(
-      decommissionDate + 'T00:00:00.000Z'
-    ).toLocaleDateString()
+    const dateDisplay = formatDate(decommissionDate)
     const truncated = truncateNotes(decommissionNotes)
     const notesSuffix = truncated ? ` Notes: "${truncated}"` : ''
 
@@ -587,7 +624,35 @@ export default function SystemDetailPage() {
     )
   }
 
+  // Pick the score aggregate matching the currently-selected datacall; fall
+  // back to the newest scored call so the page still shows the most recent
+  // measurement when no datacall is picked. "Newest" and "previous" are
+  // deadline order via the shared datacalls list, not raw datacallid -
+  // historical loads can out-id the real current call (#393).
+  const scoredCallsByDeadline = sortDatacallsByDeadline(
+    datacalls.filter((dc) => scores.some((s) => s.datacallid === dc.datacallid))
+  )
+  const currentScore =
+    scores.find((s) => s.datacallid === activeDataCallId) ??
+    scores.find((s) => s.datacallid === scoredCallsByDeadline[0]?.datacallid) ??
+    scores[0]
+  const currentScoredIdx = currentScore
+    ? scoredCallsByDeadline.findIndex(
+        (dc) => dc.datacallid === currentScore.datacallid
+      )
+    : -1
+  const previousScore =
+    currentScoredIdx >= 0
+      ? scores.find(
+          (s) =>
+            s.datacallid ===
+            scoredCallsByDeadline[currentScoredIdx + 1]?.datacallid
+        )
+      : undefined
+  const datacallNameById = (id?: number) =>
+    id ? datacalls.find((dc) => dc.datacallid === id)?.datacall : undefined
   const systemOpDiv = opdivs.find((o) => o.opdiv_id === system.opdiv_id)
+  const opdivCode = systemOpDiv?.code
   const opdivName = systemOpDiv?.name ?? null
 
   // Delegates section: visible to any assigned non-delegate (incl. ISSM) when
@@ -602,12 +667,11 @@ export default function SystemDetailPage() {
   const canManageDelegates = isAdmin || isISSO(userInfo)
 
   // Target maturity owns its own edit/save lifecycle (see TargetMaturityCard).
-  // The card is slotted into the right column of whichever view renders
-  // (between Data Lake Export and Organization). The card's Edit button is
-  // hidden while the page is in Edit mode so an admin can't run both
-  // edit flows at once: saving the card mid-page-edit would fire the
-  // isEditing/system useEffect and reset editedSystem, wiping any
-  // in-progress page-form edits.
+  // Read mode pairs it with Extended metadata; edit mode keeps it in the right
+  // form column. The card's Edit button is hidden while the page is in Edit
+  // mode so an admin can't run both edit flows at once: saving the card
+  // mid-page-edit would fire the isEditing/system useEffect and reset
+  // editedSystem, wiping any in-progress page-form edits.
   const targetMaturityCard = (
     <TargetMaturityCard
       system={system}
@@ -616,21 +680,128 @@ export default function SystemDetailPage() {
     />
   )
 
-  return (
-    <Box sx={{ mt: 1, mb: 4 }}>
-      <BreadCrumbs segmentLabels={{ [fismasystemid!]: system.fismaname }} />
+  // Header actions vary by mode: peer navigation + Edit system in read,
+  // Cancel + Save in edit. Edit gates on admin and on not being mid-save.
+  const headerActions = isEditing ? (
+    <>
+      <Button
+        variant="outlined"
+        color="primary"
+        onClick={handleCancel}
+        disabled={isSaving}
+      >
+        Cancel
+      </Button>
+      <Button
+        variant="contained"
+        color="primary"
+        onClick={handleSave}
+        disabled={!isFormValid() || isSaving}
+      >
+        {isSaving ? 'Saving...' : 'Save changes'}
+      </Button>
+    </>
+  ) : (
+    <>
+      <Button
+        variant="outlined"
+        color="primary"
+        // A real router link rather than onClick + navigate, so open-in-new-
+        // tab and copy-link work (ui#640). The questionnaire route is keyed on
+        // fismasystemid, same as this page, so the URL alone opens this exact
+        // system and no route state is needed.
+        component={RouterLink}
+        to={questionnairePath(system.fismasystemid)}
+        // Renders as a real <a>, so the CMS design system's global a:visited
+        // rule would repaint the label purple after a click and break the
+        // button look. Pin the link states to the button's own color.
+        sx={{ '&:link, &:visited': { color: 'primary.main' } }}
+      >
+        Questionnaire
+      </Button>
+      <Button
+        variant="outlined"
+        color="primary"
+        component={RouterLink}
+        to={`/systems/${system.fismasystemid}/pillar-scores`}
+        sx={{ '&:link, &:visited': { color: 'primary.main' } }}
+      >
+        Pillar scores
+      </Button>
+      {isAdmin && (
+        <Button variant="contained" color="primary" onClick={handleEdit}>
+          Edit system
+        </Button>
+      )}
+    </>
+  )
 
-      <SystemDetailHeader
-        systemName={system.fismaname}
-        fismasystemid={system.fismasystemid}
-        canEdit={isAdmin}
-        isEditing={isEditing}
-        isSaving={isSaving}
-        isFormValid={isFormValid()}
-        onEdit={handleEdit}
-        onSave={handleSave}
-        onCancel={handleCancel}
+  return (
+    <Box sx={{ py: 4 }}>
+      <PageHeader
+        breadcrumbs={
+          <BreadCrumbs segmentLabels={{ [fismasystemid!]: system.fismaname }} />
+        }
+        // Edit mode reframes the page identity: H1 reads "Edit system" with
+        // a plain "<name> · <acronym>" subtitle so the user knows which
+        // system they are editing. Read mode keeps the system name as the
+        // h1 with the inline Active/Decommissioned chip.
+        title={
+          isEditing ? (
+            'Edit system'
+          ) : (
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.25 }}
+            >
+              {system.fismaname}
+              <StatusChip
+                label={system.decommissioned ? 'Decommissioned' : 'Active'}
+                kind={system.decommissioned ? 'neutral' : 'active'}
+              />
+            </Box>
+          )
+        }
+        subtitle={
+          isEditing ? (
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+            >
+              {system.fismaname}
+              {system.fismaacronym && (
+                <>
+                  <span aria-hidden>·</span>
+                  <Box component="span" sx={{ fontWeight: 600 }}>
+                    {system.fismaacronym}
+                  </Box>
+                </>
+              )}
+            </Box>
+          ) : (
+            <Box
+              component="span"
+              sx={{ display: 'inline-flex', alignItems: 'center', gap: 1 }}
+            >
+              {system.fismauid && <CodeBadge code={system.fismauid} />}
+              {opdivCode && (
+                <>
+                  <span aria-hidden>·</span>
+                  <CodeBadge code={opdivCode} />
+                </>
+              )}
+            </Box>
+          )
+        }
+        actions={headerActions}
       />
+
+      {/* Edit mode locks the datacall picker: system metadata (acronym,
+          datacenter env, etc.) is not datacall-scoped, so switching the
+          datacall mid-edit would do nothing and confuse the user. The card
+          still renders so the user knows which datacall context they're in,
+          just static. */}
+      <DatacallContextCard readOnly={isEditing} />
 
       {isEditing && editedSystem && isAdmin ? (
         <SystemDetailEditView
@@ -669,38 +840,25 @@ export default function SystemDetailPage() {
       ) : (
         <SystemDetailReadView
           system={system}
+          opdivs={opdivs}
+          currentScore={currentScore}
+          previousScore={previousScore}
+          previousDatacallName={datacallNameById(previousScore?.datacallid)}
           decommissionedByName={decommissionedByName}
           targetMaturitySlot={targetMaturityCard}
           opdivName={opdivName}
+          isAdmin={isAdmin}
+          onIssoUpdated={async () => {
+            // The read is the source of truth for resolved fields like
+            // isso_name, so refetch rather than echo the adopted value.
+            triedFetch.current = false
+            await fetchFismaSystems(showDecommissioned)
+          }}
         />
       )}
 
-      {/* ZTMF Insights enrichment is CMS-only for now; gate the whole section on
-          the per-system sdl_sync_enabled toggle (default false for new OpDivs). */}
-      {system.fismauid && system.sdl_sync_enabled && (
-        <>
-          <Divider sx={{ my: 4 }} />
-          <Typography variant="h6" sx={{ mb: 2 }}>
-            ZTMF Insights
-          </Typography>
-          <SystemEnrichmentCard
-            fismaUid={system.fismauid}
-            systemDataCenterEnvironment={system.datacenterenvironment}
-            system={system}
-            isAdmin={isAdmin}
-            onIssoUpdated={async () => {
-              // Same refetch-not-echo rationale as handleSave: the read is the
-              // source of truth for resolved fields like isso_name.
-              triedFetch.current = false
-              await fetchFismaSystems(showDecommissioned)
-            }}
-          />
-        </>
-      )}
-
       {canViewDelegates && (
-        <>
-          <Divider sx={{ my: 4 }} />
+        <Box sx={{ mt: 4 }}>
           {/* Keyed by system: this page stays mounted when the route moves
               between two systems already in the shared list, and without a
               remount the section would carry the previous system's search
@@ -710,9 +868,8 @@ export default function SystemDetailPage() {
             system={system}
             canManage={canManageDelegates}
           />
-        </>
+        </Box>
       )}
-
       <ConfirmDialog
         confirmationText={CONFIRMATION_MESSAGE}
         open={openConfirmDialog}

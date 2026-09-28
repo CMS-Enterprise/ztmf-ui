@@ -30,13 +30,13 @@ try {
   bundles = readdirSync(assetsDir).filter((name) => name.endsWith('.js'))
 } catch {
   console.error(
-    `assert-prod-excludes-devtools: ${assetsDir} not found — run this after "vite build".`
+    `assert-prod-excludes-devtools: ${assetsDir} not found - run this after "vite build".`
   )
   process.exit(1)
 }
 if (bundles.length === 0) {
   console.error(
-    'assert-prod-excludes-devtools: no .js bundles in dist/assets — nothing to check is a failure, not a pass.'
+    'assert-prod-excludes-devtools: no .js bundles in dist/assets - nothing to check is a failure, not a pass.'
   )
   process.exit(1)
 }

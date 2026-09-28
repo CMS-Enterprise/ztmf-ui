@@ -122,9 +122,7 @@ test('403 renders the quiet empty state and the interceptor stays out of the way
 
   renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
-  expect(
-    await screen.findByText(/no ztmf insights data found/i)
-  ).toBeInTheDocument()
+  expect(await screen.findByText(/no ztmf insights yet/i)).toBeInTheDocument()
   // The opt-out is real: no permission snackbar fired anywhere.
   expect(screen.queryByText(ERROR_MESSAGES.permission)).not.toBeInTheDocument()
   // And no redirect either - skipAuthHandling bypasses both branches.
@@ -133,14 +131,12 @@ test('403 renders the quiet empty state and the interceptor stays out of the way
   expect(mock.history.get[0].skipAuthHandling).toBe(true)
 })
 
-test('404 renders the same quiet empty state', async () => {
+test('404 renders the shared insights empty state', async () => {
   mock.onGet(`/systemenrichment/${FISMA_UID}`).reply(404)
 
   renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
-  expect(
-    await screen.findByText(/no ztmf insights data found/i)
-  ).toBeInTheDocument()
+  expect(await screen.findByText(/no ztmf insights yet/i)).toBeInTheDocument()
 })
 
 test('500 renders the failed-to-load message', async () => {
@@ -284,7 +280,7 @@ test('formats a timestamp-format ATO expiration date instead of "Invalid Date"',
   renderWithProviders(<SystemEnrichmentCard fismaUid={FISMA_UID} />)
 
   expect(await screen.findByText('Test Package')).toBeInTheDocument()
-  expect(screen.getByText('12/13/2026')).toBeInTheDocument()
+  expect(screen.getByText('Dec 13, 2026')).toBeInTheDocument()
   expect(screen.queryByText('Invalid Date')).not.toBeInTheDocument()
 })
 

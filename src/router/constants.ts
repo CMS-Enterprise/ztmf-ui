@@ -14,6 +14,7 @@ export enum RouteIds {
   USERS = 'users',
   SIGNIN = 'signin',
   SYSTEM_DETAIL = 'system-detail',
+  PILLAR_SCORES = 'pillar-scores',
   ADMIN_OPDIVS = 'admin-opdivs',
   ADMIN_EVENTS = 'admin-events',
 }
@@ -38,6 +39,7 @@ export enum Routes {
   AUTH_LOGIN = `/${RouteIds.AUTH}/${RouteIds.LOGIN}`,
   SIGNIN = `/${RouteIds.SIGNIN}`,
   SYSTEM_DETAIL = '/systems/:fismasystemid',
+  PILLAR_SCORES = '/systems/:fismasystemid/pillar-scores',
   ADMIN_OPDIVS = '/admin/opdivs',
   ADMIN_EVENTS = '/admin/events',
 }

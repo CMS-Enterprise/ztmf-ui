@@ -7,6 +7,15 @@ jest.mock('@/axiosConfig', () => {
 })
 
 import { screen } from '@testing-library/react'
+
+// axiosConfig reads import.meta, which Jest's CJS transform cannot parse -
+// same import-meta dance as the other view tests. Pulled in transitively via
+// SystemEnrichmentCard.
+jest.mock('@/axiosConfig', () => ({
+  __esModule: true,
+  default: { get: jest.fn(), post: jest.fn(), put: jest.fn() },
+}))
+
 import SystemDetailReadView from './SystemDetailReadView'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType } from '@/types'
@@ -38,17 +47,18 @@ test('renders the OpDiv name in the Organization section', () => {
   expect(screen.getByText('CMS')).toBeInTheDocument()
 })
 
-test('shows the em-dash fallback when opdivName is null', () => {
+test('shows the dash fallback when opdivName is null', () => {
   renderView(null)
-  // Label always present; value falls back to — via FieldDisplay
+  // Label always present; the value falls back to '-' when there is neither
+  // a resolved code nor a name.
   expect(screen.getByText('OpDiv')).toBeInTheDocument()
   expect(screen.queryByText('CMS')).not.toBeInTheDocument()
 })
 
-test('OpDiv label appears before Group Acronym in the Organization card', () => {
+test('OpDiv label appears before Group acronym in the Organization card', () => {
   renderView('CMS')
   const opdivLabel = screen.getByText('OpDiv')
-  const groupLabel = screen.getByText('Group Acronym')
+  const groupLabel = screen.getByText('Group acronym')
   // DOCUMENT_POSITION_FOLLOWING (4): groupLabel comes after opdivLabel in the DOM
   expect(
     opdivLabel.compareDocumentPosition(groupLabel) &
@@ -65,6 +75,21 @@ function renderWithExtended(extra: Partial<FismaSystemType>) {
     />
   )
 }
+
+test('places target maturity and extended metadata in the same layout row', () => {
+  renderWithProviders(
+    <SystemDetailReadView
+      system={{ ...BASE_SYSTEM, hva: true } as FismaSystemType}
+      decommissionedByName=""
+      opdivName="CMS"
+      targetMaturitySlot={<div>Target maturity content</div>}
+    />
+  )
+
+  const grid = screen.getByTestId('metadata-target-grid')
+  expect(grid).toContainElement(screen.getByText('Target maturity content'))
+  expect(grid).toContainElement(screen.getByText('Extended metadata'))
+})
 
 describe('extended metadata formatting', () => {
   test('renders tri-state booleans as Yes/No/Unknown, not raw values', () => {

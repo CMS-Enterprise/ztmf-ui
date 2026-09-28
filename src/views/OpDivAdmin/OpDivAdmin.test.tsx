@@ -119,7 +119,7 @@ jest.mock('../Title/Context', () => ({
   },
 }))
 
-import { act, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import OpDivAdmin from './OpDivAdmin'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
@@ -151,6 +151,8 @@ function ctx(role: UserRole) {
       fullname: 'Tester',
       role,
     } as userData,
+    // The page derives its per-OpDiv system counts from the context list.
+    fismaSystems: [],
     opdivs: [EMPIRE],
     opdivsLoaded: true,
   }
@@ -177,9 +179,12 @@ test('creating an OpDiv POSTs the trimmed form and closes the dialog', async () 
   renderAs('OWNER')
 
   await user.click(screen.getByRole('button', { name: /create opdiv/i }))
-  await user.type(await screen.findByLabelText(/code/i), '  NEWOP  ')
-  await user.type(screen.getByLabelText(/^name/i), '  New Division  ')
-  await user.click(screen.getByRole('button', { name: /^save$/i }))
+  const dialog = await screen.findByRole('dialog', { name: /create opdiv/i })
+  await user.type(within(dialog).getByLabelText(/code/i), '  NEWOP  ')
+  await user.type(within(dialog).getByLabelText(/^name/i), '  New Division  ')
+  await user.click(
+    within(dialog).getByRole('button', { name: /create opdiv/i })
+  )
 
   await waitFor(() => expect(mock.history.post).toHaveLength(1))
   expect(mock.history.post[0].url).toBe(OPDIVS_URL)
@@ -201,9 +206,12 @@ test('a backend field error on create stays inline and keeps the dialog open', a
   renderAs('OWNER')
 
   await user.click(screen.getByRole('button', { name: /create opdiv/i }))
-  await user.type(await screen.findByLabelText(/code/i), 'EMPIRE')
-  await user.type(screen.getByLabelText(/^name/i), 'Duplicate')
-  await user.click(screen.getByRole('button', { name: /^save$/i }))
+  const dialog = await screen.findByRole('dialog', { name: /create opdiv/i })
+  await user.type(within(dialog).getByLabelText(/code/i), 'EMPIRE')
+  await user.type(within(dialog).getByLabelText(/^name/i), 'Duplicate')
+  await user.click(
+    within(dialog).getByRole('button', { name: /create opdiv/i })
+  )
 
   // Routed to the Code field rather than a toast, so the admin can correct it
   // in place.
@@ -224,7 +232,9 @@ test('OWNER sees the delegate toggle plus Create and row actions', async () => {
   expect(
     screen.getByRole('button', { name: /create opdiv/i })
   ).toBeInTheDocument()
-  expect(screen.getByRole('button', { name: /^edit$/i })).toBeInTheDocument()
+  expect(
+    screen.getByRole('button', { name: /edit opdiv/i })
+  ).toBeInTheDocument()
   expect(
     screen.getByRole('button', { name: /deactivate/i })
   ).toBeInTheDocument()
@@ -242,7 +252,7 @@ test('HHS admin sees the grid and toggle but not Create / Edit / Deactivate', as
     screen.queryByRole('button', { name: /create opdiv/i })
   ).not.toBeInTheDocument()
   expect(
-    screen.queryByRole('button', { name: /^edit$/i })
+    screen.queryByRole('button', { name: /edit opdiv/i })
   ).not.toBeInTheDocument()
   expect(
     screen.queryByRole('button', { name: /deactivate/i })

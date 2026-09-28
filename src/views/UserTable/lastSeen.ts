@@ -11,6 +11,7 @@ import type {
   GridFilterModel,
   GridSortItem,
 } from '@mui/x-data-grid'
+import { formatDateTime } from '@/utils/dates'
 
 /** Neutral empty state - see the module note on why it isn't "Never logged in". */
 export const LAST_SEEN_EMPTY_LABEL = 'No activity recorded'
@@ -87,10 +88,7 @@ export function formatLastSeenRelative(value: Date, now: Date): string {
 
 /** Absolute timestamp for the hover tooltip, in the viewer's locale. */
 export function formatLastSeenAbsolute(value: Date): string {
-  return value.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
+  return formatDateTime(value)
 }
 
 /**

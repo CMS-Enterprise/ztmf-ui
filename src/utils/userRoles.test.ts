@@ -183,7 +183,7 @@ test('isAdminTierRole returns true for every admin tier (write or read-only)', (
 // SYSTEM_DELEGATE is the frontend mirror of the backend answers-only carve-out
 // (ztmf#455): it gets system-detail access exactly like ISSO/ISSM, but is
 // barred from the target-maturity edit control. hasSystemAccess and
-// isSystemScoped must therefore diverge for this role — that divergence is the
+// isSystemScoped must therefore diverge for this role - that divergence is the
 // whole point of the role, so pin it explicitly.
 test('SYSTEM_DELEGATE has system access but is NOT system-scoped (answers-only)', () => {
   const delegate = roleUser('SYSTEM_DELEGATE')

@@ -161,7 +161,7 @@ afterEach(() => {
   })
 })
 
-describe('Title — shared OpDiv context (#558)', () => {
+describe('Title - shared OpDiv context (#558)', () => {
   it('fetches the inactive-inclusive list once and puts it on the Outlet context', async () => {
     renderWithQueryClient(<Title />)
 

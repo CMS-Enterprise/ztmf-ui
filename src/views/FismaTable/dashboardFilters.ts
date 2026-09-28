@@ -21,7 +21,7 @@ export type DashboardFilterState = {
   openCallOnly: boolean
 }
 
-/** An empty filter state — nothing selected, everything passes. */
+/** An empty filter state - nothing selected, everything passes. */
 export const EMPTY_DASHBOARD_FILTERS: DashboardFilterState = {
   environments: [],
   opdivIds: [],
@@ -72,7 +72,7 @@ export function isOpenCallInView(
  * True when a system is a genuine "Not updated" laggard for the active data
  * call: it has a questionnaire but zero functions updated. Reuses the column's
  * own classifier (`progressSortValue === -1`) so the filter and the Data Call
- * Progress chip never disagree — the 0/0 "N/A" case and systems with no
+ * Progress chip never disagree - the 0/0 "N/A" case and systems with no
  * progress data are intentionally excluded.
  *
  * "Not updated" is a current-cycle laggard signal, so it only applies to the
@@ -90,6 +90,38 @@ export function isNotUpdated(
 ): boolean {
   if (!isCurrentCall) return false
   return progressSortValue(entry) === -1
+}
+
+/**
+ * Apply the dashboard's free-text search to the fields still visible in the
+ * redesigned grid. Every whitespace-separated term must match at least one
+ * field, matching DataGrid quick-filter behavior while making the visible row
+ * count available outside the grid.
+ * @param {FismaSystemType[]} rows - Rows that already passed the facet filters.
+ * @param {string} search - The user's free-text query.
+ * @param {Record<number, string>} opdivCodeMap - OpDiv code keyed by opdiv_id.
+ * @returns {FismaSystemType[]} Rows matching every search term.
+ */
+export function applyDashboardSearch(
+  rows: FismaSystemType[],
+  search: string,
+  opdivCodeMap: Record<number, string>
+): FismaSystemType[] {
+  const terms = search.trim().toLocaleLowerCase().split(/\s+/).filter(Boolean)
+  if (terms.length === 0) return rows
+
+  return rows.filter((row) => {
+    const fields = [
+      row.fismaname,
+      row.fismaacronym,
+      row.mission,
+      row.component,
+      row.isso_name,
+      row.opdiv_id == null ? '' : opdivCodeMap[row.opdiv_id],
+    ].map((value) => String(value ?? '').toLocaleLowerCase())
+
+    return terms.every((term) => fields.some((field) => field.includes(term)))
+  })
 }
 
 /**

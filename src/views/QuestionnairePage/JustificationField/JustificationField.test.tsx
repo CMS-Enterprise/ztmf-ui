@@ -80,7 +80,7 @@ describe('justification context helpers', () => {
 
   it("labels prior content as last year's response", () => {
     expect(priorResponseFor(insight, 'FY2025 Q2')).toEqual({
-      label: "Last year's response — FY2025 Q1",
+      label: "Last year's response - FY2025 Q1",
       text: insight.last_score_notes,
     })
     expect(
@@ -314,7 +314,7 @@ describe('JustificationField', () => {
 
     fireEvent.click(
       screen.getByRole('button', {
-        name: "Review again: Last year's response — FY2025 Q1",
+        name: "Review again: Last year's response - FY2025 Q1",
       })
     )
 
@@ -330,7 +330,7 @@ describe('JustificationField', () => {
     )
     fireEvent.click(
       screen.getByRole('button', {
-        name: "Review again: Last year's response — FY2025 Q1",
+        name: "Review again: Last year's response - FY2025 Q1",
       })
     )
 
@@ -373,7 +373,7 @@ describe('JustificationField', () => {
     expect(screen.getByText('Added to response')).toBeInTheDocument()
     fireEvent.click(
       screen.getByRole('button', {
-        name: "Review again: Last year's response — FY2025 Q1",
+        name: "Review again: Last year's response - FY2025 Q1",
       })
     )
     expect(
@@ -490,7 +490,7 @@ describe('JustificationField', () => {
     ).toBeInTheDocument()
     expect(
       screen.getByRole('button', {
-        name: "Review again: Last year's response — FY2025 Q1",
+        name: "Review again: Last year's response - FY2025 Q1",
       })
     ).toBeInTheDocument()
   })
