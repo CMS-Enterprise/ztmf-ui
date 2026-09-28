@@ -22,12 +22,12 @@ const LOW_FIPS: InsightPayload = { fips_impact_level: 'Low', fips_ceiling: 2 }
 // Low FIPS with CMS-specific badge data (suggested + prior answer).
 // suggested_score: 3 (Advanced) is intentionally distinct from fips_ceiling: 2
 // (Initial) so the "ZTMF Insights" badge and "Low baseline" chip land on
-// separate option rows — a bug that suppressed badges only on the baseline
+// separate option rows - a bug that suppressed badges only on the baseline
 // option would be visible.
 const LOW_FIPS_WITH_BADGES: InsightPayload = {
   fips_impact_level: 'Low',
   fips_ceiling: 2,
-  suggested_score: 3, // Advanced (score 3) — above the ceiling, not at it
+  suggested_score: 3, // Advanced (score 3) - above the ceiling, not at it
   last_score: 1,
   last_datacall: 'FY2025 Q1',
 }
@@ -75,7 +75,7 @@ describe('QuestionRadioGroup', () => {
   })
 
   describe('with no FIPS data', () => {
-    it('renders plain radios — no baseline treatment at all', () => {
+    it('renders plain radios - no baseline treatment at all', () => {
       renderGroup()
       expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
     })
@@ -126,7 +126,7 @@ describe('QuestionRadioGroup', () => {
   describe('showInsightBadges=false (HHS-like rendering)', () => {
     it('shows FIPS baseline but suppresses CMS insight chips', () => {
       renderGroup({ insight: LOW_FIPS_WITH_BADGES, showInsightBadges: false })
-      // FIPS baseline marker still renders — it is a federal-wide concept.
+      // FIPS baseline marker still renders - it is a federal-wide concept.
       expect(screen.getByText('Low baseline')).toBeInTheDocument()
       // CMS-internal insight chips are absent.
       expect(screen.queryByText('ZTMF Insights')).not.toBeInTheDocument()
@@ -154,7 +154,7 @@ describe('QuestionRadioGroup', () => {
       expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
     })
 
-    it('malformed level (a number on the opaque payload) is ignored — no throw, no treatment', () => {
+    it('malformed level (a number on the opaque payload) is ignored - no throw, no treatment', () => {
       renderGroup({
         insight: {
           fips_impact_level: 3 as unknown as null,

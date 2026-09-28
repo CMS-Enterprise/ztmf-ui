@@ -1,21 +1,21 @@
 import React from 'react'
 import {
-  Chip,
-  Dialog,
-  DialogContent,
-  DialogTitle,
-  DialogActions,
+  Box,
+  Button,
+  Checkbox,
+  InputAdornment,
+  OutlinedInput,
   Typography,
 } from '@mui/material'
-import { Button as CmsButton } from '@cmsgov/design-system'
+import Modal from '@/components/ui/Modal'
 import { GridRowId } from '@mui/x-data-grid'
-import Checkbox from '@mui/material/Checkbox'
-import TextField from '@mui/material/TextField'
-import Autocomplete, { createFilterOptions } from '@mui/material/Autocomplete'
+import SearchIcon from '@mui/icons-material/Search'
+import { CodeBadge } from '@/components/ui/StatusChip'
 import { useSetUserOpDivs, useUserOpDivs } from '@/utils/userOpdivs'
 import { EMPTY_LIST } from '@/utils/emptyList'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
+import { colors, radius } from '@/theme/tokens'
 import type { OpDiv } from '@/types'
 
 type Props = {
@@ -64,6 +64,70 @@ type Props = {
   onChanged?: (userid: string) => void
 }
 
+type View = 'selected' | 'all'
+
+const searchInputSx = {
+  height: 36,
+  fontSize: 13,
+  '& .MuiOutlinedInput-input': { padding: '0 0' },
+  '& fieldset': { borderColor: colors.border },
+}
+
+const rowSx = {
+  display: 'flex',
+  alignItems: 'center',
+  gap: 1.25,
+  px: 1.75,
+  py: 1.25,
+  borderBottom: `1px solid ${colors.neutral100}`,
+  cursor: 'pointer',
+  '&:last-of-type': { borderBottom: 'none' },
+  '&:hover': { backgroundColor: colors.neutral50 },
+}
+
+/** Pill-style toggle for the Selected/All view switcher. */
+function PillTab({
+  active,
+  children,
+  onClick,
+}: {
+  active: boolean
+  children: React.ReactNode
+  onClick: () => void
+}) {
+  return (
+    <Box
+      component="button"
+      type="button"
+      onClick={onClick}
+      aria-pressed={active}
+      sx={{
+        font: 'inherit',
+        fontSize: 13,
+        fontWeight: 500,
+        px: 1.25,
+        py: 0.5,
+        borderRadius: 999,
+        border: active ? 'none' : `1px solid ${colors.neutral200}`,
+        backgroundColor: active ? colors.primary50 : colors.white,
+        color: active ? colors.primary : colors.ink,
+        cursor: 'pointer',
+      }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+/**
+ * Assign OpDivs modal. Renders the pill-tab + checkbox list described by
+ * the mockup (frame 17) in the shared Modal shell.
+ *
+ * Grants are batched: checking and unchecking rows only mutates local
+ * state, and one PUT /users/{id}/opdivs commits the full desired set when
+ * the user clicks Save. Cancel discards everything - so unchecking needs
+ * no confirm dialog; nothing is destructive until Save.
+ */
 export default function OpDivGrantModal({
   open,
   handleClose,
@@ -97,6 +161,8 @@ export default function OpDivGrantModal({
     targetQuery.isError || (enforceCallerScope && callerQuery.isError)
   const grantMutation = useSetUserOpDivs()
   const saving = grantMutation.isPending
+  const [view, setView] = React.useState<View>('all')
+  const [search, setSearch] = React.useState<string>('')
 
   // Only the user's edits live in state; until the picker is touched the fetched
   // grants render directly, so a refresh cannot clobber an edit. Empty while a
@@ -121,6 +187,9 @@ export default function OpDivGrantModal({
   const callerGrantIds: number[] = enforceCallerScope
     ? callerQuery.data ?? EMPTY_LIST
     : EMPTY_LIST
+  // The caller's raw backend scope (IsAssignedOpDiv). Superset of assignableIds
+  // - it also covers grants to OpDivs since re-parented/deactivated. Gates the
+  // scoped save and the row lock, so both agree with what the backend acts on.
   const callerScope = React.useMemo(
     () => new Set(callerGrantIds),
     [callerGrantIds]
@@ -145,7 +214,7 @@ export default function OpDivGrantModal({
   }, [assignableOpDivs, enforceCallerScope, callerScope])
 
   // Label from the full map (assignable or not), with an identifiable fallback
-  // so a grant to an OpDiv missing from the map never chips blank.
+  // so a grant to an OpDiv missing from the map never renders blank.
   const optionLabel = React.useCallback(
     (opdivId: number) => {
       const od = opdivLabelMap[opdivId]
@@ -154,10 +223,9 @@ export default function OpDivGrantModal({
     [opdivLabelMap]
   )
 
-  // Options = assignable + currently-granted, so a chip for a grant to a
-  // non-assignable OpDiv still resolves against the options (no MUI "value not
-  // in options" warning, no blank chip). filterOptions below narrows the
-  // DROPDOWN back to the assignable set so those grants are not re-selectable.
+  // Rows = assignable + currently-granted, so a grant to a non-assignable
+  // OpDiv still renders (labeled) instead of disappearing; the row lock below
+  // keeps those from being re-toggled out of scope.
   const sortedOptionIds = React.useMemo(() => {
     const ids = new Set<number>(assignableIds)
     for (const id of localOpDivs) ids.add(id)
@@ -166,7 +234,30 @@ export default function OpDivGrantModal({
     )
   }, [assignableIds, localOpDivs, optionLabel])
 
-  const baseFilter = React.useMemo(() => createFilterOptions<number>(), [])
+  const visibleOpDivs = React.useMemo(() => {
+    const scoped =
+      view === 'selected'
+        ? sortedOptionIds.filter((id) => localOpDivs.includes(id))
+        : sortedOptionIds
+    const needle = search.trim().toLowerCase()
+    if (!needle) return scoped
+    return scoped.filter((id) => {
+      const od = opdivLabelMap[id]
+      if (!od) return false
+      return (
+        od.code.toLowerCase().includes(needle) ||
+        od.name.toLowerCase().includes(needle)
+      )
+    })
+  }, [view, sortedOptionIds, localOpDivs, opdivLabelMap, search])
+
+  // Reset transient view state whenever the modal opens/closes so a
+  // previous user's filter doesn't carry over and per the project rule
+  // that closed modals must not retain validation/UI state.
+  React.useEffect(() => {
+    if (open) setView('all')
+    if (!open) setSearch('')
+  }, [open])
 
   const handleError = React.useCallback((error: unknown) => {
     if (isAuthHandled(error)) return
@@ -193,6 +284,16 @@ export default function OpDivGrantModal({
     handleError(failure)
   }, [open, loading, failure, handleError])
 
+  const handleToggle = (opdivId: number, checked: boolean) => {
+    setEdits(
+      checked
+        ? localOpDivs.includes(opdivId)
+          ? localOpDivs
+          : [...localOpDivs, opdivId]
+        : localOpDivs.filter((id) => id !== opdivId)
+    )
+  }
+
   const handleSave = async () => {
     // Scoped caller (OPDIV_ADMIN): keep only grants within the caller's own
     // backend scope (callerScope), so the batch request never includes ids the
@@ -217,84 +318,170 @@ export default function OpDivGrantModal({
     }
   }
 
+  const selectedCount = localOpDivs.length
+  const totalCount = sortedOptionIds.length
+  const controlsDisabled = loading || fetchFailed
+
   return (
-    <Dialog
+    <Modal
       open={open}
       onClose={handleClose}
-      maxWidth="lg"
-      fullWidth
-      aria-label={`Assign OpDivs for ${userName}`}
+      title="Assign OpDivs"
+      eyebrow={userName || undefined}
+      size="md"
+      dense
+      footer={
+        <>
+          <Button variant="text" color="inherit" onClick={handleClose}>
+            Cancel
+          </Button>
+          <Button
+            variant="contained"
+            color="primary"
+            onClick={handleSave}
+            disabled={saving || controlsDisabled || callerHasNoScope}
+            sx={{ borderRadius: `${radius.button}px` }}
+          >
+            Save
+          </Button>
+        </>
+      }
     >
-      <DialogTitle align="center">
-        <div>
-          <Typography variant="h3">Assign OpDivs</Typography>
-        </div>
-      </DialogTitle>
-      <DialogContent sx={{ height: 500 }}>
-        <Autocomplete
-          multiple
-          disableCloseOnSelect
-          options={sortedOptionIds}
-          disabled={loading || fetchFailed}
-          disableClearable
-          getOptionLabel={optionLabel}
-          // Keep the dropdown scoped to the assignable set even though options
-          // also carries current non-assignable grants (for chip resolution).
-          filterOptions={(options, params) =>
-            baseFilter(options, params).filter((o) => assignableIds.has(o))
+      <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
+        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+          OpDiv Admins manage users and systems within their assigned OpDivs.
+        </Typography>
+
+        <OutlinedInput
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          placeholder="Search by code or name"
+          fullWidth
+          disabled={controlsDisabled}
+          sx={searchInputSx}
+          startAdornment={
+            <InputAdornment position="start" sx={{ ml: 1.25, mr: 1 }}>
+              <SearchIcon sx={{ fontSize: 16, color: colors.neutral500 }} />
+            </InputAdornment>
           }
-          // Lock (drop the delete button on) only chips outside the caller's
-          // backend scope for a scoped caller: those are grants from another
-          // admin that the save strips regardless, so a delete would be a
-          // silent no-op. A caller-held grant (incl. one to a now
-          // parent/inactive OpDiv) stays deletable - removing it is a real,
-          // permitted revocation. Unscoped callers keep delete on everything.
-          // No limitTags collapse - surfacing every grant, including the
-          // non-assignable ones, is the point of this fix.
-          renderTags={(value, getTagProps) =>
-            value.map((option, index) => {
-              const { key, onDelete, ...tagProps } = getTagProps({ index })
-              const locked = enforceCallerScope && !callerScope.has(option)
+          inputProps={{ 'aria-label': 'Search OpDivs' }}
+        />
+
+        <Box sx={{ display: 'flex', gap: 1 }}>
+          <PillTab
+            active={view === 'selected'}
+            onClick={() => setView('selected')}
+          >
+            Selected ({selectedCount})
+          </PillTab>
+          <PillTab active={view === 'all'} onClick={() => setView('all')}>
+            All OpDivs ({totalCount})
+          </PillTab>
+        </Box>
+
+        <Box
+          sx={{
+            border: `1px solid ${colors.neutral200}`,
+            borderRadius: 1,
+            maxHeight: 240,
+            overflow: 'auto',
+          }}
+        >
+          {fetchFailed ? (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.danger,
+                textAlign: 'center',
+                py: 3,
+              }}
+            >
+              Could not load this user&apos;s OpDivs. Close and try again.
+            </Typography>
+          ) : loading ? (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.neutral500,
+                textAlign: 'center',
+                py: 3,
+              }}
+            >
+              Loading OpDivs...
+            </Typography>
+          ) : visibleOpDivs.length === 0 ? (
+            <Typography
+              sx={{
+                fontSize: 13,
+                color: colors.neutral500,
+                textAlign: 'center',
+                py: 3,
+              }}
+            >
+              {search.trim()
+                ? 'No OpDivs match your search.'
+                : view === 'selected'
+                  ? 'No OpDivs selected yet.'
+                  : 'No OpDivs available.'}
+            </Typography>
+          ) : (
+            visibleOpDivs.map((opdivId) => {
+              const od = opdivLabelMap[opdivId]
+              const isAssigned = localOpDivs.includes(opdivId)
+              // Lock rows for grants outside a scoped caller's backend
+              // scope: those come from another admin, the save strips them
+              // from the PUT regardless, so a toggle would be a silent
+              // no-op. Unscoped callers keep every row toggleable.
+              const locked =
+                enforceCallerScope && isAssigned && !callerScope.has(opdivId)
               return (
-                <Chip
-                  {...tagProps}
-                  key={key}
-                  label={optionLabel(option)}
-                  onDelete={locked ? undefined : onDelete}
-                />
+                <Box
+                  key={opdivId}
+                  component="label"
+                  htmlFor={`assign-opdiv-${opdivId}`}
+                  sx={{ ...rowSx, ...(locked && { opacity: 0.65 }) }}
+                >
+                  <Checkbox
+                    id={`assign-opdiv-${opdivId}`}
+                    checked={isAssigned}
+                    disabled={controlsDisabled || locked}
+                    onChange={(e) => handleToggle(opdivId, e.target.checked)}
+                    sx={{ p: 0.5 }}
+                  />
+                  {od ? (
+                    <>
+                      <CodeBadge code={od.code} />
+                      <Typography
+                        sx={{
+                          fontSize: 13,
+                          fontWeight: 600,
+                          color: colors.ink,
+                          flex: 1,
+                          minWidth: 0,
+                        }}
+                      >
+                        {od.name}
+                      </Typography>
+                    </>
+                  ) : (
+                    <Typography
+                      sx={{
+                        fontSize: 13,
+                        fontWeight: 600,
+                        color: colors.ink,
+                        flex: 1,
+                        minWidth: 0,
+                      }}
+                    >
+                      OpDiv #{opdivId}
+                    </Typography>
+                  )}
+                </Box>
               )
             })
-          }
-          renderOption={(props, option, { selected }) => (
-            <li {...props} key={option}>
-              <Checkbox style={{ marginRight: 8 }} checked={selected} />
-              {optionLabel(option)}
-            </li>
           )}
-          value={localOpDivs}
-          onChange={(_event, newValue) => setEdits(newValue)}
-          renderInput={(params) => (
-            <TextField
-              {...params}
-              label="Assign OpDivs"
-              variant="filled"
-              placeholder="OpDivs"
-              InputLabelProps={{ sx: { marginTop: 0 } }}
-            />
-          )}
-        />
-      </DialogContent>
-      <DialogActions>
-        <CmsButton onClick={handleClose} variation="ghost">
-          Cancel
-        </CmsButton>
-        <CmsButton
-          onClick={handleSave}
-          disabled={saving || loading || fetchFailed || callerHasNoScope}
-        >
-          Save
-        </CmsButton>
-      </DialogActions>
-    </Dialog>
+        </Box>
+      </Box>
+    </Modal>
   )
 }

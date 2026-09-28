@@ -9,10 +9,10 @@ import {
 describe('fipsBaseline', () => {
   describe('isAboveBaseline', () => {
     it('warns on options scoring above the ceiling, not at/below it (Low → ceiling 2)', () => {
-      expect(isAboveBaseline(1, 2)).toBe(false) // Traditional — floor
+      expect(isAboveBaseline(1, 2)).toBe(false) // Traditional - floor
       expect(isAboveBaseline(2, 2)).toBe(false) // at baseline
-      expect(isAboveBaseline(3, 2)).toBe(true) // Advanced — above
-      expect(isAboveBaseline(4, 2)).toBe(true) // Optimal — above
+      expect(isAboveBaseline(3, 2)).toBe(true) // Advanced - above
+      expect(isAboveBaseline(4, 2)).toBe(true) // Optimal - above
     })
 
     it('Moderate (ceiling 3) warns only on Optimal', () => {
@@ -32,7 +32,7 @@ describe('fipsBaseline', () => {
 
     it('out-of-range ceiling falls back to 4 (a stray 0 must not invert the fail-safe)', () => {
       // 0 serialized in place of null would make score > ceiling true for every
-      // option; clamp it — and anything outside 1–4 — back to the safe ceiling.
+      // option; clamp it - and anything outside 1–4 - back to the safe ceiling.
       expect(baselineCeiling(0)).toBe(4)
       expect(baselineCeiling(-1)).toBe(4)
       expect(baselineCeiling(5)).toBe(4)

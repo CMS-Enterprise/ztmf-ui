@@ -74,6 +74,8 @@ function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
       role: 'OPDIV_ADMIN',
     } as userData,
     datacenterEnvironments: [],
+    // The score hero picks its aggregate against the shared datacall list.
+    datacalls: [],
     // OpDivs now arrive on the shared Outlet context instead of a per-page GET.
     opdivs: [
       {
@@ -98,9 +100,12 @@ function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
 
 /** The header Edit button (matched by the CMS design-system class). */
 function pageEditButton(): HTMLElement {
-  return screen
-    .queryAllByRole('button', { name: 'Edit' })
-    .filter((button) => button.classList.contains('ds-c-button'))[0]
+  return (
+    screen
+      // The redesign header button reads "Edit system", which also keeps it
+      // apart from the target-maturity card's own Edit button.
+      .queryAllByRole('button', { name: 'Edit system' })[0]
+  )
 }
 
 /** Captures the body of the page's full-system PUT. */
@@ -114,7 +119,7 @@ function captureSave() {
 }
 
 async function enterEditMode(user: ReturnType<typeof userEvent.setup>) {
-  await screen.findByText('System Identity')
+  await screen.findByText('System identity')
   await user.click(pageEditButton())
   await screen.findByRole('textbox', { name: 'ISSO Name' })
 }
@@ -126,7 +131,7 @@ test('Save is enabled for a system with no Component, Data Call Contact, or ISSO
   await enterEditMode(user)
 
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Save' })).toBeEnabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeEnabled()
   )
 })
 
@@ -138,7 +143,7 @@ test('editing one field on such a system saves without filling the blank fields'
   await enterEditMode(user)
   const isso = screen.getByRole('textbox', { name: 'ISSO Name' })
   await user.type(isso, 'General Dodonna')
-  await user.click(screen.getByRole('button', { name: 'Save' }))
+  await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
   // The blank fields are sent as-is, not demanded.
@@ -153,10 +158,10 @@ test('clearing a hard-required field (FISMA Name) still blocks the save', async 
   renderPage()
 
   await enterEditMode(user)
-  await user.clear(screen.getByRole('textbox', { name: 'FISMA Name' }))
+  await user.clear(screen.getByRole('textbox', { name: /^FISMA Name/ }))
 
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   )
 })
 
@@ -172,6 +177,6 @@ test('a malformed value typed into ISSO Email still blocks the save', async () =
   )
 
   await waitFor(() =>
-    expect(screen.getByRole('button', { name: 'Save' })).toBeDisabled()
+    expect(screen.getByRole('button', { name: 'Save changes' })).toBeDisabled()
   )
 })

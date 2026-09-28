@@ -147,10 +147,10 @@ export function formatBool(
  * Display label for a decomposed multi-select value.
  *
  * @param v - The stored parts, or null.
- * @returns The parts joined for display, or an em-dash when empty.
+ * @returns The parts joined for display, or a dash when empty.
  */
 export function formatList(v: string[] | null | undefined): string {
-  return v && v.length > 0 ? v.join(', ') : '—'
+  return v && v.length > 0 ? v.join(', ') : '-'
 }
 
 /**

@@ -78,7 +78,7 @@ jest.mock('@/utils/notify', () => {
 // Stub the insights panel and option badges with recognizable text so the
 // justification-integration tests can assert their presence/absence without
 // depending on the real panel's internals. OptionInsightBadges renders nothing
-// when no insight is passed, matching the real component — so the existing
+// when no insight is passed, matching the real component - so the existing
 // effect-path tests (which run with insights disabled) are unaffected.
 jest.mock('./InsightsPanel/InsightsPanel', () => {
   const react = require('react')
@@ -273,10 +273,14 @@ test('scores fetch 403 (auth-handled) still commits questions and opens the targ
       )
     ).toBe(true)
   )
-  // Sidebar/URL committed together with the content; not stuck loading.
-  await waitFor(() =>
-    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
-  )
+  // Sidebar/URL committed together with the content; not stuck loading. The
+  // header carries a persistent completion progressbar, so "not loading" means
+  // that bar is the only progressbar left - the loading spinner is gone.
+  await waitFor(() => {
+    const bars = screen.getAllByRole('progressbar')
+    expect(bars).toHaveLength(1)
+    expect(bars[0]).toHaveAccessibleName(/overall questionnaire completion/i)
+  })
   // Auth-handled path is silent - no "try again" toast fires.
   expect(
     notifyMock.mock.calls.some(
@@ -348,14 +352,14 @@ test('read-only session evicts the current-question draft on mount', async () =>
 // ---------------------------------------------------------------------------
 // 2c. Time-spent view pings (#368): every session emits one 'events/view' per
 //     opened question with the DB questionid. The payload carries no readonly
-//     flag — editor-vs-viewer is decided server-side from role + deadline.
+//     flag - editor-vs-viewer is decided server-side from role + deadline.
 // ---------------------------------------------------------------------------
 
 const viewPings = () =>
   axios.post.mock.calls.filter((c: unknown[]) => c[0] === apiPaths.events.view)
 
 // The store declines rather than deletes, but the no-edits clear fires
-// whenever on-screen values match the server's — exactly what a declined load
+// whenever on-screen values match the server's - exactly what a declined load
 // leaves behind. Without the guard, opening the question deletes the entry.
 test('does not clear a draft the store declined to read', async () => {
   loadDraftMock.mockResolvedValue(null)
@@ -492,7 +496,7 @@ test('records an events/view ping in a read-only session too', async () => {
 
   renderAt(DEEP_LINK)
 
-  // Read-only viewers are captured too (#368) — the ping still fires; whether
+  // Read-only viewers are captured too (#368) - the ping still fires; whether
   // it counts as viewer time is decided server-side, so the body is identical.
   await waitFor(() => expect(viewPings()).toHaveLength(1))
   expect(viewPings()[0][1]).toEqual({
@@ -634,7 +638,7 @@ test('editable to read-only flip disarms an in-flight autosave', async () => {
   // Flush the initial fetch chain (fake timers don't fire microtasks).
   await act(async () => {})
   const notes = (await screen.findByLabelText(
-    'Justification notes'
+    /supporting evidence/i
   )) as HTMLTextAreaElement
 
   // Typing schedules a saveDraft on the debounce timer.
@@ -729,12 +733,12 @@ test('out-of-band scores refresh re-seeds the answer after save-and-back', async
   // Answer Q1, click Next -> POST fires, fetchQuestionScores GET goes in
   // flight (held by scoresGate) and questionId moves to Q2.
   await user.click(baseline)
-  await user.click(screen.getByText(/^Next$/i))
+  await user.click(screen.getByText(/^Next question/i))
   await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1. fetchOptions runs with an empty scores ref (the second
   // /scores call is still pending), so Q1 briefly shows unanswered.
-  await user.click(screen.getByText(/Back/i))
+  await user.click(screen.getByText(/Previous/i))
   const backBaseline = (await screen.findByLabelText(
     /baseline/i
   )) as HTMLInputElement
@@ -788,12 +792,12 @@ test('out-of-band scores refresh does not overwrite an unsaved in-progress edit'
     /baseline/i
   )) as HTMLInputElement
   await user.click(baseline)
-  await user.click(screen.getByText(/^Next$/i))
+  await user.click(screen.getByText(/^Next question/i))
   await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
 
   // Back to Q1 - fetchOptions seeds from an empty ref so Q1 shows
   // unanswered, and initQuestionChoice is now -1.
-  await user.click(screen.getByText(/Back/i))
+  await user.click(screen.getByText(/Previous/i))
   await waitFor(() => {
     const el = screen.getByLabelText(/baseline/i) as HTMLInputElement
     expect(el.checked).toBe(false)
@@ -973,6 +977,16 @@ const OPDIV_ROWS = [
 describe('QuestionnairePage justification integration', () => {
   type InsightsResponse = { data: { data: unknown[] } }
 
+  // These integration tests wait for the full questionnaire to load before
+  // asserting the insights gate. CI runners can exceed RTL's 1s default while
+  // rendering that page, even though every mocked request resolves immediately.
+  beforeAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 4000 })
+  })
+  afterAll(() => {
+    rtlConfigure({ asyncUtilTimeout: 1000 })
+  })
+
   // This block is the insights-enabled variant: SSD-EX's OpDiv (9) carries
   // insights_enabled, so the layer is expected on unless a test says otherwise.
   const insightsCtx = (overrides: Record<string, unknown> = {}) =>
@@ -1042,7 +1056,7 @@ describe('QuestionnairePage justification integration', () => {
     expect(complete).toBeDisabled()
 
     // Accepting the required review must land even though the text equals
-    // the seeded prior response — via the confirm endpoint, since the old
+    // the seeded prior response - via the confirm endpoint, since the old
     // identical-body answer PUT was silently discarded by the backend's
     // no-op guard. Insert alone performs no write (like the
     // insights-suggestion card's Insert); the resolved review lands on the
@@ -1061,7 +1075,7 @@ describe('QuestionnairePage justification integration', () => {
     await waitFor(() =>
       expect(axios.put).toHaveBeenCalledWith(apiPaths.scores.confirm(5001))
     )
-    // The unchanged answer body must NOT be re-PUT — that path re-stamps
+    // The unchanged answer body must NOT be re-PUT - that path re-stamps
     // nothing server-side and would clear notes_is_ai_summary on a real
     // change-detection miss.
     expect(axios.put).not.toHaveBeenCalledWith(
@@ -1084,7 +1098,7 @@ describe('QuestionnairePage justification integration', () => {
       await screen.findByText('Suggested justification')
     ).toBeInTheDocument()
     expect(
-      await screen.findByText("Last year's response — FY2025 Q1")
+      await screen.findByText("Last year's response - FY2025 Q1")
     ).toBeInTheDocument()
   })
 
@@ -1123,7 +1137,7 @@ describe('QuestionnairePage justification integration', () => {
     // the panel cannot pop in after the user has already advanced.
     const complete = await screen.findByRole('button', { name: 'Complete' })
     expect(
-      await screen.findByText('Checking for prior responses…')
+      await screen.findByText('Checking for prior responses...')
     ).toBeInTheDocument()
     expect(complete).toBeDisabled()
     expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
@@ -1134,7 +1148,7 @@ describe('QuestionnairePage justification integration', () => {
 
     expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
     expect(
-      screen.queryByText('Checking for prior responses…')
+      screen.queryByText('Checking for prior responses...')
     ).not.toBeInTheDocument()
   })
 
@@ -1150,7 +1164,7 @@ describe('QuestionnairePage justification integration', () => {
 
     const complete = await screen.findByRole('button', { name: 'Complete' })
     expect(
-      await screen.findByText('Checking for prior responses…')
+      await screen.findByText('Checking for prior responses...')
     ).toBeInTheDocument()
     expect(complete).toBeDisabled()
 
@@ -1160,7 +1174,7 @@ describe('QuestionnairePage justification integration', () => {
 
     expect(await screen.findByText('Review required')).toBeInTheDocument()
     expect(
-      screen.queryByText('Checking for prior responses…')
+      screen.queryByText('Checking for prior responses...')
     ).not.toBeInTheDocument()
     // Still blocked: the carried-forward response now requires review.
     expect(complete).toBeDisabled()
@@ -1176,7 +1190,7 @@ describe('QuestionnairePage justification integration', () => {
       await screen.findByText('Explain the authentication mechanisms.')
     ).toBeInTheDocument()
     const response = screen.getByRole('textbox', {
-      name: 'Justification notes',
+      name: /supporting evidence/i,
     })
     expect(response).toHaveAttribute('rows', '4')
     expect(
@@ -1192,7 +1206,7 @@ describe('QuestionnairePage justification integration', () => {
 
 describe('carried-forward confirmation', () => {
   // CI runners execute this suite ~3x slower than a dev machine, and these
-  // tests each begin by awaiting a full page load — RTL's default 1s
+  // tests each begin by awaiting a full page load - RTL's default 1s
   // findBy/waitFor timeout flaked there while the question was still
   // loading. Raise the async ceiling for this block only; passing tests are
   // unaffected (they resolve as soon as the DOM settles).
@@ -1245,6 +1259,19 @@ describe('carried-forward confirmation', () => {
     },
   })
 
+  const doneOutsideQuestionnaire = () => ({
+    ...done7001(),
+    scoreid: 6999,
+    functionoptionid: 999,
+    functionoption: {
+      functionoptionid: 999,
+      functionid: 7999,
+      score: 1,
+      optionname: 'Baseline',
+      description: 'No longer applicable',
+    },
+  })
+
   const DEVICES_LINK =
     '/questionnaire/system/1002/FY2026_Q1/devices/imperial-device-management'
 
@@ -1271,7 +1298,7 @@ describe('carried-forward confirmation', () => {
   }
 
   // Serves a mutable scores list and, like the real backend, flips the
-  // targeted row to done when the confirm endpoint is hit — so the refetch
+  // targeted row to done when the confirm endpoint is hit - so the refetch
   // after a confirm returns the confirmed row instead of resurrecting the
   // original fixture. Insights/OpDiv rows default to empty (the non-CMS
   // variant); pass them to exercise the prior-response card.
@@ -1349,10 +1376,12 @@ describe('carried-forward confirmation', () => {
     renderAt(DEEP_LINK)
 
     // Question-view badge (role="status" so the flip below is announced).
-    const badge = await screen.findByText('Carried forward — not yet confirmed')
+    const badge = await screen.findByText('Carried forward - not yet confirmed')
     expect(badge).toBeInTheDocument()
     // Sidebar marker for the same fact, on the carried question only.
     expect(screen.getAllByText('Not yet confirmed')).toHaveLength(1)
+    expect(screen.getByText('0 of 2')).toBeInTheDocument()
+    expect(screen.getByText('0 of 1 answered')).toBeInTheDocument()
 
     // The explicit act: exactly one confirm PUT, no answer PUT/POST.
     fireEvent.click(
@@ -1371,13 +1400,24 @@ describe('carried-forward confirmation', () => {
       await screen.findByText('Updated this data call')
     ).toBeInTheDocument()
     expect(
-      screen.queryByText('Carried forward — not yet confirmed')
+      screen.queryByText('Carried forward - not yet confirmed')
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', {
         name: 'Confirm this answer is still accurate',
       })
     ).not.toBeInTheDocument()
+    expect(screen.getByText('1 of 2')).toBeInTheDocument()
+    expect(screen.getByText('1 of 1 answered')).toBeInTheDocument()
+  })
+
+  it('excludes score rows outside the current questionnaire from the top progress count', async () => {
+    installScoreMocks([done7001(), doneOutsideQuestionnaire()])
+
+    renderAt(DEVICES_LINK)
+
+    expect(await screen.findByText('1 of 2')).toBeInTheDocument()
+    expect(screen.queryByText('2 of 2')).not.toBeInTheDocument()
   })
 
   it('keeps Next write-free on an untouched carried-forward question (#413)', async () => {
@@ -1385,7 +1425,7 @@ describe('carried-forward confirmation', () => {
 
     renderAt(DEEP_LINK)
 
-    await screen.findByText('Carried forward — not yet confirmed')
+    await screen.findByText('Carried forward - not yet confirmed')
     fireEvent.click(screen.getByRole('button', { name: /Next/ }))
 
     // Navigation happened (the next question's options load)...
@@ -1423,9 +1463,9 @@ describe('carried-forward confirmation', () => {
     // The guidance retires with the button: once the user is editing, telling
     // them to write a new justification describes what they are already doing.
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
-    // The badge still shows — the row is still unconfirmed until saved.
+    // The badge still shows - the row is still unconfirmed until saved.
     expect(
-      screen.getByText('Carried forward — not yet confirmed')
+      screen.getByText('Carried forward - not yet confirmed')
     ).toBeInTheDocument()
   })
 
@@ -1507,7 +1547,7 @@ describe('carried-forward confirmation', () => {
     // the box is blanked pending review, so the previous text is reached
     // through the card's insert affordance rather than sitting in the editor.
     expect(
-      await screen.findByText('Carried forward — not yet confirmed')
+      await screen.findByText('Carried forward - not yet confirmed')
     ).toBeInTheDocument()
     await waitFor(() =>
       expect(
@@ -1537,7 +1577,7 @@ describe('carried-forward confirmation', () => {
     renderAt(DEEP_LINK)
 
     expect(
-      await screen.findByText('Carried forward — not yet confirmed')
+      await screen.findByText('Carried forward - not yet confirmed')
     ).toBeInTheDocument()
     expect(
       screen.queryByRole('button', {
@@ -1611,7 +1651,7 @@ describe('carried-forward confirmation', () => {
       expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
     )
     expect(
-      screen.queryByText('Carried forward — not yet confirmed')
+      screen.queryByText('Carried forward - not yet confirmed')
     ).not.toBeInTheDocument()
     expect(
       screen.queryByRole('button', {
@@ -1643,8 +1683,8 @@ describe('carried-forward confirmation', () => {
       COMPLETE_HINT_MSG
     )
     // The Tooltip's own wiring lands on the span wrapper CmsButton forces (it
-    // cannot hold a ref). aria-label there would be prohibited — a roleless
-    // element must not be named — so describeChild has to stay on.
+    // cannot hold a ref). aria-label there would be prohibited - a roleless
+    // element must not be named - so describeChild has to stay on.
     expect(complete.parentElement).not.toHaveAttribute('aria-label')
 
     await userEvent.unhover(complete)
@@ -1655,7 +1695,7 @@ describe('carried-forward confirmation', () => {
     // Keyboard users reach it too: the hint is not hover-only. MUI opens on
     // focus only when the last input was a key, and it tracks that in
     // module-level state (@mui/utils useIsFocusVisible) that any earlier
-    // mousedown in this file latches off — so model the real sequence, keydown
+    // mousedown in this file latches off - so model the real sequence, keydown
     // then focus, rather than focusing alone.
     fireEvent.keyDown(document.body, { key: 'Tab' })
     act(() => complete.focus())
@@ -1751,7 +1791,7 @@ describe('carried-forward confirmation', () => {
       screen.getByText('0 of 2 answers counted as updated for this data call.')
     ).toBeInTheDocument()
     expect(
-      screen.getByText('Carried forward — needs confirmation (1)')
+      screen.getByText('Carried forward - needs confirmation (1)')
     ).toBeInTheDocument()
     expect(screen.getByText('Unanswered (1)')).toBeInTheDocument()
 
@@ -1768,7 +1808,7 @@ describe('carried-forward confirmation', () => {
     // The jump link navigates to the listed question.
     fireEvent.click(
       screen.getByRole('button', {
-        name: 'Identity — Imperial Identity Verification',
+        name: 'Identity - Imperial Identity Verification',
       })
     )
     await waitFor(() =>

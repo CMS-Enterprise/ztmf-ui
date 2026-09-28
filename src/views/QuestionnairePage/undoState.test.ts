@@ -53,7 +53,7 @@ describe('undoButtonLabel', () => {
  *
  * This is not incidental. Undoing the first edit of a carried-forward answer
  * returns status to not_started, which re-arms Confirm, while the new head is
- * a kind='undo' revision the server still reports as undoable — so a naive
+ * a kind='undo' revision the server still reports as undoable - so a naive
  * undo predicate would be true at exactly the same moment. canUndoAnswer's
  * `state === 'updated'` clause is what separates them, and this suite is what
  * stops someone relaxing that clause without noticing.

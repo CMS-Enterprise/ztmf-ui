@@ -1,51 +1,62 @@
 import { ReactNode } from 'react'
-import {
-  Card,
-  CardContent,
-  CardHeader,
-  Grid,
-  Typography,
-  Box,
-  Chip,
-} from '@mui/material'
-import { FismaSystemType } from '@/types'
-import {
-  SDL_SYNC_DESCRIPTION_ON,
-  SDL_SYNC_DESCRIPTION_OFF,
-  EXTENDED_METADATA_TITLE,
-  EXTENDED_METADATA_SUBHEADER,
-} from '@/constants'
-import { getFieldsBySection, FieldConfig } from './fieldConfig'
+import { useNavigate } from 'react-router-dom'
+import Box from '@mui/material/Box'
+import Typography from '@mui/material/Typography'
+import Button from '@mui/material/Button'
+import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
+import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
+import ChevronRightIcon from '@mui/icons-material/ChevronRight'
+import type { FismaSystemType, OpDiv, ScoreAggregate, ScoreTier } from '@/types'
+import { colors, fonts, radius, tierDot } from '@/theme/tokens'
+import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
+import { PILLAR_ORDER } from '@/constants'
+import { CodeBadge } from '@/components/ui/StatusChip'
+import SystemEnrichmentCard from './SystemEnrichmentCard'
+import InsightsEmptyState from './InsightsEmptyState'
+import { getFieldsBySection, type FieldConfig } from './fieldConfig'
 import {
   formatBool,
   formatList,
   isCrossFieldHidden,
 } from '@/utils/systemMetadataVocab'
+import SystemDetailCard from './SystemDetailCard'
+import { formatDate } from '@/utils/dates'
 
+/**
+ * Highest possible zero trust score on the user-facing scale, used to
+ * normalize the pillar snapshot bars. The backend computes scores on a
+ * 1.0-5.0 scale via the +1 shift at aggregation
+ * (backend/internal/model/scores.go).
+ */
+const MAX_SCORE = 5
+
+/**
+ * Props for {@link SystemDetailReadView}.
+ */
 interface SystemDetailReadViewProps {
+  /** The system being displayed. */
   system: FismaSystemType
-  decommissionedByName: string
-  // Rendered in the right column between Data Lake Export and Organization.
-  // The page owns the card so its edit state is independent of this view.
+  /** OpDiv reference list, used to resolve the system's OpDiv code. */
+  opdivs?: OpDiv[]
+  /** Score aggregate for the current datacall, when available. */
+  currentScore?: ScoreAggregate
+  /** Score aggregate for the prior datacall on the same system, when available. */
+  previousScore?: ScoreAggregate
+  /** Human-readable name for the previous datacall, used in the trend line. */
+  previousDatacallName?: string
+  /** Resolved full name of the user who decommissioned the system. */
+  decommissionedByName?: string
+  /**
+   * Target-maturity card, paired with Extended metadata when that card has
+   * content. The page owns the card so its edit state is independent.
+   */
   targetMaturitySlot?: ReactNode
-  opdivName: string | null
-}
-
-function FieldDisplay({
-  label,
-  value,
-}: {
-  label: string
-  value: string | undefined | null
-}) {
-  return (
-    <Box sx={{ mb: 2 }}>
-      <Typography variant="caption" color="text.secondary">
-        {label}
-      </Typography>
-      <Typography variant="body1">{value || '—'}</Typography>
-    </Box>
-  )
+  /** Resolved OpDiv display name, shown next to the code badge. */
+  opdivName?: string | null
+  /** Whether the viewer may write the system (gates the adopt-CFACTS action). */
+  isAdmin?: boolean
+  /** Refetch the system after the ISSO is adopted from CFACTS. */
+  onIssoUpdated?: () => void | Promise<void>
 }
 
 /**
@@ -53,10 +64,9 @@ function FieldDisplay({
  * tri-state booleans read as Yes/No/Unknown and decomposed multi-selects as a
  * comma list, so the raw "true"/array shapes never leak to the page. Text,
  * email, and single selects fall through to their stored string.
- *
- * @param field - The field being rendered.
- * @param system - The system whose value to format.
- * @returns The display string (empty string when unset; FieldDisplay shows the placeholder).
+ * @param {FieldConfig} field - The field being rendered.
+ * @param {FismaSystemType} system - The system whose value to format.
+ * @returns {string} The display string (empty when unset; the card shows '-').
  */
 function formatFieldValue(field: FieldConfig, system: FismaSystemType): string {
   const raw = system[field.key]
@@ -66,35 +76,38 @@ function formatFieldValue(field: FieldConfig, system: FismaSystemType): string {
   return String(raw ?? '')
 }
 
-function renderFields(fields: FieldConfig[], system: FismaSystemType) {
-  return fields.map((field) => (
-    <FieldDisplay
-      key={field.key}
-      label={field.label}
-      value={formatFieldValue(field, system)}
-    />
-  ))
-}
-
+/**
+ * Read-mode view for the System detail page. Renders the score hero (overall
+ * + pillar snapshot), the System identity and Organization detail cards, and
+ * the ZTMF Insights section (SystemEnrichmentCard when sdl_sync is on, the new
+ * EmptyState otherwise).
+ * @param {SystemDetailReadViewProps} props - System, OpDivs and score aggregates.
+ * @returns {JSX.Element} The detail page body.
+ */
 export default function SystemDetailReadView({
   system,
+  opdivs = [],
+  currentScore,
+  previousScore,
+  previousDatacallName,
   decommissionedByName,
   targetMaturitySlot,
   opdivName,
+  isAdmin,
+  onIssoUpdated,
 }: SystemDetailReadViewProps) {
-  const identityFields = getFieldsBySection('identity')
-  const orgFields = getFieldsBySection('organization')
-  const contactFields = getFieldsBySection('contacts')
-  // cloud_service_model and cloud_vendor do not apply to a non-cloud system, so
-  // they are hidden here just as the edit view hides them when cloud_system is
-  // No (they are empty in that case anyway).
+  const opdivCode = opdivs.find((od) => od.opdiv_id === system.opdiv_id)?.code
+  // cloud_service_model and cloud_vendor do not apply to a non-cloud system,
+  // so they are hidden here just as the edit view hides them when cloud_system
+  // is No (they are empty in that case anyway).
   const extendedFields = getFieldsBySection('extended').filter(
     (field) => !isCrossFieldHidden(field.key, system)
   )
-  // Only show the Extended Metadata card when at least one field is populated.
-  // Systems without extended metadata have every field null and would otherwise
-  // render an empty card. (Read view is not role-gated; the values are the
-  // system's own metadata, visible to anyone who can view the system.)
+  // Only show the Extended Metadata card when at least one field is
+  // populated. Systems without extended metadata have every field null and
+  // would otherwise render an empty card. (Read view is not role-gated; the
+  // values are the system's own metadata, visible to anyone who can view
+  // the system.)
   const hasAnyExtendedData = extendedFields.some((field) => {
     const raw = system[field.key]
     if (raw == null || raw === '') return false
@@ -103,188 +116,537 @@ export default function SystemDetailReadView({
   })
 
   return (
-    <Grid container spacing={3}>
-      {/* Left column: System Identity, then Contacts. Contacts fills the
-          vertical space the taller right column would otherwise leave blank. */}
-      <Grid
-        item
-        xs={12}
-        md={7}
-        sx={{ display: 'flex', flexDirection: 'column' }}
+    <Box>
+      <ScoreHero
+        currentScore={currentScore}
+        previousScore={previousScore}
+        previousDatacallName={previousDatacallName}
+        systemId={system.fismasystemid}
+      />
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: { xs: '1fr', md: '1fr 1fr' },
+          gap: 1.75,
+          mb: 1.75,
+        }}
       >
-        <Card variant="outlined" sx={{ mb: 3 }}>
-          <CardHeader
-            title="System Identity"
-            titleTypographyProps={{ variant: 'h6' }}
-            action={
-              system.decommissioned ? (
-                <Chip label="Decommissioned" color="error" size="small" />
+        <DetailCard
+          title="System identity"
+          rows={[
+            {
+              label: 'FISMA UID',
+              value: <Mono>{system.fismauid || '-'}</Mono>,
+            },
+            { label: 'Acronym', value: system.fismaacronym || '-' },
+            { label: 'Subsystem', value: system.fismasubsystem || '-' },
+            { label: 'Component', value: system.component || '-' },
+            {
+              label: 'Data center',
+              value: system.datacenterenvironment || '-',
+            },
+            {
+              label: 'FIPS-199 impact',
+              value: system.fismaimpactlevel || '-',
+            },
+            {
+              // Surfaces the Data Lake Export toggle in read mode so an admin
+              // can see the SDL sync state without entering edit mode.
+              label: 'SDL sync',
+              value:
+                system.sdl_sync_enabled === null
+                  ? 'Not configured'
+                  : system.sdl_sync_enabled
+                    ? 'On'
+                    : 'Off',
+            },
+          ]}
+        />
+        <DetailCard
+          title="Organization"
+          rows={[
+            {
+              label: 'OpDiv',
+              value: opdivCode ? (
+                <Box
+                  component="span"
+                  sx={{
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 0.75,
+                  }}
+                >
+                  <CodeBadge code={opdivCode} />
+                  {opdivName && <span>{opdivName}</span>}
+                </Box>
               ) : (
-                <Chip label="Active" color="success" size="small" />
-              )
-            }
-            sx={{ pb: 0 }}
+                opdivName ?? '-'
+              ),
+            },
+            { label: 'Group acronym', value: system.groupacronym || '-' },
+            { label: 'Group name', value: system.groupname || '-' },
+            { label: 'Division name', value: system.divisionname || '-' },
+            { label: 'ISSO email', value: system.issoemail || '-' },
+            {
+              label: 'Data call contact',
+              value: system.datacallcontact || '-',
+            },
+          ]}
+        />
+      </Box>
+      {system.decommissioned && (
+        <Box sx={{ mb: 1.75 }}>
+          <DetailCard
+            title="Decommission details"
+            rows={[
+              {
+                label: 'Decommissioned on',
+                value: formatDate(system.decommissioned_date),
+              },
+              {
+                label: 'Decommissioned by',
+                value: decommissionedByName || system.decommissioned_by || '-',
+              },
+              { label: 'Notes', value: system.decommissioned_notes || '-' },
+            ]}
           />
-          <CardContent>{renderFields(identityFields, system)}</CardContent>
-        </Card>
-        <Card variant="outlined" sx={{ flex: 1 }}>
-          <CardHeader
-            title="Contacts"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            <Grid container spacing={3}>
-              {contactFields.map((field) => (
-                <Grid item xs={12} key={field.key}>
-                  <FieldDisplay
-                    label={field.label}
-                    value={String(system[field.key] ?? '')}
-                  />
-                </Grid>
-              ))}
-            </Grid>
-          </CardContent>
-        </Card>
-      </Grid>
-
-      {/* Right column: Status + Organization */}
-      <Grid
-        item
-        xs={12}
-        md={5}
-        sx={{ display: 'flex', flexDirection: 'column' }}
-      >
-        <Card
-          variant="outlined"
+        </Box>
+      )}
+      {(targetMaturitySlot || hasAnyExtendedData) && (
+        <Box
+          data-testid="metadata-target-grid"
           sx={{
-            mb: 3,
-            borderColor: system.decommissioned ? 'error.main' : undefined,
+            display: 'grid',
+            gridTemplateColumns: {
+              xs: '1fr',
+              md:
+                targetMaturitySlot && hasAnyExtendedData
+                  ? 'minmax(0, 1fr) minmax(0, 1fr)'
+                  : '1fr',
+            },
+            alignItems: 'stretch',
+            gap: 1.75,
+            mb: 1.75,
           }}
         >
-          <CardHeader
-            title="System Status"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            {system.decommissioned ? (
-              <>
-                {system.decommissioned_date && (
-                  <FieldDisplay
-                    label="Decommissioned On"
-                    value={new Date(
-                      system.decommissioned_date
-                    ).toLocaleDateString()}
-                  />
-                )}
-                {system.decommissioned_by && (
-                  <FieldDisplay
-                    label="Decommissioned By"
-                    value={decommissionedByName || system.decommissioned_by}
-                  />
-                )}
-                {system.decommissioned_notes && (
-                  <FieldDisplay
-                    label="Notes"
-                    value={system.decommissioned_notes}
-                  />
-                )}
-              </>
-            ) : (
-              <Typography variant="body1" sx={{ color: 'success.main' }}>
-                This system is active.
-              </Typography>
-            )}
-          </CardContent>
-        </Card>
-        <Card variant="outlined" sx={{ mb: 3 }}>
-          <CardHeader
-            title="Data Lake Export"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-              <Typography variant="caption" color="text.secondary">
-                SDL Sync
-              </Typography>
-              {system.sdl_sync_enabled === null ? (
-                <Chip
-                  label="Not configured"
-                  size="small"
-                  color="default"
-                  variant="outlined"
-                />
-              ) : system.sdl_sync_enabled ? (
-                <Chip
-                  label="On"
-                  size="small"
-                  color="primary"
-                  variant="filled"
-                />
-              ) : (
-                <Chip
-                  label="Off"
-                  size="small"
-                  color="default"
-                  variant="outlined"
-                />
-              )}
-            </Box>
-            <Typography
-              variant="caption"
-              sx={{ color: 'text.secondary', mt: 0.5, display: 'block' }}
-            >
-              {system.sdl_sync_enabled === null
-                ? 'SDL sync has not been configured for this system.'
-                : system.sdl_sync_enabled
-                  ? SDL_SYNC_DESCRIPTION_ON
-                  : SDL_SYNC_DESCRIPTION_OFF}
-            </Typography>
-          </CardContent>
-        </Card>
-        {targetMaturitySlot}
-        <Card variant="outlined" sx={{ flex: 1 }}>
-          <CardHeader
-            title="Organization"
-            titleTypographyProps={{ variant: 'h6' }}
-            sx={{ pb: 0 }}
-          />
-          <CardContent>
-            <FieldDisplay label="OpDiv" value={opdivName} />
-            {renderFields(orgFields, system)}
-          </CardContent>
-        </Card>
-      </Grid>
-
-      {/* Extended Metadata — full width, 3-col grid. Hidden entirely when the
-          system has no extended metadata fields populated. */}
-      {hasAnyExtendedData && (
-        <Grid item xs={12}>
-          <Card variant="outlined">
-            <CardHeader
-              title={EXTENDED_METADATA_TITLE}
-              titleTypographyProps={{ variant: 'h6' }}
-              subheader={EXTENDED_METADATA_SUBHEADER}
-              subheaderTypographyProps={{ variant: 'caption' }}
-              sx={{ pb: 0 }}
+          {targetMaturitySlot}
+          {hasAnyExtendedData && (
+            <DetailCard
+              title="Extended metadata"
+              twoColumnRows
+              rows={extendedFields.map((field) => ({
+                label: field.label,
+                value: formatFieldValue(field, system) || '-',
+              }))}
             />
-            <CardContent>
-              <Grid container spacing={3}>
-                {extendedFields.map((field) => (
-                  <Grid item xs={12} sm={6} md={4} key={field.key}>
-                    <FieldDisplay
-                      label={field.label}
-                      value={formatFieldValue(field, system)}
-                    />
-                  </Grid>
-                ))}
-              </Grid>
-            </CardContent>
-          </Card>
-        </Grid>
+          )}
+        </Box>
       )}
-    </Grid>
+      <InsightsSection
+        system={system}
+        isAdmin={isAdmin}
+        onIssoUpdated={onIssoUpdated}
+      />
+    </Box>
+  )
+}
+
+/**
+ * Score hero card. Two-column split: overall score + tier + trend + pillar
+ * breakdown link on the left, pillar snapshot grid on the right.
+ */
+function ScoreHero({
+  currentScore,
+  previousScore,
+  previousDatacallName,
+  systemId,
+}: {
+  currentScore?: ScoreAggregate
+  previousScore?: ScoreAggregate
+  previousDatacallName?: string
+  systemId: number
+}) {
+  const navigate = useNavigate()
+  // Render the card even when no score is available so the page shape stays
+  // consistent and the empty state is informative.
+  return (
+    <Box
+      sx={{
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: `${radius.card}px`,
+        p: 2.5,
+        mb: 1.75,
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', md: '1fr 2fr' },
+        gap: 3,
+      }}
+    >
+      <Box
+        sx={{
+          borderRight: { xs: 'none', md: `1px solid ${colors.neutral200}` },
+          borderBottom: {
+            xs: `1px solid ${colors.neutral200}`,
+            md: 'none',
+          },
+          pr: { xs: 0, md: 3 },
+          pb: { xs: 2, md: 0 },
+        }}
+      >
+        {/* Datacall name lives in the chrome sub-bar (Title.tsx) now, so
+            the eyebrow stops at "Zero trust score" to avoid duplicate
+            context. The currentDatacallName prop is still passed down for
+            the trend-line label below ("was 3.52 in <prev datacall>"). */}
+        <Eyebrow>Zero trust score</Eyebrow>
+        {currentScore ? (
+          <>
+            <Box
+              sx={{
+                display: 'flex',
+                alignItems: 'baseline',
+                gap: 1.25,
+                mt: 1,
+                mb: 0.5,
+              }}
+            >
+              <Typography
+                component="span"
+                sx={{
+                  fontFamily: fonts.mono,
+                  fontSize: 48,
+                  fontWeight: 700,
+                  lineHeight: 1,
+                  letterSpacing: '-0.02em',
+                  color: colors.ink,
+                }}
+              >
+                {currentScore.systemscore.toFixed(2)}
+              </Typography>
+              <TierLabel tier={currentScore.systemtier} />
+            </Box>
+            <TrendLine
+              current={currentScore.systemscore}
+              previous={previousScore?.systemscore}
+              previousDatacallName={previousDatacallName}
+            />
+          </>
+        ) : (
+          <Typography
+            sx={{
+              mt: 1,
+              fontSize: 14,
+              fontWeight: 500,
+              color: colors.neutral500,
+            }}
+          >
+            No score available yet.
+          </Typography>
+        )}
+        <Box sx={{ mt: 1.75 }}>
+          <Button
+            onClick={() => navigate(`/systems/${systemId}/pillar-scores`)}
+            sx={{
+              p: 0,
+              minWidth: 0,
+              fontSize: 13,
+              fontWeight: 600,
+              color: colors.primary,
+              textTransform: 'none',
+              '&:hover': { backgroundColor: 'transparent' },
+            }}
+            endIcon={<ChevronRightIcon sx={{ fontSize: 16 }} />}
+          >
+            View pillar breakdown
+          </Button>
+        </Box>
+      </Box>
+      <Box>
+        <Eyebrow>Pillar snapshot</Eyebrow>
+        <PillarSnapshot pillars={currentScore?.pillarscores} />
+      </Box>
+    </Box>
+  )
+}
+
+/**
+ * Two-column grid of pillar rows (name + bar + score). Falls back to a muted
+ * single line when no pillar data is available yet.
+ */
+function PillarSnapshot({
+  pillars,
+}: {
+  pillars?: {
+    pillarid: number
+    pillar: string
+    score: number
+    tier?: ScoreTier
+  }[]
+}) {
+  if (!pillars || pillars.length === 0) {
+    return (
+      <Typography sx={{ mt: 1, fontSize: 13, color: colors.neutral500 }}>
+        Pillar scores appear once the datacall has been scored.
+      </Typography>
+    )
+  }
+  const rank = (name: string) => {
+    const i = PILLAR_ORDER.indexOf(name)
+    return i === -1 ? Number.MAX_SAFE_INTEGER : i
+  }
+  const sorted = [...pillars].sort((a, b) => rank(a.pillar) - rank(b.pillar))
+  return (
+    <Box
+      sx={{
+        display: 'grid',
+        gridTemplateColumns: { xs: '1fr', sm: 'repeat(2, 1fr)' },
+        gap: '8px 18px',
+        mt: 1.25,
+      }}
+    >
+      {sorted.map((p) => (
+        <PillarRow key={p.pillarid} pillar={p} />
+      ))}
+    </Box>
+  )
+}
+
+function PillarRow({
+  pillar,
+}: {
+  pillar: { pillarid: number; pillar: string; score: number; tier?: ScoreTier }
+}) {
+  const tier: ScoreTier = pillar.tier ?? 'Not Assessed'
+  const notAssessed = tier === 'Not Assessed'
+  const fillPct = Math.max(0, Math.min(1, pillar.score / MAX_SCORE)) * 100
+  return (
+    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.25 }}>
+      <Box sx={{ flex: 1, fontSize: 13, fontWeight: 500, color: colors.ink }}>
+        {pillar.pillar}
+      </Box>
+      <Box
+        sx={{
+          width: 80,
+          height: 5,
+          borderRadius: `${radius.sm}px`,
+          backgroundColor: colors.neutral200,
+          overflow: 'hidden',
+        }}
+      >
+        {!notAssessed && (
+          <Box
+            sx={{
+              width: `${fillPct}%`,
+              height: '100%',
+              borderRadius: `${radius.sm}px`,
+              backgroundColor: tierDot[tier],
+            }}
+          />
+        )}
+      </Box>
+      <Typography
+        component="span"
+        sx={{
+          fontFamily: fonts.mono,
+          fontSize: 13,
+          fontWeight: 600,
+          color: colors.ink,
+          minWidth: 32,
+          textAlign: 'right',
+        }}
+      >
+        {notAssessed ? '-' : pillar.score.toFixed(2)}
+      </Typography>
+    </Box>
+  )
+}
+
+/**
+ * Renders the trend delta line under the overall score: up/down arrow icon,
+ * delta value, and the previous datacall reference. Falls back to a muted
+ * "no prior measurement" line so the area stays balanced.
+ */
+function TrendLine({
+  current,
+  previous,
+  previousDatacallName,
+}: {
+  current: number
+  previous?: number
+  previousDatacallName?: string
+}) {
+  if (typeof previous !== 'number') {
+    return (
+      <Typography
+        sx={{ fontSize: 13, fontWeight: 500, color: colors.neutral500 }}
+      >
+        First measurement, no prior period to compare against.
+      </Typography>
+    )
+  }
+  const delta = current - previous
+  const flat = Math.abs(delta) < 0.005
+  const up = delta > 0
+  const color = flat ? colors.neutral500 : up ? colors.up : colors.down
+  return (
+    <Box
+      sx={{
+        display: 'inline-flex',
+        alignItems: 'center',
+        gap: 0.5,
+        color,
+        fontSize: 13,
+        fontWeight: 500,
+      }}
+    >
+      {!flat &&
+        (up ? (
+          <ArrowUpwardIcon sx={{ fontSize: 14 }} />
+        ) : (
+          <ArrowDownwardIcon sx={{ fontSize: 14 }} />
+        ))}
+      <span>
+        {flat ? 'No change' : `${up ? '+' : ''}${delta.toFixed(2)}`}
+        {previousDatacallName ? ` vs ${previousDatacallName}` : ''}
+        {` (was ${previous.toFixed(2)})`}
+      </span>
+    </Box>
+  )
+}
+
+/**
+ * Two-column key/value card used for System identity and Organization.
+ */
+function DetailCard({
+  title,
+  rows,
+  twoColumnRows = false,
+}: {
+  title: string
+  rows: { label: string; value: ReactNode }[]
+  twoColumnRows?: boolean
+}) {
+  return (
+    <SystemDetailCard title={title}>
+      <Box
+        sx={{
+          display: 'grid',
+          gridTemplateColumns: twoColumnRows
+            ? {
+                xs: '130px minmax(0, 1fr)',
+                lg: 'minmax(100px, 0.75fr) minmax(0, 1fr) minmax(100px, 0.75fr) minmax(0, 1fr)',
+              }
+            : '130px minmax(0, 1fr)',
+          gap: '8px 14px',
+          fontSize: 13,
+        }}
+      >
+        {rows.map((row) => (
+          <Box key={row.label} sx={{ display: 'contents' }}>
+            <Box sx={{ color: colors.neutral500, fontWeight: 500 }}>
+              {row.label}
+            </Box>
+            <Box sx={{ color: colors.ink, fontWeight: 500 }}>{row.value}</Box>
+          </Box>
+        ))}
+      </Box>
+    </SystemDetailCard>
+  )
+}
+
+/**
+ * ZTMF Insights section. Always renders a card with the "ZTMF Insights" title
+ * so the section is consistent; inside, either the SystemEnrichmentCard content
+ * (when sdl_sync is on and the upstream returns data) or the insights empty
+ * state (when sdl_sync is off, or on but the upstream has no record).
+ */
+function InsightsSection({
+  system,
+  isAdmin,
+  onIssoUpdated,
+}: {
+  system: FismaSystemType
+  isAdmin?: boolean
+  onIssoUpdated?: () => void | Promise<void>
+}) {
+  const body =
+    system.fismauid && system.sdl_sync_enabled ? (
+      <SystemEnrichmentCard
+        fismaUid={system.fismauid}
+        // Lets the card flag a CFACTS-reported data center environment that
+        // disagrees with the ZTMF value (ztmf#239); without it the mismatch
+        // chip can never render.
+        systemDataCenterEnvironment={system.datacenterenvironment}
+        // The full system plus admin flag drive the ISSO-mismatch callout and
+        // its adopt-CFACTS action; onIssoUpdated refetches after adopting.
+        system={system}
+        isAdmin={isAdmin}
+        onIssoUpdated={onIssoUpdated}
+      />
+    ) : (
+      <InsightsEmptyState />
+    )
+  return (
+    <Box
+      sx={{
+        backgroundColor: colors.white,
+        border: `1px solid ${colors.neutral200}`,
+        borderRadius: `${radius.card}px`,
+        p: 2.25,
+      }}
+    >
+      <Typography
+        component="h2"
+        sx={{ fontSize: 14, fontWeight: 700, color: colors.ink, mb: 1.5 }}
+      >
+        ZTMF Insights
+      </Typography>
+      {body}
+    </Box>
+  )
+}
+
+function Eyebrow({ children }: { children: ReactNode }) {
+  return (
+    <Typography
+      sx={{
+        fontSize: 11,
+        fontWeight: 600,
+        color: colors.neutral500,
+        textTransform: 'uppercase',
+        letterSpacing: '0.08em',
+      }}
+    >
+      {children}
+    </Typography>
+  )
+}
+
+function Mono({ children }: { children: ReactNode }) {
+  return (
+    <Box
+      component="span"
+      sx={{ fontFamily: fonts.mono, fontSize: 13, fontWeight: 500 }}
+    >
+      {children}
+    </Box>
+  )
+}
+
+function TierLabel({ tier }: { tier?: ScoreTier }) {
+  if (!tier || tier === 'Not Assessed') {
+    return (
+      <Typography
+        component="span"
+        sx={{ fontSize: 14, fontWeight: 600, color: colors.neutral500 }}
+      >
+        Not assessed
+      </Typography>
+    )
+  }
+  const color = TIER_CHIP_STYLES[tier].color
+  return (
+    <Typography component="span" sx={{ fontSize: 14, fontWeight: 600, color }}>
+      {tier}
+    </Typography>
   )
 }

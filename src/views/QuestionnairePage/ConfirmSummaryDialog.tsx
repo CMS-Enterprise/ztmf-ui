@@ -48,7 +48,7 @@ const ConfirmSummaryDialog = ({ summary, onClose, onJump }: Props) => {
             onClick={() => onJump(entry)}
             sx={{ textAlign: 'left' }}
           >
-            {entry.pillarName} — {entry.functionName}
+            {entry.pillarName} - {entry.functionName}
           </Link>
         </ListItem>
       ))}
@@ -96,7 +96,7 @@ const ConfirmSummaryDialog = ({ summary, onClose, onJump }: Props) => {
             {summary.unconfirmed.length > 0 && (
               <Box sx={{ mb: 1.5 }}>
                 <Typography component="h3" sx={{ fontWeight: 700 }}>
-                  Carried forward — needs confirmation (
+                  Carried forward - needs confirmation (
                   {summary.unconfirmed.length})
                 </Typography>
                 <Typography variant="body2" sx={{ color: 'text.secondary' }}>

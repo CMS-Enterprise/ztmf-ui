@@ -60,7 +60,7 @@ function describeKind(kind: ScoreRevision['kind']): string {
  *
  * A Drawer rather than an extension of ScoreDiffModal: that modal is
  * cross-data-call, per-system and all-questions, while this is one call, one
- * score, N revisions — and its scrim would hide the very answer being compared
+ * score, N revisions - and its scrim would hide the very answer being compared
  * against. Only the before/after cell is shared, via AnswerSideCell.
  *
  * Undo eligibility is never re-derived here. The server marks each revision
@@ -160,7 +160,7 @@ export default function AnswerHistoryPanel({
           </Typography>
           <Typography variant="caption" sx={{ color: 'text.secondary' }}>
             {rev.actor?.name ?? 'Unknown user'}
-            {rev.actor?.role ? ` (${rev.actor.role})` : ''} —{' '}
+            {rev.actor?.role ? ` (${rev.actor.role})` : ''} -{' '}
             {formatWhen(rev.createdat)}
           </Typography>
 

@@ -5,15 +5,15 @@ import type { userData } from '@/types'
 //
 // #569's QuickSearchToolbar unit tests lock in that "Clear filters" calls
 // setShowDecommissioned(false). But the behavior that actually drops the
-// decommissioned rows is Title's refetch effect — fetchFismaSystems keyed on
-// showDecommissioned — which no unit test exercises. This test renders the REAL
+// decommissioned rows is Title's refetch effect - fetchFismaSystems keyed on
+// showDecommissioned - which no unit test exercises. This test renders the REAL
 // Title so that effect runs, and drives showDecommissioned through the real
 // Outlet context to assert the fetch hits the unparameterized GET /fismasystems
 // on clear (and ?decommissioned=true when enabled), with rows added/dropped.
 //
 // Mock setup mirrors Title.test.tsx, except Outlet renders a lightweight harness
 // that consumes the passed context (Title's real setShowDecommissioned + live
-// fismaSystems) — standing in for the deep Home > FismaTable > DataGrid subtree
+// fismaSystems) - standing in for the deep Home > FismaTable > DataGrid subtree
 // so the test targets Title's refetch, not the DataGrid.
 jest.mock('react-router-dom', () => ({
   __esModule: true,
@@ -124,7 +124,7 @@ const WITH_DECOMMISSIONED = [
   { fismasystemid: 3, fismaname: 'Decommissioned Zeta' },
 ]
 
-// The system endpoint the current assertion cares about — active-only vs the
+// The system endpoint the current assertion cares about - active-only vs the
 // decommissioned-inclusive variant.
 const fismaSystemsCalls = () =>
   mockedGet.mock.calls
@@ -144,7 +144,7 @@ beforeEach(() => {
       return Promise.resolve({ data: { data: ACTIVE } })
     if (url === '/fismasystems?decommissioned=true')
       return Promise.resolve({ data: { data: WITH_DECOMMISSIONED } })
-    // /datacalls and anything else the mount touches — empty is fine.
+    // /datacalls and anything else the mount touches - empty is fine.
     return Promise.resolve({ data: { data: [] } })
   })
   mockedPost.mockResolvedValue({ status: 204 })
@@ -165,7 +165,7 @@ afterEach(() => {
   })
 })
 
-describe('Title — Clear filters drops decommissioned rows via refetch (#572)', () => {
+describe('Title - Clear filters drops decommissioned rows via refetch (#572)', () => {
   it('refetches the unparameterized endpoint on clear, dropping decommissioned rows', async () => {
     renderWithQueryClient(<Title />)
 

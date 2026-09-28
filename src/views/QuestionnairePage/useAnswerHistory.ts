@@ -9,7 +9,7 @@ import type { ScoreHistory, ScoreUndoResult } from '@/types'
 /**
  * The typed error code the undo endpoint returns when the head revision moved
  * underneath the caller. Declared locally rather than in utils/authCodes.ts,
- * which is scoped by contract to the auth middleware's codes — the delegate
+ * which is scoped by contract to the auth middleware's codes - the delegate
  * codes set the same precedent.
  */
 export const REVISION_CONFLICT = 'REVISION_CONFLICT'
@@ -76,7 +76,7 @@ type Params = {
   scoreid: number
   /**
    * The page's existing imperative refetch. The questionnaire's score state is
-   * not in TanStack Query — it is useState fed by fetchQuestionScores — so
+   * not in TanStack Query - it is useState fed by fetchQuestionScores - so
    * invalidating a cache key cannot refresh the answer the user is looking at.
    * Undo therefore refreshes the same way its two siblings (saveResponse,
    * confirmScoreById) do, and the cache invalidation below only covers the
@@ -115,7 +115,7 @@ export function useAnswerHistory({
 
   // Deliberately NOT gated on `open`. The strip's Undo button renders off the
   // head revision's `undoable` flag, so gating the read on the drawer would
-  // mean the button could never appear — the data deciding whether to offer it
+  // mean the button could never appear - the data deciding whether to offer it
   // would only arrive after the user had already opened the thing it is meant
   // to be a shortcut for. Reading per question also makes opening the drawer
   // instant rather than a spinner, and it still runs on a closed call, where

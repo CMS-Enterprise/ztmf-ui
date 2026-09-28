@@ -10,7 +10,7 @@ import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 // Deep-link integration test for #500 / #732: a questionnaire URL reached by
 // paste / refresh / bookmark (no router location.state) must resolve the
 // system from :fismasystemid, the cycle from the datacall segment, and open the
-// named :pillar/:function — not fail to load or snap to the first function.
+// named :pillar/:function - not fail to load or snap to the first function.
 // Pre-#732 acronym links redirect to the id form when they name exactly one
 // system, and land on the dashboard with the not-found warning otherwise.
 
@@ -82,7 +82,7 @@ beforeEach(() => {
       fullname: 'Grand Moff Tarkin',
       role: 'OWNER',
     } as userData,
-    // Latest is call 5; the deep link below names call 4 — so a scores query
+    // Latest is call 5; the deep link below names call 4 - so a scores query
     // for datacallid=4 proves the cycle was resolved from the URL, not defaulted.
     latestDataCallId: 5,
     latestDatacall: 'Audit Fields Smoke Cycle',

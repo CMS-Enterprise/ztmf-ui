@@ -183,9 +183,9 @@ describe('display formatting', () => {
 
   it('joins a decomposed list, with a placeholder when empty', () => {
     expect(formatList(['IaaS', 'PaaS'])).toBe('IaaS, PaaS')
-    expect(formatList([])).toBe('—')
-    expect(formatList(null)).toBe('—')
-    expect(formatList(undefined)).toBe('—')
+    expect(formatList([])).toBe('-')
+    expect(formatList(null)).toBe('-')
+    expect(formatList(undefined)).toBe('-')
   })
 })
 

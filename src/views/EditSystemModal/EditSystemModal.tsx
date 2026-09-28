@@ -1,60 +1,33 @@
 import * as React from 'react'
-import TextField from '@mui/material/TextField'
-import Dialog from '@mui/material/Dialog'
-import DialogActions from '@mui/material/DialogActions'
-import DialogContent from '@mui/material/DialogContent'
-import CustomDialogTitle from '../../components/DialogTitle/CustomDialogTitle'
-import { Button as CmsButton } from '@cmsgov/design-system'
-import { Box, Grid } from '@mui/material'
+import Modal from '@/components/ui/Modal'
+import { Box, Button } from '@mui/material'
 import FormControlLabel from '@mui/material/FormControlLabel'
 import Checkbox from '@mui/material/Checkbox'
 import Typography from '@mui/material/Typography'
-import {
-  editSystemModalProps,
-  FismaSystemType,
-  FormValidType,
-  FormValidHelperText,
-} from '@/types'
-import MenuItem from '@mui/material/MenuItem'
-import {
-  CONFIRMATION_MESSAGE,
-  ERROR_MESSAGES,
-  STATUS_MESSAGES,
-} from '@/constants'
-import SdlSyncToggle from '@/components/SdlSyncToggle/SdlSyncToggle'
+import { editSystemModalProps } from '@/types'
+import { CONFIRMATION_MESSAGE, STATUS_MESSAGES } from '@/constants'
 
-import ValidatedTextField from './ValidatedTextField'
-import { emailValidator } from './validators'
 import { EMPTY_SYSTEM } from './emptySystem'
+import { useUserNameLookup } from './hooks/useUserNameLookup'
+import { useEditSystemForm } from './hooks/useEditSystemForm'
+import { useDecommissionFlow } from './hooks/useDecommissionFlow'
+import { useReactivateFlow } from './hooks/useReactivateFlow'
+import DecommissionedSystemInfo from './components/DecommissionedSystemInfo'
+import DecommissionForm from './components/DecommissionForm'
+import ReactivateForm from './components/ReactivateForm'
+import SystemFormFields from './components/SystemFormFields'
+import ExtendedMetadataFields from './components/ExtendedMetadataFields'
 import { toDropdownOptionsWithCurrent } from '@/utils/dataCenterEnvironments'
 import CircularProgress from '@mui/material/CircularProgress'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import _ from 'lodash'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
-import {
-  TEXTFIELD_HELPER_TEXT,
-  EXTENDED_METADATA_TITLE,
-  EXTENDED_METADATA_CREATE_HINT,
-  EXTENDED_METADATA_EDIT_HINT,
-} from '@/constants'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
-import {
-  getFieldsBySection,
-  EXTENDED_METADATA_KEYS,
-  type FieldConfig,
-} from '@/views/SystemDetailPage/fieldConfig'
-import {
-  useSystemAttributes,
-  optionsForField,
-  booleanOptions,
-  boolToSelectValue,
-  selectValueToBool,
-  buildExtendedDiff,
-  crossFieldClears,
-  isCrossFieldHidden,
-} from '@/utils/systemMetadataVocab'
+import { EXTENDED_METADATA_KEYS } from '@/views/SystemDetailPage/fieldConfig'
+import { buildExtendedDiff } from '@/utils/systemMetadataVocab'
+import type { FismaSystemType } from '@/types'
+import { formatDate } from '@/utils/dates'
 
 /**
  * Component that renders a modal to edit fisma systems.
@@ -68,303 +41,81 @@ export default function EditSystemModal({
   onClose,
   system,
   mode,
-  datacenterEnvironments,
-  opdivs: allOpdivs,
+  datacenterEnvironments = [],
+  opdivs: allOpdivs = [],
 }: editSystemModalProps) {
+  const {
+    editedFismaSystem,
+    setEditedFismaSystem,
+    setFormValid,
+    formValidErrorText,
+    setFormValidErrorText,
+    loading,
+    isFormValid,
+    showError,
+    handleInputChange,
+    markTouched,
+    markFieldError,
+  } = useEditSystemForm(system, open)
   const datacenterEnvironmentOptions = toDropdownOptionsWithCurrent(
     datacenterEnvironments,
     system?.datacenterenvironment
   )
-  const extendedFields = getFieldsBySection('extended')
-
-  const [formValid, setFormValid] = React.useState<FormValidType>({
-    issoemail: false,
-    datacallcontact: false,
-    fismaname: false,
-    fismaacronym: false,
-    datacenterenvironment: false,
-    component: false,
-    fismauid: false,
-    opdiv_id: false,
-  })
-  const opdivs = allOpdivs.filter((o) => o.active)
-  const isFormValid = (): boolean => {
-    return Object.values(formValid).every((value) => value === true)
-  }
-  const [loading, setLoading] = React.useState<boolean>(true)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
-  const [openDecommissionAlert, setOpenDecommissionAlert] =
-    React.useState<boolean>(false)
-  const [decommissionDate, setDecommissionDate] = React.useState<string>('')
-  const [decommissionDateError, setDecommissionDateError] =
-    React.useState<string>('')
-  const [decommissionNotes, setDecommissionNotes] = React.useState<string>('')
-  const [showDecommissionForm, setShowDecommissionForm] =
-    React.useState<boolean>(false)
-  const [decommissionedByName, setDecommissionedByName] =
-    React.useState<string>('')
-  const [reactivatedByName, setReactivatedByName] = React.useState<string>('')
-  const [showReactivateForm, setShowReactivateForm] =
-    React.useState<boolean>(false)
-  const [reactivationNotes, setReactivationNotes] = React.useState<string>('')
-  const [openReactivateAlert, setOpenReactivateAlert] =
-    React.useState<boolean>(false)
-  const [formValidErrorText, setFormValidErrorText] =
-    React.useState<FormValidHelperText>({
-      issoemail: TEXTFIELD_HELPER_TEXT,
-      datacallcontact: TEXTFIELD_HELPER_TEXT,
-      fismaname: TEXTFIELD_HELPER_TEXT,
-      fismaacronym: TEXTFIELD_HELPER_TEXT,
-      datacenterenvironment: TEXTFIELD_HELPER_TEXT,
-      component: TEXTFIELD_HELPER_TEXT,
-      fismauid: TEXTFIELD_HELPER_TEXT,
-      opdiv_id: TEXTFIELD_HELPER_TEXT,
-    })
-
+  const {
+    decommissionDate,
+    setDecommissionDate,
+    decommissionDateError,
+    decommissionNotes,
+    setDecommissionNotes,
+    showDecommissionForm,
+    setShowDecommissionForm,
+    openDecommissionAlert,
+    setOpenDecommissionAlert,
+    checkDecommissionDate,
+    handleDecommission: runDecommission,
+    resetDecommissionForm,
+  } = useDecommissionFlow()
+  const decommissionedByName = useUserNameLookup(
+    system?.decommissioned_by,
+    Boolean(open && system?.decommissioned && system?.decommissioned_by)
+  )
+  const reactivatedByName = useUserNameLookup(
+    system?.reactivated_by,
+    Boolean(open && system?.reactivated_by)
+  )
+  const {
+    reactivationNotes,
+    setReactivationNotes,
+    showReactivateForm,
+    setShowReactivateForm,
+    openReactivateAlert,
+    setOpenReactivateAlert,
+    handleReactivate: runReactivate,
+    resetReactivateForm,
+  } = useReactivateFlow()
+  // Active OpDivs for the required owning-OpDiv selector. Sourced from the
+  // shared context list Title fetches (#701), filtered to active here so a
+  // since-deactivated OpDiv isn't offered as a new assignment.
+  const opdivs = React.useMemo(
+    () => allOpdivs.filter((o) => o.active),
+    [allOpdivs]
+  )
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
       onClose(EMPTY_SYSTEM)
     }
   }
-  const handleInputChange = (
-    e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>,
-    key: string
-  ) => {
-    const value = e.target.value
-    const isValid = value.length > 0
-
-    setEditedFismaSystem((prevState) => ({
-      ...prevState,
-      [key]: value,
-    }))
-    setFormValid((prevState) => ({
-      ...prevState,
-      [key]: isValid,
-    }))
-    if (!isValid) {
-      setFormValidErrorText((prevState) => ({
-        ...prevState,
-        [key]: isValid ? '' : TEXTFIELD_HELPER_TEXT,
-      }))
-    }
-  }
-  const [editedFismaSystem, setEditedFismaSystem] =
-    React.useState<FismaSystemType>(EMPTY_SYSTEM)
-  const attributes = useSystemAttributes()
-
-  const setField = (key: string, value: string | boolean | string[] | null) =>
-    setEditedFismaSystem((prev) => ({
-      ...prev,
-      [key]: value,
-      ...crossFieldClears(key, value),
-    }))
-
-  // Renders an extended-metadata field per its configured type: canonical
-  // enum select, tri-state boolean (Yes/No/Unknown), decomposed multi-select,
-  // or free text. Each control stores the field's typed clear signal when
-  // emptied: enum '', boolean null, array [].
-  const renderExtendedControl = (field: FieldConfig) => {
-    // A field marked read-only in fieldConfig renders disabled; the same flag
-    // keeps it out of the write payload.
-    const disabled = field.readOnly
-    if (field.type === 'select') {
-      const current = editedFismaSystem[field.key] as string | null | undefined
-      return (
-        <TextField
-          id={`${mode}-${field.key}`}
-          select
-          label={field.label}
-          variant="standard"
-          margin="normal"
-          fullWidth
-          disabled={disabled}
-          value={current || ''}
-          helperText={field.helpText}
-          InputLabelProps={{ sx: { marginTop: 0 } }}
-          onChange={(e) => setField(field.key, e.target.value)}
-        >
-          <MenuItem value="">&mdash; None &mdash;</MenuItem>
-          {optionsForField(attributes, field.key).map((o) => (
-            <MenuItem key={o.value} value={o.value}>
-              {o.label}
-            </MenuItem>
-          ))}
-        </TextField>
-      )
-    }
-    if (field.type === 'boolean') {
-      return (
-        <TextField
-          id={`${mode}-${field.key}`}
-          select
-          label={field.label}
-          variant="standard"
-          margin="normal"
-          fullWidth
-          disabled={disabled}
-          value={boolToSelectValue(
-            editedFismaSystem[field.key] as boolean | null | undefined
-          )}
-          helperText={field.helpText}
-          InputLabelProps={{ sx: { marginTop: 0 } }}
-          onChange={(e) =>
-            setField(field.key, selectValueToBool(e.target.value))
-          }
-        >
-          {booleanOptions(field.booleanLabels).map((o) => (
-            <MenuItem key={o.label} value={o.value}>
-              {o.label}
-            </MenuItem>
-          ))}
-        </TextField>
-      )
-    }
-    if (field.type === 'multiselect') {
-      const current =
-        (editedFismaSystem[field.key] as string[] | null | undefined) ?? []
-      return (
-        <TextField
-          id={`${mode}-${field.key}`}
-          select
-          label={field.label}
-          variant="standard"
-          margin="normal"
-          fullWidth
-          disabled={disabled}
-          value={current}
-          SelectProps={{
-            multiple: true,
-            renderValue: (selected) => (selected as string[]).join(', '),
-          }}
-          helperText={field.helpText}
-          InputLabelProps={{ sx: { marginTop: 0 } }}
-          onChange={(e) =>
-            setField(field.key, e.target.value as unknown as string[])
-          }
-        >
-          {optionsForField(attributes, field.key).map((o) => (
-            <MenuItem key={o.value} value={o.value}>
-              {o.label}
-            </MenuItem>
-          ))}
-        </TextField>
-      )
-    }
-    return (
-      <TextField
-        id={`${mode}-${field.key}`}
-        label={field.label}
-        variant="standard"
-        margin="normal"
-        fullWidth
-        disabled={disabled}
-        value={
-          (editedFismaSystem[field.key] as string | null | undefined) ?? ''
-        }
-        helperText={field.helpText}
-        InputLabelProps={{ sx: { marginTop: 0 } }}
-        // Send the raw value, so clearing sends '' (the blankToNil clear
-        // signal) rather than null, which the backend reads as "leave
-        // unchanged". Matches the detail edit view's text branch.
-        onChange={(e) => setField(field.key, e.target.value)}
-      />
-    )
-  }
-
+  // Reset the decommission + reactivate sub-form state every time a new
+  // system loads. (Form-state init lives inside useEditSystemForm.)
   React.useEffect(() => {
     if (system && open) {
-      setFormValid((prevState) => ({
-        ...prevState,
-        issoemail:
-          system?.issoemail && system?.issoemail.length > 0 ? true : false,
-        datacallcontact:
-          system?.datacallcontact && system?.datacallcontact.length > 0
-            ? true
-            : false,
-        fismaname:
-          system?.fismaname && system?.fismaname.length > 0 ? true : false,
-        fismaacronym:
-          system?.fismaacronym && system?.fismaacronym.length > 0
-            ? true
-            : false,
-        datacenterenvironment:
-          system?.datacenterenvironment &&
-          system?.datacenterenvironment.length > 0
-            ? true
-            : false,
-        component:
-          system?.component && system?.component.length > 0 ? true : false,
-        fismauid:
-          system?.fismauid && system?.fismauid.length > 0 ? true : false,
-        opdiv_id: system?.opdiv_id != null ? true : false,
-      }))
-      setEditedFismaSystem(system)
-      const today = new Date()
-      const yyyy = today.getFullYear()
-      const mm = String(today.getMonth() + 1).padStart(2, '0')
-      const dd = String(today.getDate()).padStart(2, '0')
-      setDecommissionDate(`${yyyy}-${mm}-${dd}`)
-      setDecommissionDateError('')
-      setDecommissionNotes('')
-      setShowDecommissionForm(false)
-      setReactivationNotes('')
-      setShowReactivateForm(false)
-      setLoading(false)
+      resetDecommissionForm()
+      resetReactivateForm()
     }
-  }, [system, open])
-  React.useEffect(() => {
-    const controller = new AbortController()
-    if (open && system?.decommissioned && system?.decommissioned_by) {
-      const userId = system.decommissioned_by
-      async function load() {
-        try {
-          const res = await axiosInstance.get(apiPaths.users.detail(userId), {
-            signal: controller.signal,
-          })
-          if (system?.decommissioned_by === userId) {
-            setDecommissionedByName(res.data?.data?.fullname || userId)
-          }
-        } catch {
-          if (controller.signal.aborted) return
-          if (system?.decommissioned_by === userId) {
-            setDecommissionedByName(userId)
-          }
-        }
-      }
-      load()
-    } else {
-      setDecommissionedByName('')
-    }
-    return () => {
-      controller.abort()
-    }
-  }, [system, open])
-  React.useEffect(() => {
-    const controller = new AbortController()
-    if (open && system?.reactivated_by) {
-      const userId = system.reactivated_by
-      async function load() {
-        try {
-          const res = await axiosInstance.get(apiPaths.users.detail(userId), {
-            signal: controller.signal,
-          })
-          if (system?.reactivated_by === userId) {
-            setReactivatedByName(res.data?.data?.fullname || userId)
-          }
-        } catch {
-          if (controller.signal.aborted) return
-          if (system?.reactivated_by === userId) {
-            setReactivatedByName(userId)
-          }
-        }
-      }
-      load()
-    } else {
-      setReactivatedByName('')
-    }
-    return () => {
-      controller.abort()
-    }
+    // resetDecommissionForm / resetReactivateForm are stable (useCallback);
+    // re-run only on system/open transitions, not on hook identity.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [system, open])
   const handleClose = () => {
     if (_.isEqual(system, editedFismaSystem)) {
@@ -400,7 +151,7 @@ export default function EditSystemModal({
           buildExtendedDiff(editedFismaSystem, system, EXTENDED_METADATA_KEYS)
         )
         await axiosInstance.put(
-          apiPaths.fismaSystems.detail(editedFismaSystem.fismasystemid),
+          `fismasystems/${editedFismaSystem.fismasystemid}`,
           editBody
         )
         notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
@@ -413,11 +164,7 @@ export default function EditSystemModal({
         // toast is a status flag, not the detail.
         if (parsed.fieldErrors) {
           Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-            setFormValid((prevState) => ({ ...prevState, [key]: false }))
-            setFormValidErrorText((prevState) => ({
-              ...prevState,
-              [key]: message,
-            }))
+            markFieldError(key, message)
           })
           notify(STATUS_MESSAGES.notSaved, 'error', { autoHideDuration: 1500 })
           return
@@ -451,7 +198,7 @@ export default function EditSystemModal({
             EXTENDED_METADATA_KEYS
           )
         )
-        await axiosInstance.post(apiPaths.fismaSystems.root, body)
+        await axiosInstance.post(`fismasystems`, body)
         notify(STATUS_MESSAGES.created, 'success', { autoHideDuration: 1500 })
         onClose(editedFismaSystem)
       } catch (error) {
@@ -462,11 +209,7 @@ export default function EditSystemModal({
         // toast is a status flag, not the detail.
         if (parsed.fieldErrors) {
           Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
-            setFormValid((prevState) => ({ ...prevState, [key]: false }))
-            setFormValidErrorText((prevState) => ({
-              ...prevState,
-              [key]: message,
-            }))
+            markFieldError(key, message)
           })
           notify(STATUS_MESSAGES.notCreated, 'error', {
             autoHideDuration: 1500,
@@ -477,123 +220,8 @@ export default function EditSystemModal({
       }
     }
   }
-  const validateDecommissionDate = (dateStr: string): boolean => {
-    if (!dateStr) {
-      setDecommissionDateError('Date is required')
-      return false
-    }
-    const parsed = new Date(dateStr + 'T00:00:00.000Z')
-    if (isNaN(parsed.getTime())) {
-      setDecommissionDateError('Invalid date')
-      return false
-    }
-    const today = new Date()
-    today.setHours(0, 0, 0, 0)
-    if (parsed > today) {
-      setDecommissionDateError('Date cannot be in the future')
-      return false
-    }
-    setDecommissionDateError('')
-    return true
-  }
-  const getTodayISO = (): string => {
-    const today = new Date()
-    const yyyy = today.getFullYear()
-    const mm = String(today.getMonth() + 1).padStart(2, '0')
-    const dd = String(today.getDate()).padStart(2, '0')
-    return `${yyyy}-${mm}-${dd}`
-  }
-  const handleDecommission = async () => {
-    setOpenDecommissionAlert(false)
-    if (!validateDecommissionDate(decommissionDate)) {
-      return
-    }
-    const isoDate = new Date(decommissionDate + 'T00:00:00.000Z').toISOString()
-    const trimmedNotes = decommissionNotes.trim()
-    const body: {
-      decommissioned_date: string
-      notes?: string
-    } = {
-      decommissioned_date: isoDate,
-    }
-    if (trimmedNotes) {
-      body.notes = trimmedNotes
-    }
-    try {
-      const res = await axiosInstance.delete(
-        apiPaths.fismaSystems.detail(editedFismaSystem.fismasystemid),
-        { data: body }
-      )
-      if (res.status === 200 || res.status === 204) {
-        notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
-          autoHideDuration: 2000,
-        })
-        const updatedSystem: FismaSystemType = res.data?.data || {
-          ...editedFismaSystem,
-          decommissioned: true,
-          decommissioned_date: isoDate,
-          decommissioned_notes: trimmedNotes || null,
-        }
-        onClose(updatedSystem)
-      }
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      console.error(
-        'Decommission error:',
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.status,
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.data
-      )
-      const parsed = parseApiError(error)
-      if (parsed.status === 404) {
-        notify(ERROR_MESSAGES.systemNotFound, 'error', {
-          autoHideDuration: 2000,
-        })
-        return
-      }
-      notify(parsed.message, 'error')
-    }
-  }
-  const handleReactivate = async () => {
-    setOpenReactivateAlert(false)
-    const trimmedNotes = reactivationNotes.trim()
-    const body = trimmedNotes ? { notes: trimmedNotes } : undefined
-    try {
-      const res = await axiosInstance.put(
-        apiPaths.fismaSystems.reactivate(editedFismaSystem.fismasystemid),
-        body
-      )
-      if (res.status === 200) {
-        notify(STATUS_MESSAGES.systemReactivated, 'success', {
-          autoHideDuration: 2000,
-        })
-        const updatedSystem: FismaSystemType = res.data?.data || {
-          ...editedFismaSystem,
-          decommissioned: false,
-          reactivation_notes: trimmedNotes || null,
-        }
-        onClose(updatedSystem)
-      }
-    } catch (error) {
-      if (isAuthHandled(error)) return
-      console.error(
-        'Reactivate error:',
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.status,
-        (error as { response?: { status?: number; data?: unknown } }).response
-          ?.data
-      )
-      const parsed = parseApiError(error)
-      if (parsed.status === 404) {
-        notify(ERROR_MESSAGES.systemNotFound, 'error', {
-          autoHideDuration: 2000,
-        })
-        return
-      }
-      notify(parsed.message, 'error')
-    }
-  }
+  const handleDecommission = () => runDecommission(editedFismaSystem, onClose)
+  const handleReactivate = () => runReactivate(editedFismaSystem, onClose)
   if (open && system) {
     if (loading) {
       return (
@@ -611,763 +239,159 @@ export default function EditSystemModal({
     }
     return (
       <>
-        <Dialog open={open} onClose={handleClose} maxWidth="lg" fullWidth>
-          <CustomDialogTitle title={`${title} Fisma System`} />
-          <DialogContent>
-            <Box sx={{ flexGrow: 1 }} component="form">
-              <TextField
-                id="opdiv_id"
-                select
-                required
-                label="OpDiv"
-                variant="standard"
-                fullWidth
-                value={editedFismaSystem.opdiv_id ?? ''}
-                error={!formValid.opdiv_id}
-                helperText={
-                  !formValid.opdiv_id ? formValidErrorText.opdiv_id : ''
-                }
-                sx={{ mb: 2 }}
-                InputLabelProps={{
-                  sx: {
-                    marginTop: 0,
-                  },
-                }}
-                onChange={(e) => {
-                  const val =
-                    e.target.value === '' ? null : Number(e.target.value)
-                  setEditedFismaSystem((prev) => ({ ...prev, opdiv_id: val }))
-                  setFormValid((prev) => ({ ...prev, opdiv_id: val != null }))
-                }}
+        <Modal
+          open={open}
+          onClose={handleClose}
+          title={`${title} FISMA system`}
+          eyebrow={mode === 'create' ? 'New system' : undefined}
+          size="xl"
+          disableBackdropClose
+          footer={
+            <>
+              <Button variant="text" color="inherit" onClick={handleClose}>
+                Cancel
+              </Button>
+              <Button
+                variant="contained"
+                color="primary"
+                onClick={handleSave}
+                disabled={!isFormValid()}
               >
-                {opdivs.map((o) => (
-                  <MenuItem key={o.opdiv_id} value={o.opdiv_id}>
-                    {o.code} — {o.name}
-                  </MenuItem>
-                ))}
-              </TextField>
-              <Grid container spacing={2}>
-                <Grid item xs={7}>
-                  <TextField
-                    id="fismaname"
-                    label="Fisma Name"
-                    required
-                    fullWidth
-                    margin="normal"
-                    variant="standard"
-                    defaultValue={system?.fismaname || ''}
-                    error={!formValid.fismaname ? true : false}
-                    helperText={
-                      !formValid.fismaname ? formValidErrorText.fismaname : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'fismaname')
-                    }}
-                  />
-                  <TextField
-                    id="fismaacronym"
-                    label="Fisma Acronym"
-                    required
-                    variant="standard"
-                    margin="normal"
-                    defaultValue={system?.fismaacronym || ''}
-                    error={!formValid.fismaacronym ? true : false}
-                    helperText={
-                      !formValid.fismaacronym
-                        ? formValidErrorText.fismaacronym
-                        : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'fismaacronym')
-                    }}
-                  />
-                  <TextField
-                    id="groupacronym"
-                    label="Group Acronym"
-                    variant="standard"
-                    margin="normal"
-                    defaultValue={system?.groupacronym || ''}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    sx={{ ml: 2 }}
-                    onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        groupacronym: e.target.value,
-                      }))
-                    }}
-                  />
-                  <TextField
-                    id="component"
-                    label="Component"
-                    variant="standard"
-                    required
-                    margin="normal"
-                    defaultValue={system?.component || ''}
-                    error={!formValid.component ? true : false}
-                    helperText={
-                      !formValid.component ? formValidErrorText.component : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    sx={{ ml: 2 }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'component')
-                    }}
-                  />
-                  <TextField
-                    id="groupname"
-                    label="Group Name"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.groupname || ''}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        groupname: e.target.value,
-                      }))
-                    }}
-                  />
-
-                  <TextField
-                    id="divisionname"
-                    label="Division Name"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.divisionname}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        divisionname: e.target.value,
-                      }))
-                    }}
-                  />
-                  <TextField
-                    id="fismasubsystem"
-                    label="Fisma Subsystem"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.fismasubsystem}
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      setEditedFismaSystem((prevState) => ({
-                        ...prevState,
-                        fismasubsystem: e.target.value,
-                      }))
-                    }}
-                  />
-                </Grid>
-                <Grid item xs={5}>
-                  <ValidatedTextField
-                    label="Data Call Contact"
-                    validator={emailValidator}
-                    dfValue={system?.datacallcontact || ''}
-                    isFullWidth={true}
-                    onChange={(isValid, newValue) => {
-                      setFormValid((prevState) => ({
-                        ...prevState,
-                        datacallcontact: isValid,
-                      }))
-                      if (isValid) {
-                        setEditedFismaSystem((prevState) => ({
-                          ...prevState,
-                          datacallcontact: newValue,
-                        }))
-                      }
-                    }}
-                  />
-                  <ValidatedTextField
-                    label="ISSO Email"
-                    validator={emailValidator}
-                    dfValue={system?.issoemail || ''}
-                    isFullWidth={true}
-                    onChange={(isValid, newValue) => {
-                      setFormValid((prevState) => ({
-                        ...prevState,
-                        issoemail: isValid,
-                      }))
-                      if (isValid) {
-                        setEditedFismaSystem((prevState) => ({
-                          ...prevState,
-                          issoemail: newValue,
-                        }))
-                      }
-                    }}
-                  />
-
-                  <TextField
-                    id="fismauid"
-                    label="Fisma UID"
-                    variant="standard"
-                    margin="normal"
-                    fullWidth
-                    defaultValue={system?.fismauid || ''}
-                    error={!formValid.fismauid ? true : false}
-                    helperText={
-                      !formValid.fismauid ? formValidErrorText.fismauid : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'fismauid')
-                    }}
-                  />
-                  <TextField
-                    id="outlined-select-datacenterenvironment"
-                    required
-                    select
-                    label="Datacenter Environment"
-                    variant="standard"
-                    defaultValue={system?.datacenterenvironment || ''}
-                    fullWidth
-                    error={!formValid.datacenterenvironment ? true : false}
-                    helperText={
-                      !formValid.datacenterenvironment
-                        ? formValidErrorText.datacenterenvironment
-                        : ''
-                    }
-                    InputLabelProps={{
-                      sx: {
-                        marginTop: 0,
-                      },
-                    }}
-                    sx={{ mt: 2 }}
-                    onChange={(e) => {
-                      handleInputChange(e, 'datacenterenvironment')
-                    }}
-                  >
-                    {datacenterEnvironmentOptions.map((option) => (
-                      <MenuItem
-                        key={option.value}
-                        value={option.value}
-                        disabled={option.disabled}
-                      >
-                        {option.label}
-                      </MenuItem>
-                    ))}
-                  </TextField>
-                  <Box
-                    sx={{
-                      mt: 3,
-                      p: 2,
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <SdlSyncToggle
-                      checked={editedFismaSystem.sdl_sync_enabled ?? false}
-                      onChange={(checked) =>
-                        setEditedFismaSystem((prev) => ({
-                          ...prev,
-                          sdl_sync_enabled: checked,
-                        }))
-                      }
-                    />
-                  </Box>
-                  {mode === 'edit' && (
-                    <Box
-                      sx={{
-                        mt: 3,
-                        p: 2,
-                        border: 1,
-                        borderColor: 'divider',
-                        borderRadius: 1,
-                      }}
-                    >
-                      {system?.decommissioned ? (
-                        <>
-                          <Typography
-                            variant="body2"
-                            sx={{ fontWeight: 500, mb: 1 }}
-                          >
-                            System Decommissioned
-                          </Typography>
-                          {!showDecommissionForm && !showReactivateForm && (
-                            <>
-                              {system?.decommissioned_date && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: 'block',
-                                    ml: 2,
-                                    color: 'text.secondary',
-                                  }}
-                                >
-                                  Date:{' '}
-                                  {new Date(
-                                    system.decommissioned_date
-                                  ).toLocaleDateString()}
-                                </Typography>
-                              )}
-                              {system?.decommissioned_by && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: 'block',
-                                    ml: 2,
-                                    color: 'text.secondary',
-                                  }}
-                                >
-                                  By:{' '}
-                                  {decommissionedByName ||
-                                    system.decommissioned_by}
-                                </Typography>
-                              )}
-                              {system?.decommissioned_notes && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    display: 'block',
-                                    ml: 2,
-                                    mt: 0.5,
-                                    color: 'text.secondary',
-                                  }}
-                                >
-                                  Notes: {system.decommissioned_notes}
-                                </Typography>
-                              )}
-                              {system?.reactivated_date && (
-                                <Box sx={{ mt: 1 }}>
-                                  <Typography
-                                    variant="caption"
-                                    sx={{
-                                      display: 'block',
-                                      fontStyle: 'italic',
-                                      color: 'text.secondary',
-                                    }}
-                                  >
-                                    Previously reactivated on{' '}
-                                    {new Date(
-                                      system.reactivated_date
-                                    ).toLocaleDateString()}
-                                    {system?.reactivated_by &&
-                                      ` by ${reactivatedByName || system.reactivated_by}`}
-                                    {system?.reactivation_notes
-                                      ? ` (notes: ${system.reactivation_notes})`
-                                      : ''}
-                                  </Typography>
-                                </Box>
-                              )}
-                              <Box sx={{ display: 'flex', gap: 1, mt: 1 }}>
-                                <CmsButton
-                                  size="small"
-                                  onClick={() => {
-                                    if (system?.decommissioned_date) {
-                                      const d = new Date(
-                                        system.decommissioned_date
-                                      )
-                                      const yyyy = d.getFullYear()
-                                      const mm = String(
-                                        d.getMonth() + 1
-                                      ).padStart(2, '0')
-                                      const dd = String(d.getDate()).padStart(
-                                        2,
-                                        '0'
-                                      )
-                                      setDecommissionDate(`${yyyy}-${mm}-${dd}`)
-                                    }
-                                    setDecommissionNotes(
-                                      system?.decommissioned_notes || ''
-                                    )
-                                    setShowDecommissionForm(true)
-                                  }}
-                                >
-                                  Edit Decommission Details
-                                </CmsButton>
-                                <CmsButton
-                                  variation="solid"
-                                  size="small"
-                                  onClick={() => {
-                                    setReactivationNotes('')
-                                    setShowReactivateForm(true)
-                                  }}
-                                >
-                                  Reactivate System
-                                </CmsButton>
-                              </Box>
-                            </>
-                          )}
-                          {showReactivateForm && (
-                            <Box sx={{ ml: 2, mt: 2 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{ mt: 0, mb: 0.5, fontWeight: 500 }}
-                              >
-                                Reactivation Notes (optional)
-                              </Typography>
-                              <textarea
-                                value={reactivationNotes}
-                                maxLength={500}
-                                rows={3}
-                                onChange={(e) =>
-                                  setReactivationNotes(e.target.value)
-                                }
-                                placeholder="Reason for reactivation..."
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                  fontFamily: 'inherit',
-                                  resize: 'vertical',
-                                }}
-                              />
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: 'text.secondary',
-                                  display: 'block',
-                                  mb: 1,
-                                }}
-                              >
-                                {reactivationNotes.length}/500
-                              </Typography>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <CmsButton
-                                  variation="solid"
-                                  size="small"
-                                  onClick={() => setOpenReactivateAlert(true)}
-                                >
-                                  Reactivate
-                                </CmsButton>
-                                <CmsButton
-                                  size="small"
-                                  onClick={() => setShowReactivateForm(false)}
-                                >
-                                  Cancel
-                                </CmsButton>
-                              </Box>
-                            </Box>
-                          )}
-                          {showDecommissionForm && (
-                            <Box sx={{ ml: 2, mt: 1 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{ mb: 0.5, fontWeight: 500 }}
-                              >
-                                Decommission Date
-                              </Typography>
-                              <input
-                                type="date"
-                                value={decommissionDate}
-                                max={getTodayISO()}
-                                onChange={(e) => {
-                                  setDecommissionDate(e.target.value)
-                                  if (decommissionDateError) {
-                                    validateDecommissionDate(e.target.value)
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  validateDecommissionDate(
-                                    e.currentTarget.value
-                                  )
-                                }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: decommissionDateError
-                                    ? '1px solid #d32f2f'
-                                    : '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                }}
-                              />
-                              {decommissionDateError && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: '#d32f2f',
-                                    mt: 0.5,
-                                    display: 'block',
-                                  }}
-                                >
-                                  {decommissionDateError}
-                                </Typography>
-                              )}
-                              <Typography
-                                variant="body2"
-                                sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
-                              >
-                                Notes (optional)
-                              </Typography>
-                              <textarea
-                                value={decommissionNotes}
-                                maxLength={500}
-                                rows={3}
-                                onChange={(e) =>
-                                  setDecommissionNotes(e.target.value)
-                                }
-                                placeholder="Reason for decommission..."
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                  fontFamily: 'inherit',
-                                  resize: 'vertical',
-                                }}
-                              />
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: 'text.secondary',
-                                  display: 'block',
-                                  mb: 1,
-                                }}
-                              >
-                                {decommissionNotes.length}/500
-                              </Typography>
-                              <Box sx={{ display: 'flex', gap: 1 }}>
-                                <CmsButton
-                                  variation="solid"
-                                  size="small"
-                                  onClick={() => {
-                                    if (
-                                      validateDecommissionDate(decommissionDate)
-                                    ) {
-                                      setOpenDecommissionAlert(true)
-                                    }
-                                  }}
-                                >
-                                  Update
-                                </CmsButton>
-                                <CmsButton
-                                  size="small"
-                                  onClick={() => setShowDecommissionForm(false)}
-                                >
-                                  Cancel
-                                </CmsButton>
-                              </Box>
-                            </Box>
-                          )}
-                        </>
-                      ) : (
-                        <>
-                          <FormControlLabel
-                            control={
-                              <Checkbox
-                                checked={showDecommissionForm}
-                                onChange={(e) => {
-                                  setShowDecommissionForm(e.target.checked)
-                                }}
-                                sx={{
-                                  color: '#d32f2f',
-                                  '&.Mui-checked': {
-                                    color: '#d32f2f',
-                                  },
-                                }}
-                              />
-                            }
-                            label={
-                              <Typography
-                                variant="body2"
-                                sx={{ fontWeight: 500 }}
-                              >
-                                Decommission System
-                              </Typography>
-                            }
-                          />
-                          {showDecommissionForm && (
-                            <Box sx={{ ml: 4, mt: 1 }}>
-                              <Typography
-                                variant="body2"
-                                sx={{ mb: 0.5, fontWeight: 500 }}
-                              >
-                                Decommission Date
-                              </Typography>
-                              <input
-                                type="date"
-                                value={decommissionDate}
-                                max={getTodayISO()}
-                                onChange={(e) => {
-                                  setDecommissionDate(e.target.value)
-                                  if (decommissionDateError) {
-                                    validateDecommissionDate(e.target.value)
-                                  }
-                                }}
-                                onBlur={(e) => {
-                                  validateDecommissionDate(
-                                    e.currentTarget.value
-                                  )
-                                }}
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: decommissionDateError
-                                    ? '1px solid #d32f2f'
-                                    : '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                }}
-                              />
-                              {decommissionDateError && (
-                                <Typography
-                                  variant="caption"
-                                  sx={{
-                                    color: '#d32f2f',
-                                    mt: 0.5,
-                                    display: 'block',
-                                  }}
-                                >
-                                  {decommissionDateError}
-                                </Typography>
-                              )}
-                              <Typography
-                                variant="body2"
-                                sx={{ mt: 2, mb: 0.5, fontWeight: 500 }}
-                              >
-                                Notes (optional)
-                              </Typography>
-                              <textarea
-                                value={decommissionNotes}
-                                maxLength={500}
-                                rows={3}
-                                onChange={(e) =>
-                                  setDecommissionNotes(e.target.value)
-                                }
-                                placeholder="Reason for decommission..."
-                                style={{
-                                  width: '100%',
-                                  padding: '8px',
-                                  fontSize: '14px',
-                                  border: '1px solid #ccc',
-                                  borderRadius: '4px',
-                                  boxSizing: 'border-box',
-                                  fontFamily: 'inherit',
-                                  resize: 'vertical',
-                                }}
-                              />
-                              <Typography
-                                variant="caption"
-                                sx={{
-                                  color: 'text.secondary',
-                                  display: 'block',
-                                  mb: 1,
-                                }}
-                              >
-                                {decommissionNotes.length}/500
-                              </Typography>
-                              <CmsButton
-                                variation="solid"
-                                onClick={() => {
-                                  if (
-                                    validateDecommissionDate(decommissionDate)
-                                  ) {
-                                    setOpenDecommissionAlert(true)
-                                  }
-                                }}
-                                style={{
-                                  marginTop: '12px',
-                                  backgroundColor: '#d32f2f',
-                                }}
-                              >
-                                Decommission
-                              </CmsButton>
-                            </Box>
-                          )}
-                        </>
-                      )}
-                    </Box>
-                  )}
-                </Grid>
-                <Grid item xs={12}>
-                  <Box
-                    sx={{
-                      mt: 2,
-                      p: 2,
-                      border: 1,
-                      borderColor: 'divider',
-                      borderRadius: 1,
-                    }}
-                  >
-                    <Typography variant="h6" sx={{ mb: 0.5 }}>
-                      {EXTENDED_METADATA_TITLE}
-                    </Typography>
-                    <Typography
-                      variant="caption"
-                      sx={{
-                        display: 'block',
-                        mb: 2,
-                        color: 'text.secondary',
-                      }}
-                    >
-                      {mode === 'create'
-                        ? EXTENDED_METADATA_CREATE_HINT
-                        : EXTENDED_METADATA_EDIT_HINT}
-                    </Typography>
-                    <Grid container spacing={2}>
-                      {extendedFields
-                        .filter(
-                          (field) =>
-                            !isCrossFieldHidden(field.key, editedFismaSystem)
-                        )
-                        .map((field) => (
-                          <Grid item xs={12} sm={6} md={4} key={field.key}>
-                            {renderExtendedControl(field)}
-                          </Grid>
-                        ))}
-                    </Grid>
-                  </Box>
-                </Grid>
-              </Grid>
-            </Box>
-          </DialogContent>
-          <DialogActions>
-            <CmsButton
-              variation="solid"
-              onClick={handleSave}
-              disabled={!isFormValid()}
+                {mode === 'edit' ? 'Save changes' : 'Create system'}
+              </Button>
+            </>
+          }
+        >
+          <Box sx={{ flexGrow: 1 }} component="form">
+            <SystemFormFields
+              editedFismaSystem={editedFismaSystem}
+              setEditedFismaSystem={setEditedFismaSystem}
+              handleInputChange={handleInputChange}
+              showError={showError}
+              formValidErrorText={formValidErrorText}
+              markTouched={markTouched}
+              setFormValid={setFormValid}
+              setFormValidErrorText={setFormValidErrorText}
+              opdivs={opdivs}
+              datacenterEnvironmentOptions={datacenterEnvironmentOptions}
             >
-              {mode === 'edit' ? 'Save' : 'Create'}
-            </CmsButton>
-            <CmsButton onClick={handleClose} color="primary">
-              Close
-            </CmsButton>
-          </DialogActions>
-        </Dialog>
+              {mode === 'edit' && (
+                <Box
+                  sx={{
+                    mt: 3,
+                    p: 2,
+                    border: 1,
+                    borderColor: 'divider',
+                    borderRadius: 1,
+                  }}
+                >
+                  {system?.decommissioned ? (
+                    <>
+                      <Typography
+                        variant="body2"
+                        sx={{ fontWeight: 500, mb: 1 }}
+                      >
+                        System Decommissioned
+                      </Typography>
+                      {!showDecommissionForm && !showReactivateForm && (
+                        <DecommissionedSystemInfo
+                          system={system}
+                          decommissionedByName={decommissionedByName}
+                          reactivatedByName={reactivatedByName}
+                          onEditDecommission={() => {
+                            if (system?.decommissioned_date) {
+                              const d = new Date(system.decommissioned_date)
+                              const yyyy = d.getFullYear()
+                              const mm = String(d.getMonth() + 1).padStart(
+                                2,
+                                '0'
+                              )
+                              const dd = String(d.getDate()).padStart(2, '0')
+                              setDecommissionDate(`${yyyy}-${mm}-${dd}`)
+                            }
+                            setDecommissionNotes(
+                              system?.decommissioned_notes || ''
+                            )
+                            setShowDecommissionForm(true)
+                          }}
+                          onReactivate={() => {
+                            setReactivationNotes('')
+                            setShowReactivateForm(true)
+                          }}
+                        />
+                      )}
+                      {showReactivateForm && (
+                        <ReactivateForm
+                          notes={reactivationNotes}
+                          setNotes={setReactivationNotes}
+                          onConfirm={() => setOpenReactivateAlert(true)}
+                          onCancel={() => setShowReactivateForm(false)}
+                        />
+                      )}
+                      {showDecommissionForm && (
+                        <DecommissionForm
+                          date={decommissionDate}
+                          setDate={setDecommissionDate}
+                          dateError={decommissionDateError}
+                          checkDate={checkDecommissionDate}
+                          notes={decommissionNotes}
+                          setNotes={setDecommissionNotes}
+                          onConfirm={() => setOpenDecommissionAlert(true)}
+                          onCancel={() => setShowDecommissionForm(false)}
+                          confirmLabel="Update"
+                          marginLeft={2}
+                        />
+                      )}
+                    </>
+                  ) : (
+                    <>
+                      <FormControlLabel
+                        control={
+                          <Checkbox
+                            checked={showDecommissionForm}
+                            onChange={(e) => {
+                              setShowDecommissionForm(e.target.checked)
+                            }}
+                            sx={{
+                              color: '#d32f2f',
+                              '&.Mui-checked': {
+                                color: '#d32f2f',
+                              },
+                            }}
+                          />
+                        }
+                        label={
+                          <Typography variant="body2" sx={{ fontWeight: 500 }}>
+                            Decommission System
+                          </Typography>
+                        }
+                      />
+                      {showDecommissionForm && (
+                        <DecommissionForm
+                          date={decommissionDate}
+                          setDate={setDecommissionDate}
+                          dateError={decommissionDateError}
+                          checkDate={checkDecommissionDate}
+                          notes={decommissionNotes}
+                          setNotes={setDecommissionNotes}
+                          onConfirm={() => setOpenDecommissionAlert(true)}
+                          confirmLabel="Decommission"
+                          confirmColor="error"
+                          marginLeft={4}
+                        />
+                      )}
+                    </>
+                  )}
+                </Box>
+              )}
+            </SystemFormFields>
+            <ExtendedMetadataFields
+              editedFismaSystem={editedFismaSystem}
+              setEditedFismaSystem={setEditedFismaSystem}
+              mode={mode}
+            />
+          </Box>
+        </Modal>
         <ConfirmDialog
           confirmationText={CONFIRMATION_MESSAGE}
           open={openAlert}
@@ -1382,8 +406,8 @@ export default function EditSystemModal({
           }
           confirmationText={
             system?.decommissioned
-              ? `Update decommission details for "${system?.fismaname}" to ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
-              : `Are you sure you want to decommission "${system?.fismaname}" on ${new Date(decommissionDate + 'T00:00:00.000Z').toLocaleDateString()}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. An admin can later reactivate the system if needed.`
+              ? `Update decommission details for "${system?.fismaname}" to ${formatDate(decommissionDate)}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''}`
+              : `Are you sure you want to decommission "${system?.fismaname}" on ${formatDate(decommissionDate)}?${decommissionNotes.trim() ? ` Notes: "${decommissionNotes.trim().length > 100 ? decommissionNotes.trim().substring(0, 100) + '...' : decommissionNotes.trim()}"` : ''} This will hide the system from the active systems list. An admin can later reactivate the system if needed.`
           }
           open={openDecommissionAlert}
           onClose={() => setOpenDecommissionAlert(false)}

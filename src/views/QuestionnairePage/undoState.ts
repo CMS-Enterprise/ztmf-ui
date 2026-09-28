@@ -17,7 +17,7 @@ export const canUndoAnswer = (s: {
   state: CarryForwardState
   dirty: boolean
   isReadOnly: boolean
-  /** scoreid !== 0 — an unanswered question has no row and no history. */
+  /** scoreid !== 0 - an unanswered question has no row and no history. */
   hasScore: boolean
   priorReviewBlocked: boolean
 }): boolean =>
@@ -25,7 +25,7 @@ export const canUndoAnswer = (s: {
   // The load-bearing clause, and the reason this is not simply
   // !canConfirmCarryForward. Undoing the first edit of a carried-forward
   // answer returns status to not_started, which makes the chip read
-  // "unconfirmed" and brings the Confirm button back — while the new head is
+  // "unconfirmed" and brings the Confirm button back - while the new head is
   // a kind='undo' revision the server still reports as undoable. Without this
   // clause both buttons would render at once. Requiring 'updated' also reads
   // correctly on its own: "Undo last change" only means something for an
