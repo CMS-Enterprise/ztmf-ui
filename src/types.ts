@@ -445,20 +445,6 @@ export type FismaTableProps = {
   // The single call chosen for each system's dashboard row (most-recently-updated),
   // used so Pillar Scores opens on the same call the table is displaying.
   chosenCallMap?: Record<number, number>
-  /**
-   * Pins the table to a single OpDiv. When set, the OpDiv facet is seeded to
-   * this id, its picker is withheld from the toolbar, and "Clear all" resets
-   * to this id rather than 'all' - a page scoped to one OpDiv must never be
-   * able to widen itself past its own scope.
-   */
-  lockedOpDivId?: number
-  /**
-   * Withholds the "Show decommissioned" toggle. Separate from lockedOpDivId
-   * because the reason differs: the endpoint SWAPS the list rather than adding
-   * to it, so any page pairing this table with an active-posture summary must
-   * suppress it - including one scoped to every OpDiv at once.
-   */
-  hideDecommissionedToggle?: boolean
 }
 
 export type ThemeColor =
