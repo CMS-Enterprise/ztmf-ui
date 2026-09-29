@@ -3,8 +3,7 @@ import { Box, Button, OutlinedInput } from '@mui/material'
 import Modal from '@/components/ui/Modal'
 import Field, { fieldInputSx } from '@/components/ui/Field'
 import { datacallModalProps } from '@/types'
-import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { useCreateDatacall } from '@/utils/datacalls'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { radius } from '@/theme/tokens'
@@ -38,7 +37,6 @@ export default function DataCallModal({
   // Guards against a double-submit (fast double-click or double-Enter) that
   // would otherwise fire two POSTs before the modal auto-closes and creates
   // duplicate datacalls server-side.
-  const [submitting, setSubmitting] = React.useState<boolean>(false)
 
   // Modals stay mounted across open/close so React preserves their state.
   // Without this reset, a user who triggers a validation error (e.g. blurs
@@ -51,7 +49,6 @@ export default function DataCallModal({
       setDatacallError('')
       setDeadline('')
       setDeadlineError('')
-      setSubmitting(false)
     }
   }, [open])
 
@@ -95,19 +92,25 @@ export default function DataCallModal({
     }
   }
 
+  const createDatacallMutation = useCreateDatacall()
+  // The mutation owns the in-flight state; it guards re-entry here and drives
+  // the disabled Create button and its label below.
+  const submitting = createDatacallMutation.isPending
   const submitDatacall = async () => {
     if (submitting) return
-    setSubmitting(true)
     try {
-      await axiosInstance.post(apiPaths.datacalls.root, {
+      await createDatacallMutation.mutateAsync({
         datacall: datacall.toUpperCase(),
         deadline: new Date(deadline).toISOString(),
       })
       notify('Datacall has successfully been created', 'success', {
         autoHideDuration: 2500,
       })
-      // Refresh the caller's data-call list so the newly created call
-      // appears in the picker without a manual page reload, then close.
+      // Refresh the caller's data-call list so the newly created call appears
+      // in the picker without a manual page reload, then close. The mutation
+      // also invalidates the data-call key, which reaches nothing while the
+      // layout holds this list in state; drop this callback when that read
+      // becomes a query.
       onCreated?.()
       onClose()
     } catch (error) {
@@ -124,8 +127,6 @@ export default function DataCallModal({
         return
       }
       notify(parsed.message, 'error', { autoHideDuration: 2500 })
-    } finally {
-      setSubmitting(false)
     }
   }
 

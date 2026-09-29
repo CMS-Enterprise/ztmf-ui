@@ -11,8 +11,7 @@ import Modal from '@/components/ui/Modal'
 import Field, { fieldInputSx } from '@/components/ui/Field'
 import SentEmailsModal from './SentEmailsModal'
 import { EmailModalProps } from '@/types'
-import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { useSendMassEmail } from '@/utils/massEmails'
 import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { colors, fonts } from '@/theme/tokens'
@@ -57,9 +56,10 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     }, 200)
     closeModal()
   }
+  const sendEmail = useSendMassEmail()
   const submitEmail = async () => {
     try {
-      const res = await axiosInstance.post(apiPaths.massEmails, {
+      const recipients = await sendEmail.mutateAsync({
         group: groupValue,
         subject,
         body,
@@ -68,7 +68,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
       notify('Emails have successfully been sent', 'success', {
         autoHideDuration: 2500,
       })
-      setSentToEmails(res.data.data)
+      setSentToEmails(recipients)
     } catch (error) {
       if (isAuthHandled(error)) return
       notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
