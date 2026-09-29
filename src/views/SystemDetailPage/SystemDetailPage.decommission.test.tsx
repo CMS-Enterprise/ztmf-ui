@@ -79,6 +79,7 @@ function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
   mockCtx = {
     fismaSystems: [system],
     setFismaSystems: jest.fn(),
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -291,6 +292,7 @@ test('falls back to a single-system fetch when the system is not in context', as
   mockCtx = {
     fismaSystems: [other],
     setFismaSystems: jest.fn(),
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -449,4 +451,36 @@ test('toggling data-lake sync in edit mode updates the draft', async () => {
   await user.click(toggle)
   // BASE_SYSTEM starts with sync off, so the click flips the draft on.
   expect(toggle).toBeChecked()
+})
+
+test('shows not-found instead of spinning for a user with no accessible systems', async () => {
+  // A loaded, empty list: the page used to wait for a non-empty list before
+  // looking the system up, so it spun forever.
+  mock.onGet(/fismasystems\/42$/).reply(404, { error: 'not found' })
+  mockCtx = {
+    fismaSystems: [],
+    setFismaSystems: jest.fn(),
+    fismaSystemsLoaded: true,
+    userInfo: {
+      userid: '1',
+      email: 'grand.moff@deathstar.empire',
+      fullname: 'Grand Moff Tarkin',
+      role: 'OWNER',
+    } as userData,
+    datacenterEnvironments: [],
+    opdivs: [],
+    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
+    showDecommissioned: false,
+    datacalls: [],
+    selectedDatacall: null,
+    latestDataCallId: 0,
+  }
+  renderWithProviders(
+    <Routes>
+      <Route path="/systems/:fismasystemid" element={<SystemDetailPage />} />
+    </Routes>,
+    { initialEntries: ['/systems/42'] }
+  )
+
+  expect(await screen.findByText('System not found')).toBeInTheDocument()
 })

@@ -946,6 +946,9 @@ export default function UserTable() {
               sorting: {
                 sortModel: [{ field: 'role', sort: 'asc' }],
               },
+              // Same first page as the other tables; without it MUI's
+              // default of 100 applies.
+              pagination: { paginationModel: { pageSize: 25, page: 0 } },
             }}
             rowModesModel={rowModesModel}
             onRowModesModelChange={handleRowModesModelChange}

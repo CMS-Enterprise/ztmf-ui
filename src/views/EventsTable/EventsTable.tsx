@@ -28,9 +28,9 @@ import { formatDateTime } from '@/utils/dates'
 // string and simply matches nothing for an unknown one.
 const ACTIONS = ['created', 'updated', 'deleted', 'viewed', 'imported']
 
-// Matches the backend's default page size so the first request and the grid's
-// initial state agree without a round of re-fetching.
-const DEFAULT_PAGE_SIZE = 50
+// Same first page as every other table (25). The request always sends an
+// explicit limit, so this does not need to match the backend's own default.
+const DEFAULT_PAGE_SIZE = 25
 
 // Compact 30px control height shared across the toolbar filters, matching the
 // Users / OpDivs table toolbars.

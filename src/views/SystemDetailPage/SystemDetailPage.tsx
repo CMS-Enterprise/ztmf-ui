@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
+import { useResolvedSystem } from '@/hooks/useResolvedSystem'
 import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import _ from 'lodash'
@@ -50,7 +51,6 @@ import { formatDate } from '@/utils/dates'
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
   const {
-    fismaSystems,
     setFismaSystems,
     userInfo,
     selectedDatacall,
@@ -72,46 +72,11 @@ export default function SystemDetailPage() {
   // backend re-checks assignment/OpDiv scope on the target-maturity PUT.
   const canEditTarget = isAdmin || isSystemScoped(userInfo)
 
-  const system = useMemo(
-    () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
-    [fismaSystems, systemId]
-  )
-
-  // If system not in context (e.g. decommissioned and not in active-only fetch),
-  // try fetching it individually so the page works on refresh
-  const triedFetch = useRef(false)
-  const [retryingFetch, setRetryingFetch] = useState(false)
-
-  useEffect(() => {
-    const controller = new AbortController()
-    if (fismaSystems.length > 0 && !system && !triedFetch.current) {
-      triedFetch.current = true
-      setRetryingFetch(true)
-      async function load() {
-        try {
-          const res = await axiosInstance.get(
-            apiPaths.fismaSystems.detail(systemId),
-            {
-              signal: controller.signal,
-            }
-          )
-          const data = res.data?.data
-          if (data) {
-            setFismaSystems((prev) => [...prev, data])
-          }
-        } catch {
-          if (controller.signal.aborted) return
-          // System truly doesn't exist
-        } finally {
-          if (!controller.signal.aborted) setRetryingFetch(false)
-        }
-      }
-      load()
-    }
-    return () => {
-      controller.abort()
-    }
-  }, [fismaSystems, system, systemId, setFismaSystems])
+  // Resolves from the shared list, or fetches by id when the system is not in
+  // it (decommissioned, or outside the current view), so the page works on
+  // refresh and for a user with no accessible systems.
+  const resolution = useResolvedSystem(systemId)
+  const system = resolution.system ?? null
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
@@ -402,10 +367,8 @@ export default function SystemDetailPage() {
       // would show the cleared field as empty until the next fetch.
       //
       // The caller's decommissioned view mode is preserved so saving does not
-      // change which systems the dashboard lists. That mode can exclude the
-      // system just saved, so clearing triedFetch lets the single-system
-      // fallback re-add it.
-      triedFetch.current = false
+      // change which systems the dashboard lists. When that mode excludes the
+      // system just saved, useResolvedSystem fetches it back by id.
       await fetchFismaSystems(showDecommissioned)
     } catch (error) {
       if (isAuthHandled(error)) return
@@ -593,8 +556,9 @@ export default function SystemDetailPage() {
     )
   }
 
-  // Loading state: context hasn't populated yet, or retrying fetch for individual system
-  if (fismaSystems.length === 0 || retryingFetch) {
+  // Still resolving: the systems list hasn't loaded, or the by-id fetch for a
+  // system missing from it hasn't answered yet.
+  if (resolution.status === 'resolving') {
     return (
       <Box
         sx={{
@@ -851,7 +815,6 @@ export default function SystemDetailPage() {
           onIssoUpdated={async () => {
             // The read is the source of truth for resolved fields like
             // isso_name, so refetch rather than echo the adopted value.
-            triedFetch.current = false
             await fetchFismaSystems(showDecommissioned)
           }}
         />

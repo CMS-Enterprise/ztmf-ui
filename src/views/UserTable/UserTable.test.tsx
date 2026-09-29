@@ -232,3 +232,14 @@ describe('UserTable', () => {
     expect(screen.getByText('Chewbacca')).toBeInTheDocument()
   })
 })
+
+describe('UserTable pagination', () => {
+  test('starts at 25 rows per page like the other tables', async () => {
+    // With no pagination in initialState the grid fell back to MUI's 100.
+    renderWithProviders(<UserTable />)
+    await screen.findByText('Leia Organa')
+    expect(
+      screen.getByRole('combobox', { name: 'Rows per page' })
+    ).toHaveTextContent('25')
+  })
+})
