@@ -36,6 +36,12 @@ export type OpDivHeroProps = {
   delta: PairedDelta
   /** Display name of the baseline call, when there is one. */
   priorLabel?: string
+  /**
+   * What the page is scoped to, for the denominator note. The card is reused
+   * by the system-scoped dashboard, where "in this OpDiv" is simply wrong -
+   * an ISSO's scope is their assignments, which rarely covers an OpDiv.
+   */
+  scopeNoun?: string
 }
 
 /**
@@ -50,6 +56,7 @@ export default function OpDivHero({
   systemCount,
   delta,
   priorLabel,
+  scopeNoun = 'this OpDiv',
 }: OpDivHeroProps) {
   // An OpDiv average is not a graded system, so there is no API tier for it.
   // This is the documented exception where deriving from the number is right.
@@ -98,7 +105,7 @@ export default function OpDivHero({
 
       <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 0.5 }}>
         {scoredCount === 0
-          ? `No scored systems yet · ${systemCount} in this OpDiv`
+          ? `No scored systems yet · ${systemCount} in ${scopeNoun}`
           : `Average of ${scoredCount} scored ${
               scoredCount === 1 ? 'system' : 'systems'
             } of ${systemCount}`}
