@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useState } from 'react'
 import Button from '@mui/material/Button'
 import AddIcon from '@mui/icons-material/Add'
 import EmailOutlinedIcon from '@mui/icons-material/EmailOutlined'
@@ -75,6 +75,74 @@ import { useUsersSnackbar } from './hooks/useUsersSnackbar'
 import { useUsersModals } from './hooks/useUsersModals'
 import { useLoadUsers } from './hooks/useLoadUsers'
 import { useSystemCatalog } from './hooks/useSystemCatalog'
+
+/** Props for {@link NoUsersOverlay}. */
+type NoUsersOverlayProps = {
+  /** OpDiv code the grid is narrowed to, when it is narrowed to one. */
+  opdivCode?: string
+  /** Whether a role facet is also applied. */
+  roleFiltered?: boolean
+  /** Clears both facets. */
+  onClear?: () => void
+}
+
+// Teaches slotProps about the overlay's own props, which is how the grid types
+// custom slots - otherwise the only way to pass them is a cast that would also
+// hide a genuine mismatch.
+declare module '@mui/x-data-grid' {
+  interface NoRowsOverlayPropsOverrides extends NoUsersOverlayProps {}
+}
+
+/**
+ * Empty-grid message.
+ *
+ * An empty table has to say WHY it is empty. The OpDiv dashboard deep-links
+ * here pre-filtered, and an OpDiv whose users carry no grants yet lands on a
+ * blank grid that reads as a broken page rather than as an answer - the CMS
+ * seed granted every legacy account to CMS alone, so every other OpDiv starts
+ * out empty. Naming the filter and offering a way out turns that into a fact.
+ * @param {NoUsersOverlayProps} props - Active facets and the clear handler.
+ * @returns {JSX.Element} The overlay.
+ */
+function NoUsersOverlay({
+  opdivCode,
+  roleFiltered,
+  onClear,
+}: NoUsersOverlayProps) {
+  const filtered = Boolean(opdivCode) || Boolean(roleFiltered)
+  return (
+    <Box
+      sx={{
+        height: '100%',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        gap: 1,
+        px: 2,
+        textAlign: 'center',
+      }}
+    >
+      <Typography sx={{ fontSize: 14, color: colors.neutral700 }}>
+        {!filtered
+          ? 'No users yet.'
+          : opdivCode && !roleFiltered
+            ? `No users are assigned to ${opdivCode}.`
+            : 'No users match the current filters.'}
+      </Typography>
+      {filtered && onClear && (
+        <Button
+          size="small"
+          variant="outlined"
+          color="primary"
+          onClick={onClear}
+        >
+          Show all users
+        </Button>
+      )}
+    </Box>
+  )
+}
 
 export default function UserTable() {
   const apiRef = useGridApiRef()
@@ -828,6 +896,11 @@ export default function UserTable() {
     })
   }, [rows, roleFilter, opdivFilter])
 
+  const clearFacetFilters = useCallback(() => {
+    setOpDivFilter('all')
+    setRoleFilter('all')
+  }, [setOpDivFilter, setRoleFilter])
+
   return (
     <Box
       sx={{
@@ -952,7 +1025,20 @@ export default function UserTable() {
             onProcessRowUpdateError={handleProcessRowUpdateError}
             onRowEditStop={handleRowEditStop}
             processRowUpdate={processRowUpdate}
-            slots={{ footer: DataGridPaginationFooter }}
+            slots={{
+              footer: DataGridPaginationFooter,
+              noRowsOverlay: NoUsersOverlay,
+            }}
+            slotProps={{
+              noRowsOverlay: {
+                opdivCode:
+                  opdivFilter !== 'all'
+                    ? String(opdivCodeMap[opdivFilter] ?? opdivFilter)
+                    : undefined,
+                roleFiltered: roleFilter !== 'all',
+                onClear: clearFacetFilters,
+              },
+            }}
             pageSizeOptions={[25, 50, 100]}
             disableColumnSelector
             // Table has its own search + filters in the toolbar; hide every

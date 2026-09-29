@@ -89,6 +89,8 @@ function TableToolbar({
   openCallInView,
   showDecommissioned,
   setShowDecommissioned,
+  lockedOpDivId,
+  hideDecommissionedToggle,
 }: {
   count: number
   search: string
@@ -96,6 +98,10 @@ function TableToolbar({
   opdivs: OpDiv[]
   opdivFilter: number | 'all'
   setOpDivFilter: (value: number | 'all') => void
+  /** When set, the OpDiv picker is withheld and Clear all resets to it. */
+  lockedOpDivId?: number
+  /** Withholds the decommissioned toggle - see FismaTableProps. */
+  hideDecommissionedToggle?: boolean
   envOptions: string[]
   envFilter: string | 'all'
   setEnvFilter: (value: string | 'all') => void
@@ -120,17 +126,20 @@ function TableToolbar({
   // search term (#566/#573). Show Decommissioned counts as an active filter
   // for the enabled state - it lives in Title context (it gates a refetch)
   // but reads as a filter to the user.
+  // The locked OpDiv is the page's own scope, not a user-applied facet, so it
+  // neither enables Clear all nor is cleared by it.
+  const opdivBaseline: number | 'all' = lockedOpDivId ?? 'all'
   const hasActiveFilters =
     search.trim() !== '' ||
     envFilter !== 'all' ||
-    opdivFilter !== 'all' ||
+    opdivFilter !== opdivBaseline ||
     notUpdatedOnly ||
     openCallOnly ||
     showDecommissioned
   const handleClearAll = () => {
     setSearch('')
     setEnvFilter('all')
-    setOpDivFilter('all')
+    setOpDivFilter(opdivBaseline)
     setNotUpdatedOnly(false)
     setOpenCallOnly(false)
     setShowDecommissioned(false)
@@ -284,13 +293,19 @@ function TableToolbar({
                 </span>
               </Tooltip>
             </Box>
-            <Box sx={{ display: 'flex', minWidth: 0, flexShrink: 0 }}>
-              <CompactSwitchLabel
-                checked={showDecommissioned}
-                onChange={setShowDecommissioned}
-                label="Show decommissioned"
-              />
-            </Box>
+            {/* Withheld when the page is scoped to one OpDiv. The endpoint
+                SWAPS the list rather than adding to it, so turning this on
+                would leave the surrounding summary with no active systems to
+                describe - see OpDivDashboard, which also forces the flag off. */}
+            {!hideDecommissionedToggle && (
+              <Box sx={{ display: 'flex', minWidth: 0, flexShrink: 0 }}>
+                <CompactSwitchLabel
+                  checked={showDecommissioned}
+                  onChange={setShowDecommissioned}
+                  label="Show decommissioned"
+                />
+              </Box>
+            )}
           </Box>
           <Box
             sx={{
@@ -336,63 +351,68 @@ function TableToolbar({
                 )}
               />
             )}
-            <Autocomplete
-              size="small"
-              options={opdivs}
-              getOptionLabel={(od) => od.code}
-              isOptionEqualToValue={(option, value) =>
-                option.opdiv_id === value.opdiv_id
-              }
-              value={
-                opdivFilter === 'all'
-                  ? null
-                  : opdivs.find((od) => od.opdiv_id === opdivFilter) ?? null
-              }
-              onChange={(_event, od) =>
-                setOpDivFilter(od ? od.opdiv_id : 'all')
-              }
-              renderOption={(props, option) => {
-                const { key, ...rest } = props
-                return (
-                  <li key={key} {...rest}>
-                    <Box
-                      sx={{
-                        display: 'flex',
-                        flexDirection: 'column',
-                        width: '100%',
-                      }}
-                    >
-                      <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
-                        {option.code}
-                      </Typography>
-                      <Typography
-                        sx={{ fontSize: 12, color: colors.neutral500 }}
+            {/* Withheld when the page is already scoped to one OpDiv - the
+                route is the filter, and offering the picker would invite
+                widening past the page's own scope. */}
+            {lockedOpDivId === undefined && (
+              <Autocomplete
+                size="small"
+                options={opdivs}
+                getOptionLabel={(od) => od.code}
+                isOptionEqualToValue={(option, value) =>
+                  option.opdiv_id === value.opdiv_id
+                }
+                value={
+                  opdivFilter === 'all'
+                    ? null
+                    : opdivs.find((od) => od.opdiv_id === opdivFilter) ?? null
+                }
+                onChange={(_event, od) =>
+                  setOpDivFilter(od ? od.opdiv_id : 'all')
+                }
+                renderOption={(props, option) => {
+                  const { key, ...rest } = props
+                  return (
+                    <li key={key} {...rest}>
+                      <Box
+                        sx={{
+                          display: 'flex',
+                          flexDirection: 'column',
+                          width: '100%',
+                        }}
                       >
-                        {option.name}
-                      </Typography>
-                    </Box>
-                  </li>
-                )
-              }}
-              sx={{
-                width: '100%',
-                '@media (min-width: 1100px)': {
-                  width: 180,
-                  flexShrink: 0,
-                },
-                ...compactAutocompleteSx,
-              }}
-              renderInput={(params) => (
-                <TextField
-                  {...params}
-                  placeholder="All OpDivs"
-                  inputProps={{
-                    ...params.inputProps,
-                    'aria-label': 'Filter by OpDiv',
-                  }}
-                />
-              )}
-            />
+                        <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                          {option.code}
+                        </Typography>
+                        <Typography
+                          sx={{ fontSize: 12, color: colors.neutral500 }}
+                        >
+                          {option.name}
+                        </Typography>
+                      </Box>
+                    </li>
+                  )
+                }}
+                sx={{
+                  width: '100%',
+                  '@media (min-width: 1100px)': {
+                    width: 180,
+                    flexShrink: 0,
+                  },
+                  ...compactAutocompleteSx,
+                }}
+                renderInput={(params) => (
+                  <TextField
+                    {...params}
+                    placeholder="All OpDivs"
+                    inputProps={{
+                      ...params.inputProps,
+                      'aria-label': 'Filter by OpDiv',
+                    }}
+                  />
+                )}
+              />
+            )}
           </Box>
         </Box>
         <Button
@@ -464,6 +484,8 @@ export default function FismaTable({
   progress,
   systemCallMap = {},
   chosenCallMap = {},
+  lockedOpDivId,
+  hideDecommissionedToggle = false,
 }: FismaTableProps) {
   // Selection mode is opt-in: the parent enables it by passing handlers. This
   // keeps the table usable on pages that don't surface an Export CSV action.
@@ -487,7 +509,15 @@ export default function FismaTable({
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const hasSystemDetailAccess = hasSystemAccess(userInfo)
   const navigate = useNavigate()
-  const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
+  const [opdivFilter, setOpDivFilter] = useState<number | 'all'>(
+    lockedOpDivId ?? 'all'
+  )
+  // Re-seed when the lock moves. The OpDiv dashboard's switcher changes the
+  // route param without remounting the table, so seeding initial state alone
+  // would leave the grid showing the previously-viewed OpDiv.
+  useEffect(() => {
+    if (lockedOpDivId !== undefined) setOpDivFilter(lockedOpDivId)
+  }, [lockedOpDivId])
   const [envFilter, setEnvFilter] = useState<string | 'all'>('all')
   const [notUpdatedOnly, setNotUpdatedOnly] = useState(false)
   const [openCallOnly, setOpenCallOnly] = useState(false)
@@ -979,6 +1009,8 @@ export default function FismaTable({
         opdivs={opdivs}
         opdivFilter={opdivFilter}
         setOpDivFilter={setOpDivFilter}
+        lockedOpDivId={lockedOpDivId}
+        hideDecommissionedToggle={hideDecommissionedToggle}
         envOptions={envOptions}
         envFilter={envFilter}
         setEnvFilter={setEnvFilter}

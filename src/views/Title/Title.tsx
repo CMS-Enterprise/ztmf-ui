@@ -357,11 +357,16 @@ export default function Title() {
     },
     {
       label: 'OpDivs',
-      to: Routes.ADMIN_OPDIVS,
-      active: location.pathname.startsWith('/admin/opdivs'),
-      // OWNER manages OpDivs fully; an HHS admin reaches the page only to
-      // flip the per-OpDiv System Delegate toggle.
-      show: isUnscopedWriteAdmin(userInfo),
+      to: Routes.OPDIVS,
+      // Exact-or-slash rather than a bare startsWith: /opdivs now has both a
+      // dashboard (/opdivs/:id) and the management grid (/opdivs/manage)
+      // under it, and the tab must light up for all of them.
+      active:
+        location.pathname === Routes.OPDIVS ||
+        location.pathname.startsWith(`${Routes.OPDIVS}/`),
+      // Every admin tier lands on the per-OpDiv dashboard. The OWNER/HHS-only
+      // management grid is a header action inside the tab, not a nav item.
+      show: hasAdminRead,
     },
     {
       label: 'Events',

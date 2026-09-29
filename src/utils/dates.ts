@@ -84,3 +84,27 @@ export function formatDateTime(value: DateInput, fallback = EMPTY): string {
     minute: '2-digit',
   })
 }
+
+/** Milliseconds in a day. */
+const DAY_MS = 86_400_000
+
+/**
+ * Whole days from now until a deadline.
+ *
+ * Counted between UTC calendar days rather than between instants, so a
+ * deadline at UTC midnight does not read as "0 days left" for most of the day
+ * before it. Negative once the deadline has passed; null when unparseable.
+ *
+ * @param value - ISO string, Date, or nothing.
+ * @param now - The moment to count from; injectable for tests.
+ */
+export function daysUntil(
+  value: DateInput,
+  now: Date = new Date()
+): number | null {
+  const parsed = parse(value)
+  if (!parsed) return null
+  const startOfDay = (d: Date) =>
+    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
+  return Math.round((startOfDay(parsed) - startOfDay(now)) / DAY_MS)
+}

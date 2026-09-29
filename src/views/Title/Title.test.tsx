@@ -204,6 +204,39 @@ describe('Title logout affordance', () => {
     }
   )
 
+  it.each([
+    'OWNER',
+    'HHS_ADMIN',
+    'HHS_READONLY_ADMIN',
+    'OPDIV_ADMIN',
+    'OPDIV_READONLY_ADMIN',
+  ] as UserRole[])(
+    'shows the OpDivs nav link for the admin tier %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      // The tab now leads to the per-OpDiv dashboard, which every admin tier
+      // can read - the OWNER/HHS-only management grid sits behind a header
+      // action inside it, not behind the tab itself.
+      const link = await screen.findByRole('link', { name: 'OpDivs' })
+      expect(link).toHaveAttribute('href', expect.stringContaining('/opdivs'))
+    }
+  )
+
+  it.each(['ISSO', 'ISSM', 'SYSTEM_DELEGATE'] as UserRole[])(
+    'hides the OpDivs nav link from the system-scoped tier %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      // These tiers hold system-level scope only: the backend does not honor
+      // an OpDiv grant for them, so an OpDiv-wide view would misreport.
+      await screen.findByRole('button', { name: /^account:/i })
+      expect(
+        screen.queryByRole('link', { name: 'OpDivs' })
+      ).not.toBeInTheDocument()
+    }
+  )
+
   it('calls the logout endpoint and lands the user on the sign-in page', async () => {
     renderTitleFor('ISSO')
 

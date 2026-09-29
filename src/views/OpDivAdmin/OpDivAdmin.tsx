@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useNavigate, Link as RouterLink } from 'react-router-dom'
 import Box from '@mui/material/Box'
+import Link from '@mui/material/Link'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
 import AddIcon from '@mui/icons-material/Add'
@@ -27,7 +28,7 @@ import StatusChip, { CodeBadge } from '@/components/ui/StatusChip'
 import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
 import { colors, radius } from '@/theme/tokens'
 import { useContextProp } from '../Title/Context'
-import { Routes } from '@/router/constants'
+import { Routes, opdivDashboardPath } from '@/router/constants'
 import { useCreateOpDiv, useUpdateOpDiv, type OpDivInput } from '@/utils/opdivs'
 import { useSetOpDivDelegateEnabled } from '@/utils/delegates'
 import { isUnscopedWriteAdmin } from '@/utils/userRoles'
@@ -359,8 +360,15 @@ export default function OpDivAdmin() {
         headerName: 'Name',
         flex: 1.4,
         minWidth: 200,
+        // A real anchor rather than an onRowClick handler: the row already
+        // carries a delegate Switch and an actions column, and a row-level
+        // handler would swallow or duplicate their clicks.
         renderCell: (params) => (
-          <Typography
+          <Link
+            component={RouterLink}
+            to={opdivDashboardPath(params.row.opdiv_id)}
+            onClick={(event) => event.stopPropagation()}
+            underline="hover"
             sx={{
               fontWeight: 600,
               fontSize: 14,
@@ -368,7 +376,7 @@ export default function OpDivAdmin() {
             }}
           >
             {params.row.name}
-          </Typography>
+          </Link>
         ),
       },
       {
@@ -525,7 +533,9 @@ export default function OpDivAdmin() {
       <PageHeader
         title="Manage OpDivs"
         subtitle={subtitle || undefined}
-        breadcrumbs={<BreadCrumbs />}
+        breadcrumbs={
+          <BreadCrumbs segmentLabels={{ opdivs: 'OpDivs', manage: 'Manage' }} />
+        }
         actions={
           // Create stays OWNER-only; an HHS admin lands here just for the
           // System Delegate toggle.
