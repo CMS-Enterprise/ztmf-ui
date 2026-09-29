@@ -1,4 +1,30 @@
-import { deriveExportCallId } from './exportCall'
+import { collectExportCallIds, deriveExportCallId } from './exportCall'
+
+describe('collectExportCallIds', () => {
+  it('returns the one call a single-call year resolves to', () => {
+    // FY26 onward runs a single data call, so this is the steady state and
+    // the caller exports directly without prompting.
+    expect(collectExportCallIds([1, 2], { 1: [104], 2: [104] }, {})).toEqual([
+      104,
+    ])
+  })
+
+  it('returns every call a historical multi-call year spans', () => {
+    // Earlier years ran several calls and stay viewable; the caller offers
+    // these as a choice rather than going dead.
+    expect(collectExportCallIds([1, 2], { 1: [103], 2: [102] }, {})).toEqual([
+      103, 102,
+    ])
+  })
+
+  it('falls back to the displayed call for a never-started system', () => {
+    expect(collectExportCallIds([1], {}, { 1: 104 })).toEqual([104])
+  })
+
+  it('is empty when nothing is selected', () => {
+    expect(collectExportCallIds([], {}, {})).toEqual([])
+  })
+})
 
 // The export endpoint targets one data call; these pin how the target is
 // derived from a row selection (ported from main's footer-component tests

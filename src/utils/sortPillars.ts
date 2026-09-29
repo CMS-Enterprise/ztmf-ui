@@ -6,7 +6,7 @@ import { PILLAR_ORDER } from '@/constants'
  * @param pillarName - The pillar name from the API (`question.pillar.pillar`).
  * @returns Where the pillar should sort.
  */
-const pillarRank = (pillarName: string): number => {
+export const pillarRank = (pillarName: string): number => {
   const orderIndex = PILLAR_ORDER.indexOf(pillarName)
   return orderIndex === -1 ? Number.MAX_SAFE_INTEGER : orderIndex
 }
