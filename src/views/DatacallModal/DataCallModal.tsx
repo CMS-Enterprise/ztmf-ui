@@ -38,6 +38,12 @@ export default function DataCallModal({
   // would otherwise fire two POSTs before the modal auto-closes and creates
   // duplicate datacalls server-side.
 
+  const createDatacallMutation = useCreateDatacall()
+  // The mutation owns the in-flight state; it guards re-entry in
+  // submitDatacall and drives the disabled Create button and its label.
+  const submitting = createDatacallMutation.isPending
+  const { reset: resetCreateDatacall } = createDatacallMutation
+
   // Modals stay mounted across open/close so React preserves their state.
   // Without this reset, a user who triggers a validation error (e.g. blurs
   // an invalid date), closes the modal, and reopens it would still see the
@@ -49,8 +55,13 @@ export default function DataCallModal({
       setDatacallError('')
       setDeadline('')
       setDeadlineError('')
+      // The modal stays mounted between opens, so the mutation's in-flight
+      // state would otherwise survive a close. Closing during a create and
+      // reopening would show a disabled "Creating..." button over an empty
+      // form.
+      resetCreateDatacall()
     }
-  }, [open])
+  }, [open, resetCreateDatacall])
 
   function isValidFormat(input: string) {
     // Below the shortest valid form, stay quiet: the user is mid-typing.
@@ -92,10 +103,6 @@ export default function DataCallModal({
     }
   }
 
-  const createDatacallMutation = useCreateDatacall()
-  // The mutation owns the in-flight state; it guards re-entry here and drives
-  // the disabled Create button and its label below.
-  const submitting = createDatacallMutation.isPending
   const submitDatacall = async () => {
     if (submitting) return
     try {
