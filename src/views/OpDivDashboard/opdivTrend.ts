@@ -28,7 +28,7 @@ const QUARTERLY_OPDIV_CODE = 'CMS'
  * Scores carry more precision than they are ever rendered at, so a move below
  * this would show up as a system that "changed" from 3.00 to 3.00.
  */
-const MIN_VISIBLE_SCORE_CHANGE = 0.005
+export const MIN_VISIBLE_SCORE_CHANGE = 0.005
 
 /**
  * The data calls a given OpDiv's trend should plot.

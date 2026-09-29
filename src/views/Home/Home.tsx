@@ -1,8 +1,7 @@
 import FismaTable from '../FismaTable/FismaTable'
 import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
-import { useState, useEffect } from 'react'
-import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { useState, useMemo } from 'react'
+import { useDatacallAggregates, useDatacallProgress } from '@/api/scores'
 import { useContextProp } from '../Title/Context'
 import { Box, Button, CircularProgress } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
@@ -13,17 +12,18 @@ import DatacallContextCard from '@/components/DatacallContextCard/DatacallContex
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import { exportSystemAnswers } from '@/utils/exportSystems'
-import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
+import {
+  isAdmin as checkIsAdmin,
+  hasAdminRead,
+  isSystemDelegate,
+  isSystemScoped,
+} from '@/utils/userRoles'
+import MySystemsBand from '../MySystems/MySystemsBand'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
 import { colors } from '@/theme/tokens'
 import _ from 'lodash'
-import type {
-  ScoreAggregate,
-  ScoreProgress,
-  SystemScoreEntry,
-  FismaSystemType,
-} from '@/types'
+import type { ScoreAggregate, FismaSystemType } from '@/types'
 import { buildDashboardMaps } from './aggregateScores'
 import { deriveExportCallId } from './exportCall'
 
@@ -53,25 +53,12 @@ function averageScore(aggregates: ScoreAggregate[]): number {
  * @returns {JSX.Element} The dashboard.
  */
 export default function HomePageContainer() {
-  const [loading, setLoading] = useState<boolean>(true)
-  const [scoreMap, setScoreMap] = useState<Record<number, SystemScoreEntry>>({})
   const [exporting, setExporting] = useState<boolean>(false)
   // Lifted so the Export CSV action can scope itself to the user's selection.
   // Empty array (default) -> export every system in the active datacall, which
   // matches the prior "select nothing, export all" behavior.
   const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [addOpen, setAddOpen] = useState<boolean>(false)
-  const [priorAvg, setPriorAvg] = useState<number | undefined>(undefined)
-  const [priorLabel, setPriorLabel] = useState<string>('')
-  const [progressMap, setProgressMap] = useState<Record<number, ScoreProgress>>(
-    {}
-  )
-  // Which active call(s) each system has scores in, so per-row actions open the
-  // system's own data call instead of a globally-selected one.
-  const [systemCallMap, setSystemCallMap] = useState<Record<number, number[]>>(
-    {}
-  )
-  const [chosenCallMap, setChosenCallMap] = useState<Record<number, number>>({})
   const {
     latestDataCallId,
     selectedDatacall,
@@ -87,103 +74,57 @@ export default function HomePageContainer() {
   const datacallName = selectedDatacall?.datacall ?? ''
   const systemCount = fismaSystems.length
   const isAdmin = checkIsAdmin(userInfo)
+  // Admin tiers keep the estate-wide tiles. The system-scoped tiers - ISSO and
+  // ISSM, plus delegates, who work the same questionnaires - get the band.
+  // hasAdminRead wins, so an OpDiv admin who also holds systems still sees the
+  // summary their tier is built around.
+  const showsMySystems =
+    !hasAdminRead(userInfo) &&
+    (isSystemScoped(userInfo) || isSystemDelegate(userInfo))
 
-  useEffect(() => {
-    const controller = new AbortController()
-    const ids = activeDatacallIds
+  // Aggregate every active call in the year, then merge per system, choosing
+  // the call each system most recently updated. Scores and progress are read
+  // together because the chosen call depends on both. A single call's failure
+  // yields an empty list rather than sinking the batch - see useDatacallAggregates.
+  const { scoresPerCall, isPending: scoresPending } =
+    useDatacallAggregates(activeDatacallIds)
+  const { progressPerCall, isPending: progressPending } =
+    useDatacallProgress(activeDatacallIds)
 
-    // Aggregate every active call in the year. Each call is fetched
-    // independently (per-request .catch so one failure doesn't sink the batch
-    // or block the others), then buildDashboardMaps merges them per system,
-    // choosing the call each system most recently updated. Scores and progress
-    // are fetched together because the chosen call depends on both.
-    async function load() {
-      const [scoresPerCall, progressPerCall] = await Promise.all([
-        Promise.all(
-          ids.map((id) =>
-            axiosInstance
-              .get(apiPaths.scores.aggregateByDatacall(id), {
-                signal: controller.signal,
-              })
-              .then((res) => res.data.data as ScoreAggregate[])
-              .catch((error) => {
-                if (!controller.signal.aborted)
-                  console.error(`scores/aggregate ${id} failed:`, error)
-                return [] as ScoreAggregate[]
-              })
-          )
-        ),
-        Promise.all(
-          ids.map((id) =>
-            axiosInstance
-              .get(apiPaths.scores.progress(id), {
-                signal: controller.signal,
-              })
-              .then((res) => res.data.data as ScoreProgress[])
-              .catch((error) => {
-                if (!controller.signal.aborted)
-                  console.error(`scores/progress ${id} failed:`, error)
-                return [] as ScoreProgress[]
-              })
-          )
-        ),
-      ])
-      if (controller.signal.aborted) return
-      const maps = buildDashboardMaps(ids, scoresPerCall, progressPerCall)
-      setScoreMap(maps.scoreMap)
-      setProgressMap(maps.progressMap)
-      setSystemCallMap(maps.systemCallMap)
-      setChosenCallMap(maps.chosenCallMap)
-      setLoading(false)
-    }
+  const { scoreMap, progressMap, systemCallMap, chosenCallMap } = useMemo(
+    () => buildDashboardMaps(activeDatacallIds, scoresPerCall, progressPerCall),
+    [activeDatacallIds, scoresPerCall, progressPerCall]
+  )
 
-    // Keep the spinner until the active calls resolve - activeDatacallIds is
-    // empty on the first paint while Title is still fetching /datacalls, so
-    // don't clear loading (which would flash an empty dashboard) until there
-    // are calls to fetch.
-    if (ids.length > 0) {
-      load()
-    }
-    return () => {
-      controller.abort()
-    }
-  }, [activeDatacallIds])
-
-  // Average score for the immediately-prior datacall, for the Avg ZT trend.
-  // datacalls arrives deadline-sorted (newest first), so the prior call is
-  // the next entry after the active one - NOT the next-lower datacallid,
-  // which historical loads can out-id (#393).
-  useEffect(() => {
+  // The immediately-prior datacall, for the Avg ZT trend. datacalls arrives
+  // deadline-sorted (newest first), so the prior call is the next entry after
+  // the active one - NOT the next-lower datacallid, which historical loads can
+  // out-id (#393).
+  const priorCall = useMemo(() => {
     const activeIdx = datacalls.findIndex(
       (dc) => dc.datacallid === activeDataCallId
     )
-    const prior = activeIdx >= 0 ? datacalls[activeIdx + 1] : undefined
-    if (!prior) {
-      setPriorAvg(undefined)
-      setPriorLabel('')
-      return
-    }
-    const controller = new AbortController()
-    async function fetchPrior() {
-      try {
-        const res = await axiosInstance.get(
-          `/scores/aggregate?datacallid=${prior!.datacallid}`,
-          { signal: controller.signal }
-        )
-        setPriorAvg(averageScore(res.data.data as ScoreAggregate[]))
-        setPriorLabel(shortFy(prior!.datacall))
-      } catch {
-        if (controller.signal.aborted) return
-        // Non-fatal: the trend simply hides if the prior fetch fails.
-        setPriorAvg(undefined)
-        setPriorLabel('')
-      }
-    }
-    fetchPrior()
-    return () => {
-      controller.abort()
-    }
-  }, [activeDataCallId, datacalls])
+    return activeIdx >= 0 ? datacalls[activeIdx + 1] : undefined
+  }, [datacalls, activeDataCallId])
+
+  // Its own query rather than part of the batch above: the prior call is not an
+  // active call, so it is not in activeDatacallIds. Non-fatal - the trend
+  // simply hides when this has not resolved.
+  const { scoresPerCall: priorScores } = useDatacallAggregates(
+    priorCall ? [priorCall.datacallid] : []
+  )
+  const priorRows = priorScores[0]
+  const priorAvg =
+    priorCall && priorRows && priorRows.length > 0
+      ? averageScore(priorRows)
+      : undefined
+  const priorLabel = priorAvg === undefined ? '' : shortFy(priorCall?.datacall)
+
+  // activeDatacallIds is [] on the first paint while Title is still fetching
+  // /datacalls, which is not "loaded and empty" - hold the spinner through that
+  // window too rather than flashing an empty dashboard.
+  const loading =
+    activeDatacallIds.length === 0 || scoresPending || progressPending
 
   // The single call the export targets, or null (button disabled) when the
   // selection spans more than one call. Derivation logic + rationale live in
@@ -297,12 +238,20 @@ export default function HomePageContainer() {
 
       <DatacallContextCard />
 
-      <StatisticsBlocks
-        scores={scoreMap}
-        progress={progressMap}
-        priorAvg={priorAvg}
-        priorLabel={priorLabel}
-      />
+      {/* The summary swaps by tier. An admin's stat tiles describe an estate -
+          highest, lowest, how many at Optimal - which says nothing to someone
+          holding three systems, so the system-scoped tiers get a band about
+          what needs their action instead. */}
+      {showsMySystems ? (
+        <MySystemsBand hideTargets={isSystemDelegate(userInfo)} />
+      ) : (
+        <StatisticsBlocks
+          scores={scoreMap}
+          progress={progressMap}
+          priorAvg={priorAvg}
+          priorLabel={priorLabel}
+        />
+      )}
       <FismaTable
         scores={scoreMap}
         selectedRows={selectedRows}
