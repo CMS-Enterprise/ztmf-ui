@@ -208,6 +208,10 @@ it('shows not-found instead of spinning for a user with no accessible systems', 
     )
     render(<RouterProvider router={router} />)
     expect(await screen.findByText('System not found')).toBeInTheDocument()
+    expect(
+      screen.getByText(/you may not have access to it/)
+    ).toBeInTheDocument()
+    expect(screen.getByText('Not found')).toBeInTheDocument()
   } finally {
     mockContext.fismaSystems = saved
   }

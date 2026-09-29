@@ -483,4 +483,8 @@ test('shows not-found instead of spinning for a user with no accessible systems'
   )
 
   expect(await screen.findByText('System not found')).toBeInTheDocument()
+  // The empty list may just mean no access, so the copy must not claim the
+  // system does not exist; the crumb follows sentence case.
+  expect(screen.getByText(/you may not have access to it/)).toBeInTheDocument()
+  expect(screen.getByText('Not found')).toBeInTheDocument()
 })

@@ -63,8 +63,9 @@ export function useResolvedSystem(systemId: number): SystemResolution {
           )
         }
       } catch {
-        // A cancelled request is not an answer; anything else (404 or a
-        // failed request) means the system cannot be shown.
+        // A cancelled request is not an answer. Anything else, including a
+        // 5xx or network failure, resolves to not-found: the page cannot tell
+        // "missing" from "unreachable", so its copy covers both.
         if (controller.signal.aborted) return
       } finally {
         if (!controller.signal.aborted) {

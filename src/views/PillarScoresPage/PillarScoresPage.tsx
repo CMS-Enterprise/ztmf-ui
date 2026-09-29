@@ -110,12 +110,13 @@ export default function PillarScoresPage() {
   if (resolution.status === 'not-found') {
     return (
       <Box sx={{ mt: 4 }}>
-        <BreadCrumbs segmentLabels={{ [fismasystemid ?? '']: 'Not Found' }} />
+        <BreadCrumbs segmentLabels={{ [fismasystemid ?? '']: 'Not found' }} />
         <Typography variant="h5" color="error" sx={{ mt: 2 }}>
           System not found
         </Typography>
         <Typography color="text.secondary" sx={{ mt: 1 }}>
-          No system with ID &ldquo;{fismasystemid}&rdquo; was found.
+          Could not find a system with ID &ldquo;{fismasystemid}&rdquo;. It may
+          not exist, or you may not have access to it.
         </Typography>
       </Box>
     )
