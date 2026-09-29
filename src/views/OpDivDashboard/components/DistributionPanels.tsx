@@ -177,9 +177,12 @@ export function PillarPanel({
 export function SystemScorePanel({
   bars,
   unscored,
+  scopeNoun = 'this OpDiv',
 }: {
   bars: SystemScoreBar[]
   unscored: number
+  /** What the ranking covers - see OpDivHero's scopeNoun. */
+  scopeNoun?: string
 }) {
   const toItem = (bar: SystemScoreBar): BarListItem => ({
     label: bar.acronym,
@@ -214,7 +217,7 @@ export function SystemScorePanel({
         max={MAX_SCORE}
         min={MIN_SCORE}
         labelWidth={88}
-        emptyMessage="No scored systems in this OpDiv yet."
+        emptyMessage={`No scored systems in ${scopeNoun} yet.`}
       />
       {hiddenCount > 0 && !expanded && (
         <>
