@@ -23,6 +23,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import type { SxProps, Theme } from '@mui/material/styles'
 import { colors, fonts, radius, status } from '@/theme/tokens'
+import { jumpToPanel } from './jumpToPanel'
 
 /** How urgent a tile is. */
 export type KpiTone = 'danger' | 'warning' | 'good' | 'neutral'
@@ -161,11 +162,7 @@ export default function KpiTile({
     <ButtonBase
       // Not an anchor: the destination is a panel on this same page, and a
       // real #hash would fight the hash router that owns the URL.
-      onClick={() =>
-        document
-          .getElementById(jumpToId)
-          ?.scrollIntoView({ behavior: 'smooth', block: 'center' })
-      }
+      onClick={() => jumpToPanel(jumpToId)}
       sx={{
         ...frame,
         width: '100%',
