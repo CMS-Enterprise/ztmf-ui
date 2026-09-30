@@ -54,6 +54,11 @@ export type OpDivKpiRowProps = {
   priorLabel?: string
   /** Whole days until the open call's deadline; negative once it has passed. */
   daysRemaining: number | null
+  /**
+   * What the row is scoped to, for the tiles that name it. Reused by the
+   * system-scoped dashboard, where "this OpDiv" misdescribes the scope.
+   */
+  scopeNoun?: string
 }
 
 /**
@@ -68,6 +73,7 @@ export default function OpDivKpiRow({
   delta,
   priorLabel,
   daysRemaining,
+  scopeNoun = 'this OpDiv',
 }: OpDivKpiRowProps) {
   // The deadline is the reason "not started" is urgent, so it rides on that
   // tile rather than occupying one of its own.
@@ -265,7 +271,7 @@ export default function OpDivKpiRow({
           label="Systems"
           value={summary.systemCount.toLocaleString('en-US')}
           hint={`${completion.systemsInCall.toLocaleString('en-US')} in this call`}
-          info="Active systems attributed to this OpDiv. Decommissioned systems are excluded from every figure on this page, whatever the Show decommissioned toggle is set to elsewhere in the app."
+          info={`Active systems attributed to ${scopeNoun}. Decommissioned systems are excluded from every figure here, whatever the Show decommissioned toggle is set to elsewhere in the app.`}
         />
         <KpiTile
           label="At Advanced or better"

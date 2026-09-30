@@ -72,6 +72,11 @@ export type TrendPanelProps = {
   tiers: TierCount[]
   /** The systems behind the step into the selected call. */
   movers: Movers
+  /**
+   * What the series covers, for the empty state and the chart's description.
+   * Reused by the system-scoped dashboard, where "this OpDiv" is wrong.
+   */
+  scopeNoun?: string
 }
 
 /** Uppercase label above a block in the detail area. */
@@ -212,6 +217,7 @@ export default function TrendPanel({
   onSelectCall,
   tiers,
   movers,
+  scopeNoun = 'this OpDiv',
 }: TrendPanelProps) {
   // Stated, not hidden: systems are attributed to an OpDiv from the active
   // systems list, so a system decommissioned mid-history leaves every earlier
@@ -246,7 +252,7 @@ export default function TrendPanel({
       <ChartCard eyebrow="Score trend" subtitle={subtitle} info={TREND_INFO}>
         <Typography sx={{ fontSize: 13, color: colors.neutral500, py: 2 }}>
           {points.length === 0
-            ? 'No scored data calls yet for this OpDiv.'
+            ? `No scored data calls yet for ${scopeNoun}.`
             : 'Only one scored data call so far, so there is no trend to plot yet.'}
         </Typography>
       </ChartCard>
@@ -281,7 +287,7 @@ export default function TrendPanel({
           height: points.length > BRUSH_THRESHOLD ? 260 : 220,
         }}
         role="img"
-        aria-label={`Line chart of this OpDiv's average Zero Trust score across ${points.length} data calls, from ${points[0].label} to ${points[points.length - 1].label}. The same values are listed as text below the chart.`}
+        aria-label={`Line chart of the average Zero Trust score for ${scopeNoun} across ${points.length} data calls, from ${points[0].label} to ${points[points.length - 1].label}. The same values are listed as text below the chart.`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart

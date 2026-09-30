@@ -16,11 +16,21 @@ jest.mock('../Title/Context', () => ({
 // The dashboard body is out of scope here; stub it so the test only renders
 // the header and the Add modal wiring.
 jest.mock('../FismaTable/FismaTable', () => () => null)
-jest.mock('../StatisticBlocks/StatisticsBlocks', () => () => null)
 jest.mock(
   '@/components/DatacallContextCard/DatacallContextCard',
   () => () => null
 )
+
+// The band's own suite covers its behavior; here it only has to record the
+// props Home hands it.
+let bandProps: Record<string, unknown> = {}
+jest.mock('../MySystems/MySystemsBand', () => {
+  const BandStub = (props: object) => {
+    bandProps = props as Record<string, unknown>
+    return <div data-testid="my-systems-band" />
+  }
+  return BandStub
+})
 
 let modalProps: Record<string, unknown> = {}
 jest.mock('../EditSystemModal/EditSystemModal', () => (props: object) => {
@@ -59,6 +69,7 @@ beforeEach(() => {
   // its loading state and render the header.
   ;(axiosInstance.get as jest.Mock).mockResolvedValue({ data: { data: [] } })
   modalProps = {}
+  bandProps = {}
   mockCtx = {
     // One active call: the dashboard holds its spinner until the scores for
     // the active calls have loaded.
@@ -96,4 +107,39 @@ test('the Add system modal receives the shared OpDiv list', async () => {
   expect(modalProps.mode).toBe('create')
   // The full list, inactive included: the modal filters to active itself.
   expect(modalProps.opdivs).toEqual(OPDIVS)
+})
+
+describe('the summary band', () => {
+  // Every tier gets the same band now: it describes whatever /fismasystems
+  // returned for this caller, which the backend has already narrowed. The
+  // estate-wide stat tiles it replaced answered nothing for a reader holding
+  // three systems and little more for one holding a thousand.
+  const tiers = [
+    'OWNER',
+    'HHS_ADMIN',
+    'OPDIV_ADMIN',
+    'OPDIV_READONLY_ADMIN',
+    'ISSO',
+    'ISSM',
+  ]
+  it.each(tiers)('renders for %s', async (role) => {
+    mockCtx.userInfo = { ...(mockCtx.userInfo as object), role } as userData
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByTestId('my-systems-band')).toBeInTheDocument()
+    expect(bandProps.hideTargets).toBe(false)
+  })
+
+  it('withholds the target worklist from a System Delegate', async () => {
+    // A delegate is answers-only and cannot set a target maturity, so
+    // offering them that backlog would be offering a 403.
+    mockCtx.userInfo = {
+      ...(mockCtx.userInfo as object),
+      role: 'SYSTEM_DELEGATE',
+    } as userData
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByTestId('my-systems-band')).toBeInTheDocument()
+    expect(bandProps.hideTargets).toBe(true)
+  })
 })
