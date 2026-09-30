@@ -16,6 +16,11 @@ import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { colors, fonts } from '@/theme/tokens'
 
+// Both fields are rejected by the backend below this length. Stated in the
+// helper text and enforced on Send so the rule is visible before the round
+// trip rather than coming back as a generic error.
+const MIN_TEXT_LENGTH = 4
+
 const GROUP_OPTIONS = [
   { label: 'ISSO', value: 'ISSO' },
   { label: 'ISSM', value: 'ISSM' },
@@ -57,6 +62,16 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     closeModal()
   }
   const sendEmail = useSendMassEmail()
+  const canSend =
+    groupValue.length > 0 &&
+    subject.trim().length >= MIN_TEXT_LENGTH &&
+    body.trim().length >= MIN_TEXT_LENGTH
+  // Shown only once there is something to judge, so an untouched form does not
+  // open covered in red.
+  const tooShort = (value: string) =>
+    value.length > 0 && value.trim().length < MIN_TEXT_LENGTH
+      ? `Needs at least ${MIN_TEXT_LENGTH} characters.`
+      : undefined
   const submitEmail = async () => {
     try {
       const recipients = await sendEmail.mutateAsync({
@@ -65,9 +80,21 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
         body,
       })
       setSentGroup(groupValue)
-      notify('Emails have successfully been sent', 'success', {
-        autoHideDuration: 2500,
-      })
+      if (recipients.length === 0) {
+        notify(
+          `No one in ${groupValue} has an email address on file, so nothing was sent.`,
+          'warning',
+          { autoHideDuration: 4000 }
+        )
+      } else {
+        notify(
+          `Sending to ${recipients.length} ${
+            recipients.length === 1 ? 'recipient' : 'recipients'
+          }.`,
+          'success',
+          { autoHideDuration: 2500 }
+        )
+      }
       setSentToEmails(recipients)
     } catch (error) {
       if (isAuthHandled(error)) return
@@ -101,7 +128,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             <Button
               variant="contained"
               color="primary"
-              disabled={!(subject && groupValue && body)}
+              disabled={!canSend}
               onClick={submitEmail}
             >
               Send
@@ -142,7 +169,13 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               ))}
             </Select>
           </Field>
-          <Field id="email_subject" label="Subject" required>
+          <Field
+            id="email_subject"
+            label="Subject"
+            required
+            helperText="Appears as the subject line of the email."
+            error={tooShort(subject)}
+          >
             <OutlinedInput
               id="email_subject"
               name="email_subject"
@@ -153,7 +186,12 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               sx={fieldInputSx}
             />
           </Field>
-          <Field id="email_body" label="Message" required>
+          <Field
+            id="email_body"
+            label="Message"
+            required
+            error={tooShort(body)}
+          >
             <OutlinedInput
               id="email_body"
               name="email_body"

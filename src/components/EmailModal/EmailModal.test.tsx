@@ -62,6 +62,49 @@ beforeEach(() => {
   mockedNavigate.mockReset()
 })
 
+test('states the minimum length and blocks Send until both fields meet it', async () => {
+  renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
+
+  // An untouched form explains the field rather than opening covered in red.
+  expect(
+    screen.getByText(/appears as the subject line of the email/i)
+  ).toBeInTheDocument()
+  expect(screen.queryByText(/needs at least 4 characters/i)).toBeNull()
+
+  const group = screen.getByRole('combobox', { name: /send to/i })
+  await userEvent.click(group)
+  await userEvent.click(await screen.findByRole('option', { name: 'ALL' }))
+
+  const subject = document.querySelector(
+    'input[name="email_subject"]'
+  ) as HTMLInputElement
+  const body = document.querySelector(
+    'textarea[name="email_body"]'
+  ) as HTMLTextAreaElement
+  const send = screen.getByRole('button', { name: /^send$/i })
+
+  // Two characters in the subject is the exact case that produced a bare
+  // "an error occurred" from the backend. Now it says so in place.
+  await userEvent.type(subject, 'sg')
+  await userEvent.type(body, 'long enough')
+  expect(send).toBeDisabled()
+  expect(
+    await screen.findByText(/needs at least 4 characters/i)
+  ).toBeInTheDocument()
+
+  // Whitespace does not count toward the minimum.
+  await userEvent.clear(subject)
+  await userEvent.type(subject, '    ')
+  expect(send).toBeDisabled()
+
+  await userEvent.clear(subject)
+  await userEvent.type(subject, 'four')
+  expect(send).toBeEnabled()
+  expect(screen.queryByText(/needs at least 4 characters/i)).toBeNull()
+
+  expect(mock.history.post).toHaveLength(0)
+})
+
 test('success path fires the success snackbar and surfaces sent emails', async () => {
   mock
     .onPost('/massemails')
@@ -70,10 +113,26 @@ test('success path fires the success snackbar and surfaces sent emails', async (
   renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
   await fillAndSubmit()
 
+  // Reports the recipient count rather than claiming delivery. The API answers
+  // before the send is attempted, so "sent" is more than it can know.
   expect(
-    await screen.findByText(/emails have successfully been sent/i)
+    await screen.findByText(/sending to 2 recipients/i)
   ).toBeInTheDocument()
   expect(mockedNavigate).not.toHaveBeenCalled()
+})
+
+test('a group with nobody contactable warns instead of reporting success', async () => {
+  // Reachable in production: the backend short-circuits when every user in the
+  // group is missing an address, which got likelier after the HHS import.
+  mock.onPost('/massemails').reply(200, { data: [] })
+
+  renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
+  await fillAndSubmit()
+
+  expect(
+    await screen.findByText(/no one in ALL has an email address on file/i)
+  ).toBeInTheDocument()
+  expect(screen.queryByText(/sending to/i)).toBeNull()
 })
 
 test('offers System Delegate as a targetable email group and posts its key', async () => {
