@@ -67,6 +67,19 @@ describe('capped worklists', () => {
     expect(screen.queryByText('SYS12')).not.toBeInTheDocument()
   })
 
+  it('stops at the ceiling rather than rendering a thousand rows', async () => {
+    // At the start of a data call every enrolled system is not started, which
+    // at CMS scale is four figures. A card is not where that list belongs.
+    const user = userEvent.setup()
+    renderPanel(1300)
+
+    await user.click(screen.getByRole('button', { name: /show all/i }))
+
+    expect(screen.getByText('SYS50')).toBeInTheDocument()
+    expect(screen.queryByText('SYS51')).not.toBeInTheDocument()
+    expect(screen.getByText(/Showing 50 of 1,300/i)).toBeVisible()
+  })
+
   it('offers no toggle when nothing is hidden', () => {
     renderPanel(3)
 

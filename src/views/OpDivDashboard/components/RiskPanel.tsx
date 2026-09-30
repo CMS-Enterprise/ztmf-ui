@@ -11,7 +11,6 @@
  *
  * @module views/OpDivDashboard/components/RiskPanel
  */
-import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { Link as RouterLink } from 'react-router-dom'
@@ -19,6 +18,7 @@ import Link from '@mui/material/Link'
 import { colors, fonts, radius } from '@/theme/tokens'
 import ChartCard from './ChartCard'
 import ShowAllToggle from './ShowAllToggle'
+import { useExpandableRows } from './useExpandableRows'
 import { stageColor } from './stageColor'
 import {
   RISK_TIER_FLOOR,
@@ -141,11 +141,10 @@ function RiskListRow({ row }: { row: RiskRow }) {
  * @returns {JSX.Element} The card.
  */
 export default function RiskPanel({ risk, gap, id }: RiskPanelProps) {
-  const [expanded, setExpanded] = useState(false)
-  const listed = expanded
-    ? risk.belowFloor
-    : risk.belowFloor.slice(0, MAX_LISTED)
-  const remaining = risk.belowFloor.length - listed.length
+  const { listed, hidden, expanded, toggle, cappedAtMax } = useExpandableRows(
+    risk.belowFloor,
+    MAX_LISTED
+  )
   const targetJudged = gap.atOrAbove + gap.below
 
   return (
@@ -189,12 +188,14 @@ export default function RiskPanel({ risk, gap, id }: RiskPanelProps) {
         </Box>
       )}
 
-      {(remaining > 0 || expanded) && (
+      {(hidden > 0 || expanded) && (
         <ShowAllToggle
-          hidden={remaining}
+          hidden={hidden}
           expanded={expanded}
-          onToggle={() => setExpanded((open) => !open)}
+          onToggle={toggle}
           noun={`${risk.belowFloor.length} below ${RISK_TIER_FLOOR}`}
+          cappedAtMax={cappedAtMax}
+          total={risk.belowFloor.length}
         />
       )}
 

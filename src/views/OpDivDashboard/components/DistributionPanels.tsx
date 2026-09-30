@@ -7,7 +7,6 @@
  *
  * @module views/OpDivDashboard/components/DistributionPanels
  */
-import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { colors, fonts } from '@/theme/tokens'
@@ -15,6 +14,7 @@ import type { datacall } from '@/types'
 import BarList, { type BarListItem } from './BarList'
 import ChartCard from './ChartCard'
 import ShowAllToggle from './ShowAllToggle'
+import { useExpandableRows } from './useExpandableRows'
 import StagePie from './StagePie'
 import { stageColor } from './stageColor'
 import {
@@ -189,7 +189,13 @@ export function SystemScorePanel({
     // The tier is text, so the band never depends on telling fills apart.
     note: bar.tier,
   })
-  const [expanded, setExpanded] = useState(false)
+  const {
+    listed: allListed,
+    hidden: cappedHidden,
+    expanded,
+    toggle,
+    cappedAtMax,
+  } = useExpandableRows(bars, bars.length)
   const { top, bottom, hiddenCount } = splitExtremes(bars)
   const spread = scoreSpread(bars)
 
@@ -204,7 +210,7 @@ export function SystemScorePanel({
       }
     >
       <BarList
-        items={(expanded ? bars : top).map(toItem)}
+        items={(expanded ? allListed : top).map(toItem)}
         max={MAX_SCORE}
         min={MIN_SCORE}
         labelWidth={88}
@@ -238,10 +244,12 @@ export function SystemScorePanel({
       )}
       {(hiddenCount > 0 || expanded) && (
         <ShowAllToggle
-          hidden={hiddenCount}
+          hidden={expanded ? cappedHidden : hiddenCount}
           expanded={expanded}
-          onToggle={() => setExpanded((open) => !open)}
+          onToggle={toggle}
           noun={`${bars.length} systems`}
+          cappedAtMax={cappedAtMax}
+          total={bars.length}
         />
       )}
       {spread && (
