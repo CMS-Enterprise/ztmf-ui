@@ -15,6 +15,8 @@ import Typography from '@mui/material/Typography'
 import { Link as RouterLink } from 'react-router-dom'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ChartCard from '@/views/OpDivDashboard/components/ChartCard'
+import { useExpandableRows } from '@/views/OpDivDashboard/components/useExpandableRows'
+import ShowAllToggle from '@/views/OpDivDashboard/components/ShowAllToggle'
 import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import { colors, fonts, radius } from '@/theme/tokens'
 import type { CompletionRow } from '../mySystemsAggregates'
@@ -33,8 +35,15 @@ export type CompletionPanelProps = {
  * @param {CompletionPanelProps} props - The completion rows.
  * @returns {JSX.Element} The card.
  */
+/** How many systems to show before the reader asks for more. */
+const MAX_LISTED = 8
+
 export default function CompletionPanel({ rows }: CompletionPanelProps) {
   const unconfirmedSystems = rows.filter((r) => r.unconfirmed > 0).length
+  const { listed, hidden, expanded, toggle, cappedAtMax } = useExpandableRows(
+    rows,
+    MAX_LISTED
+  )
 
   return (
     <ChartCard
@@ -51,11 +60,23 @@ export default function CompletionPanel({ rows }: CompletionPanelProps) {
           None of your systems are enrolled in an open data call.
         </Typography>
       ) : (
-        <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-          {rows.map((row) => (
-            <CompletionRowView key={row.system.fismasystemid} row={row} />
-          ))}
-        </Box>
+        <>
+          <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
+            {listed.map((row) => (
+              <CompletionRowView key={row.system.fismasystemid} row={row} />
+            ))}
+          </Box>
+          {(hidden > 0 || expanded) && (
+            <ShowAllToggle
+              hidden={hidden}
+              expanded={expanded}
+              onToggle={toggle}
+              noun={`${rows.length} systems`}
+              cappedAtMax={cappedAtMax}
+              total={rows.length}
+            />
+          )}
+        </>
       )}
     </ChartCard>
   )
