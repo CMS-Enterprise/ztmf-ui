@@ -7,9 +7,15 @@
  * A reader opening this page wants to know what needs doing, and the answer
  * was the smallest text on the screen.
  *
- * So the first four tiles are the things that need action, worst first, and
- * every one of them goes quiet and green when there is nothing to chase. The
- * second row carries the standing facts at the same weight it always had.
+ * So the tiles lead with what needs action and go quiet and green when there
+ * is nothing to chase. Two exceptions to the pure severity order:
+ *
+ *  - **Score range leads**, sitting immediately beside the hero, because it
+ *    finishes the sentence the hero starts: an average says nothing about
+ *    whether the systems behind it cluster or straddle three tiers.
+ *  - Highest and lowest used to be two tiles. On a small assignment they name
+ *    the same system twice, and when nothing is scored they are two em-dashes,
+ *    so they are one range now.
  *
  * Every tile explains itself on hover. These are compressed counts with real
  * rules behind them - what "not started" counts, which systems a decline is
@@ -22,6 +28,7 @@
 import Box from '@mui/material/Box'
 import { colors } from '@/theme/tokens'
 import KpiTile from './KpiTile'
+import { scoreRange } from './scoreRange'
 import type {
   CompletionSummary,
   OpDivSummary,
@@ -78,6 +85,8 @@ export default function OpDivKpiRow({
   const atRisk = risk.belowFloor.length
   const declined = delta.declined
 
+  const range = scoreRange(summary)
+
   // The composition behind the risk denominator, which nothing else on the
   // page states. Unrecorded flags are named rather than folded into the
   // negative - an unrecorded flag is not a recorded "no".
@@ -107,6 +116,42 @@ export default function OpDivKpiRow({
           },
         }}
       >
+        {/* Beside the hero on purpose: the hero is the average, and the
+            average alone says nothing about whether the systems behind it sit
+            together or straddle three tiers. */}
+        <KpiTile
+          label="Score range"
+          // Each end in its own band's color, so the tile shows the spread it
+          // is describing. The tier is also named in the hint, so the reading
+          // never depends on telling two fills apart.
+          value={
+            range.low ? (
+              <>
+                <Box component="span" sx={{ color: range.low.color }}>
+                  {range.low.text}
+                </Box>
+                {range.high && (
+                  <>
+                    <Box
+                      component="span"
+                      sx={{ color: colors.neutral400, mx: 0.25 }}
+                    >
+                      –
+                    </Box>
+                    <Box component="span" sx={{ color: range.high.color }}>
+                      {range.high.text}
+                    </Box>
+                  </>
+                )}
+              </>
+            ) : (
+              '—'
+            )
+          }
+          hint={range.hint}
+          valueColor={range.low ? undefined : colors.neutral400}
+          info="The spread of scored systems, lowest to highest. Read beside the overall score: the same average can come from systems clustered together or from a strong system carrying a weak one, and only the second is a problem to chase. A 1.00 floor is usually a system enrolled in the call with nothing answered rather than one assessed as failing."
+        />
         <KpiTile
           label="Not started"
           value={
@@ -154,6 +199,42 @@ export default function OpDivKpiRow({
           jumpToId={atRisk > 0 ? RISK_PANEL_ID : undefined}
           info={`Systems where a weakness costs the most: flagged an HVA or carrying a High FIPS impact level, and scoring below Advanced. ${impactInfo}`}
         />
+        {/* A strict subset of Not started, split out because the two ask for
+            completely different amounts of work: a never-touched questionnaire
+            needs answering, while these only need someone to confirm what is
+            already sitting in them. Rolling them together hid the cheap win. */}
+        <KpiTile
+          label="Answers to confirm"
+          value={
+            completion.systemsInCall > 0 ? completion.awaitingConfirmation : '—'
+          }
+          hint={
+            completion.awaitingConfirmation > 0
+              ? 'answered last cycle · unconfirmed'
+              : completion.systemsInCall > 0
+                ? 'nothing waiting on a confirmation'
+                : 'no systems in the call'
+          }
+          tone={completion.awaitingConfirmation > 0 ? 'warning' : 'good'}
+          jumpToId={
+            completion.awaitingConfirmation > 0
+              ? NOT_STARTED_PANEL_ID
+              : undefined
+          }
+          info={`Systems whose questionnaire is carried forward from last cycle but has not been confirmed. They read as answered everywhere else and still register no progress, so they are the cheapest work on the page - confirming is not re-answering. Counted within the ${notStarted} not started rather than alongside them.`}
+        />
+      </Box>
+
+      <Box
+        sx={{
+          display: 'grid',
+          gap: 1.5,
+          gridTemplateColumns: {
+            xs: 'repeat(2, minmax(0, 1fr))',
+            md: 'repeat(4, minmax(0, 1fr))',
+          },
+        }}
+      >
         <KpiTile
           label="Unscored"
           value={`${unscored}/${summary.systemCount}`}
@@ -180,18 +261,6 @@ export default function OpDivKpiRow({
               : `Systems scoring lower than they did in ${priorLabel ?? 'the previous data call'}, counted over the ${delta.n} scored in both calls. Systems scored in only one of the two are excluded, so a changed system mix cannot register as a decline. Worth reading beside the overall change: the average can hold steady while individual systems move in both directions.`
           }
         />
-      </Box>
-
-      <Box
-        sx={{
-          display: 'grid',
-          gap: 1.5,
-          gridTemplateColumns: {
-            xs: 'repeat(2, minmax(0, 1fr))',
-            md: 'repeat(4, minmax(0, 1fr))',
-          },
-        }}
-      >
         <KpiTile
           label="Systems"
           value={summary.systemCount.toLocaleString('en-US')}
@@ -214,19 +283,6 @@ export default function OpDivKpiRow({
             summary.optimalAdvancedCount > 0 ? colors.up : colors.neutral400
           }
           info="Scored systems holding Optimal or Advanced. Measured over the systems with a score, not over every system - a system that was never enrolled has no tier to hold, and counting it as a miss would understate the OpDiv."
-        />
-        <KpiTile
-          label="Highest score"
-          value={summary.highest ? summary.highest.score.toFixed(2) : '—'}
-          hint={summary.highest?.acronym}
-          valueColor={summary.highest ? colors.up : colors.neutral400}
-        />
-        <KpiTile
-          label="Lowest score"
-          value={summary.lowest ? summary.lowest.score.toFixed(2) : '—'}
-          hint={summary.lowest?.acronym}
-          valueColor={summary.lowest ? colors.down : colors.neutral400}
-          info="The weakest scored system. A 1.00 is the scale floor, which usually means a system enrolled in the call with nothing answered rather than one assessed as failing."
         />
       </Box>
     </Box>
