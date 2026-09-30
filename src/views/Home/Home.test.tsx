@@ -16,17 +16,13 @@ jest.mock('../Title/Context', () => ({
 // The dashboard body is out of scope here; stub it so the test only renders
 // the header and the Add modal wiring.
 jest.mock('../FismaTable/FismaTable', () => () => null)
-jest.mock('../StatisticBlocks/StatisticsBlocks', () => {
-  const StatsStub = () => <div data-testid="stat-blocks" />
-  return StatsStub
-})
 jest.mock(
   '@/components/DatacallContextCard/DatacallContextCard',
   () => () => null
 )
 
-// The band's own suite covers its behavior; here it only has to be
-// distinguishable from StatisticsBlocks so the tier selection is observable.
+// The band's own suite covers its behavior; here it only has to record the
+// props Home hands it.
 let bandProps: Record<string, unknown> = {}
 jest.mock('../MySystems/MySystemsBand', () => {
   const BandStub = (props: object) => {
@@ -113,30 +109,25 @@ test('the Add system modal receives the shared OpDiv list', async () => {
   expect(modalProps.opdivs).toEqual(OPDIVS)
 })
 
-describe('summary selection by tier', () => {
-  // The estate-wide tiles describe a population; the band describes a
-  // worklist. Which one a user gets is the whole of this feature.
-  const adminTiers = [
+describe('the summary band', () => {
+  // Every tier gets the same band now: it describes whatever /fismasystems
+  // returned for this caller, which the backend has already narrowed. The
+  // estate-wide stat tiles it replaced answered nothing for a reader holding
+  // three systems and little more for one holding a thousand.
+  const tiers = [
     'OWNER',
     'HHS_ADMIN',
     'OPDIV_ADMIN',
     'OPDIV_READONLY_ADMIN',
+    'ISSO',
+    'ISSM',
   ]
-  it.each(adminTiers)('keeps the stat tiles for %s', async (role) => {
-    mockCtx.userInfo = { ...(mockCtx.userInfo as object), role } as userData
-    renderWithProviders(<Home />)
-
-    expect(await screen.findByTestId('stat-blocks')).toBeInTheDocument()
-    expect(screen.queryByTestId('my-systems-band')).not.toBeInTheDocument()
-  })
-
-  const scopedTiers = ['ISSO', 'ISSM']
-  it.each(scopedTiers)('gives %s the systems band', async (role) => {
+  it.each(tiers)('renders for %s', async (role) => {
     mockCtx.userInfo = { ...(mockCtx.userInfo as object), role } as userData
     renderWithProviders(<Home />)
 
     expect(await screen.findByTestId('my-systems-band')).toBeInTheDocument()
-    expect(screen.queryByTestId('stat-blocks')).not.toBeInTheDocument()
+    expect(bandProps.hideTargets).toBe(false)
   })
 
   it('withholds the target worklist from a System Delegate', async () => {
@@ -150,16 +141,5 @@ describe('summary selection by tier', () => {
 
     expect(await screen.findByTestId('my-systems-band')).toBeInTheDocument()
     expect(bandProps.hideTargets).toBe(true)
-  })
-
-  it('gives an ISSO the full band including targets', async () => {
-    mockCtx.userInfo = {
-      ...(mockCtx.userInfo as object),
-      role: 'ISSO',
-    } as userData
-    renderWithProviders(<Home />)
-
-    await screen.findByTestId('my-systems-band')
-    expect(bandProps.hideTargets).toBe(false)
   })
 })

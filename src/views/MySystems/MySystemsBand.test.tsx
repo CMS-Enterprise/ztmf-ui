@@ -239,6 +239,50 @@ describe('detail panels', () => {
     expect(screen.queryByText(/Nothing to report yet/i)).not.toBeInTheDocument()
   })
 
+  it('drops Movement when no system is scored in both calls', async () => {
+    // Every row would read "not scored", which says nothing the hero's
+    // "no prior call to compare" note does not already say.
+    mockData = emptyData({
+      priorCall: { datacallid: 1, datacall: 'FY25 ZTM' },
+      movement: [
+        {
+          system: makeSystem({ fismasystemid: 1 }),
+          from: null,
+          to: 4,
+          delta: null,
+          direction: 'unpaired',
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<MySystemsBand />)
+
+    await user.click(screen.getByRole('button', { name: /show detail/i }))
+
+    expect(screen.queryByText('Movement')).not.toBeInTheDocument()
+  })
+
+  it('keeps Movement once something actually pairs', async () => {
+    mockData = emptyData({
+      priorCall: { datacallid: 1, datacall: 'FY25 ZTM' },
+      movement: [
+        {
+          system: makeSystem({ fismasystemid: 1 }),
+          from: 3,
+          to: 4,
+          delta: 1,
+          direction: 'gained',
+        },
+      ],
+    })
+    const user = userEvent.setup()
+    renderWithProviders(<MySystemsBand />)
+
+    await user.click(screen.getByRole('button', { name: /show detail/i }))
+
+    expect(screen.getByText('Movement')).toBeInTheDocument()
+  })
+
   it('drops the trend until there are two points to join', async () => {
     mockData = emptyData({
       trend: {
