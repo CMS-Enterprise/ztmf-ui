@@ -8,7 +8,7 @@
  * @module views/OpDivDashboard/components/scoreRange
  */
 import { tierForScore } from '@/utils/tierStyles'
-import { stageColor } from './stageColor'
+import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import type { ScoreTier } from '@/types'
 import type { OpDivSummary } from '../opdivAggregates'
 
@@ -48,7 +48,12 @@ export function scoreRange(
   }
   const end = (score: number): RangeEnd => {
     const tier = tierForScore(score)
-    return { text: score.toFixed(2), tier, color: stageColor(tier) }
+    // The chip palette, not the dot palette. tierDot is documented as accent
+    // dots that sit BESIDE a value, and several of its colors fail WCAG AA as
+    // text - Advanced (#C19A00) is 2.66:1 on white, which misses even the 3:1
+    // large-text bar. TIER_CHIP_STYLES is the accessible source of truth and
+    // clears 4.5:1 on every tier.
+    return { text: score.toFixed(2), tier, color: TIER_CHIP_STYLES[tier].color }
   }
   // One value when every scored system sits at the same score: a "5.00-5.00"
   // range describes a difference that does not exist, and rendering it as one

@@ -134,7 +134,7 @@ export default function OpDivKpiRow({
                   <>
                     <Box
                       component="span"
-                      sx={{ color: colors.neutral400, mx: 0.25 }}
+                      sx={{ color: colors.neutral500, mx: 0.25 }}
                     >
                       –
                     </Box>
@@ -149,7 +149,7 @@ export default function OpDivKpiRow({
             )
           }
           hint={range.hint}
-          valueColor={range.low ? undefined : colors.neutral400}
+          valueColor={range.low ? undefined : colors.neutral500}
           info="The spread of scored systems, lowest to highest. Read beside the overall score: the same average can come from systems clustered together or from a strong system carrying a weak one, and only the second is a problem to chase. A 1.00 floor is usually a system enrolled in the call with nothing answered rather than one assessed as failing."
         />
         <KpiTile
@@ -280,7 +280,7 @@ export default function OpDivKpiRow({
               : 'nothing scored yet'
           }
           valueColor={
-            summary.optimalAdvancedCount > 0 ? colors.up : colors.neutral400
+            summary.optimalAdvancedCount > 0 ? colors.up : colors.neutral500
           }
           info="Scored systems holding Optimal or Advanced. Measured over the systems with a score, not over every system - a system that was never enrolled has no tier to hold, and counting it as a miss would understate the OpDiv."
         />

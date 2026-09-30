@@ -1,7 +1,7 @@
 import { render, screen } from '@testing-library/react'
 import OpDivKpiRow from './OpDivKpiRow'
 import { scoreRange } from './scoreRange'
-import { tierDot } from '@/theme/tokens'
+import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import type { CompletionSummary, RiskSummary } from '../opdivAggregates'
 import type { PairedDelta } from '../opdivTrend'
 
@@ -55,7 +55,8 @@ describe('scoreRange', () => {
     // Regression: the tile this replaced painted every lowest score with the
     // fixed "down" color, so a floor of 5.00 rendered as an alert. Colouring
     // the pair by the low end alone was the same mistake one step removed - a
-    // range reaching Optimal read as Traditional purple.
+    // range reaching Optimal read as Traditional purple. Contrast of these
+    // values is pinned separately in scoreRange.test.ts.
     const range = scoreRange({
       lowest: { score: 1.5, acronym: 'LOW' },
       highest: { score: 4.8, acronym: 'HIGH' },
@@ -65,12 +66,12 @@ describe('scoreRange', () => {
     expect(range.low).toMatchObject({
       text: '1.50',
       tier: 'Traditional',
-      color: tierDot.Traditional,
+      color: TIER_CHIP_STYLES.Traditional.color,
     })
     expect(range.high).toMatchObject({
       text: '4.80',
       tier: 'Optimal',
-      color: tierDot.Optimal,
+      color: TIER_CHIP_STYLES.Optimal.color,
     })
     expect(range.low?.color).not.toBe(range.high?.color)
   })
