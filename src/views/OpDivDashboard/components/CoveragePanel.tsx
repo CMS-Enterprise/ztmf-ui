@@ -13,6 +13,7 @@
  *
  * @module views/OpDivDashboard/components/CoveragePanel
  */
+import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
@@ -23,6 +24,7 @@ import { Routes } from '@/router/constants'
 import { colors, fonts, radius } from '@/theme/tokens'
 import { roleLabel } from '@/utils/userRoles'
 import ChartCard from './ChartCard'
+import ShowAllToggle from './ShowAllToggle'
 import { adminTierRoster, classifyDelegateExpiry } from '../opdivPeople'
 import type { FismaSystemType, users } from '@/types'
 
@@ -66,9 +68,10 @@ function GapRow({
   singular: string
   plural: string
 }) {
+  const [expanded, setExpanded] = useState(false)
   const count = systems.length
   const clear = count === 0
-  const named = systems.slice(0, MAX_NAMED)
+  const named = expanded ? systems : systems.slice(0, MAX_NAMED)
   const remaining = count - named.length
   return (
     <Box sx={{ py: 0.4 }}>
@@ -110,10 +113,13 @@ function GapRow({
               {system.fismaacronym}
             </Link>
           ))}
-          {remaining > 0 && (
-            <Typography sx={{ fontSize: 11, color: colors.neutral500 }}>
-              +{remaining} more
-            </Typography>
+          {(remaining > 0 || expanded) && (
+            <ShowAllToggle
+              hidden={remaining}
+              expanded={expanded}
+              onToggle={() => setExpanded((open) => !open)}
+              noun={`${count} ${count === 1 ? singular : plural}`}
+            />
           )}
         </Box>
       )}
@@ -136,7 +142,8 @@ export default function CoveragePanel({
   now,
 }: CoveragePanelProps) {
   const roster = adminTierRoster(scopedUsers)
-  const listed = roster.slice(0, MAX_LISTED)
+  const [rosterOpen, setRosterOpen] = useState(false)
+  const listed = rosterOpen ? roster : roster.slice(0, MAX_LISTED)
   const remaining = roster.length - listed.length
   const delegates = classifyDelegateExpiry(scopedUsers, now ?? new Date())
   const delegateTotal =
@@ -264,13 +271,13 @@ export default function CoveragePanel({
                 ))}
               </Box>
             )}
-            {remaining > 0 && (
-              <Typography
-                sx={{ fontSize: 11, color: colors.neutral500, mt: 0.5 }}
-              >
-                and {remaining} more administrator
-                {remaining === 1 ? '' : 's'}.
-              </Typography>
+            {(remaining > 0 || rosterOpen) && (
+              <ShowAllToggle
+                hidden={remaining}
+                expanded={rosterOpen}
+                onToggle={() => setRosterOpen((open) => !open)}
+                noun={`${roster.length} administrators`}
+              />
             )}
           </Box>
 

@@ -11,12 +11,14 @@
  *
  * @module views/OpDivDashboard/components/RiskPanel
  */
+import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { Link as RouterLink } from 'react-router-dom'
 import Link from '@mui/material/Link'
 import { colors, fonts, radius } from '@/theme/tokens'
 import ChartCard from './ChartCard'
+import ShowAllToggle from './ShowAllToggle'
 import { stageColor } from './stageColor'
 import {
   RISK_TIER_FLOOR,
@@ -139,7 +141,10 @@ function RiskListRow({ row }: { row: RiskRow }) {
  * @returns {JSX.Element} The card.
  */
 export default function RiskPanel({ risk, gap, id }: RiskPanelProps) {
-  const listed = risk.belowFloor.slice(0, MAX_LISTED)
+  const [expanded, setExpanded] = useState(false)
+  const listed = expanded
+    ? risk.belowFloor
+    : risk.belowFloor.slice(0, MAX_LISTED)
   const remaining = risk.belowFloor.length - listed.length
   const targetJudged = gap.atOrAbove + gap.below
 
@@ -184,10 +189,13 @@ export default function RiskPanel({ risk, gap, id }: RiskPanelProps) {
         </Box>
       )}
 
-      {remaining > 0 && (
-        <Typography sx={{ fontSize: 11, color: colors.neutral500 }}>
-          and {remaining} more below {RISK_TIER_FLOOR}.
-        </Typography>
+      {(remaining > 0 || expanded) && (
+        <ShowAllToggle
+          hidden={remaining}
+          expanded={expanded}
+          onToggle={() => setExpanded((open) => !open)}
+          noun={`${risk.belowFloor.length} below ${RISK_TIER_FLOOR}`}
+        />
       )}
 
       {/* Both caveats are about coverage, not posture, so they sit apart from
