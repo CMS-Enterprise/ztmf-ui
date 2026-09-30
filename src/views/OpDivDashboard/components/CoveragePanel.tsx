@@ -13,7 +13,6 @@
  *
  * @module views/OpDivDashboard/components/CoveragePanel
  */
-import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
@@ -25,6 +24,7 @@ import { colors, fonts, radius } from '@/theme/tokens'
 import { roleLabel } from '@/utils/userRoles'
 import ChartCard from './ChartCard'
 import ShowAllToggle from './ShowAllToggle'
+import { useExpandableRows } from './useExpandableRows'
 import { adminTierRoster, classifyDelegateExpiry } from '../opdivPeople'
 import type { FismaSystemType, users } from '@/types'
 
@@ -68,11 +68,15 @@ function GapRow({
   singular: string
   plural: string
 }) {
-  const [expanded, setExpanded] = useState(false)
   const count = systems.length
   const clear = count === 0
-  const named = expanded ? systems : systems.slice(0, MAX_NAMED)
-  const remaining = count - named.length
+  const {
+    listed: named,
+    hidden: remaining,
+    expanded,
+    toggle,
+    cappedAtMax,
+  } = useExpandableRows(systems, MAX_NAMED)
   return (
     <Box sx={{ py: 0.4 }}>
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.75 }}>
@@ -117,8 +121,10 @@ function GapRow({
             <ShowAllToggle
               hidden={remaining}
               expanded={expanded}
-              onToggle={() => setExpanded((open) => !open)}
+              onToggle={toggle}
               noun={`${count} ${count === 1 ? singular : plural}`}
+              cappedAtMax={cappedAtMax}
+              total={count}
             />
           )}
         </Box>
@@ -142,9 +148,13 @@ export default function CoveragePanel({
   now,
 }: CoveragePanelProps) {
   const roster = adminTierRoster(scopedUsers)
-  const [rosterOpen, setRosterOpen] = useState(false)
-  const listed = rosterOpen ? roster : roster.slice(0, MAX_LISTED)
-  const remaining = roster.length - listed.length
+  const {
+    listed,
+    hidden: remaining,
+    expanded: rosterOpen,
+    toggle: toggleRoster,
+    cappedAtMax: rosterCapped,
+  } = useExpandableRows(roster, MAX_LISTED)
   const delegates = classifyDelegateExpiry(scopedUsers, now ?? new Date())
   const delegateTotal =
     delegates.active.length +
@@ -275,8 +285,10 @@ export default function CoveragePanel({
               <ShowAllToggle
                 hidden={remaining}
                 expanded={rosterOpen}
-                onToggle={() => setRosterOpen((open) => !open)}
+                onToggle={toggleRoster}
                 noun={`${roster.length} administrators`}
+                cappedAtMax={rosterCapped}
+                total={roster.length}
               />
             )}
           </Box>

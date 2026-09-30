@@ -7,7 +7,6 @@
  *
  * @module views/OpDivDashboard/components/NotStartedPanel
  */
-import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
@@ -16,6 +15,7 @@ import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import { colors, fonts } from '@/theme/tokens'
 import ChartCard from './ChartCard'
 import ShowAllToggle from './ShowAllToggle'
+import { useExpandableRows } from './useExpandableRows'
 import type { NoProgressRow } from '../opdivAggregates'
 
 /** Explains the figure in the card header. */
@@ -47,9 +47,10 @@ export default function NotStartedPanel({
   datacallId,
   id,
 }: NotStartedPanelProps) {
-  const [expanded, setExpanded] = useState(false)
-  const listed = expanded ? rows : rows.slice(0, MAX_LISTED)
-  const remaining = rows.length - listed.length
+  const { listed, hidden, expanded, toggle, cappedAtMax } = useExpandableRows(
+    rows,
+    MAX_LISTED
+  )
 
   return (
     <ChartCard
@@ -152,12 +153,14 @@ export default function NotStartedPanel({
               )
             )}
           </Box>
-          {(remaining > 0 || expanded) && (
+          {(hidden > 0 || expanded) && (
             <ShowAllToggle
-              hidden={remaining}
+              hidden={hidden}
               expanded={expanded}
-              onToggle={() => setExpanded((open) => !open)}
+              onToggle={toggle}
               noun={`${rows.length} not started`}
+              cappedAtMax={cappedAtMax}
+              total={rows.length}
             />
           )}
         </>
