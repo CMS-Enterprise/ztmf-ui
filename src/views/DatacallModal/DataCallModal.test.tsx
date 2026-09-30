@@ -16,6 +16,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axiosInstance from '@/axiosConfig'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
+import { notify } from '@/utils/notify'
 import DataCallModal from './DataCallModal'
 
 const mock = new MockAdapter(axiosInstance)
@@ -62,8 +63,40 @@ test('creates the data call, notifies, fires onCreated, and closes', async () =>
   expect(onClose).toHaveBeenCalledTimes(1)
 })
 
-test('a 400 field map lands on the Name field and leaves the modal open', async () => {
+test('a duplicate name toasts the backend message and leaves the modal open', async () => {
   const user = userEvent.setup()
+  // The real shape for this endpoint. A duplicate maps to model.ErrNotUnique,
+  // which the controller returns as a 400 carrying the text in `error` with no
+  // field map, so parseApiError yields a message and no fieldErrors.
+  mock
+    .onPost('/datacalls')
+    .reply(400, { error: 'not unique : (FY2027 Q4) already exists.' })
+  const onClose = jest.fn()
+  renderWithQueryClient(
+    <DataCallModal open onClose={onClose} onCreated={jest.fn()} />
+  )
+
+  await fillValidForm(user)
+  await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+  await waitFor(() =>
+    expect(notify).toHaveBeenCalledWith(
+      'not unique : (FY2027 Q4) already exists.',
+      'error',
+      expect.anything()
+    )
+  )
+  expect(onClose).not.toHaveBeenCalled()
+  // Nothing lands under the Name field, because the response carries no map
+  // to route. The inline branch below covers the shape that would.
+  expect(screen.queryByText(/already exists/i)).not.toBeInTheDocument()
+})
+
+test('a 400 field map lands under the Name field instead of a toast', async () => {
+  const user = userEvent.setup()
+  // No datacall error currently returns this shape, so this pins the branch
+  // rather than the endpoint. Keep it: validation that does return a map is
+  // the reason the branch exists.
   mock
     .onPost('/datacalls')
     .reply(400, { data: { datacall: 'a data call with this name exists' } })
@@ -78,7 +111,42 @@ test('a 400 field map lands on the Name field and leaves the modal open', async 
   expect(
     await screen.findByText(/a data call with this name exists/i)
   ).toBeInTheDocument()
+  expect(notify).not.toHaveBeenCalled()
   expect(onClose).not.toHaveBeenCalled()
+})
+
+test('a create started before the modal closes still lands and still reports', async () => {
+  const user = userEvent.setup()
+  let release!: () => void
+  mock.onPost('/datacalls').reply(
+    () =>
+      new Promise((resolve) => {
+        release = () => resolve([201, {}])
+      })
+  )
+  const onCreated = jest.fn()
+  const { rerender } = renderWithQueryClient(
+    <DataCallModal open onClose={jest.fn()} onCreated={onCreated} />
+  )
+
+  await fillValidForm(user)
+  await user.click(screen.getByRole('button', { name: /^create$/i }))
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+
+  // Closing is not a cancel. The write is already on its way to the server and
+  // aborting here would not un-commit it, so the request runs to completion and
+  // the caller still learns the outcome.
+  rerender(
+    <DataCallModal open={false} onClose={jest.fn()} onCreated={onCreated} />
+  )
+  release()
+
+  await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1))
+  expect(notify).toHaveBeenCalledWith(
+    'Datacall has successfully been created',
+    'success',
+    expect.anything()
+  )
 })
 
 test('reopening after a close mid-create shows a clean, enabled form', async () => {
