@@ -1,5 +1,4 @@
 import FismaTable from '../FismaTable/FismaTable'
-import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
 import { useState, useMemo } from 'react'
 import { useDatacallAggregates, useDatacallProgress } from '@/api/scores'
 import { useContextProp } from '../Title/Context'
@@ -12,40 +11,15 @@ import DatacallContextCard from '@/components/DatacallContextCard/DatacallContex
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import { exportSystemAnswers } from '@/utils/exportSystems'
-import {
-  isAdmin as checkIsAdmin,
-  hasAdminRead,
-  isSystemDelegate,
-  isSystemScoped,
-} from '@/utils/userRoles'
+import { isAdmin as checkIsAdmin, isSystemDelegate } from '@/utils/userRoles'
 import MySystemsBand from '../MySystems/MySystemsBand'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
 import { colors } from '@/theme/tokens'
 import _ from 'lodash'
-import type { ScoreAggregate, FismaSystemType } from '@/types'
+import type { FismaSystemType } from '@/types'
 import { buildDashboardMaps } from './aggregateScores'
 import { deriveExportCallId } from './exportCall'
-
-/** Short fiscal-year label, e.g. "FY2022 ..." -> "FY22". Falls back to the name. */
-function shortFy(name: string | undefined): string {
-  if (!name) return ''
-  const match = name.match(/FY(\d{4})/i)
-  return match ? `FY${match[1].slice(2)}` : name
-}
-
-/** Average of the systemscore values in a score aggregate response. */
-function averageScore(aggregates: ScoreAggregate[]): number {
-  let sum = 0
-  let count = 0
-  for (const a of aggregates) {
-    if (a.systemscore) {
-      sum += a.systemscore
-      count += 1
-    }
-  }
-  return count > 0 ? sum / count : 0
-}
 
 /**
  * Dashboard view: page header with export/add actions, the datacall context
@@ -62,7 +36,6 @@ export default function HomePageContainer() {
   const {
     latestDataCallId,
     selectedDatacall,
-    datacalls,
     activeDatacallIds,
     fismaSystems,
     setFismaSystems,
@@ -74,13 +47,15 @@ export default function HomePageContainer() {
   const datacallName = selectedDatacall?.datacall ?? ''
   const systemCount = fismaSystems.length
   const isAdmin = checkIsAdmin(userInfo)
-  // Admin tiers keep the estate-wide tiles. The system-scoped tiers - ISSO and
-  // ISSM, plus delegates, who work the same questionnaires - get the band.
-  // hasAdminRead wins, so an OpDiv admin who also holds systems still sees the
-  // summary their tier is built around.
-  const showsMySystems =
-    !hasAdminRead(userInfo) &&
-    (isSystemScoped(userInfo) || isSystemDelegate(userInfo))
+  // Everyone gets the band, so the dashboard reads the same whoever opens it.
+  // The band describes whatever /fismasystems returned for this caller, which
+  // the backend has already narrowed: an ISSO's assignments, an OpDiv admin's
+  // OpDiv, an HHS admin's estate. Admins who want per-OpDiv depth go to the
+  // OpDiv dashboard, which is built for it.
+  //
+  // A delegate is answers-only and cannot set a target maturity, so the target
+  // worklist is withheld from them rather than offering a backlog they 403 on.
+  const hideTargets = isSystemDelegate(userInfo)
 
   // Aggregate every active call in the year, then merge per system, choosing
   // the call each system most recently updated. Scores and progress are read
@@ -95,30 +70,6 @@ export default function HomePageContainer() {
     () => buildDashboardMaps(activeDatacallIds, scoresPerCall, progressPerCall),
     [activeDatacallIds, scoresPerCall, progressPerCall]
   )
-
-  // The immediately-prior datacall, for the Avg ZT trend. datacalls arrives
-  // deadline-sorted (newest first), so the prior call is the next entry after
-  // the active one - NOT the next-lower datacallid, which historical loads can
-  // out-id (#393).
-  const priorCall = useMemo(() => {
-    const activeIdx = datacalls.findIndex(
-      (dc) => dc.datacallid === activeDataCallId
-    )
-    return activeIdx >= 0 ? datacalls[activeIdx + 1] : undefined
-  }, [datacalls, activeDataCallId])
-
-  // Its own query rather than part of the batch above: the prior call is not an
-  // active call, so it is not in activeDatacallIds. Non-fatal - the trend
-  // simply hides when this has not resolved.
-  const { scoresPerCall: priorScores } = useDatacallAggregates(
-    priorCall ? [priorCall.datacallid] : []
-  )
-  const priorRows = priorScores[0]
-  const priorAvg =
-    priorCall && priorRows && priorRows.length > 0
-      ? averageScore(priorRows)
-      : undefined
-  const priorLabel = priorAvg === undefined ? '' : shortFy(priorCall?.datacall)
 
   // activeDatacallIds is [] on the first paint while Title is still fetching
   // /datacalls, which is not "loaded and empty" - hold the spinner through that
@@ -238,20 +189,12 @@ export default function HomePageContainer() {
 
       <DatacallContextCard />
 
-      {/* The summary swaps by tier. An admin's stat tiles describe an estate -
-          highest, lowest, how many at Optimal - which says nothing to someone
-          holding three systems, so the system-scoped tiers get a band about
-          what needs their action instead. */}
-      {showsMySystems ? (
-        <MySystemsBand hideTargets={isSystemDelegate(userInfo)} />
-      ) : (
-        <StatisticsBlocks
-          scores={scoreMap}
-          progress={progressMap}
-          priorAvg={priorAvg}
-          priorLabel={priorLabel}
-        />
-      )}
+      {/* Replaces the old stat tiles for everyone. Those described an estate -
+          highest, lowest, how many at Optimal - which answered nothing for a
+          reader holding three systems and little more for one holding a
+          thousand. This says what needs action instead, at whatever scope the
+          caller has. */}
+      <MySystemsBand hideTargets={hideTargets} />
       <FismaTable
         scores={scoreMap}
         selectedRows={selectedRows}

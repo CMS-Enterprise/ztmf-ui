@@ -19,6 +19,8 @@ import ArrowDownwardIcon from '@mui/icons-material/ArrowDownward'
 import ArrowUpwardIcon from '@mui/icons-material/ArrowUpward'
 import RemoveIcon from '@mui/icons-material/Remove'
 import ChartCard from '@/views/OpDivDashboard/components/ChartCard'
+import { useExpandableRows } from '@/views/OpDivDashboard/components/useExpandableRows'
+import ShowAllToggle from '@/views/OpDivDashboard/components/ShowAllToggle'
 import { colors, fonts } from '@/theme/tokens'
 import type { MovementDirection, SystemMovement } from '../mySystemsAggregates'
 
@@ -37,6 +39,9 @@ const DIRECTIONS: Record<
   unpaired: { color: colors.neutral500, word: 'not compared', Icon: null },
 }
 
+/** How many systems to show before the reader asks for more. */
+const MAX_LISTED = 8
+
 /** Props for {@link MovementPanel}. */
 export type MovementPanelProps = {
   rows: SystemMovement[]
@@ -54,6 +59,10 @@ export default function MovementPanel({
   priorLabel,
 }: MovementPanelProps) {
   const declined = rows.filter((r) => r.direction === 'lost').length
+  const { listed, hidden, expanded, toggle, cappedAtMax } = useExpandableRows(
+    rows,
+    MAX_LISTED
+  )
 
   return (
     <ChartCard
@@ -73,7 +82,7 @@ export default function MovementPanel({
         </Typography>
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-          {rows.map(({ system, from, to, delta, direction }) => {
+          {listed.map(({ system, from, to, delta, direction }) => {
             const { color, word, Icon } = DIRECTIONS[direction]
             return (
               <Box
@@ -155,6 +164,16 @@ export default function MovementPanel({
               </Box>
             )
           })}
+          {(hidden > 0 || expanded) && (
+            <ShowAllToggle
+              hidden={hidden}
+              expanded={expanded}
+              onToggle={toggle}
+              noun={`${rows.length} systems`}
+              cappedAtMax={cappedAtMax}
+              total={rows.length}
+            />
+          )}
         </Box>
       )}
     </ChartCard>

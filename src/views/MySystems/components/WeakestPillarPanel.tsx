@@ -14,6 +14,8 @@ import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
 import { Link as RouterLink } from 'react-router-dom'
 import ChartCard from '@/views/OpDivDashboard/components/ChartCard'
+import { useExpandableRows } from '@/views/OpDivDashboard/components/useExpandableRows'
+import ShowAllToggle from '@/views/OpDivDashboard/components/ShowAllToggle'
 import { colors, fonts } from '@/theme/tokens'
 import { tierForScore } from '@/utils/tierStyles'
 import { tierDot } from '@/theme/tokens'
@@ -22,6 +24,9 @@ import type { SystemWeakPillar } from '../mySystemsAggregates'
 /** Explains the figure in the card header. */
 const WEAKEST_INFO =
   'For each system, the pillar it scores lowest on, and how far that sits below the system’s own average across the pillars it is scored on. A system scored on fewer pillars (a SaaS system is scored on four, not six) is averaged over only the pillars it carries, so the gap is never inflated by pillars that do not apply to it.'
+
+/** How many systems to show before the reader asks for more. */
+const MAX_LISTED = 8
 
 /** Scale bounds, matching the maturity scale. */
 const MIN_SCORE = 1
@@ -43,6 +48,10 @@ export default function WeakestPillarPanel({
   rows,
   callName,
 }: WeakestPillarPanelProps) {
+  const { listed, hidden, expanded, toggle, cappedAtMax } = useExpandableRows(
+    rows,
+    MAX_LISTED
+  )
   return (
     <ChartCard
       eyebrow="Weakest pillar"
@@ -55,7 +64,7 @@ export default function WeakestPillarPanel({
         </Typography>
       ) : (
         <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
-          {rows.map(({ system, pillar, score, belowOwnAverage }) => {
+          {listed.map(({ system, pillar, score, belowOwnAverage }) => {
             // Measured from 1.0, not 0: the scale floor is 1.0, so measuring
             // from zero would render the worst possible score as a fifth-full
             // bar and squeeze the real spread into the rest.
@@ -132,6 +141,16 @@ export default function WeakestPillarPanel({
               </Box>
             )
           })}
+          {(hidden > 0 || expanded) && (
+            <ShowAllToggle
+              hidden={hidden}
+              expanded={expanded}
+              onToggle={toggle}
+              noun={`${rows.length} systems`}
+              cappedAtMax={cappedAtMax}
+              total={rows.length}
+            />
+          )}
         </Box>
       )}
     </ChartCard>

@@ -17,6 +17,8 @@ import Typography from '@mui/material/Typography'
 import { Link as RouterLink } from 'react-router-dom'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import ChartCard from '@/views/OpDivDashboard/components/ChartCard'
+import { useExpandableRows } from '@/views/OpDivDashboard/components/useExpandableRows'
+import ShowAllToggle from '@/views/OpDivDashboard/components/ShowAllToggle'
 import { colors, fonts } from '@/theme/tokens'
 import type { OpDivSystemRow } from '@/views/OpDivDashboard/opdivAggregates'
 
@@ -41,8 +43,13 @@ export type TargetPanelProps = {
  * @returns {JSX.Element} The card.
  */
 export default function TargetPanel({ rows, totalSystems }: TargetPanelProps) {
-  const listed = rows.slice(0, MAX_LISTED)
-  const remaining = rows.length - listed.length
+  const {
+    listed,
+    hidden: remaining,
+    expanded,
+    toggle,
+    cappedAtMax,
+  } = useExpandableRows(rows, MAX_LISTED)
 
   return (
     <ChartCard
@@ -122,10 +129,15 @@ export default function TargetPanel({ rows, totalSystems }: TargetPanelProps) {
               </Box>
             ))}
           </Box>
-          {remaining > 0 && (
-            <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-              +{remaining} more
-            </Typography>
+          {(remaining > 0 || expanded) && (
+            <ShowAllToggle
+              hidden={remaining}
+              expanded={expanded}
+              onToggle={toggle}
+              noun={`${rows.length} without a target`}
+              cappedAtMax={cappedAtMax}
+              total={rows.length}
+            />
           )}
         </>
       )}

@@ -228,9 +228,10 @@ function DetailPanels({
         datacallId={data.pillars.anchorCall?.datacallid}
       />
     ),
-    // Movement needs a baseline call to compare against; without one it has
-    // nothing to say that the hero's "no prior call" note does not.
-    priorLabel && data.movement.length > 0 && (
+    // Movement needs a baseline call AND at least one system scored in both,
+    // or every row reads "not scored" and the card says nothing the hero's
+    // "no prior call" note does not already say.
+    priorLabel && data.movement.some((m) => m.delta !== null) && (
       <MovementPanel
         key="movement"
         rows={data.movement}
