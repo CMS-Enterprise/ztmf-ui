@@ -7,12 +7,14 @@
  *
  * @module views/OpDivDashboard/components/DistributionPanels
  */
+import { useState } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { colors, fonts } from '@/theme/tokens'
 import type { datacall } from '@/types'
 import BarList, { type BarListItem } from './BarList'
 import ChartCard from './ChartCard'
+import ShowAllToggle from './ShowAllToggle'
 import StagePie from './StagePie'
 import { stageColor } from './stageColor'
 import {
@@ -187,6 +189,7 @@ export function SystemScorePanel({
     // The tier is text, so the band never depends on telling fills apart.
     note: bar.tier,
   })
+  const [expanded, setExpanded] = useState(false)
   const { top, bottom, hiddenCount } = splitExtremes(bars)
   const spread = scoreSpread(bars)
 
@@ -201,13 +204,13 @@ export function SystemScorePanel({
       }
     >
       <BarList
-        items={top.map(toItem)}
+        items={(expanded ? bars : top).map(toItem)}
         max={MAX_SCORE}
         min={MIN_SCORE}
         labelWidth={88}
         emptyMessage="No scored systems in this OpDiv yet."
       />
-      {hiddenCount > 0 && (
+      {hiddenCount > 0 && !expanded && (
         <>
           {/* Says what was left out rather than trailing off. The full ranking
               is in the systems table below, so nothing here is the only way
@@ -232,6 +235,14 @@ export function SystemScorePanel({
             labelWidth={88}
           />
         </>
+      )}
+      {(hiddenCount > 0 || expanded) && (
+        <ShowAllToggle
+          hidden={hiddenCount}
+          expanded={expanded}
+          onToggle={() => setExpanded((open) => !open)}
+          noun={`${bars.length} systems`}
+        />
       )}
       {spread && (
         <Typography
