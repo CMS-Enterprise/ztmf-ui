@@ -47,6 +47,13 @@ import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
+import AnswerHistoryPanel, { UndoAnswerButton } from './AnswerHistoryPanel'
+import { canUndoAnswer, undoPreview } from './undoState'
+import {
+  useAnswerHistory,
+  classifyUndoError,
+  UNDO_CONFLICT_MESSAGE,
+} from './useAnswerHistory'
 import {
   carryForwardState,
   isQuestionComplete,
@@ -79,6 +86,7 @@ import EyebrowLine from './components/EyebrowLine'
 import SectionRail from './components/SectionRail'
 import QuestionnaireProgress from './components/QuestionnaireProgress'
 import SaveIndicator from './components/SaveIndicator'
+import Link from '@mui/material/Link'
 import Card from './components/Card'
 import {
   saveDraft,
@@ -627,6 +635,13 @@ export default function QuestionnarePage() {
     justificationContextId,
     currentPriorResponse?.text ?? null,
     isReadOnly,
+    // The review gate reads scores.status (see untouchedThisCycle below), so a
+    // status change is a context change. Without this the initializer
+    // short-circuits on an unchanged contextId and cannot re-arm: undo returns
+    // a row to not_started, but the blank-box + "Insert into response"
+    // presentation every other unconfirmed carried-forward answer gets would
+    // only reappear after navigating away and back (ztmf-misc#392).
+    questionScores[selectQuestionOption]?.status ?? null,
   ])
   // A context that has not yet been evaluated is synchronously treated as
   // initializing. This keeps the editor and Next button blocked during the
@@ -674,15 +689,43 @@ export default function QuestionnarePage() {
   const currentSavedScore =
     initQuestionChoice !== -1 ? questionScores[initQuestionChoice] : undefined
   const currentCarryState = carryForwardState(currentSavedScore, isOpenCall)
+  // Any deviation from the seeded answer/notes: the edit is the explicit act,
+  // and Next saves it (flipping status server-side), so both the Confirm and
+  // Undo buttons yield to avoid two visible paths to the same write. Hoisted
+  // so they cannot drift; deliberately NOT the variants elsewhere in this file
+  // that also fold in priorReviewNeedsSave.
+  const answerDirty =
+    selectQuestionOption !== initQuestionChoice || notes !== initNotes
+  const priorReviewBlocked =
+    priorReviewState === 'pending' || priorReviewState === 'initializing'
   const showConfirmButton = canConfirmCarryForward({
     state: currentCarryState,
-    // Any deviation from the seeded answer/notes: the edit is the explicit
-    // act, and Next saves it (flipping status server-side), so the button
-    // yields to avoid two visible paths to the same write.
-    dirty: selectQuestionOption !== initQuestionChoice || notes !== initNotes,
+    dirty: answerDirty,
     isReadOnly,
-    priorReviewBlocked:
-      priorReviewState === 'pending' || priorReviewState === 'initializing',
+    priorReviewBlocked,
+  })
+  // Answer history and undo (ztmf-misc#392). The hook owns the drawer state
+  // and both requests, so this page adds none of its own.
+  const answerHistory = useAnswerHistory({
+    scoreid,
+    refetchScores: () => fetchQuestionScores(system, setQuestionScores),
+    // Moves whenever this answer is written, which is what makes the Undo
+    // button appear the instant a save lands instead of on the next
+    // navigation. status is included because a confirm changes it.
+    writeStamp: currentSavedScore
+      ? `${currentSavedScore.last_edited_at ?? ''}|${currentSavedScore.status ?? ''}`
+      : null,
+  })
+  // The head revision and the one below it: head.prev is what an undo restores,
+  // and the earlier row's createdat is when that value was saved.
+  const [undoTarget, undoPrior] = answerHistory.history.data?.revisions ?? []
+  const showUndoButton = canUndoAnswer({
+    headUndoable: answerHistory.head?.undoable ?? false,
+    state: currentCarryState,
+    dirty: answerDirty,
+    isReadOnly,
+    hasScore: scoreid !== 0,
+    priorReviewBlocked,
   })
   // Derived from the button so the sentence and the action it describes cannot
   // drift apart. !currentPriorResponse suppresses it on insights questions,
@@ -732,6 +775,26 @@ export default function QuestionnarePage() {
       await confirmScoreById(currentSavedScore.scoreid)
     } finally {
       setConfirming(false)
+    }
+  }
+
+  // The third sibling of saveResponse and confirmScoreById. Reverts to the
+  // value the head revision replaced, sending that revision's id so the server
+  // refuses rather than silently reverting a change this session never saw.
+  const handleUndoClick = async (revisionid: number) => {
+    try {
+      await answerHistory.undo.mutateAsync(revisionid)
+      notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      clearCurrentDraft()
+    } catch (error) {
+      const outcome = classifyUndoError(error)
+      if (outcome.kind === 'handled') return
+      if (outcome.kind === 'conflict') {
+        answerHistory.history.refetch()
+        notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
+        return
+      }
+      notify(outcome.message, 'error', { autoHideDuration: 2500 })
     }
   }
 
@@ -2095,6 +2158,22 @@ export default function QuestionnarePage() {
                       Confirm this answer is still accurate
                     </Button>
                   )}
+                  {/* Third child of the existing strip: it already wraps and
+                      gaps, so no layout change. Hidden while the form is dirty
+                      - undoing saved state under unsaved edits would discard
+                      them silently. */}
+                  {showUndoButton && answerHistory.head && (
+                    <UndoAnswerButton
+                      head={answerHistory.head}
+                      disabled={answerHistory.undo.isPending}
+                      onUndo={handleUndoClick}
+                      preview={undoPreview({
+                        restoresOptionName: undoTarget?.prev?.optionname,
+                        restoresNotes: !!undoTarget?.prev?.notes,
+                        savedAt: undoPrior?.createdat,
+                      })}
+                    />
+                  )}
                 </Box>
               )}
               {/* Sits where the prior-response flow puts its own review
@@ -2130,6 +2209,15 @@ export default function QuestionnarePage() {
                       : 'Draft restored - click Next or Complete to save permanently.'}
                 </Alert>
               )}
+              <AnswerHistoryPanel
+                open={answerHistory.open}
+                onClose={answerHistory.closeHistory}
+                revisions={answerHistory.history.data?.revisions ?? []}
+                isPending={answerHistory.history.isPending}
+                isError={answerHistory.history.isError}
+                isUndoing={answerHistory.undo.isPending}
+                onUndo={handleUndoClick}
+              />
               <Box
                 sx={{
                   display: 'flex',
@@ -2178,22 +2266,45 @@ export default function QuestionnarePage() {
                 >
                   {'< Previous'}
                 </Button>
-                <SaveIndicator
-                  lastSavedAt={lastSavedAt}
-                  lastEditedAt={
-                    initQuestionChoice !== -1 &&
-                    questionScores[initQuestionChoice]
-                      ? questionScores[initQuestionChoice].last_edited_at
-                      : null
-                  }
-                  lastEditedBy={
-                    initQuestionChoice !== -1 &&
-                    questionScores[initQuestionChoice]
-                      ? questionScores[initQuestionChoice].last_edited_by
-                      : null
-                  }
-                  isReadOnly={isReadOnly}
-                />
+                {/* The history trigger sits beside the save indicator rather
+                    than inside it. SaveIndicator renders LastEditedFooter as a
+                    Tooltip title, and a link in tooltip content is hover-only:
+                    unreachable by keyboard and absent from the DOM until the
+                    pointer arrives. Grouped in a Box so the row keeps its
+                    three-child space-between layout. */}
+                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
+                  <SaveIndicator
+                    lastSavedAt={lastSavedAt}
+                    lastEditedAt={
+                      initQuestionChoice !== -1 &&
+                      questionScores[initQuestionChoice]
+                        ? questionScores[initQuestionChoice].last_edited_at
+                        : null
+                    }
+                    lastEditedBy={
+                      initQuestionChoice !== -1 &&
+                      questionScores[initQuestionChoice]
+                        ? questionScores[initQuestionChoice].last_edited_by
+                        : null
+                    }
+                    isReadOnly={isReadOnly}
+                  />
+                  {/* Only offered when there is something to show. History
+                      stays readable on a closed call, where the strip's Undo
+                      button is correctly absent. */}
+                  {answerHistory.head && (
+                    <Link
+                      id="view-answer-history"
+                      component="button"
+                      type="button"
+                      variant="caption"
+                      onClick={answerHistory.openHistory}
+                      sx={{ verticalAlign: 'baseline' }}
+                    >
+                      View history
+                    </Link>
+                  )}
+                </Box>
                 {/* Tooltip states that the forward action saves this
                     question on its own (#705). describeChild so MUI applies
                     aria-description, not aria-label, over the button text;
