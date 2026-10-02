@@ -1,5 +1,9 @@
 name: Orchestration PROD
 
+# Every merge to main deploys dev first, then prod only if dev succeeded, so a
+# bad bundle stops at dev. Dev deploys only from here (and manual-deploy-dev);
+# PRs deploy to per-PR environments. Context: ztmf-misc#345.
+
 on:
   pull_request:
     branches:
@@ -19,18 +23,33 @@ jobs:
     name: Analysis
     if: ${{ github.event.pull_request.merged }}
     uses: ./.github/workflows/analysis.yml
-    secrets: inherit     
+    secrets: inherit
+
+  ui-dev:
+    # One dev sync at a time, shared with manual-deploy-dev; queue, do not cancel.
+    concurrency:
+      group: deploy-dev
+      queue: max
+      cancel-in-progress: false
+    if: ${{ github.event.pull_request.merged }}
+    name: ui dev
+    needs:
+      - analysis
+    uses: ./.github/workflows/ui.yml
+    with:
+      environment: dev
+    secrets: inherit
+
   ui:
     # One prod sync at a time; queue, do not cancel.
     concurrency:
       group: deploy-prod
       cancel-in-progress: false
     if: ${{ github.event.pull_request.merged }}
-    name: ui
-    needs: 
-      - analysis
+    name: ui prod
+    needs:
+      - ui-dev
     uses: ./.github/workflows/ui.yml
     with:
       environment: prod
     secrets: inherit
-  
