@@ -1,4 +1,4 @@
-import { formatDate, formatDateTime } from './dates'
+import { daysUntil, formatDate, formatDateTime } from './dates'
 
 describe('formatDate', () => {
   it('renders the D3 calendar shape', () => {
@@ -59,5 +59,27 @@ describe('formatDateTime', () => {
 
   it('honors a caller-supplied fallback', () => {
     expect(formatDateTime(undefined, 'Never')).toBe('Never')
+  })
+})
+
+describe('daysUntil', () => {
+  const now = new Date('2026-09-25T18:00:00Z')
+
+  it('counts whole calendar days, not elapsed hours', () => {
+    // A UTC-midnight deadline tomorrow is "1 day left" all day today, not 0.
+    expect(daysUntil('2026-09-26 00:00:00+00', now)).toBe(1)
+  })
+
+  it('reads a deadline today as zero', () => {
+    expect(daysUntil('2026-09-25 00:00:00+00', now)).toBe(0)
+  })
+
+  it('goes negative once the deadline has passed', () => {
+    expect(daysUntil('2026-09-20 00:00:00+00', now)).toBe(-5)
+  })
+
+  it('returns null rather than a number for an absent deadline', () => {
+    expect(daysUntil(null, now)).toBeNull()
+    expect(daysUntil('not a date', now)).toBeNull()
   })
 })
