@@ -1,14 +1,14 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
-import { Box, Button, CircularProgress } from '@mui/material'
+import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import PillarScoresContent from './PillarScoresContent'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
 import { useContextProp } from '../Title/Context'
+import { useResolvedSystem } from '@/hooks/useResolvedSystem'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import {
@@ -28,53 +28,19 @@ import type { ScoreAggregate } from '@/types'
  */
 export default function PillarScoresPage() {
   const { fismasystemid } = useParams()
-  const {
-    fismaSystems,
-    setFismaSystems,
-    selectedDatacall,
-    latestDataCallId,
-    datacalls,
-    userInfo,
-  } = useContextProp()
+  const { selectedDatacall, latestDataCallId, datacalls, userInfo } =
+    useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const systemId = Number(fismasystemid)
-  const system = fismaSystems.find((s) => s.fismasystemid === systemId)
+  // Resolves from the shared list, or fetches by id when the system is not in
+  // it (decommissioned, or a deep link), so a missing system reaches a
+  // not-found state instead of a placeholder or an endless spinner.
+  const resolution = useResolvedSystem(systemId)
+  const system = resolution.system
 
   const [scores, setScores] = useState<ScoreAggregate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [compareOpen, setCompareOpen] = useState<boolean>(false)
-
-  // A system reached by URL may be absent from the active-only context list
-  // (decommissioned, or a deep link). Fetch it by id as SystemDetailPage does,
-  // so nothing downstream renders the "System" placeholder.
-  const triedFetch = useRef(false)
-  const [retryingFetch, setRetryingFetch] = useState(false)
-  useEffect(() => {
-    const controller = new AbortController()
-    if (fismaSystems.length > 0 && !system && !triedFetch.current) {
-      triedFetch.current = true
-      setRetryingFetch(true)
-      async function load() {
-        try {
-          const res = await axiosInstance.get(
-            apiPaths.fismaSystems.detail(systemId),
-            { signal: controller.signal }
-          )
-          const data = res.data?.data
-          if (data) setFismaSystems((prev) => [...prev, data])
-        } catch {
-          if (controller.signal.aborted) return
-          // No such system; fall through to the placeholder.
-        } finally {
-          if (!controller.signal.aborted) setRetryingFetch(false)
-        }
-      }
-      load()
-    }
-    return () => {
-      controller.abort()
-    }
-  }, [fismaSystems, system, systemId, setFismaSystems])
 
   useEffect(() => {
     if (!systemId) return
@@ -100,7 +66,7 @@ export default function PillarScoresPage() {
     }
   }, [systemId])
 
-  const systemName = system?.fismaname ?? 'System'
+  const systemName = system?.fismaname ?? ''
   const systemAcronym = system?.fismaacronym ?? ''
   // Subtitle stays system-name-only because the datacall card above carries
   // the current-datacall context. currentDatacallName is still threaded down
@@ -131,14 +97,27 @@ export default function PillarScoresPage() {
   )?.datacall
   const subtitle = systemName
 
-  // Wait for the lookup to settle so the header never flashes the placeholder.
-  const resolvingSystem =
-    !system &&
-    (fismaSystems.length === 0 || retryingFetch || !triedFetch.current)
-  if (resolvingSystem) {
+  // Wait for the lookup to settle so the header never renders without a name.
+  if (resolution.status === 'resolving') {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
         <CircularProgress />
+      </Box>
+    )
+  }
+
+  // Same not-found state as the System Detail page.
+  if (resolution.status === 'not-found') {
+    return (
+      <Box sx={{ mt: 4 }}>
+        <BreadCrumbs segmentLabels={{ [fismasystemid ?? '']: 'Not found' }} />
+        <Typography variant="h5" color="error" sx={{ mt: 2 }}>
+          System not found
+        </Typography>
+        <Typography color="text.secondary" sx={{ mt: 1 }}>
+          Could not find a system with ID &ldquo;{fismasystemid}&rdquo;. It may
+          not exist, or you may not have access to it.
+        </Typography>
       </Box>
     )
   }
@@ -148,7 +127,12 @@ export default function PillarScoresPage() {
       <PageHeader
         title="Pillar scores"
         subtitle={subtitle}
-        breadcrumbs={<BreadCrumbs segmentLabels={{ [systemId]: systemName }} />}
+        breadcrumbs={
+          <BreadCrumbs
+            segmentLabels={{ [systemId]: systemName }}
+            segmentLinks={{ [systemId]: `/systems/${systemId}` }}
+          />
+        }
         actions={
           <>
             {hasSystemAccess(userInfo) && system && (
