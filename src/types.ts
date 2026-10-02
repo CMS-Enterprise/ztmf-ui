@@ -218,6 +218,11 @@ export type FismaFunction = {
   function: string
   description: string
   datacenterenvironment: string
+  // Rank within the question, from functions.ordr. The API sorts by it, so the
+  // questionnaire needs no client sort - but useQuestionBreakdown rebuilds its
+  // rows from /scores rather than /questions, so it re-sorts on this to restore
+  // the questionnaire's order.
+  order: number
 }
 export type FismaQuestion = {
   questionid: number

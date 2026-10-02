@@ -22,24 +22,27 @@ import { useQuestionBreakdown } from './useQuestionBreakdown'
 
 const mock = new MockAdapter(axiosInstance)
 
+// Ranks are the API's, from pillars.ordr and functions.ordr. The values are
+// production's: Identity 1, Devices 2, Data 5 - and they are deliberately NOT
+// in array order here, so a hook that returned rows in payload order would fail.
 const questions = [
   {
     questionid: 1,
     question: 'Do you do MFA?',
-    pillar: { pillar: 'Identity' },
-    function: { functionid: 100, function: 'MFA' },
+    pillar: { pillar: 'Identity', pillarid: 6, order: 1 },
+    function: { functionid: 100, function: 'MFA', order: 101 },
   },
   {
     questionid: 2,
     question: 'Do you encrypt data at rest?',
-    pillar: { pillar: 'Data' },
-    function: { functionid: 200, function: 'Encryption' },
+    pillar: { pillar: 'Data', pillarid: 4, order: 5 },
+    function: { functionid: 200, function: 'Encryption', order: 505 },
   },
   {
     questionid: 3,
     question: 'Do you patch devices?',
-    pillar: { pillar: 'Devices' },
-    function: { functionid: 300, function: 'Patching' },
+    pillar: { pillar: 'Devices', pillarid: 1, order: 2 },
+    function: { functionid: 300, function: 'Patching', order: 201 },
   },
 ]
 
@@ -87,7 +90,7 @@ beforeEach(() => {
 })
 
 describe('useQuestionBreakdown', () => {
-  test('joins questions x scores by functionid, applies +1 shift, sorts by PILLAR_ORDER', async () => {
+  test('joins questions x scores by functionid, applies +1 shift, sorts by the API ranks', async () => {
     mock
       .onGet('/fismasystems/7/questions')
       .reply(200, { data: questions })
@@ -99,9 +102,10 @@ describe('useQuestionBreakdown', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     expect(result.current.rows).toHaveLength(3)
-    // PILLAR_ORDER is Identity, Devices, Networks, Applications, Data,
-    // CrossCutting - so the join must order Identity -> Devices -> Data
-    // even though scores arrived in Data, Identity, Devices order.
+    // pillars.ordr puts Identity(1) before Devices(2) before Data(5), so the
+    // join must order Identity -> Devices -> Data even though scores arrived
+    // in Data, Identity, Devices order and the questions payload listed them
+    // Identity, Data, Devices.
     expect(result.current.rows.map((r) => r.pillar)).toEqual([
       'Identity',
       'Devices',

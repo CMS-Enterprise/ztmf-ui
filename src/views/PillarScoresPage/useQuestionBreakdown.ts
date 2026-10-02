@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import axiosInstance from '@/axiosConfig'
 import { isAuthHandled } from '@/utils/notify'
 import { tierForScore } from '@/utils/tierStyles'
-import { PILLAR_ORDER } from '@/constants'
 import type { FismaQuestion, ScoreTier } from '@/types'
 
 /**
@@ -39,16 +38,15 @@ export interface QuestionBreakdownRow {
   questionid: number
   question: string
   pillar: string
+  // Server-supplied ranks carried through so this view can restore the
+  // questionnaire's order. Rows are built by walking /scores, whose order is
+  // its own, so some client-side sort is unavoidable here - but it keys on
+  // what the API served rather than a hardcoded name list (ztmf-misc#393).
+  pillarOrder: number
+  functionOrder: number
   functionName: string
   displayScore: number
   tier: ScoreTier
-}
-
-/** Stable sort: known pillars first, in PILLAR_ORDER. */
-function pillarRank(name: string | undefined): number {
-  if (!name) return Number.MAX_SAFE_INTEGER
-  const i = PILLAR_ORDER.indexOf(name)
-  return i === -1 ? Number.MAX_SAFE_INTEGER : i
 }
 
 /**
@@ -127,6 +125,8 @@ export function useQuestionBreakdown(
         questionid: number
         question: string
         pillar: string
+        pillarOrder: number
+        functionOrder: number
         functionName: string
       }
     >()
@@ -136,6 +136,8 @@ export function useQuestionBreakdown(
           questionid: q.questionid,
           question: q.question,
           pillar: q.pillar?.pillar ?? '-',
+          pillarOrder: q.pillar?.order ?? Number.MAX_SAFE_INTEGER,
+          functionOrder: q.function.order ?? Number.MAX_SAFE_INTEGER,
           functionName: q.function.function,
         })
       }
@@ -157,22 +159,33 @@ export function useQuestionBreakdown(
         questionid: q.questionid,
         question: q.question,
         pillar: q.pillar,
+        pillarOrder: q.pillarOrder,
+        functionOrder: q.functionOrder,
         functionName: q.functionName,
         displayScore,
         tier: tierForScore(displayScore),
       })
     }
+    // pillars.ordr, then functions.ordr - the questionnaire's own sort keys.
+    // Name comparison is the last resort, for rows the ordr backfill could not
+    // rank (both sides 0), where it is at least deterministic.
     return out.sort((a, b) => {
-      const pr = pillarRank(a.pillar) - pillarRank(b.pillar)
+      const pr = a.pillarOrder - b.pillarOrder
       if (pr !== 0) return pr
+      const fr = a.functionOrder - b.functionOrder
+      if (fr !== 0) return fr
       return a.functionName.localeCompare(b.functionName)
     })
   }, [scores, questionByFunctionId])
 
   const pillarOptions = useMemo(() => {
-    const set = new Set<string>()
-    for (const r of rows) set.add(r.pillar)
-    return Array.from(set).sort((a, b) => pillarRank(a) - pillarRank(b))
+    const byName = new Map<string, number>()
+    for (const r of rows) {
+      if (!byName.has(r.pillar)) byName.set(r.pillar, r.pillarOrder)
+    }
+    return Array.from(byName.entries())
+      .sort(([, a], [, b]) => a - b)
+      .map(([name]) => name)
   }, [rows])
 
   return { rows, loading, pillarOptions }
