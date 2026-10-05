@@ -38,12 +38,10 @@ export interface QuestionBreakdownRow {
   questionid: number
   question: string
   pillar: string
-  // Server-supplied ranks carried through so this view can restore the
-  // questionnaire's order. Rows are built by walking /scores, whose order is
-  // its own, so some client-side sort is unavoidable here - but it keys on
-  // what the API served rather than a hardcoded name list (ztmf-misc#393).
-  pillarOrder: number
-  functionOrder: number
+  // Index of the question in the /questions payload, which the API already
+  // serves in questionnaire order (ztmf-misc#393). Rows are built by walking
+  // /scores, whose order is its own, so they are re-sorted on this.
+  position: number
   functionName: string
   displayScore: number
   tier: ScoreTier
@@ -62,8 +60,8 @@ export interface QuestionBreakdownRow {
  *
  * Rows are joined on functionid, the score is shifted (+1) onto the 1-5
  * scale the rest of the page uses, the tier is derived from that shifted
- * value via {@link tierForScore}, and the result is stably sorted by
- * pillar order then function name. The list endpoint may return a stale
+ * value via {@link tierForScore}, and the result is sorted into the
+ * questionnaire's order. The list endpoint may return a stale
  * score for a function that has since been removed; those rows are dropped
  * defensively.
  *
@@ -125,23 +123,21 @@ export function useQuestionBreakdown(
         questionid: number
         question: string
         pillar: string
-        pillarOrder: number
-        functionOrder: number
+        position: number
         functionName: string
       }
     >()
-    for (const q of questions) {
+    questions.forEach((q, position) => {
       if (q.function?.functionid != null) {
         map.set(q.function.functionid, {
           questionid: q.questionid,
           question: q.question,
           pillar: q.pillar?.pillar ?? '-',
-          pillarOrder: q.pillar?.order ?? Number.MAX_SAFE_INTEGER,
-          functionOrder: q.function.order ?? Number.MAX_SAFE_INTEGER,
+          position,
           functionName: q.function.function,
         })
       }
-    }
+    })
     return map
   }, [questions])
 
@@ -159,34 +155,20 @@ export function useQuestionBreakdown(
         questionid: q.questionid,
         question: q.question,
         pillar: q.pillar,
-        pillarOrder: q.pillarOrder,
-        functionOrder: q.functionOrder,
+        position: q.position,
         functionName: q.functionName,
         displayScore,
         tier: tierForScore(displayScore),
       })
     }
-    // pillars.ordr, then functions.ordr - the questionnaire's own sort keys.
-    // Name comparison is the last resort, for rows the ordr backfill could not
-    // rank (both sides 0), where it is at least deterministic.
-    return out.sort((a, b) => {
-      const pr = a.pillarOrder - b.pillarOrder
-      if (pr !== 0) return pr
-      const fr = a.functionOrder - b.functionOrder
-      if (fr !== 0) return fr
-      return a.functionName.localeCompare(b.functionName)
-    })
+    return out.sort((a, b) => a.position - b.position)
   }, [scores, questionByFunctionId])
 
-  const pillarOptions = useMemo(() => {
-    const byName = new Map<string, number>()
-    for (const r of rows) {
-      if (!byName.has(r.pillar)) byName.set(r.pillar, r.pillarOrder)
-    }
-    return Array.from(byName.entries())
-      .sort(([, a], [, b]) => a - b)
-      .map(([name]) => name)
-  }, [rows])
+  // Rows are in questionnaire order, so first appearance is pillar order.
+  const pillarOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.pillar))),
+    [rows]
+  )
 
   return { rows, loading, pillarOptions }
 }

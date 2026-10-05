@@ -22,9 +22,8 @@ import { useQuestionBreakdown } from './useQuestionBreakdown'
 
 const mock = new MockAdapter(axiosInstance)
 
-// Ranks are the API's, from pillars.ordr and functions.ordr. The values are
-// production's: Identity 1, Devices 2, Data 5 - and they are deliberately NOT
-// in array order here, so a hook that returned rows in payload order would fail.
+// In questionnaire order, as the API serves /questions. The scores below arrive
+// in a different order, so a hook that kept /scores order would fail.
 const questions = [
   {
     questionid: 1,
@@ -33,16 +32,16 @@ const questions = [
     function: { functionid: 100, function: 'MFA', order: 101 },
   },
   {
-    questionid: 2,
-    question: 'Do you encrypt data at rest?',
-    pillar: { pillar: 'Data', pillarid: 4, order: 5 },
-    function: { functionid: 200, function: 'Encryption', order: 505 },
-  },
-  {
     questionid: 3,
     question: 'Do you patch devices?',
     pillar: { pillar: 'Devices', pillarid: 1, order: 2 },
     function: { functionid: 300, function: 'Patching', order: 201 },
+  },
+  {
+    questionid: 2,
+    question: 'Do you encrypt data at rest?',
+    pillar: { pillar: 'Data', pillarid: 4, order: 5 },
+    function: { functionid: 200, function: 'Encryption', order: 505 },
   },
 ]
 
@@ -90,7 +89,7 @@ beforeEach(() => {
 })
 
 describe('useQuestionBreakdown', () => {
-  test('joins questions x scores by functionid, applies +1 shift, sorts by the API ranks', async () => {
+  test('joins questions x scores by functionid, applies +1 shift, keeps questionnaire order', async () => {
     mock
       .onGet('/fismasystems/7/questions')
       .reply(200, { data: questions })
@@ -102,10 +101,7 @@ describe('useQuestionBreakdown', () => {
     await waitFor(() => expect(result.current.loading).toBe(false))
 
     expect(result.current.rows).toHaveLength(3)
-    // pillars.ordr puts Identity(1) before Devices(2) before Data(5), so the
-    // join must order Identity -> Devices -> Data even though scores arrived
-    // in Data, Identity, Devices order and the questions payload listed them
-    // Identity, Data, Devices.
+    // Scores arrived Data, Identity, Devices; rows follow /questions instead.
     expect(result.current.rows.map((r) => r.pillar)).toEqual([
       'Identity',
       'Devices',
@@ -117,6 +113,54 @@ describe('useQuestionBreakdown', () => {
       'Identity',
       'Devices',
       'Data',
+    ])
+  })
+
+  test('orders by /questions position, not functions.ordr', async () => {
+    // functions.ordr ranks within one question, so it can disagree with the
+    // questionnaire - here a function created without an order reads 0.
+    const identity = { pillar: 'Identity', pillarid: 6, order: 1 }
+    mock.onGet('/fismasystems/7/questions').reply(200, {
+      data: [
+        {
+          questionid: 1,
+          question: 'Do you do MFA?',
+          pillar: identity,
+          function: { functionid: 100, function: 'MFA', order: 101 },
+        },
+        {
+          questionid: 4,
+          question: 'Do you govern identities?',
+          pillar: identity,
+          function: { functionid: 400, function: 'Governance', order: 0 },
+        },
+      ],
+    })
+    mock
+      .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
+      .reply(200, {
+        data: [
+          {
+            scoreid: 14,
+            functionoptionid: 25,
+            functionoption: {
+              functionoptionid: 25,
+              functionid: 400,
+              score: 1,
+              optionname: '',
+              description: '',
+            },
+          },
+          scores[1],
+        ],
+      })
+
+    const { result } = renderHook(() => useQuestionBreakdown(7, 4))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.rows.map((r) => r.functionName)).toEqual([
+      'MFA',
+      'Governance',
     ])
   })
 
