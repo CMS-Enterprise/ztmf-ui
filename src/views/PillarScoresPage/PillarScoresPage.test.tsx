@@ -27,6 +27,7 @@ const mockContext = {
   ],
   selectedDatacall,
   setFismaSystems: jest.fn(),
+  fismaSystemsLoaded: true,
   setSelectedDatacall: jest.fn(),
   toggleActiveDatacall: jest.fn(),
   latestDataCallId: 5,
@@ -183,4 +184,55 @@ it('keeps the comparison modal independent from the selected data call', async (
   await screen.findByRole('dialog')
 
   expect(mockContext.setSelectedDatacall).not.toHaveBeenCalled()
+})
+
+it('shows not-found instead of spinning for a user with no accessible systems', async () => {
+  // A loaded, empty list: the page used to wait for a non-empty list before
+  // looking the system up, so it spun forever.
+  const saved = mockContext.fismaSystems
+  mockContext.fismaSystems = []
+  mockGet.mockImplementation((url: string) =>
+    url === '/fismasystems/1002'
+      ? Promise.reject(new Error('Request failed with status code 404'))
+      : Promise.resolve({ data: { data: [] } })
+  )
+  try {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/systems/:fismasystemid/pillar-scores',
+          element: <PillarScoresPage />,
+        },
+      ],
+      { initialEntries: ['/systems/1002/pillar-scores'] }
+    )
+    render(<RouterProvider router={router} />)
+    expect(await screen.findByText('System not found')).toBeInTheDocument()
+    expect(
+      screen.getByText(/you may not have access to it/)
+    ).toBeInTheDocument()
+    expect(screen.getByText('Not found')).toBeInTheDocument()
+  } finally {
+    mockContext.fismaSystems = saved
+  }
+})
+
+it("links the system crumb back to the system's detail page", async () => {
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/systems/:fismasystemid/pillar-scores',
+        element: <PillarScoresPage />,
+      },
+      { path: '/systems/:fismasystemid', element: <div>system info</div> },
+    ],
+    { initialEntries: ['/systems/1002/pillar-scores'] }
+  )
+  render(<RouterProvider router={router} />)
+
+  const crumb = await screen.findByRole('link', {
+    name: 'Super Star Destroyer Executor Command Systems',
+  })
+  await userEvent.click(crumb)
+  expect(router.state.location.pathname).toBe('/systems/1002')
 })

@@ -165,7 +165,7 @@ const PAGE: EventsPage = {
     },
   ],
   total: 120,
-  limit: 50,
+  limit: 25,
   offset: 0,
 }
 
@@ -263,10 +263,10 @@ describe('rendering', () => {
 })
 
 describe('query params', () => {
-  it('requests the backend default page on load, with no filters', async () => {
+  it('requests the first page on load, with no filters', async () => {
     renderFor('OWNER')
     await screen.findByText('Grand Moff Tarkin')
-    expect(lastEventsParams()).toEqual({ limit: 50, offset: 0 })
+    expect(lastEventsParams()).toEqual({ limit: 25, offset: 0 })
   })
 
   it('maps a page change to the matching offset', async () => {
@@ -274,7 +274,7 @@ describe('query params', () => {
     await screen.findByText('Grand Moff Tarkin')
     await userEvent.click(screen.getByRole('button', { name: 'next page' }))
     await waitFor(() =>
-      expect(lastEventsParams()).toEqual({ limit: 50, offset: 50 })
+      expect(lastEventsParams()).toEqual({ limit: 25, offset: 25 })
     )
   })
 
@@ -289,7 +289,7 @@ describe('query params', () => {
     await waitFor(() => expect(lastEventsParams().action).toBe('viewed'))
     await userEvent.click(clear)
     await waitFor(() =>
-      expect(lastEventsParams()).toEqual({ limit: 50, offset: 0 })
+      expect(lastEventsParams()).toEqual({ limit: 25, offset: 0 })
     )
   })
 
@@ -297,12 +297,12 @@ describe('query params', () => {
     renderFor('OWNER')
     await screen.findByText('Grand Moff Tarkin')
     await userEvent.click(screen.getByRole('button', { name: 'next page' }))
-    await waitFor(() => expect(lastEventsParams().offset).toBe(50))
+    await waitFor(() => expect(lastEventsParams().offset).toBe(25))
     await userEvent.click(screen.getByLabelText('Action'))
     await userEvent.click(await screen.findByRole('option', { name: 'Viewed' }))
     await waitFor(() =>
       expect(lastEventsParams()).toEqual({
-        limit: 50,
+        limit: 25,
         offset: 0,
         action: 'viewed',
       })
@@ -332,7 +332,7 @@ describe('query params', () => {
     renderFor('OWNER')
     await screen.findByText('Grand Moff Tarkin')
     await userEvent.click(screen.getByRole('button', { name: 'next page' }))
-    await waitFor(() => expect(lastEventsParams().offset).toBe(50))
+    await waitFor(() => expect(lastEventsParams().offset).toBe(25))
     fireEvent.change(screen.getByLabelText('From'), {
       target: { value: '1991-06-30' },
     })
