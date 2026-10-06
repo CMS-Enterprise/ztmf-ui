@@ -16,6 +16,11 @@ import { ERROR_MESSAGES } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { colors, fonts } from '@/theme/tokens'
 
+// Both fields are rejected by the backend below this length. Stated in the
+// helper text and enforced on Send so the rule is visible before the round
+// trip rather than coming back as a generic error.
+const MIN_TEXT_LENGTH = 4
+
 const GROUP_OPTIONS = [
   { label: 'ISSO', value: 'ISSO' },
   { label: 'ISSM', value: 'ISSM' },
@@ -25,6 +30,12 @@ const GROUP_OPTIONS = [
   { label: 'DCC', value: 'DCC' },
   { label: 'ALL', value: 'ALL' },
 ]
+
+// The API key is what gets posted; anything shown to a person uses the label.
+const groupLabel = (value: string) =>
+  GROUP_OPTIONS.find((opt) => opt.value === value)?.label ?? value
+
+const minLengthHint = `At least ${MIN_TEXT_LENGTH} characters.`
 
 /**
  * Email-users modal. Sends a mass email to a selected role group. Migrated to
@@ -44,11 +55,13 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const [subject, setSubject] = React.useState<string>('')
   const [body, setBody] = React.useState<string>('')
   const [sentGroup, setSentGroup] = React.useState<string>('')
+  const [touched, setTouched] = React.useState({ subject: false, body: false })
   const resetEmailInputs = () => {
     setBody('')
     setGroupValue('')
     setSubject('')
     setSentToEmails([])
+    setTouched({ subject: false, body: false })
   }
   const handleClose = () => {
     setTimeout(() => {
@@ -57,21 +70,54 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     closeModal()
   }
   const sendEmail = useSendMassEmail()
+  const canSend =
+    groupValue.length > 0 &&
+    subject.trim().length >= MIN_TEXT_LENGTH &&
+    body.trim().length >= MIN_TEXT_LENGTH
+  // Shown only once the user has typed and left the field, so an untouched form
+  // does not open covered in red and role="alert" does not fire mid-word.
+  const tooShort = (value: string, wasTouched: boolean) =>
+    wasTouched && value.length > 0 && value.trim().length < MIN_TEXT_LENGTH
+      ? `Needs at least ${MIN_TEXT_LENGTH} characters.`
+      : undefined
+  const subjectError = tooShort(subject, touched.subject)
+  const bodyError = tooShort(body, touched.body)
+  const describedBy = (id: string, error: string | undefined) =>
+    error ? `${id}-error` : `${id}-helper`
+  // isPending lags the click by a render, so a fast double-click can get past
+  // the disabled button; the ref closes that gap.
+  const inFlight = React.useRef(false)
   const submitEmail = async () => {
+    if (inFlight.current || sendEmail.isPending) return
+    inFlight.current = true
     try {
       const recipients = await sendEmail.mutateAsync({
         group: groupValue,
         subject,
         body,
       })
-      setSentGroup(groupValue)
-      notify('Emails have successfully been sent', 'success', {
-        autoHideDuration: 2500,
-      })
+      setSentGroup(groupLabel(groupValue))
+      if (recipients.length === 0) {
+        notify(
+          `No one in ${groupLabel(groupValue)} has an email address on file, so nothing was sent.`,
+          'warning',
+          { autoHideDuration: 4000 }
+        )
+      } else {
+        notify(
+          `Sending to ${recipients.length} ${
+            recipients.length === 1 ? 'recipient' : 'recipients'
+          }.`,
+          'success',
+          { autoHideDuration: 2500 }
+        )
+      }
       setSentToEmails(recipients)
     } catch (error) {
       if (isAuthHandled(error)) return
       notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+    } finally {
+      inFlight.current = false
     }
   }
 
@@ -101,7 +147,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             <Button
               variant="contained"
               color="primary"
-              disabled={!(subject && groupValue && body)}
+              disabled={!canSend || sendEmail.isPending}
               onClick={submitEmail}
             >
               Send
@@ -127,7 +173,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               input={<OutlinedInput sx={fieldInputSx} />}
               renderValue={(selected) =>
                 selected ? (
-                  selected
+                  groupLabel(selected)
                 ) : (
                   <Box component="span" sx={{ color: colors.neutral500 }}>
                     Select a recipient group
@@ -142,18 +188,35 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               ))}
             </Select>
           </Field>
-          <Field id="email_subject" label="Subject" required>
+          <Field
+            id="email_subject"
+            label="Subject"
+            required
+            helperText={`Appears as the subject line of the email. ${minLengthHint}`}
+            error={subjectError}
+          >
             <OutlinedInput
               id="email_subject"
               name="email_subject"
               fullWidth
               value={subject}
-              inputProps={{ maxLength: 100 }}
+              inputProps={{
+                maxLength: 100,
+                'aria-invalid': Boolean(subjectError),
+                'aria-describedby': describedBy('email_subject', subjectError),
+              }}
               onChange={(e) => setSubject(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, subject: true }))}
               sx={fieldInputSx}
             />
           </Field>
-          <Field id="email_body" label="Message" required>
+          <Field
+            id="email_body"
+            label="Message"
+            required
+            helperText={minLengthHint}
+            error={bodyError}
+          >
             <OutlinedInput
               id="email_body"
               name="email_body"
@@ -161,8 +224,13 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               multiline
               minRows={8}
               value={body}
-              inputProps={{ maxLength: 2000 }}
+              inputProps={{
+                maxLength: 2000,
+                'aria-invalid': Boolean(bodyError),
+                'aria-describedby': describedBy('email_body', bodyError),
+              }}
               onChange={(e) => setBody(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, body: true }))}
               sx={fieldInputSx}
             />
             <Typography
