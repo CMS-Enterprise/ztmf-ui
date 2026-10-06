@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react'
 import axiosInstance from '@/axiosConfig'
 import { isAuthHandled } from '@/utils/notify'
 import { tierForScore } from '@/utils/tierStyles'
-import { PILLAR_ORDER } from '@/constants'
 import type { FismaQuestion, ScoreTier } from '@/types'
 
 /**
@@ -39,16 +38,13 @@ export interface QuestionBreakdownRow {
   questionid: number
   question: string
   pillar: string
+  // Index of the question in the /questions payload, which the API already
+  // serves in questionnaire order (ztmf-misc#393). Rows are built by walking
+  // /scores, whose order is its own, so they are re-sorted on this.
+  position: number
   functionName: string
   displayScore: number
   tier: ScoreTier
-}
-
-/** Stable sort: known pillars first, in PILLAR_ORDER. */
-function pillarRank(name: string | undefined): number {
-  if (!name) return Number.MAX_SAFE_INTEGER
-  const i = PILLAR_ORDER.indexOf(name)
-  return i === -1 ? Number.MAX_SAFE_INTEGER : i
 }
 
 /**
@@ -64,8 +60,8 @@ function pillarRank(name: string | undefined): number {
  *
  * Rows are joined on functionid, the score is shifted (+1) onto the 1-5
  * scale the rest of the page uses, the tier is derived from that shifted
- * value via {@link tierForScore}, and the result is stably sorted by
- * pillar order then function name. The list endpoint may return a stale
+ * value via {@link tierForScore}, and the result is sorted into the
+ * questionnaire's order. The list endpoint may return a stale
  * score for a function that has since been removed; those rows are dropped
  * defensively.
  *
@@ -127,19 +123,21 @@ export function useQuestionBreakdown(
         questionid: number
         question: string
         pillar: string
+        position: number
         functionName: string
       }
     >()
-    for (const q of questions) {
+    questions.forEach((q, position) => {
       if (q.function?.functionid != null) {
         map.set(q.function.functionid, {
           questionid: q.questionid,
           question: q.question,
           pillar: q.pillar?.pillar ?? '-',
+          position,
           functionName: q.function.function,
         })
       }
-    }
+    })
     return map
   }, [questions])
 
@@ -157,23 +155,20 @@ export function useQuestionBreakdown(
         questionid: q.questionid,
         question: q.question,
         pillar: q.pillar,
+        position: q.position,
         functionName: q.functionName,
         displayScore,
         tier: tierForScore(displayScore),
       })
     }
-    return out.sort((a, b) => {
-      const pr = pillarRank(a.pillar) - pillarRank(b.pillar)
-      if (pr !== 0) return pr
-      return a.functionName.localeCompare(b.functionName)
-    })
+    return out.sort((a, b) => a.position - b.position)
   }, [scores, questionByFunctionId])
 
-  const pillarOptions = useMemo(() => {
-    const set = new Set<string>()
-    for (const r of rows) set.add(r.pillar)
-    return Array.from(set).sort((a, b) => pillarRank(a) - pillarRank(b))
-  }, [rows])
+  // Rows are in questionnaire order, so first appearance is pillar order.
+  const pillarOptions = useMemo(
+    () => Array.from(new Set(rows.map((r) => r.pillar))),
+    [rows]
+  )
 
   return { rows, loading, pillarOptions }
 }

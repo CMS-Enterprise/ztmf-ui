@@ -280,3 +280,47 @@ it('never re-filters the response client-side', async () => {
   })
   expect(screen.getAllByText('Applications').length).toBeGreaterThan(0)
 })
+
+// The pillar rail's labels, in DOM order. Each pillar is a role="button" tile
+// whose first Typography carries the name; CrossCutting renders "Cross-cutting".
+const PILLAR_LABELS = [
+  'Identity',
+  'Devices',
+  'Networks',
+  'Applications',
+  'Data',
+  'Cross-cutting',
+]
+const railPillars = () =>
+  Array.from(document.querySelectorAll('[role="button"]'))
+    .map((el) => el.querySelector('p')?.textContent?.trim() ?? '')
+    .filter((t) => PILLAR_LABELS.includes(t))
+
+it('renders pillars in the order the API served them', async () => {
+  // Deliberately not the CISA sequence. The client-side pillar sort deleted in
+  // ztmf-misc#393 would have re-ranked this to Identity, Networks, Data,
+  // hiding whatever the API actually said.
+  //
+  // Cross-cutting is expected last regardless: PillarRail splits it into its
+  // own section below the main pillars, so its position is a layout decision
+  // rather than an ordering one.
+  mockCtx = makeCtx(CURRENT_CALL)
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({
+        data: {
+          data: questionsFor(['Data', 'CrossCutting', 'Identity', 'Networks']),
+        },
+      })
+    return Promise.resolve({ data: { data: [] } })
+  })
+  renderPage()
+
+  await waitFor(() => expect(railPillars()).toHaveLength(4))
+  expect(railPillars()).toEqual([
+    'Data',
+    'Identity',
+    'Networks',
+    'Cross-cutting',
+  ])
+})
