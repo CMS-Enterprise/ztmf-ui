@@ -65,10 +65,14 @@ beforeEach(() => {
 test('states the minimum length and blocks Send until both fields meet it', async () => {
   renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
 
-  // An untouched form explains the field rather than opening covered in red.
+  // An untouched form states the rule on both fields rather than opening
+  // covered in red.
   expect(
-    screen.getByText(/appears as the subject line of the email/i)
+    screen.getByText(
+      'Appears as the subject line of the email. At least 4 characters.'
+    )
   ).toBeInTheDocument()
+  expect(screen.getByText('At least 4 characters.')).toBeInTheDocument()
   expect(screen.queryByText(/needs at least 4 characters/i)).toBeNull()
 
   const group = screen.getByRole('combobox', { name: /send to/i })
@@ -103,6 +107,56 @@ test('states the minimum length and blocks Send until both fields meet it', asyn
   expect(screen.queryByText(/needs at least 4 characters/i)).toBeNull()
 
   expect(mock.history.post).toHaveLength(0)
+})
+
+test('shows the length error only after leaving the field, wired to the input', async () => {
+  renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
+
+  const subject = document.querySelector(
+    'input[name="email_subject"]'
+  ) as HTMLInputElement
+
+  // Points at the helper while the field is fine.
+  expect(subject).toHaveAttribute('aria-invalid', 'false')
+  expect(subject).toHaveAttribute('aria-describedby', 'email_subject-helper')
+
+  // Still typing: no alert yet, so a screen reader is not interrupted mid-word.
+  await userEvent.type(subject, 'sg')
+  expect(screen.queryByRole('alert')).toBeNull()
+
+  await userEvent.tab()
+  const alert = await screen.findByRole('alert')
+  expect(alert).toHaveTextContent(/needs at least 4 characters/i)
+  expect(alert).toHaveAttribute('id', 'email_subject-error')
+  expect(subject).toHaveAttribute('aria-invalid', 'true')
+  expect(subject).toHaveAttribute('aria-describedby', 'email_subject-error')
+})
+
+test('a double-click on Send posts once', async () => {
+  let resolve: (v: [number, unknown]) => void = () => {}
+  mock.onPost('/massemails').reply(() => new Promise((r) => (resolve = r)))
+
+  renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
+  await userEvent.click(screen.getByRole('combobox', { name: /send to/i }))
+  await userEvent.click(await screen.findByRole('option', { name: 'ALL' }))
+  await userEvent.type(
+    document.querySelector('input[name="email_subject"]') as HTMLInputElement,
+    'hello'
+  )
+  await userEvent.type(
+    document.querySelector(
+      'textarea[name="email_body"]'
+    ) as HTMLTextAreaElement,
+    'world'
+  )
+  const send = screen.getByRole('button', { name: /^send$/i })
+  await userEvent.dblClick(send)
+
+  await waitFor(() => expect(send).toBeDisabled())
+  expect(mock.history.post).toHaveLength(1)
+  resolve([200, { data: ['a@example.com'] }])
+  expect(await screen.findByText(/sending to 1 recipient/i)).toBeInTheDocument()
+  expect(mock.history.post).toHaveLength(1)
 })
 
 test('success path fires the success snackbar and surfaces sent emails', async () => {
@@ -172,6 +226,40 @@ test('offers System Delegate as a targetable email group and posts its key', asy
   await waitFor(() => {
     expect(posted.group).toBe('SYSTEM_DELEGATE')
   })
+  // Everything a person reads uses the label; only the POST carries the key.
+  expect(group).toHaveTextContent('System Delegate')
+  expect(screen.queryByText(/SYSTEM_DELEGATE/)).toBeNull()
+  await userEvent.click(
+    await screen.findByRole('button', { name: /view recipients/i })
+  )
+  expect(await screen.findByText('Sent to System Delegate')).toBeInTheDocument()
+})
+
+test('the nobody-contactable warning names the group by its label', async () => {
+  mock.onPost('/massemails').reply(200, { data: [] })
+
+  renderWithProviders(<EmailModal openModal={true} closeModal={jest.fn()} />)
+  await userEvent.click(screen.getByRole('combobox', { name: /send to/i }))
+  await userEvent.click(
+    await screen.findByRole('option', { name: 'System Delegate' })
+  )
+  await userEvent.type(
+    document.querySelector('input[name="email_subject"]') as HTMLInputElement,
+    'hello'
+  )
+  await userEvent.type(
+    document.querySelector(
+      'textarea[name="email_body"]'
+    ) as HTMLTextAreaElement,
+    'world'
+  )
+  await userEvent.click(screen.getByRole('button', { name: /^send$/i }))
+
+  expect(
+    await screen.findByText(
+      /no one in System Delegate has an email address on file/i
+    )
+  ).toBeInTheDocument()
 })
 
 test('offers READONLY_ADMIN as a targetable email group and posts its key', async () => {

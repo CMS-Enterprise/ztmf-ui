@@ -31,6 +31,12 @@ const GROUP_OPTIONS = [
   { label: 'ALL', value: 'ALL' },
 ]
 
+// The API key is what gets posted; anything shown to a person uses the label.
+const groupLabel = (value: string) =>
+  GROUP_OPTIONS.find((opt) => opt.value === value)?.label ?? value
+
+const minLengthHint = `At least ${MIN_TEXT_LENGTH} characters.`
+
 /**
  * Email-users modal. Sends a mass email to a selected role group. Migrated to
  * the shared Modal shell (rounded, X close, Cancel beside the primary action)
@@ -49,11 +55,13 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
   const [subject, setSubject] = React.useState<string>('')
   const [body, setBody] = React.useState<string>('')
   const [sentGroup, setSentGroup] = React.useState<string>('')
+  const [touched, setTouched] = React.useState({ subject: false, body: false })
   const resetEmailInputs = () => {
     setBody('')
     setGroupValue('')
     setSubject('')
     setSentToEmails([])
+    setTouched({ subject: false, body: false })
   }
   const handleClose = () => {
     setTimeout(() => {
@@ -66,23 +74,32 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     groupValue.length > 0 &&
     subject.trim().length >= MIN_TEXT_LENGTH &&
     body.trim().length >= MIN_TEXT_LENGTH
-  // Shown only once there is something to judge, so an untouched form does not
-  // open covered in red.
-  const tooShort = (value: string) =>
-    value.length > 0 && value.trim().length < MIN_TEXT_LENGTH
+  // Shown only once the user has typed and left the field, so an untouched form
+  // does not open covered in red and role="alert" does not fire mid-word.
+  const tooShort = (value: string, wasTouched: boolean) =>
+    wasTouched && value.length > 0 && value.trim().length < MIN_TEXT_LENGTH
       ? `Needs at least ${MIN_TEXT_LENGTH} characters.`
       : undefined
+  const subjectError = tooShort(subject, touched.subject)
+  const bodyError = tooShort(body, touched.body)
+  const describedBy = (id: string, error: string | undefined) =>
+    error ? `${id}-error` : `${id}-helper`
+  // isPending lags the click by a render, so a fast double-click can get past
+  // the disabled button; the ref closes that gap.
+  const inFlight = React.useRef(false)
   const submitEmail = async () => {
+    if (inFlight.current || sendEmail.isPending) return
+    inFlight.current = true
     try {
       const recipients = await sendEmail.mutateAsync({
         group: groupValue,
         subject,
         body,
       })
-      setSentGroup(groupValue)
+      setSentGroup(groupLabel(groupValue))
       if (recipients.length === 0) {
         notify(
-          `No one in ${groupValue} has an email address on file, so nothing was sent.`,
+          `No one in ${groupLabel(groupValue)} has an email address on file, so nothing was sent.`,
           'warning',
           { autoHideDuration: 4000 }
         )
@@ -99,6 +116,8 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
     } catch (error) {
       if (isAuthHandled(error)) return
       notify(ERROR_MESSAGES.tryAgain, 'error', { autoHideDuration: 2500 })
+    } finally {
+      inFlight.current = false
     }
   }
 
@@ -128,7 +147,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             <Button
               variant="contained"
               color="primary"
-              disabled={!canSend}
+              disabled={!canSend || sendEmail.isPending}
               onClick={submitEmail}
             >
               Send
@@ -154,7 +173,7 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               input={<OutlinedInput sx={fieldInputSx} />}
               renderValue={(selected) =>
                 selected ? (
-                  selected
+                  groupLabel(selected)
                 ) : (
                   <Box component="span" sx={{ color: colors.neutral500 }}>
                     Select a recipient group
@@ -173,16 +192,21 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             id="email_subject"
             label="Subject"
             required
-            helperText="Appears as the subject line of the email."
-            error={tooShort(subject)}
+            helperText={`Appears as the subject line of the email. ${minLengthHint}`}
+            error={subjectError}
           >
             <OutlinedInput
               id="email_subject"
               name="email_subject"
               fullWidth
               value={subject}
-              inputProps={{ maxLength: 100 }}
+              inputProps={{
+                maxLength: 100,
+                'aria-invalid': Boolean(subjectError),
+                'aria-describedby': describedBy('email_subject', subjectError),
+              }}
               onChange={(e) => setSubject(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, subject: true }))}
               sx={fieldInputSx}
             />
           </Field>
@@ -190,7 +214,8 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
             id="email_body"
             label="Message"
             required
-            error={tooShort(body)}
+            helperText={minLengthHint}
+            error={bodyError}
           >
             <OutlinedInput
               id="email_body"
@@ -199,8 +224,13 @@ export default function EmailModal({ openModal, closeModal }: EmailModalProps) {
               multiline
               minRows={8}
               value={body}
-              inputProps={{ maxLength: 2000 }}
+              inputProps={{
+                maxLength: 2000,
+                'aria-invalid': Boolean(bodyError),
+                'aria-describedby': describedBy('email_body', bodyError),
+              }}
               onChange={(e) => setBody(e.target.value)}
+              onBlur={() => setTouched((t) => ({ ...t, body: true }))}
               sx={fieldInputSx}
             />
             <Typography
