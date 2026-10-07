@@ -320,9 +320,6 @@ export type editSystemModalProps = {
 export type datacallModalProps = {
   open: boolean
   onClose: () => void
-  // Fired after a successful POST /datacalls so the parent can re-fetch
-  // its data-call list and the new call appears without a manual reload.
-  onCreated?: () => void
 }
 
 export type ScoreData = {

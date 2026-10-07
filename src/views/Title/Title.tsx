@@ -24,10 +24,13 @@ import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { notify, isAuthHandled } from '@/utils/notify'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/api/keys'
 import { useOpDivs } from '@/utils/opdivs'
+import { useDatacalls } from '@/utils/datacalls'
+import { useFismaSystems } from '@/utils/fismaSystems'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { useDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
-import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
@@ -59,14 +62,12 @@ export default function Title() {
   const normalizedPath = location.pathname.toLowerCase().replace(/\/$/, '')
   const isSignInRoute = normalizedPath === Routes.SIGNIN.toLowerCase()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
-  const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
-  const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
   // The dashboard aggregates the active year's data calls. activeYear is the
   // selected fiscal year; activeDatacallIds are the toggled-on calls within it
   // (all on by default). See groupDatacallsByYear / #467.
   // Only the setter is needed now that the year is implied by the selected
-  // call; kept as state so fetchDatacalls' initial-load reset still works.
+  // call; kept as state so the default-selection effect below can set it.
   const [activeYear, setActiveYear] = useState<number | null>(null)
   const [activeDatacallIds, setActiveDatacallIds] = useState<number[]>([])
   const [latestDeadline, setLatestDeadline] = useState<string>('')
@@ -76,6 +77,37 @@ export default function Title() {
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
   const [dashboardSearch, setDashboardSearch] = useState<string>('')
   const authenticated = loaderData.status === 200
+  const queryClient = useQueryClient()
+  const { fismaSystems, fismaSystemsLoaded } = useFismaSystems(
+    showDecommissioned,
+    { enabled: authenticated }
+  )
+  const { datacalls } = useDatacalls({ enabled: authenticated })
+  // Same signature the context has always exposed, writing the query cache
+  // instead of component state so consumers are unchanged. The announce-style
+  // callers become invalidations in a later commit; the remaining ones append
+  // a system the filtered list does not carry.
+  const fetchFismaSystems = useCallback(async () => {
+    await queryClient.invalidateQueries({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+  }, [queryClient])
+  const setFismaSystems = useCallback<
+    React.Dispatch<React.SetStateAction<FismaSystemType[]>>
+  >(
+    (update) => {
+      queryClient.setQueryData<FismaSystemType[]>(
+        queryKeys.fismaSystems.list(showDecommissioned),
+        (prev) =>
+          typeof update === 'function'
+            ? (update as (p: FismaSystemType[]) => FismaSystemType[])(
+                prev ?? []
+              )
+            : update
+      )
+    },
+    [queryClient, showDecommissioned]
+  )
   // Datacenter-environment vocabulary is reference data shared by the system
   // form (dropdown) and the questionnaire pillar filter, so it is fetched
   // once here and passed down via context. Failure is non-fatal: consumers
@@ -93,40 +125,6 @@ export default function Title() {
     opdivsLoaded,
     error: opdivsError,
   } = useOpDivs(true, { enabled: authenticated })
-  const [fismaSystemsLoaded, setFismaSystemsLoaded] = useState(false)
-
-  const fetchFismaSystems = useCallback(
-    async (decommissioned: boolean = false) => {
-      try {
-        const res = await axiosInstance.get(
-          apiPaths.fismaSystems.list(decommissioned)
-        )
-        setFismaSystems(res.data.data)
-      } catch (error) {
-        console.error(
-          'Fetch systems error:',
-          (error as { response?: { status?: number; data?: unknown } }).response
-            ?.status,
-          (error as { response?: { status?: number; data?: unknown } }).response
-            ?.data
-        )
-      } finally {
-        setFismaSystemsLoaded(true)
-      }
-    },
-    []
-  )
-
-  // Both of the effects below gate on loaderData.status === 200 (an active
-  // app session) rather than only on serverError. When the user is not
-  // logged in or has no app account, the loader returns { ok: false } with
-  // no status field, and these calls would 401. Those 401s do not use
-  // skipAuthHandling, so the centralized interceptor catches them and
-  // redirects to /signin with the "session expired" message - misleading
-  // for the never-logged-in case and noisy on every cold load.
-  useEffect(() => {
-    if (loaderData.status === 200) fetchFismaSystems(showDecommissioned)
-  }, [showDecommissioned, fetchFismaSystems, loaderData.status])
 
   useEffect(() => {
     if (loaderData.status === 200) void clearOtherUserDrafts(userInfo.userid)
@@ -143,51 +141,6 @@ export default function Title() {
   // refetch passes false so refreshing the list does not clobber whatever
   // year/selection the user is currently viewing - that selection flows through
   // the Outlet context to the dashboard and questionnaire.
-  const fetchDatacalls = useCallback(
-    async (signal?: AbortSignal, resetSelection: boolean = true) => {
-      try {
-        const res = await axiosInstance.get(
-          apiPaths.datacalls.root,
-          signal ? { signal } : {}
-        )
-        if (signal?.aborted) return
-        // "Latest"/"current" is the call with the furthest-out deadline, not
-        // the highest datacallid: historical loads can carry a higher id than
-        // the real current call. datacallid is only a tiebreak.
-        const sorted: datacall[] = sortDatacallsByDeadline(
-          res.data.data as datacall[]
-        )
-        setDatacalls(sorted)
-        if (sorted.length > 0) {
-          setLatestDataCallId(sorted[0].datacallid)
-          setLatestDatacall(sorted[0].datacall)
-          setLatestDeadline(sorted[0].deadline)
-          // Default to the latest year with data, all of its calls toggled on -
-          // initial load only; a post-create refetch keeps the user's selection.
-          if (resetSelection) {
-            const [firstGroup] = groupDatacallsByYear(sorted)
-            if (firstGroup) {
-              setActiveYear(firstGroup.year)
-              setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
-            }
-          }
-        }
-      } catch (error) {
-        if (signal?.aborted) return
-        console.error('Fetch latest datacall error:', error)
-      }
-    },
-    []
-  )
-
-  useEffect(() => {
-    if (loaderData.status !== 200) return
-    const controller = new AbortController()
-    fetchDatacalls(controller.signal)
-    return () => {
-      controller.abort()
-    }
-  }, [loaderData.status, fetchDatacalls])
 
   // Notifies rather than logs, unlike the environments fetch: this is the only
   // OpDiv fetch site, so an empty list persists for the session and leaves the
@@ -200,6 +153,24 @@ export default function Title() {
       })
     }
   }, [opdivsError])
+
+  // Derived from the data calls rather than assigned inside the fetch. The
+  // default selection is only applied while nothing is selected, so a refetch
+  // after a create cannot clobber what the user picked.
+  useEffect(() => {
+    if (datacalls.length === 0) return
+    const [latest] = datacalls
+    setLatestDataCallId(latest.datacallid)
+    setLatestDatacall(latest.datacall)
+    setLatestDeadline(latest.deadline)
+    setActiveDatacallIds((current) => {
+      if (current.length > 0) return current
+      const [firstGroup] = groupDatacallsByYear(datacalls)
+      if (!firstGroup) return current
+      setActiveYear(firstGroup.year)
+      return firstGroup.calls.map((c) => c.datacallid)
+    })
+  }, [datacalls])
 
   const datacallsByYear = useMemo(
     () => groupDatacallsByYear(datacalls),
@@ -717,11 +688,7 @@ export default function Title() {
         openModal={openEmailModal}
         closeModal={handleCloseEmailModal}
       />
-      <DataCallModal
-        open={openDataCallModal}
-        onClose={handleDataCallClose}
-        onCreated={() => fetchDatacalls(undefined, false)}
-      />
+      <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
       <Footer />
     </>
   )

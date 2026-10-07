@@ -1,7 +1,52 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
+import type { QueryHookOptions } from '@/queryClient'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import type { FismaSystemType } from '@/types'
+
+/**
+ * Reads the FISMA system list.
+ *
+ * @param decommissioned - Include decommissioned systems. Part of the cache
+ *   key, so toggling swaps between two cached lists rather than refetching one.
+ * @param signal - Optional AbortSignal to cancel the request.
+ * @returns The system rows (empty array when none).
+ */
+export async function fetchFismaSystems(
+  decommissioned: boolean,
+  signal?: AbortSignal
+): Promise<FismaSystemType[]> {
+  const res = await axiosInstance.get<{ data: FismaSystemType[] | null }>(
+    apiPaths.fismaSystems.list(decommissioned),
+    { signal }
+  )
+  return res.data.data ?? []
+}
+
+/**
+ * Reads the shared FISMA system list for a component.
+ *
+ * The decommissioned flag is part of the key rather than a refetch trigger, so
+ * flipping the dashboard toggle swaps to the other cached list and flipping
+ * back is free.
+ *
+ * @param decommissioned - Pass true to include decommissioned systems.
+ * @param options - `enabled`, for a layout that must not fetch before the
+ *   session loader has authenticated.
+ * @returns The rows and whether the first load has settled.
+ */
+export function useFismaSystems(
+  decommissioned: boolean,
+  options: QueryHookOptions = {}
+): { fismaSystems: FismaSystemType[]; fismaSystemsLoaded: boolean } {
+  const { data, isPending } = useQuery({
+    queryKey: queryKeys.fismaSystems.list(decommissioned),
+    queryFn: ({ signal }) => fetchFismaSystems(decommissioned, signal),
+    enabled: options.enabled,
+  })
+  return { fismaSystems: data ?? EMPTY_LIST, fismaSystemsLoaded: !isPending }
+}
 
 /** Request body for PUT /fismasystems/{id}/target-maturity. */
 export type TargetMaturityInput = {
