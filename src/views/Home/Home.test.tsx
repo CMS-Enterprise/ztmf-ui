@@ -28,7 +28,7 @@ jest.mock('../EditSystemModal/EditSystemModal', () => (props: object) => {
   return null
 })
 
-import { screen } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Home from './Home'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
@@ -96,4 +96,36 @@ test('the Add system modal receives the shared OpDiv list', async () => {
   expect(modalProps.mode).toBe('create')
   // The full list, inactive included: the modal filters to active itself.
   expect(modalProps.opdivs).toEqual(OPDIVS)
+})
+
+test('the trend read shares the fan-out key, so the prior call is fetched once', async () => {
+  // Two calls active, and the prior call for the trend is the second of them.
+  // The dashboard asks for call 4's aggregate twice over: once in the fan-out
+  // and once for the trend. They share a query key, so one request goes out.
+  mockCtx.datacalls = [
+    {
+      datacallid: 5,
+      datacall: 'FY26 ZTM',
+      datecreated: '2025-10-01T00:00:00Z',
+      deadline: '2099-12-31T23:59:59Z',
+    },
+    {
+      datacallid: 4,
+      datacall: 'FY25 ZTM',
+      datecreated: '2024-10-01T00:00:00Z',
+      deadline: '2025-12-31T23:59:59Z',
+    },
+  ]
+  mockCtx.activeDatacallIds = [5, 4]
+
+  renderWithProviders(<Home />)
+  await screen.findByRole('button', { name: 'Add system' })
+
+  const aggregateCalls = () =>
+    (axiosInstance.get as jest.Mock).mock.calls
+      .map(([url]) => String(url))
+      .filter((url) => url.includes('/scores/aggregate'))
+  await waitFor(() => expect(aggregateCalls().length).toBeGreaterThan(0))
+
+  expect(aggregateCalls().filter((url) => url.includes('=4'))).toHaveLength(1)
 })
