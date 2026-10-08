@@ -6,8 +6,9 @@
  * placeholders, and offers each header action only to the tier the backend
  * would accept it from.
  */
-import { screen, within } from '@testing-library/react'
+import { screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
+import { Route, Routes, useLocation } from 'react-router-dom'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, OpDiv, UserRole, userData } from '@/types'
 import { EXTREMES_PER_END } from './opdivAggregates'
@@ -42,6 +43,15 @@ let mockScoreRows: {
 }[]
 let mockUsers: userData[]
 let mockOpDivId: string
+let mockHistory: {
+  datacallid: number
+  fismasystemid: number
+  systemscore: number
+}[]
+const mockCalls: string[] = []
+const mockUpdate = jest.fn()
+const mockDelegate = jest.fn()
+const mockNotify = jest.fn()
 let mockContext: Record<string, unknown>
 let mockScoresError: boolean
 let mockUsersError: boolean
@@ -144,7 +154,27 @@ jest.mock('@/utils/scores', () => ({
     isError: false,
   }),
   usePillarAggregates: () => ({ data: [], isPending: false }),
-  useScoreHistory: () => ({ data: [], isPending: false, isError: false }),
+  useScoreHistory: () => ({
+    data: mockHistory,
+    isPending: false,
+    isError: false,
+  }),
+}))
+
+jest.mock('@/utils/opdivs', () => ({
+  ...jest.requireActual('@/utils/opdivs'),
+  useUpdateOpDiv: () => ({ mutateAsync: mockUpdate, isPending: false }),
+}))
+jest.mock('@/utils/delegates', () => ({
+  ...jest.requireActual('@/utils/delegates'),
+  useSetOpDivDelegateEnabled: () => ({
+    mutateAsync: mockDelegate,
+    isPending: false,
+  }),
+}))
+jest.mock('@/utils/notify', () => ({
+  ...jest.requireActual('@/utils/notify'),
+  notify: (...args: unknown[]) => mockNotify(...args),
 }))
 
 const mockExport = jest.fn().mockResolvedValue(undefined)
@@ -163,6 +193,8 @@ jest.mock('@/utils/users', () => ({
 }))
 
 import OpDivDashboard from './OpDivDashboard'
+import OpDivIndexRedirect from './OpDivIndexRedirect'
+import { NOT_STARTED_PANEL_ID } from './components/OpDivKpiRow'
 
 const makeSystem = (
   id: number,
@@ -240,9 +272,20 @@ beforeEach(() => {
       assignedopdivids: [7],
     },
   ] as userData[]
+  mockHistory = []
+  mockCalls.length = 0
+  mockUpdate.mockReset().mockImplementation(async () => {
+    mockCalls.push('identity')
+  })
+  mockDelegate.mockReset().mockImplementation(async () => {
+    mockCalls.push('delegate')
+  })
+  mockNotify.mockReset()
   mockSetShowDecommissioned.mockClear()
   mockExport.mockClear()
 })
+
+const Landed = () => <p>landed on {useLocation().pathname}</p>
 
 describe('OpDivDashboard', () => {
   it('names the OpDiv and renders its computed score', () => {
@@ -589,5 +632,81 @@ describe('OpDivDashboard', () => {
       renderWithProviders(<OpDivDashboard />)
       expect(screen.getByRole('button', { name: /^export$/i })).toBeDisabled()
     })
+  })
+
+  describe('settings save', () => {
+    const save = async () => {
+      renderWithProviders(<OpDivDashboard />)
+      await userEvent.click(screen.getByRole('button', { name: /settings/i }))
+      await userEvent.click(screen.getByLabelText('System Delegate role'))
+      await userEvent.click(screen.getByRole('button', { name: 'Save' }))
+    }
+
+    it('saves identity before the delegate toggle', async () => {
+      await save()
+      await waitFor(() => expect(mockCalls).toEqual(['identity', 'delegate']))
+    })
+
+    it('says which part saved when only the toggle fails', async () => {
+      mockDelegate.mockRejectedValue(new Error('boom'))
+      await save()
+      await waitFor(() =>
+        expect(mockNotify).toHaveBeenCalledWith(
+          expect.stringMatching(
+            /^Saved code, name.*but not the System Delegate/
+          ),
+          'error'
+        )
+      )
+    })
+  })
+
+  it('jumps from the Not started tile to its panel and focuses it', async () => {
+    Element.prototype.scrollIntoView = jest.fn()
+    renderWithProviders(<OpDivDashboard />)
+    await userEvent.click(screen.getByRole('button', { name: /^Not started/ }))
+    expect(document.activeElement).toBe(
+      document.getElementById(NOT_STARTED_PANEL_ID)
+    )
+  })
+
+  it('offers a text table of the trend', () => {
+    const call = (datacallid: number, name: string, deadline: string) => ({
+      datacallid,
+      datacall: name,
+      datecreated: '2024-10-01',
+      deadline,
+    })
+    mockContext = {
+      datacalls: [
+        call(103, 'FY25 ZTM', '2025-09-11'),
+        call(104, 'FY26 ZTM', '2026-09-11'),
+      ],
+    }
+    mockHistory = [103, 104].flatMap((datacallid) =>
+      [1, 2].map((fismasystemid) => ({
+        datacallid,
+        fismasystemid,
+        systemscore: 3,
+      }))
+    )
+    renderWithProviders(<OpDivDashboard />)
+    const rows = within(
+      screen.getByRole('table', { hidden: true })
+    ).getAllByRole('row', { hidden: true })
+    expect(rows).toHaveLength(3)
+  })
+
+  it('skips a just-deactivated OpDiv on the /opdivs redirect', () => {
+    window.sessionStorage.setItem('ztmf.lastOpDivId', '7')
+    mockUser = { ...makeUser('OPDIV_ADMIN'), assignedopdivids: [7, 9] }
+    const { container } = renderWithProviders(
+      <Routes>
+        <Route path="/opdivs" element={<OpDivIndexRedirect />} />
+        <Route path="/opdivs/:id" element={<Landed />} />
+      </Routes>,
+      { initialEntries: [{ pathname: '/opdivs', state: { skipOpDivId: 7 } }] }
+    )
+    expect(container).toHaveTextContent('landed on /opdivs/9')
   })
 })
