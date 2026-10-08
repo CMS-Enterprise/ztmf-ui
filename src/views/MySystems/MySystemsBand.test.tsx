@@ -1,6 +1,6 @@
-// The band's panels are exercised by mySystemsAggregates.test.ts; this suite
-// covers the shell - the decommissioned stand-down, the collapse preference,
-// and the delegate carve-out.
+// Covers the shell - the decommissioned stand-down, the collapse preference,
+// the trend-only detail, and the tiles that filter the systems table. Home's
+// suite covers the filter and the jump landing on the table.
 
 let mockCtx: Record<string, unknown>
 jest.mock('@/views/Title/Context', () => ({
@@ -8,112 +8,33 @@ jest.mock('@/views/Title/Context', () => ({
 }))
 
 // The body issues the real query stack; stub it so these tests stay about the
-// shell. mockData is what the band sees; detailArg records whether the band
-// asked for the expensive pillar/history reads.
+// shell. historyArg records whether the band asked for the score history.
 let mockData: Record<string, unknown>
-let detailArg: boolean | undefined
+let historyArg: boolean | undefined
 jest.mock('./useMySystemsData', () => ({
-  useMySystemsData: (includeDetail?: boolean) => {
-    detailArg = includeDetail
+  useMySystemsData: (includeHistory?: boolean) => {
+    historyArg = includeHistory
     return mockData
   },
 }))
 
-jest.mock('@/views/OpDivDashboard/components/OpDivHero', () => () => null)
+jest.mock('@/components/ScoreSummary/ScoreHero', () => () => null)
 
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import MySystemsBand from './MySystemsBand'
-import TargetPanel from './components/TargetPanel'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import { readCollapsed, writeCollapsed } from './collapsePreference'
-import { makeSystem } from '@/views/OpDivDashboard/testFixtures'
-
-/** A settled band with nothing in it - every panel silent. */
-function emptyData(overrides: Record<string, unknown> = {}) {
-  return {
-    isPending: false,
-    isError: false,
-    rows: [],
-    summary: {
-      systemCount: 0,
-      scoredCount: 0,
-      unscoredCount: 0,
-      avgScore: null,
-      hvaCount: 0,
-      hvaUnknownCount: 0,
-      highFipsCount: 0,
-      fipsUnknownCount: 0,
-      optimalAdvancedCount: 0,
-      highest: null,
-      lowest: null,
-    },
-    completion: {
-      systemsInCall: 0,
-      systemsComplete: 0,
-      notStarted: 0,
-      awaitingConfirmation: 0,
-      questionsExpected: 0,
-      questionsAnswered: 0,
-      questionsUpdated: 0,
-      progressPct: null,
-      measuresConfirmations: false,
-      lastUpdatedAt: null,
-    },
-    risk: { highImpact: 0, belowFloor: [], atOrAbove: 0, unscored: 0 },
-    targetGap: {
-      atOrAbove: 0,
-      below: 0,
-      noTarget: 0,
-      unscored: 0,
-      shortfalls: [],
-    },
-    delta: {
-      delta: null,
-      n: 0,
-      currentAvg: null,
-      priorAvg: null,
-      improved: 0,
-      declined: 0,
-    },
-    daysRemaining: null,
-    priorCall: null,
-    completionRows: [],
-    notStarted: [],
-    noTarget: [],
-    movement: [],
-    weakestPillars: [],
-    bySystem: [],
-    pillars: {
-      anchorCall: null,
-      averages: [],
-      extremes: { weakest: null, strongest: null, systems: 0 },
-      isPending: false,
-    },
-    trend: {
-      points: [],
-      isPending: false,
-      isError: false,
-      selectedCallId: null,
-      selectCall: jest.fn(),
-      tiers: [],
-      movers: { gained: [], lost: [], paired: 0, unchanged: 0 },
-    },
-    ...overrides,
-  }
-}
+import { actionableBandData, emptyBandData } from './testFixtures'
 
 beforeEach(() => {
   window.localStorage.clear()
-  detailArg = undefined
-  mockData = emptyData()
+  historyArg = undefined
+  mockData = emptyBandData()
   mockCtx = {
     showDecommissioned: false,
     fismaSystems: [],
     opdivs: [],
-    datacalls: [],
-    latestDataCallId: 0,
-    selectedDatacall: null,
   }
 })
 
@@ -190,141 +111,124 @@ describe('collapse preference', () => {
   })
 })
 
-describe('detail panels', () => {
-  it('does not fetch the pillar and history detail while collapsed', () => {
-    // Those are the expensive reads and the band ships collapsed, so paying
-    // for them on every ISSO's first paint would be pure waste.
+describe('detail', () => {
+  /** The region the toggle controls. */
+  function detailRegion() {
+    const toggle = screen.getByRole('button', { name: /detail/i })
+    return document.getElementById(
+      toggle.getAttribute('aria-controls') as string
+    ) as HTMLElement
+  }
+
+  it('does not fetch the score history while collapsed', () => {
     renderWithProviders(<MySystemsBand />)
 
-    expect(detailArg).toBe(false)
+    expect(historyArg).toBe(false)
   })
 
-  it('asks for the detail once expanded', async () => {
+  it('fetches the score history once expanded', async () => {
     const user = userEvent.setup()
     renderWithProviders(<MySystemsBand />)
 
     await user.click(screen.getByRole('button', { name: /show detail/i }))
 
-    expect(detailArg).toBe(true)
+    expect(historyArg).toBe(true)
   })
 
-  it('says so plainly when every panel would be empty', async () => {
-    const user = userEvent.setup()
-    renderWithProviders(<MySystemsBand />)
-
-    await user.click(screen.getByRole('button', { name: /show detail/i }))
-
-    expect(screen.getByText(/Nothing to report yet/i)).toBeVisible()
-  })
-
-  it('keeps an all-clear panel rather than hiding good news', async () => {
-    // "Every system has progress" is an answer; an absent panel is not.
-    mockData = emptyData({
-      completion: { systemsInCall: 2 },
-      summary: {
-        avgScore: 4,
-        scoredCount: 2,
-        systemCount: 2,
-        unscoredCount: 0,
+  it('shows only the score trend when expanded', async () => {
+    mockData = emptyBandData({
+      trend: {
+        ...(emptyBandData().trend as object),
+        points: [
+          { datacallid: 1, label: 'FY25 ZTM', deadline: '', avg: 3, n: 2 },
+          { datacallid: 2, label: 'FY26 ZTM', deadline: '', avg: 3.4, n: 2 },
+        ],
       },
     })
+    const user = userEvent.setup()
+    renderWithProviders(<MySystemsBand />)
+
+    await user.click(screen.getByRole('button', { name: /show detail/i }))
+
+    const detail = detailRegion()
+    expect(within(detail).getByText('Score trend')).toBeInTheDocument()
+    // One card: the trend, nothing beside it.
+    expect(detail.children).toHaveLength(1)
+  })
+
+  it("keeps the trend's own explanation when there is nothing to plot", async () => {
     const user = userEvent.setup()
     renderWithProviders(<MySystemsBand />)
 
     await user.click(screen.getByRole('button', { name: /show detail/i }))
 
     expect(
-      screen.getByText(/Every system has progress this call/i)
+      within(detailRegion()).getByText(
+        'No scored data calls yet for your systems.'
+      )
     ).toBeVisible()
-    expect(screen.queryByText(/Nothing to report yet/i)).not.toBeInTheDocument()
   })
 
-  it('drops Movement when no system is scored in both calls', async () => {
-    // Every row would read "not scored", which says nothing the hero's
-    // "no prior call to compare" note does not already say.
-    mockData = emptyData({
-      priorCall: { datacallid: 1, datacall: 'FY25 ZTM' },
-      movement: [
-        {
-          system: makeSystem({ fismasystemid: 1 }),
-          from: null,
-          to: 4,
-          delta: null,
-          direction: 'unpaired',
-        },
-      ],
-    })
-    const user = userEvent.setup()
+  it('wires the toggle to the detail region it controls', () => {
     renderWithProviders(<MySystemsBand />)
 
-    await user.click(screen.getByRole('button', { name: /show detail/i }))
-
-    expect(screen.queryByText('Movement')).not.toBeInTheDocument()
-  })
-
-  it('keeps Movement once something actually pairs', async () => {
-    mockData = emptyData({
-      priorCall: { datacallid: 1, datacall: 'FY25 ZTM' },
-      movement: [
-        {
-          system: makeSystem({ fismasystemid: 1 }),
-          from: 3,
-          to: 4,
-          delta: 1,
-          direction: 'gained',
-        },
-      ],
-    })
-    const user = userEvent.setup()
-    renderWithProviders(<MySystemsBand />)
-
-    await user.click(screen.getByRole('button', { name: /show detail/i }))
-
-    expect(screen.getByText('Movement')).toBeInTheDocument()
-  })
-
-  it('drops the trend until there are two points to join', async () => {
-    mockData = emptyData({
-      trend: {
-        points: [{ datacallid: 1, label: 'FY24', deadline: '', avg: 3, n: 1 }],
-        isPending: false,
-        isError: false,
-        tiers: [],
-        movers: {},
-      },
-    })
-    const user = userEvent.setup()
-    renderWithProviders(<MySystemsBand />)
-
-    await user.click(screen.getByRole('button', { name: /show detail/i }))
-
-    expect(screen.queryByText('Score trend')).not.toBeInTheDocument()
+    expect(detailRegion()).toBeInTheDocument()
   })
 })
 
-describe('target panel carve-out', () => {
-  it('names the systems still needing a target', () => {
-    renderWithProviders(
-      <TargetPanel
-        rows={[
-          {
-            system: makeSystem({ fismasystemid: 4, fismaacronym: 'NOTGT' }),
-            tier: 'Initial',
-          },
-        ]}
-        totalSystems={3}
-      />
-    )
+describe('tiles that filter the systems table', () => {
+  const tableJump = () => ({ targetId: 'systems-table', onJump: jest.fn() })
 
-    expect(screen.getByText('NOTGT')).toBeVisible()
-    expect(screen.getByText(/1 of 3 with no target set/i)).toBeVisible()
+  beforeEach(() => {
+    mockData = actionableBandData()
   })
 
-  it('reports an all-clear rather than an empty card', () => {
-    renderWithProviders(<TargetPanel rows={[]} totalSystems={3} />)
+  it.each(['Not started', 'Answers to confirm'])(
+    'hands %s to the table jump',
+    async (label) => {
+      const jump = tableJump()
+      const user = userEvent.setup()
+      renderWithProviders(<MySystemsBand tableJump={jump} />)
 
+      await user.click(
+        screen.getByRole('button', { name: new RegExp(`^${label}`) })
+      )
+
+      expect(jump.onJump).toHaveBeenCalledWith('systems-table')
+      // The headline is enough; the detail stays as the reader left it.
+      expect(readCollapsed()).toBe(true)
+    }
+  )
+
+  it('says the tile filters the table', async () => {
+    const user = userEvent.setup()
+    renderWithProviders(<MySystemsBand tableJump={tableJump()} />)
+
+    await user.hover(screen.getByRole('button', { name: /^Not started/ }))
+
+    expect(await screen.findByRole('tooltip')).toHaveTextContent(
+      /Filters the systems table/
+    )
+  })
+
+  it.each(['Not started', 'Answers to confirm'])(
+    'leaves %s a plain tile when the filter is unavailable',
+    (label) => {
+      renderWithProviders(<MySystemsBand />)
+
+      expect(screen.getByText(label)).toBeInTheDocument()
+      expect(
+        screen.queryByRole('button', { name: new RegExp(`^${label}`) })
+      ).not.toBeInTheDocument()
+    }
+  )
+
+  it('leaves the risk tile a plain tile', () => {
+    renderWithProviders(<MySystemsBand tableJump={tableJump()} />)
+
+    expect(screen.getByText('High impact at risk')).toBeInTheDocument()
     expect(
-      screen.getByText(/Every system you hold has a target/i)
-    ).toBeVisible()
+      screen.queryByRole('button', { name: /^High impact at risk/ })
+    ).not.toBeInTheDocument()
   })
 })

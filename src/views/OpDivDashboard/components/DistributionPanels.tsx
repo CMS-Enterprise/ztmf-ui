@@ -11,12 +11,12 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { colors, fonts } from '@/theme/tokens'
 import type { datacall } from '@/types'
-import BarList, { type BarListItem } from './BarList'
-import ChartCard from './ChartCard'
+import BarList, { type BarListItem } from '@/components/ScoreSummary/BarList'
+import ChartCard from '@/components/ScoreSummary/ChartCard'
 import ShowAllToggle from './ShowAllToggle'
 import { useExpandableRows } from './useExpandableRows'
 import StagePie from './StagePie'
-import { stageColor } from './stageColor'
+import { stageColor } from '@/components/ScoreSummary/stageColor'
 import {
   scoreSpread,
   splitExtremes,
@@ -177,12 +177,9 @@ export function PillarPanel({
 export function SystemScorePanel({
   bars,
   unscored,
-  scopeNoun = 'this OpDiv',
 }: {
   bars: SystemScoreBar[]
   unscored: number
-  /** What the ranking covers - see OpDivHero's scopeNoun. */
-  scopeNoun?: string
 }) {
   const toItem = (bar: SystemScoreBar): BarListItem => ({
     label: bar.acronym,
@@ -217,7 +214,7 @@ export function SystemScorePanel({
         max={MAX_SCORE}
         min={MIN_SCORE}
         labelWidth={88}
-        emptyMessage={`No scored systems in ${scopeNoun} yet.`}
+        emptyMessage="No scored systems in this OpDiv yet."
       />
       {hiddenCount > 0 && !expanded && (
         <>

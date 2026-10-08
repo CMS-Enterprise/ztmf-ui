@@ -23,7 +23,7 @@
  * misread. The qualifiers that used to trail the tiles as fine print live in
  * those explanations now.
  *
- * @module views/OpDivDashboard/components/OpDivKpiRow
+ * @module components/ScoreSummary/SummaryKpiRow
  */
 import Box from '@mui/material/Box'
 import { colors } from '@/theme/tokens'
@@ -33,8 +33,8 @@ import type {
   CompletionSummary,
   OpDivSummary,
   RiskSummary,
-} from '../opdivAggregates'
-import type { PairedDelta } from '../opdivTrend'
+} from '@/views/OpDivDashboard/opdivAggregates'
+import type { PairedDelta } from '@/views/OpDivDashboard/opdivTrend'
 
 /** Anchor on the panel naming the systems with no progress. */
 export const NOT_STARTED_PANEL_ID = 'opdiv-not-started'
@@ -43,8 +43,21 @@ export const RISK_PANEL_ID = 'opdiv-risk'
 /** Below this many days left, the deadline reads as urgent rather than noted. */
 const DEADLINE_URGENT_DAYS = 14
 
-/** Props for {@link OpDivKpiRow}. */
-export type OpDivKpiRowProps = {
+/** Panels the jump tiles open; a tile with no target here is not a button. */
+export type KpiJumpTargets = {
+  notStarted?: string
+  risk?: string
+  toConfirm?: string
+}
+
+const DEFAULT_JUMP_TARGETS: KpiJumpTargets = {
+  notStarted: NOT_STARTED_PANEL_ID,
+  risk: RISK_PANEL_ID,
+  toConfirm: NOT_STARTED_PANEL_ID,
+}
+
+/** Props for {@link SummaryKpiRow}. */
+export type SummaryKpiRowProps = {
   summary: OpDivSummary
   completion: CompletionSummary
   risk: RiskSummary
@@ -59,14 +72,20 @@ export type OpDivKpiRowProps = {
    * system-scoped dashboard, where "this OpDiv" misdescribes the scope.
    */
   scopeNoun?: string
+  /** Which panels the tiles may jump to. Defaults to the OpDiv page's. */
+  jumpTargets?: KpiJumpTargets
+  /** Replaces the default jump, for a host that must reveal the panel first. */
+  onJump?: (id: string) => void
+  /** Says where the jump tiles lead, replacing the default panel wording. */
+  jumpNote?: string
 }
 
 /**
  * Renders the four alert tiles and the four standing-fact tiles below them.
- * @param {OpDivKpiRowProps} props - The summaries behind every figure.
+ * @param {SummaryKpiRowProps} props - The summaries behind every figure.
  * @returns {JSX.Element} The KPI grid.
  */
-export default function OpDivKpiRow({
+export default function SummaryKpiRow({
   summary,
   completion,
   risk,
@@ -74,7 +93,10 @@ export default function OpDivKpiRow({
   priorLabel,
   daysRemaining,
   scopeNoun = 'this OpDiv',
-}: OpDivKpiRowProps) {
+  jumpTargets = DEFAULT_JUMP_TARGETS,
+  onJump,
+  jumpNote,
+}: SummaryKpiRowProps) {
   // The deadline is the reason "not started" is urgent, so it rides on that
   // tile rather than occupying one of its own.
   const deadlineNote =
@@ -92,6 +114,9 @@ export default function OpDivKpiRow({
   const declined = delta.declined
 
   const range = scoreRange(summary)
+  const notStartedJump = notStarted > 0 ? jumpTargets.notStarted : undefined
+  const toConfirmJump =
+    completion.awaitingConfirmation > 0 ? jumpTargets.toConfirm : undefined
 
   // The composition behind the risk denominator, which nothing else on the
   // page states. Unrecorded flags are named rather than folded into the
@@ -186,8 +211,9 @@ export default function OpDivKpiRow({
                 ? 'danger'
                 : 'warning'
           }
-          jumpToId={notStarted > 0 ? NOT_STARTED_PANEL_ID : undefined}
-          info={`Systems in the data call with nothing confirmed this cycle, out of the ${completion.systemsInCall} the call expects answers from. Answers carried forward from last cycle do not count as progress until someone confirms them, so a system with a full questionnaire can still appear here.${notStarted > 0 ? ' Opens the list of systems to chase.' : ''}`}
+          jumpToId={notStartedJump}
+          onJump={onJump}
+          info={`Systems in the data call with nothing confirmed this cycle, out of the ${completion.systemsInCall} the call expects answers from. Answers carried forward from last cycle do not count as progress until someone confirms them, so a system with a full questionnaire can still appear here.${notStartedJump ? ` ${jumpNote ?? 'Opens the list of systems to chase.'}` : ''}`}
         />
         <KpiTile
           label="High impact at risk"
@@ -202,7 +228,8 @@ export default function OpDivKpiRow({
           tone={
             atRisk > 0 ? 'danger' : risk.highImpact > 0 ? 'good' : 'neutral'
           }
-          jumpToId={atRisk > 0 ? RISK_PANEL_ID : undefined}
+          jumpToId={atRisk > 0 ? jumpTargets.risk : undefined}
+          onJump={onJump}
           info={`Systems where a weakness costs the most: flagged an HVA or carrying a High FIPS impact level, and scoring below Advanced. ${impactInfo}`}
         />
         {/* A strict subset of Not started, split out because the two ask for
@@ -222,12 +249,9 @@ export default function OpDivKpiRow({
                 : 'no systems in the call'
           }
           tone={completion.awaitingConfirmation > 0 ? 'warning' : 'good'}
-          jumpToId={
-            completion.awaitingConfirmation > 0
-              ? NOT_STARTED_PANEL_ID
-              : undefined
-          }
-          info={`Systems whose questionnaire is carried forward from last cycle but has not been confirmed. They read as answered everywhere else and still register no progress, so they are the cheapest work on the page - confirming is not re-answering. Counted within the ${notStarted} not started rather than alongside them.`}
+          jumpToId={toConfirmJump}
+          onJump={onJump}
+          info={`Systems whose questionnaire is carried forward from last cycle but has not been confirmed. They read as answered everywhere else and still register no progress, so they are the cheapest work on the page - confirming is not re-answering. Counted within the ${notStarted} not started rather than alongside them.${toConfirmJump && jumpNote ? ` ${jumpNote}` : ''}`}
         />
       </Box>
 
@@ -290,7 +314,7 @@ export default function OpDivKpiRow({
           valueColor={
             summary.optimalAdvancedCount > 0 ? colors.up : colors.neutral500
           }
-          info="Scored systems holding Optimal or Advanced. Measured over the systems with a score, not over every system - a system that was never enrolled has no tier to hold, and counting it as a miss would understate the OpDiv."
+          info={`Scored systems holding Optimal or Advanced. Measured over the systems with a score, not over every system - a system that was never enrolled has no tier to hold, and counting it as a miss would understate ${scopeNoun.replace(/^this /, 'the ')}.`}
         />
       </Box>
     </Box>

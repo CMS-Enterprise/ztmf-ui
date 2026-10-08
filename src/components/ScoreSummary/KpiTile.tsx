@@ -10,7 +10,7 @@
  * and states its count in words, so the alert survives a monochrome print, a
  * forced-colors mode, and a reader who cannot separate the hues.
  *
- * @module views/OpDivDashboard/components/KpiTile
+ * @module components/ScoreSummary/KpiTile
  */
 import { ReactNode } from 'react'
 import Box from '@mui/material/Box'
@@ -69,6 +69,8 @@ export type KpiTileProps = {
    * worse than one that does not.
    */
   jumpToId?: string
+  /** Replaces the default jump, for a host that must reveal the panel first. */
+  onJump?: (id: string) => void
 }
 
 /**
@@ -84,6 +86,7 @@ export default function KpiTile({
   hintColor,
   tone = 'neutral',
   jumpToId,
+  onJump = jumpToPanel,
   info,
 }: KpiTileProps) {
   const { accent, value: toneValue, Icon } = TONES[tone]
@@ -157,7 +160,7 @@ export default function KpiTile({
     <ButtonBase
       // Not an anchor: the destination is a panel on this same page, and a
       // real #hash would fight the hash router that owns the URL.
-      onClick={() => jumpToPanel(jumpToId)}
+      onClick={() => onJump(jumpToId)}
       sx={{
         ...frame,
         width: '100%',

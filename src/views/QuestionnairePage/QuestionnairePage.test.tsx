@@ -1384,6 +1384,20 @@ describe('carried-forward confirmation', () => {
     )
   })
 
+  it('marks cached score queries stale after a saved answer, so dashboards refetch', async () => {
+    installScoreMocks([])
+    const { queryClient } = renderAt(DEEP_LINK)
+    const aggregateKey = queryKeys.scores.aggregateByDatacall(1)
+    queryClient.setQueryData(aggregateKey, [])
+
+    fireEvent.click(await screen.findByLabelText(/baseline/i))
+    fireEvent.click(screen.getByText(/^Next question/i))
+    await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
+    await waitFor(() =>
+      expect(queryClient.getQueryState(aggregateKey)?.isInvalidated).toBe(true)
+    )
+  })
+
   it('excludes score rows outside the current questionnaire from the top progress count', async () => {
     installScoreMocks([done7001(), doneOutsideQuestionnaire()])
 

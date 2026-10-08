@@ -30,7 +30,7 @@ import type { ScoreAggregate, ScoreTier } from '@/types'
  * @param {Set<number>} systemIds - The OpDiv's system ids.
  * @returns {Map<number, Map<number, number>>} systemId -> pillarid -> score.
  */
-export function pillarScoresBySystem(
+function pillarScoresBySystem(
   aggregates: ScoreAggregate[],
   systemIds: Set<number>
 ): Map<number, Map<number, number>> {

@@ -12,6 +12,9 @@ jest.mock('@/axiosConfig', () => ({
 import FismaTable from './FismaTable'
 
 let mockDashboardSearch = ''
+// Empty by default, so the open call is out of view unless a test opts in.
+let mockActiveDatacallIds: number[] = []
+let mockDatacalls: object[] = []
 
 // Provide just enough context for the table to render one system row.
 jest.mock('../Title/Context', () => ({
@@ -48,8 +51,8 @@ jest.mock('../Title/Context', () => ({
     ],
     latestDataCallId: 5,
     selectedDatacall: null,
-    activeDatacallIds: [],
-    datacalls: [],
+    activeDatacallIds: mockActiveDatacallIds,
+    datacalls: mockDatacalls,
     datacenterEnvironments: [],
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
@@ -61,6 +64,8 @@ jest.mock('../Title/Context', () => ({
 describe('FismaTable', () => {
   beforeEach(() => {
     mockDashboardSearch = ''
+    mockActiveDatacallIds = []
+    mockDatacalls = []
   })
 
   // Smoke test that the table renders a row from the systems list. The score
@@ -156,5 +161,98 @@ describe('FismaTable', () => {
     expect(screen.getByLabelText('Filter by environment')).toBeInTheDocument()
     expect(screen.getByLabelText('Filter by OpDiv')).toBeInTheDocument()
     expect(screen.getByRole('button', { name: 'Clear filters' })).toBeDisabled()
+  })
+
+  describe('controlled "Not updated only"', () => {
+    // ISD has updated nothing this cycle; DS has.
+    const progress = {
+      1: {
+        fismasystemid: 1,
+        questionsexpected: 10,
+        questionsanswered: 10,
+        questionsupdated: 0,
+        updatedsincestart: false,
+      },
+      2: {
+        fismasystemid: 2,
+        questionsexpected: 10,
+        questionsanswered: 10,
+        questionsupdated: 10,
+        updatedsincestart: true,
+      },
+    }
+
+    const renderControlled = (notUpdatedOnly: boolean, onChange: jest.Mock) =>
+      render(
+        <MemoryRouter>
+          <FismaTable
+            scores={{}}
+            progress={progress}
+            notUpdatedOnly={notUpdatedOnly}
+            onNotUpdatedOnlyChange={onChange}
+          />
+        </MemoryRouter>
+      )
+
+    const openCallInView = () => {
+      mockActiveDatacallIds = [5]
+      mockDatacalls = [
+        {
+          datacallid: 5,
+          datacall: 'FY26 ZTM',
+          datecreated: '2025-10-01',
+          deadline: '2099-12-31',
+        },
+      ]
+    }
+
+    it('filters to not-updated rows when the parent turns it on', async () => {
+      openCallInView()
+      renderControlled(true, jest.fn())
+
+      expect(await screen.findByText('1 system')).toBeInTheDocument()
+      expect(screen.getByText('Imperial Star Destroyer')).toBeInTheDocument()
+      expect(screen.queryByText('Death Star')).not.toBeInTheDocument()
+      expect(
+        screen.getByRole('checkbox', { name: 'Not updated only' })
+      ).toBeChecked()
+    })
+
+    it('reports the switch to the parent instead of flipping itself', async () => {
+      openCallInView()
+      const onChange = jest.fn()
+      const user = userEvent.setup()
+      renderControlled(false, onChange)
+
+      await user.click(
+        await screen.findByRole('checkbox', { name: 'Not updated only' })
+      )
+
+      expect(onChange).toHaveBeenCalledWith(true)
+      expect(
+        screen.getByRole('checkbox', { name: 'Not updated only' })
+      ).not.toBeChecked()
+    })
+
+    it('asks the parent to clear it when the open call is out of view', () => {
+      // ui#639: a historical year is selected, so the filter would empty the grid.
+      const onChange = jest.fn()
+      renderControlled(true, onChange)
+
+      expect(onChange).toHaveBeenCalledWith(false)
+    })
+
+    it('asks the parent to clear it from Clear filters', async () => {
+      openCallInView()
+      const onChange = jest.fn()
+      const user = userEvent.setup()
+      renderControlled(true, onChange)
+
+      await user.click(
+        await screen.findByRole('button', { name: 'Clear filters' })
+      )
+
+      expect(onChange).toHaveBeenCalledWith(false)
+    })
   })
 })

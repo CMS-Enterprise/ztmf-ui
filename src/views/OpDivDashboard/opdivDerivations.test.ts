@@ -41,7 +41,10 @@ import {
   visibleOpDivs,
 } from './useOpDivScope'
 import { makeProgress, makeSystem } from './testFixtures'
-import { clickedIndex, windowContaining } from './components/chartIndex'
+import {
+  clickedIndex,
+  windowContaining,
+} from '@/components/ScoreSummary/chartIndex'
 import type { DashboardMaps } from '@/views/Home/aggregateScores'
 import type {
   OpDiv,
