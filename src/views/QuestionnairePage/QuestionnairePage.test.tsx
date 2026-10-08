@@ -1548,6 +1548,50 @@ describe('carried-forward confirmation', () => {
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
   })
 
+  it('returns an HHS answer to its unconfirmed presentation on undo, carried text in the box', async () => {
+    // The non-insights counterpart of the re-arm test below: with no prior
+    // response there is no review to re-arm, so an unconfirmed answer shows
+    // its carried text in the box, the helper copy and Confirm. Undo must land
+    // there too, not on the CMS blank-box presentation.
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+
+    renderAt(DEEP_LINK)
+
+    expect(
+      await screen.findByText('Updated this data call')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: /supporting evidence/i })
+      ).toHaveValue('edited this cycle')
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Undo last change' })
+    )
+
+    expect(
+      await screen.findByText('Carried forward - not yet confirmed')
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).toBeInTheDocument()
+    expect(screen.getByText(HELPER_COPY)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: /supporting evidence/i })
+      ).toHaveValue('carried justification')
+    )
+    expect(
+      screen.queryByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).not.toBeInTheDocument()
+  })
+
   it('re-arms the prior-response review when an undo returns the row to not_started', async () => {
     // The blank-box + "Insert into response" presentation is gated on
     // scores.status === 'not_started', so undo returning a row to that state
