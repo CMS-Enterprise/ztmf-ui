@@ -1,5 +1,5 @@
 /**
- * The summary band an ISSO, ISSM or System Delegate sees on the dashboard.
+ * The summary band every tier sees above the systems table on the dashboard.
  *
  * Home's stat tiles describe an estate: highest score, lowest score, how many
  * sit at Optimal. Across three systems those name two of the three and answer
@@ -11,17 +11,11 @@
  *  - The headline row - overall score and the eight KPI tiles - is ALWAYS
  *    visible. It is the part that earns its space at any size, and it is small
  *    enough to leave the systems table within reach.
- *  - Everything below it is detail, collapsed by default. Left open, nine
- *    cards pushed the table most of a screen down, and with a young dataset
- *    most of them had nothing to say.
- *
- * Panels with nothing to report at all are dropped rather than rendered empty;
- * panels reporting an all-clear are kept, because "every system has progress"
- * is an answer, not an absence. See hasNothingToSay call sites.
+ *  - Below it, collapsed by default, is the score trend.
  *
  * @module views/MySystems/MySystemsBand
  */
-import { useState } from 'react'
+import { useId, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
@@ -30,42 +24,37 @@ import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Card from '@/components/ui/Card'
 import { useContextProp } from '@/views/Title/Context'
-import OpDivHero from '@/views/OpDivDashboard/components/OpDivHero'
-import OpDivKpiRow from '@/views/OpDivDashboard/components/OpDivKpiRow'
-import NotStartedPanel from '@/views/OpDivDashboard/components/NotStartedPanel'
-import TrendPanel from '@/views/OpDivDashboard/components/TrendPanel'
-import {
-  PillarPanel,
-  SystemScorePanel,
-} from '@/views/OpDivDashboard/components/DistributionPanels'
+import ScoreHero from '@/components/ScoreSummary/ScoreHero'
+import SummaryKpiRow, {
+  type KpiJumpTargets,
+} from '@/components/ScoreSummary/SummaryKpiRow'
+import TrendPanel from '@/components/ScoreSummary/TrendPanel'
 import { colors } from '@/theme/tokens'
-import CompletionPanel from './components/CompletionPanel'
-import MovementPanel from './components/MovementPanel'
-import TargetPanel from './components/TargetPanel'
-import WeakestPillarPanel from './components/WeakestPillarPanel'
 import { readCollapsed, writeCollapsed } from './collapsePreference'
 import { useMySystemsData, type MySystemsData } from './useMySystemsData'
 
 /** How the figures describe their own scope. Never "this OpDiv" - see #747. */
 const SCOPE_NOUN = 'your systems'
 
+/** Info-text suffix for the two tiles that filter the systems table. */
+const TABLE_JUMP_NOTE =
+  'Filters the systems table below to the systems not yet updated.'
+
 /** Props for {@link MySystemsBand}. */
 export type MySystemsBandProps = {
   /**
-   * Withholds the target-maturity worklist. A System Delegate is answers-only
-   * and cannot set a target, so offering them that backlog is offering a 403.
+   * Makes the Not started and Answers to confirm tiles filter the systems
+   * table; omit when that filter is unavailable, and they stay plain tiles.
    */
-  hideTargets?: boolean
+  tableJump?: { targetId: string; onJump: (id: string) => void }
 }
 
 /**
  * Renders the system-scoped summary band.
- * @param {MySystemsBandProps} props - Whether to withhold the target panel.
+ * @param {MySystemsBandProps} props - The optional tile jump into the table.
  * @returns {JSX.Element} The band.
  */
-export default function MySystemsBand({
-  hideTargets = false,
-}: MySystemsBandProps) {
+export default function MySystemsBand({ tableJump }: MySystemsBandProps) {
   const { showDecommissioned } = useContextProp()
   const [collapsed, setCollapsed] = useState<boolean>(readCollapsed)
 
@@ -95,30 +84,30 @@ export default function MySystemsBand({
     <BandContent
       collapsed={collapsed}
       onToggle={toggle}
-      hideTargets={hideTargets}
+      tableJump={tableJump}
     />
   )
 }
 
 /**
- * The headline row, the toggle, and - when expanded - the detail.
+ * The headline row, the toggle, and - when expanded - the trend.
  *
  * The data hook runs whether or not the detail is open, because the headline
- * row reads from it too. Only the extra pillar and history queries are gated,
- * inside useMySystemsData.
- * @param {object} props - Collapse state, handler and the delegate carve-out.
+ * row reads from it too. Only the history query is gated on expansion.
+ * @param {object} props - Collapse state, handler and the tile jump.
  * @returns {JSX.Element} The band.
  */
 function BandContent({
   collapsed,
   onToggle,
-  hideTargets,
+  tableJump,
 }: {
   collapsed: boolean
   onToggle: () => void
-  hideTargets: boolean
+  tableJump?: MySystemsBandProps['tableJump']
 }) {
   const data = useMySystemsData(!collapsed)
+  const detailId = useId()
 
   return (
     <Box sx={{ mb: 2 }}>
@@ -131,7 +120,10 @@ function BandContent({
           mb: 1.5,
         }}
       >
-        <Typography sx={{ fontSize: 15, fontWeight: 600, color: colors.ink }}>
+        <Typography
+          component="h2"
+          sx={{ fontSize: 15, fontWeight: 600, color: colors.ink }}
+        >
           Your systems at a glance
         </Typography>
         <Button
@@ -139,6 +131,7 @@ function BandContent({
           onClick={onToggle}
           endIcon={collapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
           aria-expanded={!collapsed}
+          aria-controls={detailId}
           sx={{ fontSize: 13, textTransform: 'none' }}
         >
           {collapsed ? 'Show detail' : 'Hide detail'}
@@ -151,8 +144,29 @@ function BandContent({
         </Box>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
-          <HeadlineRow data={data} />
-          {!collapsed && <DetailPanels data={data} hideTargets={hideTargets} />}
+          <HeadlineRow data={data} tableJump={tableJump} />
+          <Box
+            id={detailId}
+            sx={{
+              display: collapsed ? 'none' : 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {/* TrendPanel explains itself when there are under two points. */}
+            {!collapsed && (
+              <TrendPanel
+                points={data.trend.points}
+                isPending={data.trend.isPending}
+                isError={data.trend.isError}
+                cadenceNote={data.trend.cadenceNote}
+                selectedCallId={data.trend.selectedCallId}
+                onSelectCall={data.trend.selectCall}
+                tiers={data.trend.tiers}
+                movers={data.trend.movers}
+                scopeNoun={SCOPE_NOUN}
+              />
+            )}
+          </Box>
         </Box>
       )}
     </Box>
@@ -161,10 +175,20 @@ function BandContent({
 
 /**
  * The always-visible headline: overall score beside the KPI tiles.
- * @param {object} props - The band's data.
+ * @param {object} props - The band's data and the optional table jump.
  * @returns {JSX.Element} The headline row.
  */
-function HeadlineRow({ data }: { data: MySystemsData }) {
+function HeadlineRow({
+  data,
+  tableJump,
+}: {
+  data: MySystemsData
+  tableJump?: MySystemsBandProps['tableJump']
+}) {
+  const jumpTargets: KpiJumpTargets = tableJump
+    ? { notStarted: tableJump.targetId, toConfirm: tableJump.targetId }
+    : {}
+
   return (
     <Box
       sx={{
@@ -174,7 +198,7 @@ function HeadlineRow({ data }: { data: MySystemsData }) {
         gridTemplateColumns: { xs: '1fr', lg: 'minmax(280px, 1fr) 2fr' },
       }}
     >
-      <OpDivHero
+      <ScoreHero
         avgScore={data.summary.avgScore}
         scoredCount={data.summary.scoredCount}
         systemCount={data.summary.systemCount}
@@ -182,7 +206,7 @@ function HeadlineRow({ data }: { data: MySystemsData }) {
         priorLabel={data.priorCall?.datacall}
         scopeNoun={SCOPE_NOUN}
       />
-      <OpDivKpiRow
+      <SummaryKpiRow
         summary={data.summary}
         completion={data.completion}
         risk={data.risk}
@@ -190,130 +214,10 @@ function HeadlineRow({ data }: { data: MySystemsData }) {
         priorLabel={data.priorCall?.datacall}
         daysRemaining={data.daysRemaining}
         scopeNoun={SCOPE_NOUN}
+        jumpTargets={jumpTargets}
+        onJump={tableJump?.onJump}
+        jumpNote={TABLE_JUMP_NOTE}
       />
     </Box>
-  )
-}
-
-/**
- * The collapsible detail, with silent panels dropped.
- *
- * Each panel decides whether it has anything to report. A panel holding an
- * all-clear stays - "every system has a target" is worth saying - but one with
- * no underlying data at all is noise, and nine such cards is what made the
- * expanded band unreadable against a young dataset.
- * @param {object} props - The band's data and the delegate carve-out.
- * @returns {JSX.Element} The detail panels.
- */
-function DetailPanels({
-  data,
-  hideTargets,
-}: {
-  data: MySystemsData
-  hideTargets: boolean
-}) {
-  const priorLabel = data.priorCall?.datacall
-
-  // An all-clear is a real answer; an absence is not. Completion and
-  // not-started speak whenever the call expects anything at all, so they are
-  // gated on enrollment rather than on having rows to list.
-  const enrolled = data.completion.systemsInCall > 0
-  const worklists = [
-    enrolled && <CompletionPanel key="completion" rows={data.completionRows} />,
-    enrolled && (
-      <NotStartedPanel
-        key="notstarted"
-        rows={data.notStarted}
-        systemsInCall={data.completion.systemsInCall}
-        datacallId={data.pillars.anchorCall?.datacallid}
-      />
-    ),
-    // Movement needs a baseline call AND at least one system scored in both,
-    // or every row reads "not scored" and the card says nothing the hero's
-    // "no prior call" note does not already say.
-    priorLabel && data.movement.some((m) => m.delta !== null) && (
-      <MovementPanel
-        key="movement"
-        rows={data.movement}
-        priorLabel={priorLabel}
-      />
-    ),
-    data.weakestPillars.length > 0 && (
-      <WeakestPillarPanel
-        key="weakest"
-        rows={data.weakestPillars}
-        callName={data.pillars.anchorCall?.datacall}
-      />
-    ),
-    !hideTargets && data.summary.systemCount > 0 && (
-      <TargetPanel
-        key="target"
-        rows={data.noTarget}
-        totalSystems={data.summary.systemCount}
-      />
-    ),
-  ].filter(Boolean)
-
-  const distributions = [
-    data.pillars.averages.length > 0 && (
-      <PillarPanel
-        key="pillars"
-        averages={data.pillars.averages}
-        extremes={data.pillars.extremes}
-        anchorCall={data.pillars.anchorCall}
-        priorLabel={priorLabel}
-        isPending={data.pillars.isPending}
-      />
-    ),
-    data.bySystem.length > 0 && (
-      <SystemScorePanel
-        key="bysystem"
-        bars={data.bySystem}
-        unscored={data.summary.unscoredCount}
-        scopeNoun={SCOPE_NOUN}
-      />
-    ),
-  ].filter(Boolean)
-
-  // Two points is the minimum a line can join; below that TrendPanel renders
-  // its own explanation, which is an absence rather than an answer.
-  const showTrend = data.trend.points.length >= 2
-
-  if (worklists.length === 0 && distributions.length === 0 && !showTrend) {
-    return (
-      <Card>
-        <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
-          Nothing to report yet. Once your systems are enrolled in a data call
-          and scored, their progress and pillar detail appear here.
-        </Typography>
-      </Card>
-    )
-  }
-
-  const gridSx = {
-    display: 'grid',
-    gap: 1.5,
-    alignItems: 'stretch',
-    gridTemplateColumns: { xs: '1fr', md: 'repeat(2, minmax(0, 1fr))' },
-  } as const
-
-  return (
-    <>
-      {worklists.length > 0 && <Box sx={gridSx}>{worklists}</Box>}
-      {distributions.length > 0 && <Box sx={gridSx}>{distributions}</Box>}
-      {showTrend && (
-        <TrendPanel
-          points={data.trend.points}
-          isPending={data.trend.isPending}
-          isError={data.trend.isError}
-          cadenceNote={data.trend.cadenceNote}
-          selectedCallId={data.trend.selectedCallId}
-          onSelectCall={data.trend.selectCall}
-          tiers={data.trend.tiers}
-          movers={data.trend.movers}
-          scopeNoun={SCOPE_NOUN}
-        />
-      )}
-    </>
   )
 }

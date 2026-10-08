@@ -24,7 +24,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { Cell, Pie, PieChart, ResponsiveContainer, Tooltip } from 'recharts'
 import { colors, fonts, radius } from '@/theme/tokens'
-import { stageColor } from './stageColor'
+import { stageColor } from '@/components/ScoreSummary/stageColor'
 import type { Breakdown } from '../opdivBreakdowns'
 import type { TierMovement } from '../opdivTrend'
 

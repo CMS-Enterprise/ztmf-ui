@@ -5,7 +5,7 @@
  * page describe a narrower slice than the page does (one data call, only
  * scored systems), and an unqualified number is how a dashboard misleads.
  *
- * @module views/OpDivDashboard/components/ChartCard
+ * @module components/ScoreSummary/ChartCard
  */
 import { ReactNode, useId } from 'react'
 import Box from '@mui/material/Box'

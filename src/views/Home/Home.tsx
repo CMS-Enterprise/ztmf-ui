@@ -1,6 +1,6 @@
 import FismaTable from '../FismaTable/FismaTable'
-import { useState, useMemo } from 'react'
-import { useDatacallAggregates, useDatacallProgress } from '@/api/scores'
+import { useCallback, useState, useMemo } from 'react'
+import { useDatacallAggregates, useDatacallProgress } from '@/utils/scores'
 import { useContextProp } from '../Title/Context'
 import { Box, Button, CircularProgress } from '@mui/material'
 import AddIcon from '@mui/icons-material/Add'
@@ -11,15 +11,20 @@ import DatacallContextCard from '@/components/DatacallContextCard/DatacallContex
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import { exportSystemAnswers } from '@/utils/exportSystems'
-import { isAdmin as checkIsAdmin, isSystemDelegate } from '@/utils/userRoles'
+import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
 import MySystemsBand from '../MySystems/MySystemsBand'
+import { jumpToPanel } from '@/components/ScoreSummary/jumpToPanel'
+import { isOpenCallInView } from '../FismaTable/dashboardFilters'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
-import { colors } from '@/theme/tokens'
+import { colors, radius } from '@/theme/tokens'
 import _ from 'lodash'
 import type { FismaSystemType } from '@/types'
 import { buildDashboardMaps } from './aggregateScores'
 import { deriveExportCallId } from './exportCall'
+
+/** Jump target for the band's Not started and Answers to confirm tiles. */
+const SYSTEMS_TABLE_ID = 'dashboard-systems-table'
 
 /**
  * Dashboard view: page header with export/add actions, the datacall context
@@ -33,10 +38,13 @@ export default function HomePageContainer() {
   // matches the prior "select nothing, export all" behavior.
   const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [addOpen, setAddOpen] = useState<boolean>(false)
+  // Lifted so the band's tiles can turn on the table's "Not updated only" filter.
+  const [notUpdatedOnly, setNotUpdatedOnly] = useState<boolean>(false)
   const {
     latestDataCallId,
     selectedDatacall,
     activeDatacallIds,
+    datacalls,
     fismaSystems,
     setFismaSystems,
     userInfo,
@@ -52,10 +60,22 @@ export default function HomePageContainer() {
   // the backend has already narrowed: an ISSO's assignments, an OpDiv admin's
   // OpDiv, an HHS admin's estate. Admins who want per-OpDiv depth go to the
   // OpDiv dashboard, which is built for it.
-  //
-  // A delegate is answers-only and cannot set a target maturity, so the target
-  // worklist is withheld from them rather than offering a backlog they 403 on.
-  const hideTargets = isSystemDelegate(userInfo)
+
+  // Same gate FismaTable puts on its "Not updated only" switch (ui#639).
+  const latestDeadlinePassed = useMemo(() => {
+    if (!latestDataCallId) return false
+    const latest = datacalls.find((d) => d.datacallid === latestDataCallId)
+    return latest ? new Date() > new Date(latest.deadline) : false
+  }, [datacalls, latestDataCallId])
+  const openCallInView = isOpenCallInView(
+    latestDataCallId,
+    latestDeadlinePassed,
+    activeDatacallIds
+  )
+  const showNotUpdated = useCallback((id: string) => {
+    setNotUpdatedOnly(true)
+    jumpToPanel(id)
+  }, [])
 
   // Aggregate every active call in the year, then merge per system, choosing
   // the call each system most recently updated. Scores and progress are read
@@ -194,15 +214,25 @@ export default function HomePageContainer() {
           reader holding three systems and little more for one holding a
           thousand. This says what needs action instead, at whatever scope the
           caller has. */}
-      <MySystemsBand hideTargets={hideTargets} />
-      <FismaTable
-        scores={scoreMap}
-        selectedRows={selectedRows}
-        onSelectionChange={setSelectedRows}
-        progress={progressMap}
-        systemCallMap={systemCallMap}
-        chosenCallMap={chosenCallMap}
+      <MySystemsBand
+        tableJump={
+          openCallInView
+            ? { targetId: SYSTEMS_TABLE_ID, onJump: showNotUpdated }
+            : undefined
+        }
       />
+      <Box id={SYSTEMS_TABLE_ID} sx={{ borderRadius: `${radius.card}px` }}>
+        <FismaTable
+          scores={scoreMap}
+          selectedRows={selectedRows}
+          onSelectionChange={setSelectedRows}
+          progress={progressMap}
+          systemCallMap={systemCallMap}
+          chosenCallMap={chosenCallMap}
+          notUpdatedOnly={notUpdatedOnly}
+          onNotUpdatedOnlyChange={setNotUpdatedOnly}
+        />
+      </Box>
 
       <EditSystemModal
         title="Add"

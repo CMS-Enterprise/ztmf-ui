@@ -17,7 +17,7 @@ import {
   encodeDatacallSlug,
   questionnairePath,
 } from '@/views/QuestionnairePage/deepLink'
-import ChartCard from './ChartCard'
+import ChartCard from '@/components/ScoreSummary/ChartCard'
 import ShowAllToggle from './ShowAllToggle'
 import { useExpandableRows } from './useExpandableRows'
 import type { NoProgressRow } from '../opdivAggregates'

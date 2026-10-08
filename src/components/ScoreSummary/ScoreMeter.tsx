@@ -6,7 +6,7 @@
  * themselves, which a dial cannot. The bands are labeled in text, so the
  * reading never depends on telling two fills apart.
  *
- * @module views/OpDivDashboard/components/ScoreMeter
+ * @module components/ScoreSummary/ScoreMeter
  */
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
