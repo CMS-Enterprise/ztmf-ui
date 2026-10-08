@@ -70,6 +70,38 @@ tests:
     path: '/#/systems/1002'
     waitFor: '#enrichment-synced-at'
 
+  # The answer-history drawer (ztmf-misc#392), the app's first hand-rolled
+  # Drawer - the theme's MuiDrawer override had never been exercised before it.
+  #
+  # SSD-EX (1002) rather than DS-1: the seed's answer-history fixture lives on
+  # 1002, on the question its questionnaire lands on, so the trigger is present
+  # without navigating. See the fixture comment in _test_data_empire.sql for
+  # why it is not on DS-1.
+  - id: answer-history-drawer
+    # Deep-linked to the fixture's question rather than relying on question
+    # order, so a later reorder cannot move the scan off the fixture.
+    path: '/#/questionnaire/system/1002/Audit_Fields_Smoke_Cycle/identity/imperial-identity-verification'
+    scan: false
+    steps:
+      # The link sits beside the save indicator in the question card, so its
+      # presence already proves the questionnaire payload and audit fields
+      # loaded. It is a real focusable control, not tooltip content.
+      - waitFor: '#view-answer-history'
+      - click: '#view-answer-history'
+      # The revision list mounts only once the drawer is open AND the read
+      # resolved, so the scan never measures the loading spinner.
+      - waitFor: '#answer-history-panel ol'
+      # Scanning mid-transition measures text blended with the backdrop and
+      # reads as a contrast failure that vanishes on the next run. MUI's slide
+      # transition is comparable to the Dialog fade the pillar-scores modal
+      # used to need this for.
+      - wait: 400ms
+      - scan:
+          label: drawer-open
+          # MUI puts role="presentation" on the Drawer root, not role="dialog",
+          # so this scopes by id rather than by role.
+          scope: '#answer-history-panel'
+
   # Dedicated redesigned page (the old pillar-scores modal no longer exists).
   # The radar's labelled image mounts only after the seeded score payload has
   # loaded, so the scan covers the populated page rather than its spinner.

@@ -117,6 +117,8 @@ jest.mock('../Title/Context', () => ({
 
 // Import after mocks so the page picks them up.
 import QuestionnairePage from './QuestionnairePage'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 
 const QUESTIONS = [
   {
@@ -210,7 +212,14 @@ function renderAt(path: string) {
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
     { initialEntries: [path] }
   )
-  const provider = <RouterProvider router={router} />
+  // QueryClientProvider, not renderWithProviders: that helper hardcodes
+  // MemoryRouter, and these suites deliberately use a data router. A fresh
+  // client per render keeps cached history from leaking between tests.
+  const provider = (
+    <QueryClientProvider client={createTestQueryClient()}>
+      <RouterProvider router={router} />
+    </QueryClientProvider>
+  )
   const utils = render(provider)
   return { ...utils, rerender: () => utils.rerender(provider) }
 }
@@ -1303,6 +1312,26 @@ describe('carried-forward confirmation', () => {
         return Promise.resolve({ data: { data: insightRows } })
       if (url.includes('/questions'))
         return Promise.resolve({ data: { data: QUESTIONS } })
+      const withHistory = rows.find(
+        (row) => url === apiPaths.scores.revisions(row.scoreid)
+      )
+      if (withHistory)
+        return Promise.resolve({
+          data: {
+            data: {
+              scoreid: withHistory.scoreid,
+              fismasystemid: 1002,
+              datacallid: 5,
+              head: {
+                revisionid: 91,
+                revision_no: 2,
+                kind: 'update',
+                undoable: true,
+              },
+              revisions: [],
+            },
+          },
+        })
       if (url.startsWith(apiPaths.scores.root))
         return Promise.resolve({ data: { data: rows } })
       if (url.includes('functions/7006/options'))
@@ -1311,7 +1340,21 @@ describe('carried-forward confirmation', () => {
         return Promise.resolve({ data: { data: OPTIONS_7001 } })
       return Promise.resolve({ data: { data: [] } })
     })
-    axios.post.mockResolvedValue({ data: {} })
+    axios.post.mockImplementation((url: string) => {
+      // Undo restores the row's previous side, which for a carried-forward
+      // answer means notes and status both go back.
+      const undone = rows.find(
+        (row) => url === apiPaths.scores.undo(row.scoreid)
+      )
+      if (undone) {
+        rows = rows.map((row) =>
+          row.scoreid === undone.scoreid
+            ? { ...row, status: 'not_started', notes: 'carried justification' }
+            : row
+        )
+      }
+      return Promise.resolve({ data: { data: {} } })
+    })
     axios.put.mockImplementation((url: string) => {
       const confirmedRow = rows.find(
         (row) => url === apiPaths.scores.confirm(row.scoreid)
@@ -1426,6 +1469,49 @@ describe('carried-forward confirmation', () => {
     ).toBeInTheDocument()
   })
 
+  it('keeps a resolved prior-response review resolved while the radio changes', async () => {
+    // The review context reads the SAVED row's status, not the selected
+    // radio's; keyed on the radio, each click reset the review and the box
+    // re-blanked on returning to the saved option (ztmf-misc#392).
+    installScoreMocks([carried7006()], {
+      insightRows: [
+        {
+          fismasystemid: 1002,
+          questionid: 900,
+          synced_at: '2026-07-14T00:00:00Z',
+          payload: {
+            last_score_notes: 'carried justification',
+            last_datacall: 'FY2025 Q1',
+          },
+        },
+      ],
+    })
+
+    renderAt(DEEP_LINK)
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+    const box = screen.getByRole('textbox', { name: 'Current response' })
+    await waitFor(() => expect(box).toHaveValue('carried justification'))
+
+    fireEvent.click(screen.getByLabelText(/advanced/i))
+    fireEvent.click(screen.getByLabelText(/baseline/i))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Current response' })
+      ).toHaveValue('carried justification')
+    )
+    expect(
+      screen.queryByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).not.toBeInTheDocument()
+  })
+
   it('keeps the guidance off a resolved prior-response card, where the button returns', async () => {
     // Pins !currentPriorResponse: a resolved review unblocks the button, so
     // that term is the only thing keeping the strip quiet on insights
@@ -1460,6 +1546,106 @@ describe('carried-forward confirmation', () => {
     ).toBeInTheDocument()
     // ...but the card owns the explanation on this variant.
     expect(screen.queryByText(HELPER_COPY)).not.toBeInTheDocument()
+  })
+
+  it('returns an HHS answer to its unconfirmed presentation on undo, carried text in the box', async () => {
+    // The non-insights counterpart of the re-arm test below: with no prior
+    // response there is no review to re-arm, so an unconfirmed answer shows
+    // its carried text in the box, the helper copy and Confirm. Undo must land
+    // there too, not on the CMS blank-box presentation.
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+
+    renderAt(DEEP_LINK)
+
+    expect(
+      await screen.findByText('Updated this data call')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: /supporting evidence/i })
+      ).toHaveValue('edited this cycle')
+    )
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Undo last change' })
+    )
+
+    expect(
+      await screen.findByText('Carried forward - not yet confirmed')
+    ).toBeInTheDocument()
+    expect(
+      await screen.findByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    ).toBeInTheDocument()
+    expect(screen.getByText(HELPER_COPY)).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: /supporting evidence/i })
+      ).toHaveValue('carried justification')
+    )
+    expect(
+      screen.queryByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).not.toBeInTheDocument()
+  })
+
+  it('re-arms the prior-response review when an undo returns the row to not_started', async () => {
+    // The blank-box + "Insert into response" presentation is gated on
+    // scores.status === 'not_started', so undo returning a row to that state
+    // has to put the question back into it. The review initializer
+    // short-circuits on an unchanged contextId, which is why status is part of
+    // that context - without it the presentation would only reappear after
+    // navigating away and back, and the same answer would look different
+    // depending on how you arrived at it (ztmf-misc#392).
+    installScoreMocks([carried7006('done')], {
+      insightRows: [
+        {
+          fismasystemid: 1002,
+          questionid: 900,
+          synced_at: '2026-07-14T00:00:00Z',
+          payload: {
+            last_score_notes: 'carried justification',
+            last_datacall: 'FY2025 Q1',
+          },
+        },
+      ],
+    })
+
+    renderAt(DEEP_LINK)
+
+    // Answered this cycle: the review is resolved, so the box is the ordinary
+    // editor holding the saved justification.
+    expect(
+      await screen.findByText('Updated this data call')
+    ).toBeInTheDocument()
+    // With a prior response the editor is labelled 'Current response'; the
+    // card holds the previous one alongside it.
+    const box = screen.getByRole('textbox', { name: 'Current response' })
+    await waitFor(() => expect(box).toHaveValue('carried justification'))
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Undo last change' })
+    )
+
+    // Back to an unconfirmed carried-forward answer, presented exactly as one:
+    // the box is blanked pending review, so the previous text is reached
+    // through the card's insert affordance rather than sitting in the editor.
+    expect(
+      await screen.findByText('Carried forward - not yet confirmed')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Current response' })
+      ).toHaveValue('')
+    )
+    expect(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).toBeInTheDocument()
   })
 
   it('shows the badge but no Confirm button to a read-only admin', async () => {
