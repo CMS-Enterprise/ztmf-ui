@@ -29,8 +29,9 @@ export async function fetchDataCenterEnvironments(
 /**
  * Reads the datacenter-environment vocabulary for a component: empty until
  * the fetch resolves, then the served rows. Cached for the session under
- * `vocabularyQueryOptions`, which also keeps a failed load silent; consumers
- * already fall back to raw values when the list is empty.
+ * `vocabularyQueryOptions`. A failed load stays silent: consumers already fall
+ * back to raw values when the list is empty, so a toast would report a
+ * degradation the user cannot see or act on.
  *
  * @param options - See QueryHookOptions.
  * @returns The current environment rows.
@@ -42,6 +43,7 @@ export function useDataCenterEnvironments(
     queryKey: queryKeys.dataCenterEnvironments.list(),
     queryFn: ({ signal }) => fetchDataCenterEnvironments(signal),
     enabled: options.enabled,
+    meta: { suppressErrorNotification: true },
     ...vocabularyQueryOptions,
   })
   return data ?? EMPTY_LIST

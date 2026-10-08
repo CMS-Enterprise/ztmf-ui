@@ -5,6 +5,12 @@ import { vocabularyQueryOptions, type QueryHookOptions } from '@/queryClient'
 import { EMPTY_LIST } from '@/utils/emptyList'
 import type { OpDiv } from '@/types'
 
+// Fixed text rather than the parsed API error: this is the only OpDiv fetch
+// site, so one failure leaves an empty list for the whole session and the
+// system form's Save stuck. The server's wording would not say that.
+const OPDIVS_LOAD_ERROR =
+  'Failed to load the OpDiv list. OpDiv names and pickers may be incomplete - please reload.'
+
 /**
  * Fetches the OpDiv reference list from GET /api/v1/opdivs.
  *
@@ -35,9 +41,11 @@ export async function fetchOpDivs(
  * under `vocabularyQueryOptions`; the write hooks below invalidate it, so a
  * change made in OpDiv admin reaches every consumer of the shared list.
  *
+ * Unlike the other vocabularies, a failed load is worth a toast, so this one
+ * falls through to the cache boundary with its own message.
+ *
  * Returns the load state too: the questionnaire's insights gate has to tell
- * "not fetched yet" from "fetched, and there are none", and the layout
- * notifies on failure because this is the only fetch site.
+ * "not fetched yet" from "fetched, and there are none".
  *
  * Read the Outlet context rather than calling this. Title holds the
  * inactive-inclusive superset for the app; a second call with a different
@@ -45,20 +53,20 @@ export async function fetchOpDivs(
  *
  * @param includeInactive - Pass true to include deactivated rows.
  * @param options - See QueryHookOptions.
- * @returns The rows, whether the load has settled (on failure too), and the
- *   error when it failed.
+ * @returns The rows and whether the load has settled (on failure too).
  */
 export function useOpDivs(
   includeInactive = false,
   options: QueryHookOptions = {}
-): { opdivs: OpDiv[]; opdivsLoaded: boolean; error: Error | null } {
-  const { data, isPending, error } = useQuery({
+): { opdivs: OpDiv[]; opdivsLoaded: boolean } {
+  const { data, isPending } = useQuery({
     queryKey: queryKeys.opdivs.list(includeInactive),
     queryFn: ({ signal }) => fetchOpDivs(includeInactive, signal),
     enabled: options.enabled,
+    meta: { errorMessage: OPDIVS_LOAD_ERROR },
     ...vocabularyQueryOptions,
   })
-  return { opdivs: data ?? EMPTY_LIST, opdivsLoaded: !isPending, error }
+  return { opdivs: data ?? EMPTY_LIST, opdivsLoaded: !isPending }
 }
 
 /**

@@ -26,6 +26,7 @@ import MockAdapter from 'axios-mock-adapter'
 import SystemDetailPage from './SystemDetailPage'
 import axiosInstance from '@/axiosConfig'
 import { STATUS_MESSAGES, ERROR_MESSAGES } from '@/constants'
+import { queryKeys } from '@/api/keys'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, UserRole, userData } from '@/types'
 
@@ -123,7 +124,8 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
   })
   const user = userEvent.setup()
   const system = BASE_SYSTEM
-  renderPage(system)
+  const { queryClient } = renderPage(system)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
   const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System identity')
@@ -152,13 +154,18 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
       expect.anything()
     )
   )
-  expect(setFismaSystems).toHaveBeenCalled()
-  const updater = setFismaSystems.mock.calls.at(-1)![0] as (
-    prev: FismaSystemType[]
-  ) => FismaSystemType[]
-  expect(
-    updater([system]).find((s) => s.fismasystemid === 42)?.decommissioned
-  ).toBe(true)
+  // The write moves the system between the active and decommissioned lists
+  // and this page is showing it, so both reads are invalidated rather than
+  // the page splicing a replacement row into shared state.
+  expect(setFismaSystems).not.toHaveBeenCalled()
+  await waitFor(() => {
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.detail(42),
+    })
+  })
   // The page leaves edit mode, so the form's Save control is gone.
   await waitFor(() =>
     expect(
@@ -208,7 +215,8 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
     return [200, {}]
   })
   const user = userEvent.setup()
-  renderPage(decommissioned)
+  const { queryClient } = renderPage(decommissioned)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
   const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System identity')
@@ -232,13 +240,17 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
       expect.anything()
     )
   )
-  const updater = setFismaSystems.mock.calls.at(-1)![0] as (
-    prev: FismaSystemType[]
-  ) => FismaSystemType[]
-  expect(
-    updater([decommissioned]).find((s) => s.fismasystemid === 42)
-      ?.decommissioned
-  ).toBe(false)
+  // Same shape as the decommission path: the system moves back into the
+  // active list and this page is showing it, so both reads are invalidated.
+  expect(setFismaSystems).not.toHaveBeenCalled()
+  await waitFor(() => {
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.detail(42),
+    })
+  })
 })
 
 // ---------------------------------------------------------------------------

@@ -23,7 +23,7 @@ import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
-import { notify, isAuthHandled } from '@/utils/notify'
+import { notify } from '@/utils/notify'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/keys'
 import { useOpDivs } from '@/utils/opdivs'
@@ -46,11 +46,6 @@ import { clearOtherUserDrafts } from '../QuestionnairePage/draftStore'
  * Component that renders the contents of the Dashboard view.
  * @returns {JSX.Element} Component that renders the dashboard contents.
  */
-
-// Fixed text, not parseApiError: this fires from the shell on any page, so a
-// generic "something went wrong" would give the user nothing to act on.
-const OPDIVS_LOAD_ERROR =
-  'Failed to load the OpDiv list. OpDiv names and pickers may be incomplete - please reload.'
 
 export default function Title() {
   const location = useLocation()
@@ -83,31 +78,6 @@ export default function Title() {
     { enabled: authenticated }
   )
   const { datacalls } = useDatacalls({ enabled: authenticated })
-  // Same signature the context has always exposed, writing the query cache
-  // instead of component state so consumers are unchanged. The announce-style
-  // callers become invalidations in a later commit; the remaining ones append
-  // a system the filtered list does not carry.
-  const fetchFismaSystems = useCallback(async () => {
-    await queryClient.invalidateQueries({
-      queryKey: queryKeys.fismaSystems.lists(),
-    })
-  }, [queryClient])
-  const setFismaSystems = useCallback<
-    React.Dispatch<React.SetStateAction<FismaSystemType[]>>
-  >(
-    (update) => {
-      queryClient.setQueryData<FismaSystemType[]>(
-        queryKeys.fismaSystems.list(showDecommissioned),
-        (prev) =>
-          typeof update === 'function'
-            ? (update as (p: FismaSystemType[]) => FismaSystemType[])(
-                prev ?? []
-              )
-            : update
-      )
-    },
-    [queryClient, showDecommissioned]
-  )
   // Datacenter-environment vocabulary is reference data shared by the system
   // form (dropdown) and the questionnaire pillar filter, so it is fetched
   // once here and passed down via context. Failure is non-fatal: consumers
@@ -120,39 +90,11 @@ export default function Title() {
   // deactivated OpDiv still resolves its name. opdivsLoaded distinguishes
   // "not fetched yet" from "fetched, and there are none" - both are an empty
   // list, and the questionnaire's insights gate needs the difference.
-  const {
-    opdivs,
-    opdivsLoaded,
-    error: opdivsError,
-  } = useOpDivs(true, { enabled: authenticated })
+  const { opdivs, opdivsLoaded } = useOpDivs(true, { enabled: authenticated })
 
   useEffect(() => {
     if (loaderData.status === 200) void clearOtherUserDrafts(userInfo.userid)
   }, [loaderData.status, userInfo.userid])
-
-  // Hoisted out of the mount effect so it can be re-invoked on demand -
-  // specifically, right after DataCallModal creates a new datacall so the
-  // picker updates without a manual page reload. Accepts an optional
-  // signal for the mount-effect's abort cleanup; user-triggered refetches
-  // (e.g. post-create) invoke it without a signal.
-  //
-  // `resetSelection` defaults to true for the initial mount load, which snaps
-  // the active year/toggles to the latest year with data. A post-create
-  // refetch passes false so refreshing the list does not clobber whatever
-  // year/selection the user is currently viewing - that selection flows through
-  // the Outlet context to the dashboard and questionnaire.
-
-  // Notifies rather than logs, unlike the environments fetch: this is the only
-  // OpDiv fetch site, so an empty list persists for the session and leaves the
-  // system form's Save stuck. Keyed so a re-render cannot stack the toast.
-  useEffect(() => {
-    if (opdivsError && !isAuthHandled(opdivsError)) {
-      notify(OPDIVS_LOAD_ERROR, 'error', {
-        key: 'opdivs-load-error',
-        preventDuplicate: true,
-      })
-    }
-  }, [opdivsError])
 
   // Derived from the data calls rather than assigned inside the fetch. The
   // default selection is only applied while nothing is selected, so a refetch
@@ -293,7 +235,11 @@ export default function Title() {
         : ''
   const handleCloseModal = (newRowData: FismaSystemType) => {
     if (!_.isEqual(EMPTY_SYSTEM, newRowData)) {
-      setFismaSystems((prevFismSystems) => [...prevFismSystems, newRowData])
+      // Refetch rather than splice in the modal's record, so the row shown is
+      // the one the server stored.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
+      })
     }
     setOpenModal(false)
     handleClose()
@@ -651,7 +597,6 @@ export default function Title() {
           <Outlet
             context={{
               fismaSystems,
-              setFismaSystems,
               userInfo,
               latestDataCallId,
               latestDatacall,
@@ -663,7 +608,6 @@ export default function Title() {
               toggleActiveDatacall,
               showDecommissioned,
               setShowDecommissioned,
-              fetchFismaSystems,
               fismaSystemsLoaded,
               dashboardSearch,
               setDashboardSearch,

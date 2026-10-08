@@ -130,11 +130,11 @@ export async function setTargetMaturity(
 /**
  * Mutation that sets a system's target maturity.
  *
- * On success that system's detail key is invalidated. Nothing reads it yet:
- * the detail page still resolves the system out of the shared list in Outlet
- * context and repaints from the record this mutation returns. The
- * invalidation is here so the repaint works on its own once the system
- * becomes a query, and the callback goes away at the same time.
+ * On success both the system's detail key and the system lists are
+ * invalidated. Both are needed: the detail page renders the system from the
+ * shared list when it is there and from the per-system read when it is not,
+ * so invalidating only one leaves the card showing the old tier on whichever
+ * path it did not cover.
  *
  * Not awaited, so the card leaves edit mode on the write. Error handling
  * stays with the caller.
@@ -151,6 +151,9 @@ export function useSetTargetMaturity(systemId: number) {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.fismaSystems.detail(systemId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
       })
     },
   })

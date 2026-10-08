@@ -1,7 +1,8 @@
 import FismaTable from '../FismaTable/FismaTable'
 import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
 import { useState, useMemo } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/api/keys'
 import { useDashboardScores, scoreAggregateQuery } from '@/utils/scores'
 import { useContextProp } from '../Title/Context'
 import { Box, Button, CircularProgress } from '@mui/material'
@@ -60,11 +61,11 @@ export default function HomePageContainer() {
     datacalls,
     activeDatacallIds,
     fismaSystems,
-    setFismaSystems,
     userInfo,
     datacenterEnvironments,
     opdivs,
   } = useContextProp()
+  const queryClient = useQueryClient()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const datacallName = selectedDatacall?.datacall ?? ''
   const systemCount = fismaSystems.length
@@ -129,11 +130,14 @@ export default function HomePageContainer() {
     }
   }
 
-  // Mirrors the header Add-system flow: append the created system to the list
-  // when the modal returns a real (non-empty) record.
+  // Mirrors the header Add-system flow. The list is refetched rather than
+  // having the modal's record spliced in, so the row shown is the one the
+  // server stored, with whatever it derived on write.
   const handleCloseAdd = (newRowData: FismaSystemType) => {
     if (!_.isEqual(EMPTY_SYSTEM, newRowData)) {
-      setFismaSystems((prev) => [...prev, newRowData])
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
+      })
     }
     setAddOpen(false)
   }
