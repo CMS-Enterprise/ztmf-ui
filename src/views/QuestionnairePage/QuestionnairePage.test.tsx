@@ -1469,6 +1469,49 @@ describe('carried-forward confirmation', () => {
     ).toBeInTheDocument()
   })
 
+  it('keeps a resolved prior-response review resolved while the radio changes', async () => {
+    // The review context reads the SAVED row's status, not the selected
+    // radio's; keyed on the radio, each click reset the review and the box
+    // re-blanked on returning to the saved option (ztmf-misc#392).
+    installScoreMocks([carried7006()], {
+      insightRows: [
+        {
+          fismasystemid: 1002,
+          questionid: 900,
+          synced_at: '2026-07-14T00:00:00Z',
+          payload: {
+            last_score_notes: 'carried justification',
+            last_datacall: 'FY2025 Q1',
+          },
+        },
+      ],
+    })
+
+    renderAt(DEEP_LINK)
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    )
+    const box = screen.getByRole('textbox', { name: 'Current response' })
+    await waitFor(() => expect(box).toHaveValue('carried justification'))
+
+    fireEvent.click(screen.getByLabelText(/advanced/i))
+    fireEvent.click(screen.getByLabelText(/baseline/i))
+
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Current response' })
+      ).toHaveValue('carried justification')
+    )
+    expect(
+      screen.queryByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).not.toBeInTheDocument()
+  })
+
   it('keeps the guidance off a resolved prior-response card, where the button returns', async () => {
     // Pins !currentPriorResponse: a resolved review unblocks the button, so
     // that term is the only thing keeping the strip quiet on insights

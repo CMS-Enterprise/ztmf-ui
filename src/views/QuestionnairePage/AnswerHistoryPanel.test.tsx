@@ -1,6 +1,6 @@
 import { fireEvent, screen } from '@testing-library/react'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
-import AnswerHistoryPanel from './AnswerHistoryPanel'
+import AnswerHistoryPanel, { UndoAnswerButton } from './AnswerHistoryPanel'
 import type { ScoreRevision } from '@/types'
 
 const side = (over: Partial<ScoreRevision['new']> = {}) => ({
@@ -44,6 +44,7 @@ const props = {
   isError: false,
   isUndoing: false,
   onUndo: jest.fn(),
+  canUndo: true,
 }
 
 afterEach(() => jest.clearAllMocks())
@@ -73,6 +74,60 @@ it('offers the undo action on the head and reports the revision it targets', () 
  * association is what matters here, not the copy: an id that nothing points at
  * announces as nothing.
  */
+// The page's gate (unsaved edits, an unresolved review) applies here as on the
+// strip: an undo under unsaved edits would discard them.
+it('withholds the action when the page does not allow undo, even on an undoable head', () => {
+  renderWithProviders(<AnswerHistoryPanel {...props} canUndo={false} />)
+
+  expect(
+    screen.queryByRole('button', { name: 'Undo last change' })
+  ).not.toBeInTheDocument()
+})
+
+it('marks an option the catalog has since deleted rather than leaving the cell blank', () => {
+  renderWithProviders(
+    <AnswerHistoryPanel
+      {...props}
+      revisions={[
+        revision({
+          prev: {
+            functionoptionid: 5,
+            notes: null,
+            notes_is_ai_summary: false,
+            status: 'done',
+          },
+        }),
+      ]}
+    />
+  )
+
+  expect(screen.getByText('Option no longer available')).toBeInTheDocument()
+})
+
+it('gives each undo button its own description, so two on the page do not collide', () => {
+  const head = { revisionid: 91, kind: 'update' as const }
+  renderWithProviders(
+    <>
+      <UndoAnswerButton
+        head={head}
+        disabled={false}
+        onUndo={jest.fn()}
+        preview="first"
+      />
+      <UndoAnswerButton
+        head={head}
+        disabled={false}
+        onUndo={jest.fn()}
+        preview="second"
+      />
+    </>
+  )
+
+  const [a, b] = screen.getAllByRole('button', { name: 'Undo last change' })
+  expect(a).toHaveAccessibleDescription('first')
+  expect(b).toHaveAccessibleDescription('second')
+})
+
 it('describes what the undo restores, and links it to the button', () => {
   renderWithProviders(
     <AnswerHistoryPanel
@@ -220,7 +275,7 @@ it('exposes dialog semantics and its accessible name', () => {
 it('closes from the header control', () => {
   renderWithProviders(<AnswerHistoryPanel {...props} />)
 
-  fireEvent.click(screen.getByRole('button', { name: 'Close answer history' }))
+  fireEvent.click(screen.getByRole('button', { name: 'Close' }))
   expect(props.onClose).toHaveBeenCalled()
 })
 

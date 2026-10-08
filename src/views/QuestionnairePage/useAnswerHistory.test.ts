@@ -22,7 +22,11 @@ import { act, renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import { parseApiError } from '@/utils/apiErrors'
-import { useAnswerHistory, REVISION_CONFLICT } from './useAnswerHistory'
+import {
+  useAnswerHistory,
+  classifyUndoError,
+  REVISION_CONFLICT,
+} from './useAnswerHistory'
 
 const mock = new MockAdapter(axiosInstance)
 const SCORE_ID = 4212
@@ -165,4 +169,78 @@ test('surfaces a missing-token rejection as a field error, not a conflict', asyn
   const parsed = parseApiError(rejection)
   expect(parsed.fieldErrors?.expected_head_revisionid).toBe('required')
   expect(parsed.code).not.toBe(REVISION_CONFLICT)
+})
+
+test('refreshes history when the edit stamp moves, but not when navigation clears it', async () => {
+  mock.onGet(apiPaths.scores.revisions(SCORE_ID)).reply(200, { data: HISTORY })
+  const queryClient = createTestQueryClient()
+  const { rerender } = renderHook(
+    ({ writeStamp }: { writeStamp: string | null }) =>
+      useAnswerHistory({
+        scoreid: SCORE_ID,
+        refetchScores: jest.fn(),
+        writeStamp,
+      }),
+    {
+      wrapper: queryWrapper(queryClient),
+      initialProps: { writeStamp: 't1|done' as string | null },
+    }
+  )
+  await waitFor(() => expect(mock.history.get).toHaveLength(1))
+
+  // A save landed: the stamp moved between two real values.
+  rerender({ writeStamp: 't2|done' })
+  await waitFor(() => expect(mock.history.get).toHaveLength(2))
+
+  // Navigating away clears the saved row before scoreid moves. Not a write.
+  rerender({ writeStamp: null })
+  rerender({ writeStamp: 't3|done' })
+  await new Promise((resolve) => setTimeout(resolve, 50))
+  expect(mock.history.get).toHaveLength(2)
+})
+
+describe('classifyUndoError', () => {
+  const rejectUndo = async (status: number, body: unknown) => {
+    mock.onPost(apiPaths.scores.undo(SCORE_ID)).reply(status, body)
+    return axiosInstance
+      .post(apiPaths.scores.undo(SCORE_ID), {})
+      .catch((e: unknown) => e)
+  }
+
+  test('a 409 with REVISION_CONFLICT is a conflict', async () => {
+    const error = await rejectUndo(409, {
+      error: 'conflict',
+      code: REVISION_CONFLICT,
+    })
+    expect(classifyUndoError(error)).toEqual({ kind: 'conflict' })
+  })
+
+  test('a 400 on the token field is refused with the server reason verbatim', async () => {
+    const reason =
+      'This answer was changed outside its history. Change the answer directly instead.'
+    const error = await rejectUndo(400, {
+      error: 'invalid input',
+      data: { expected_head_revisionid: reason },
+    })
+    expect(classifyUndoError(error)).toEqual({
+      kind: 'refused',
+      message: reason,
+    })
+  })
+
+  test('a bare "required" is a client bug, not a reason to show the user', async () => {
+    const error = await rejectUndo(400, {
+      error: 'invalid input',
+      data: { expected_head_revisionid: 'required' },
+    })
+    expect(classifyUndoError(error).kind).toBe('error')
+  })
+
+  test('any other failure is a generic error', async () => {
+    const error = await rejectUndo(500, { error: 'boom' })
+    expect(classifyUndoError(error)).toEqual({
+      kind: 'error',
+      message: 'boom',
+    })
+  })
 })

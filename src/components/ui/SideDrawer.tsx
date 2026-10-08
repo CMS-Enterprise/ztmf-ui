@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useId } from 'react'
 import Drawer from '@mui/material/Drawer'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -22,6 +22,8 @@ export type SideDrawerProps = {
   footer?: ReactNode
   /** Drawer width in pixels. Defaults to 480. */
   width?: number
+  /** Optional id for the drawer panel, for tests and scan scoping. */
+  id?: string
 }
 
 /**
@@ -41,9 +43,24 @@ export function SideDrawer({
   children,
   footer,
   width = 480,
+  id,
 }: SideDrawerProps) {
+  const titleId = useId()
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      // MUI gives the Drawer root role="presentation" and, unlike Dialog, puts
+      // no dialog semantics on the Paper, so the panel would announce as
+      // nothing. Mirror what Modal gets from Dialog.
+      PaperProps={{
+        id,
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': titleId,
+      }}
+    >
       <Box
         sx={{
           width: { xs: '100vw', sm: width },
@@ -81,6 +98,8 @@ export function SideDrawer({
               </Typography>
             )}
             <Typography
+              id={titleId}
+              component="h2"
               sx={{ fontSize: 17, fontWeight: 700, color: colors.ink }}
             >
               {title}

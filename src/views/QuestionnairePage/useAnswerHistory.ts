@@ -25,17 +25,24 @@ export const UNDO_CONFLICT_MESSAGE =
  * 'handled' means the auth interceptor already surfaced it. 'conflict' means
  * the head moved: refreshing is the recovery and retrying the same token never
  * succeeds, so it must not be reported as a generic failure the user could
- * retry into.
+ * retry into. 'refused' is a 400 on the token field: the head itself cannot be
+ * undone (e.g. the answer changed outside its history), and `message` is the
+ * server's reason, shown verbatim.
  */
 export function classifyUndoError(
   error: unknown
 ):
   | { kind: 'handled' }
   | { kind: 'conflict' }
+  | { kind: 'refused'; message: string }
   | { kind: 'error'; message: string } {
   if (isAuthHandled(error)) return { kind: 'handled' }
   const parsed = parseApiError(error)
   if (parsed.code === REVISION_CONFLICT) return { kind: 'conflict' }
+  const reason = parsed.fieldErrors?.expected_head_revisionid
+  // 'required' is a client bug, not a reason to show the user.
+  if (reason && reason !== 'required')
+    return { kind: 'refused', message: reason }
   return { kind: 'error', message: parsed.message }
 }
 
@@ -149,7 +156,11 @@ export function useAnswerHistory({
       return
     }
     if (seen.current.stamp === writeStamp) return
+    const previous = seen.current.stamp
     seen.current = { scoreid, stamp: writeStamp }
+    // A stamp going to or from null is navigation clearing the saved row
+    // before scoreid moves, not a write.
+    if (previous == null || writeStamp == null) return
     void queryClient.invalidateQueries({
       queryKey: queryKeys.scores.revisions(scoreid),
     })

@@ -78,9 +78,8 @@ tests:
   # without navigating. See the fixture comment in _test_data_empire.sql for
   # why it is not on DS-1.
   - id: answer-history-drawer
-    # Deep-linked rather than landing on the questionnaire's first question.
-    # ztmf-misc#393 makes which question loads first deterministic, but it has
-    # not merged yet; once it has, this can become the plain questionnaire path.
+    # Deep-linked to the fixture's question rather than relying on question
+    # order, so a later reorder cannot move the scan off the fixture.
     path: '/#/questionnaire/system/1002/Audit_Fields_Smoke_Cycle/identity/imperial-identity-verification'
     scan: false
     steps:
@@ -89,8 +88,9 @@ tests:
       # loaded. It is a real focusable control, not tooltip content.
       - waitFor: '#view-answer-history'
       - click: '#view-answer-history'
-      # Only mounts once the drawer is open AND the revisions read resolved.
-      - waitFor: '#answer-history-title'
+      # The revision list mounts only once the drawer is open AND the read
+      # resolved, so the scan never measures the loading spinner.
+      - waitFor: '#answer-history-panel ol'
       # Scanning mid-transition measures text blended with the backdrop and
       # reads as a contrast failure that vanishes on the next run. MUI's slide
       # transition is comparable to the Dialog fade the pillar-scores modal

@@ -9,7 +9,6 @@ import ChevronRightIcon from '@mui/icons-material/ChevronRight'
 import type { FismaSystemType, OpDiv, ScoreAggregate, ScoreTier } from '@/types'
 import { colors, fonts, radius, tierDot } from '@/theme/tokens'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
-import { PILLAR_ORDER } from '@/constants'
 import { CodeBadge } from '@/components/ui/StatusChip'
 import SystemEnrichmentCard from './SystemEnrichmentCard'
 import InsightsEmptyState from './InsightsEmptyState'
@@ -389,11 +388,8 @@ function PillarSnapshot({
       </Typography>
     )
   }
-  const rank = (name: string) => {
-    const i = PILLAR_ORDER.indexOf(name)
-    return i === -1 ? Number.MAX_SAFE_INTEGER : i
-  }
-  const sorted = [...pillars].sort((a, b) => rank(a.pillar) - rank(b.pillar))
+  // No client-side sort: /scores/aggregate orders pillar scores by pillars.ordr,
+  // the same rank the questionnaire renders in (ztmf-misc#393).
   return (
     <Box
       sx={{
@@ -403,7 +399,7 @@ function PillarSnapshot({
         mt: 1.25,
       }}
     >
-      {sorted.map((p) => (
+      {pillars.map((p) => (
         <PillarRow key={p.pillarid} pillar={p} />
       ))}
     </Box>

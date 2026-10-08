@@ -8,8 +8,7 @@ import {
   Typography,
 } from '@mui/material'
 import { FismaSystemType } from '@/types'
-import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { useSetTargetMaturity } from '@/utils/fismaSystems'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import {
@@ -70,8 +69,12 @@ export default function TargetMaturityCard({
   const [justification, setJustification] = useState(
     system.target_maturity_justification ?? ''
   )
-  const [isSaving, setIsSaving] = useState(false)
   const [openConfirmDialog, setOpenConfirmDialog] = useState(false)
+
+  const saveTargetMaturity = useSetTargetMaturity(system.fismasystemid)
+  // The mutation owns the in-flight state; it gates isSavable below and
+  // drives the disabled Save button and its label.
+  const isSaving = saveTargetMaturity.isPending
 
   const hasExplicitTarget = !!system.target_maturity_tier
   const trimmedJustification = justification.trim()
@@ -122,23 +125,22 @@ export default function TargetMaturityCard({
 
   const handleSave = async () => {
     if (!isSavable) return
-    setIsSaving(true)
     try {
-      const res = await axiosInstance.put(
-        apiPaths.fismaSystems.targetMaturity(system.fismasystemid),
-        {
-          target_maturity_tier: tier,
-          target_maturity_justification: trimmedJustification,
-        }
-      )
+      const saved = await saveTargetMaturity.mutateAsync({
+        target_maturity_tier: tier,
+        target_maturity_justification: trimmedJustification,
+      })
       // The endpoint contract is to echo the updated record. If a 200 ever
       // comes back without one, the view would silently diverge from the
       // server, so surface it as an error rather than a success toast.
-      const saved = res.data?.data as FismaSystemType | undefined
       if (!saved) {
         notify(ERROR_MESSAGES.error, 'error', { autoHideDuration: 2000 })
         return
       }
+      // The mutation also invalidates this system's detail key, which reaches
+      // nothing while the detail page resolves the system out of the shared
+      // list in Outlet context. Drop this callback when that read becomes a
+      // query.
       onSaved(saved)
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setIsEditing(false)
@@ -148,8 +150,6 @@ export default function TargetMaturityCard({
       notify(parsed.message || ERROR_MESSAGES.error, 'error', {
         autoHideDuration: 2000,
       })
-    } finally {
-      setIsSaving(false)
     }
   }
 

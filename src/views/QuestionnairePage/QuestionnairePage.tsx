@@ -39,8 +39,6 @@ import {
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { outlinedChipSx } from '@/utils/chipStyles'
-import { sortPillars } from '@/utils/sortPillars'
-import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
@@ -77,7 +75,7 @@ import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
-import { addSpace, type Category } from './helpers'
+import { addSpace, groupQuestionsByPillar, type Category } from './helpers'
 // Aliased because a local state variable named `datacall` shadows the type.
 import type { datacall as Datacall } from '@/types'
 import ClosedDatacallBanner from './components/ClosedDatacallBanner'
@@ -640,8 +638,9 @@ export default function QuestionnarePage() {
     // short-circuits on an unchanged contextId and cannot re-arm: undo returns
     // a row to not_started, but the blank-box + "Insert into response"
     // presentation every other unconfirmed carried-forward answer gets would
-    // only reappear after navigating away and back (ztmf-misc#392).
-    questionScores[selectQuestionOption]?.status ?? null,
+    // only reappear after navigating away and back (ztmf-misc#392). The saved
+    // row, not the selected radio, or every radio click would reset the review.
+    questionScores[initQuestionChoice]?.status ?? null,
   ])
   // A context that has not yet been evaluated is synchronously treated as
   // initializing. This keeps the editor and Next button blocked during the
@@ -781,7 +780,12 @@ export default function QuestionnarePage() {
   // The third sibling of saveResponse and confirmScoreById. Reverts to the
   // value the head revision replaced, sending that revision's id so the server
   // refuses rather than silently reverting a change this session never saw.
+  const undoInFlight = React.useRef(false)
   const handleUndoClick = async (revisionid: number) => {
+    // isPending lags the click by a render; a double-click would otherwise
+    // send the same token twice and report its own undo as a conflict.
+    if (undoInFlight.current) return
+    undoInFlight.current = true
     try {
       await answerHistory.undo.mutateAsync(revisionid)
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
@@ -790,11 +794,23 @@ export default function QuestionnarePage() {
       const outcome = classifyUndoError(error)
       if (outcome.kind === 'handled') return
       if (outcome.kind === 'conflict') {
+        // Someone else wrote the answer, so the one on screen is stale too.
         answerHistory.history.refetch()
+        fetchQuestionScores(system, setQuestionScores)
         notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
         return
       }
+      if (outcome.kind === 'refused') {
+        // Refetch both: the button must go, and a drifted answer means the
+        // one on screen may be stale.
+        answerHistory.history.refetch()
+        fetchQuestionScores(system, setQuestionScores)
+        notify(outcome.message, 'warning', { autoHideDuration: 6000 })
+        return
+      }
       notify(outcome.message, 'error', { autoHideDuration: 2500 })
+    } finally {
+      undoInFlight.current = false
     }
   }
 
@@ -1035,11 +1051,7 @@ export default function QuestionnarePage() {
               setNoQuestions(true)
               setLoadingQuestion(false)
             } else {
-              const organizedData: Record<string, FismaQuestion[]> = {}
               data.forEach((question: FismaQuestion) => {
-                if (!organizedData[question.pillar.pillar]) {
-                  organizedData[question.pillar.pillar] = []
-                }
                 questionData[question.function.functionid] = {
                   questionid: question.questionid,
                   question: question.question,
@@ -1048,23 +1060,14 @@ export default function QuestionnarePage() {
                   pillar: question.pillar.pillar,
                   function: question.function.function,
                 }
-                organizedData[question.pillar.pillar].push(question)
               })
               // The reduced-pillar rule is applied by the API for the cycle
               // requested above (ztmf#545), so whatever comes back is already
-              // the right set.
-              const sortedPillars = sortPillars(Object.keys(organizedData))
-              const categoriesData: Category[] = sortedPillars.map((pillar) => {
-                const sortedSteps = sortFunctions(pillar, organizedData[pillar])
-                const sortedStepFuncId = sortedSteps.map(
-                  (d) => d.function.functionid
-                )
-                sortedFuncId = [...sortedFuncId, ...sortedStepFuncId]
-                return {
-                  name: pillar,
-                  steps: sortedSteps,
-                }
-              })
+              // the right set, in the right order (ztmf-misc#393).
+              const categoriesData: Category[] = groupQuestionsByPillar(data)
+              sortedFuncId = categoriesData.flatMap((category) =>
+                category.steps.map((step) => step.function.functionid)
+              )
               const funcIdToIdx = sortedFuncId.reduce(
                 (
                   acc: { [key: number]: number },
@@ -2217,6 +2220,7 @@ export default function QuestionnarePage() {
                 isError={answerHistory.history.isError}
                 isUndoing={answerHistory.undo.isPending}
                 onUndo={handleUndoClick}
+                canUndo={showUndoButton}
               />
               <Box
                 sx={{
@@ -2297,9 +2301,9 @@ export default function QuestionnarePage() {
                       id="view-answer-history"
                       component="button"
                       type="button"
-                      variant="caption"
                       onClick={answerHistory.openHistory}
-                      sx={{ verticalAlign: 'baseline' }}
+                      // Matches the SaveIndicator text it sits beside.
+                      sx={{ fontSize: 12, fontWeight: 600 }}
                     >
                       View history
                     </Link>

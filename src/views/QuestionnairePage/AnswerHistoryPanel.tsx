@@ -3,19 +3,20 @@ import Alert from '@mui/material/Alert'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
-import Divider from '@mui/material/Divider'
-import Drawer from '@mui/material/Drawer'
-import IconButton from '@mui/material/IconButton'
 import Typography from '@mui/material/Typography'
 import { visuallyHidden } from '@mui/utils'
-import CloseIcon from '@mui/icons-material/Close'
 import UndoIcon from '@mui/icons-material/Undo'
+import HistoryIcon from '@mui/icons-material/History'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import AnswerSideCell from '@/components/AnswerSideCell/AnswerSideCell'
+import SideDrawer from '@/components/ui/SideDrawer'
+import EmptyState from '@/components/ui/EmptyState'
+import { colors, radius } from '@/theme/tokens'
+import { formatDateTime } from '@/utils/dates'
 import { undoButtonLabel, undoPreview } from './undoState'
 import type { ScoreRevision } from '@/types'
 
-export const ANSWER_HISTORY_TITLE_ID = 'answer-history-title'
+export const ANSWER_HISTORY_PANEL_ID = 'answer-history-panel'
 
 type Props = {
   open: boolean
@@ -27,15 +28,11 @@ type Props = {
   isUndoing: boolean
   /** Undo the head revision. The panel never picks a target itself. */
   onUndo: (revisionid: number) => void
-}
-
-function formatWhen(iso: string): string {
-  const d = new Date(iso)
-  if (isNaN(d.getTime())) return iso
-  return d.toLocaleString(undefined, {
-    dateStyle: 'medium',
-    timeStyle: 'short',
-  })
+  /**
+   * The page's own gate (canUndoAnswer), same as the strip's: unsaved edits or
+   * an unresolved review withhold Undo even when the server allows it.
+   */
+  canUndo: boolean
 }
 
 /** Reads as a sentence about what happened, not as a column of enum values. */
@@ -75,151 +72,130 @@ export default function AnswerHistoryPanel({
   isError,
   isUndoing,
   onUndo,
+  canUndo,
 }: Props) {
-  const closeRef = React.useRef<HTMLButtonElement>(null)
-
-  // Focus the close control on open, matching ScoreDiffModal's a11y skeleton.
-  React.useEffect(() => {
-    if (!open) return
-    const timer = setTimeout(() => closeRef.current?.focus(), 100)
-    return () => clearTimeout(timer)
-  }, [open])
-
   const head = revisions[0]
 
   return (
-    <Drawer
-      anchor="right"
+    // SideDrawer supplies the dialog semantics, the labelled title and the
+    // focus trap; focus lands on the panel itself, which suits a read-mostly
+    // list (WAI-ARIA dialog pattern).
+    <SideDrawer
       open={open}
       onClose={onClose}
-      // Dialog semantics go on the Paper, not the Drawer. MUI renders the
-      // Drawer root with role="presentation", which strips semantics, so an
-      // aria-labelledby placed there is discarded and the panel announces as
-      // nothing. Dialog does this for its own Paper automatically; Drawer does
-      // not. axe will not catch it either - a missing dialog role on a custom
-      // panel is an omission, not a violation - so the frostfall scan passing
-      // is not evidence this is right.
-      PaperProps={{
-        id: 'answer-history-panel',
-        role: 'dialog',
-        'aria-modal': true,
-        'aria-labelledby': ANSWER_HISTORY_TITLE_ID,
-        sx: { width: { xs: '100%', sm: 460 }, p: 2 },
-      }}
+      title="Answer history"
+      id={ANSWER_HISTORY_PANEL_ID}
     >
-      <Box
-        sx={{
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'space-between',
-        }}
-      >
-        <Typography
-          variant="h2"
-          sx={{ fontSize: 20 }}
-          id={ANSWER_HISTORY_TITLE_ID}
-        >
-          Answer history
-        </Typography>
-        <IconButton
-          ref={closeRef}
-          onClick={onClose}
-          aria-label="Close answer history"
-          size="small"
-        >
-          <CloseIcon />
-        </IconButton>
-      </Box>
-
       {/* No role="status" here: the questionnaire already has two live regions
           and the carry-forward chip announces the status change an undo makes. */}
       {isPending && (
-        <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
+        <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress size={24} />
         </Box>
       )}
 
       {isError && (
-        <Alert severity="error" sx={{ mt: 2 }}>
+        <Alert severity="error">
           Could not load this answer&apos;s history. Close the panel and try
           again.
         </Alert>
       )}
 
       {!isPending && !isError && revisions.length === 0 && (
-        <Typography variant="body2" sx={{ mt: 2, color: 'text.secondary' }}>
-          No changes have been recorded for this answer in this data call.
-        </Typography>
+        <EmptyState
+          icon={<HistoryIcon />}
+          tone="neutral"
+          title="No recorded changes"
+          description="No changes have been recorded for this answer in this data call."
+        />
       )}
 
-      {revisions.map((rev) => (
-        <Box key={rev.revisionid} sx={{ mt: 2 }}>
-          <Divider sx={{ mb: 1.5 }} />
-          <Typography variant="body2" sx={{ fontWeight: 600 }}>
-            {describeKind(rev.kind)}
-          </Typography>
-          <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-            {rev.actor?.name ?? 'Unknown user'}
-            {rev.actor?.role ? ` (${rev.actor.role})` : ''} -{' '}
-            {formatWhen(rev.createdat)}
-          </Typography>
-
-          <Box
-            sx={{
-              display: 'flex',
-              alignItems: 'flex-start',
-              gap: 1,
-              mt: 1,
-            }}
-          >
-            <Box sx={{ flex: 1 }}>
-              <AnswerSideCell side={rev.prev} />
-            </Box>
-            <ArrowForwardIcon
-              fontSize="small"
-              sx={{ color: 'text.secondary', mt: 0.5 }}
-              // Decorative: the before/after relationship is already conveyed
-              // by the order of the two cells.
-              aria-hidden="true"
-            />
-            <Box sx={{ flex: 1 }}>
-              <AnswerSideCell side={rev.new} />
-            </Box>
-          </Box>
-
-          {rev.undoable && rev === head ? (
-            <Box sx={{ mt: 1 }}>
-              <UndoAnswerButton
-                head={rev}
-                disabled={isUndoing}
-                onUndo={onUndo}
-                // Built from the row below the head, whose `new` side is by
-                // definition this head's `prev`.
-                preview={undoPreview({
-                  restoresOptionName: rev.prev?.optionname,
-                  restoresNotes: !!rev.prev?.notes,
-                  savedAt: revisions[1]?.createdat,
-                })}
-              />
-            </Box>
-          ) : (
-            rev.reason && (
+      {revisions.length > 0 && (
+        <Box
+          component="ol"
+          aria-label="Revisions, newest first"
+          sx={{ listStyle: 'none', m: 0, p: 0 }}
+        >
+          {revisions.map((rev) => (
+            <Box
+              component="li"
+              key={rev.revisionid}
+              sx={{
+                py: 4,
+                '&:first-of-type': { pt: 0 },
+                '&:not(:last-of-type)': {
+                  borderBottom: `1px solid ${colors.neutral200}`,
+                },
+              }}
+            >
               <Typography
-                variant="caption"
-                display="block"
-                sx={{ mt: 1, color: 'text.secondary', fontStyle: 'italic' }}
+                sx={{ fontSize: 13, fontWeight: 600, color: colors.ink }}
               >
-                {rev.reason}
+                {describeKind(rev.kind)}
               </Typography>
-            )
-          )}
+              <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                {rev.actor?.name ?? 'Unknown user'}
+                {rev.actor?.role ? ` (${rev.actor.role})` : ''} -{' '}
+                {formatDateTime(rev.createdat, rev.createdat)}
+              </Typography>
+
+              <Box
+                sx={{
+                  display: 'flex',
+                  alignItems: 'flex-start',
+                  gap: 2,
+                  mt: 2,
+                  p: 3,
+                  backgroundColor: colors.neutral50,
+                  border: `1px solid ${colors.neutral200}`,
+                  borderRadius: `${radius.md}px`,
+                }}
+              >
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <AnswerSideCell side={rev.prev} />
+                </Box>
+                <ArrowForwardIcon
+                  // Decorative: the before/after relationship is already
+                  // conveyed by the order of the two cells.
+                  aria-hidden="true"
+                  sx={{ fontSize: 16, color: colors.neutral400, mt: 0.5 }}
+                />
+                <Box sx={{ flex: 1, minWidth: 0 }}>
+                  <AnswerSideCell side={rev.new} />
+                </Box>
+              </Box>
+
+              {canUndo && rev.undoable && rev === head ? (
+                <Box sx={{ mt: 3 }}>
+                  <UndoAnswerButton
+                    head={rev}
+                    disabled={isUndoing}
+                    onUndo={onUndo}
+                    // Built from the row below the head, whose `new` side is by
+                    // definition this head's `prev`.
+                    preview={undoPreview({
+                      restoresOptionName: rev.prev?.optionname,
+                      restoresNotes: !!rev.prev?.notes,
+                      savedAt: revisions[1]?.createdat,
+                    })}
+                  />
+                </Box>
+              ) : (
+                rev.reason && (
+                  <Typography
+                    sx={{ mt: 2, fontSize: 12, color: colors.neutral500 }}
+                  >
+                    {rev.reason}
+                  </Typography>
+                )
+              )}
+            </Box>
+          ))}
         </Box>
-      ))}
-    </Drawer>
+      )}
+    </SideDrawer>
   )
 }
-
-export const UNDO_PREVIEW_ID = 'undo-action-preview'
 
 type UndoButtonProps = {
   head: { revisionid: number; kind: ScoreRevision['kind'] }
@@ -244,6 +220,8 @@ export function UndoAnswerButton({
   onUndo,
   preview,
 }: UndoButtonProps) {
+  // Per instance: the strip's button stays mounted under the open drawer.
+  const previewId = React.useId()
   return (
     <>
       <Button
@@ -252,7 +230,7 @@ export function UndoAnswerButton({
         startIcon={<UndoIcon />}
         onClick={() => onUndo(head.revisionid)}
         disabled={disabled}
-        aria-describedby={preview ? UNDO_PREVIEW_ID : undefined}
+        aria-describedby={preview ? previewId : undefined}
         sx={{ textTransform: 'none' }}
       >
         {undoButtonLabel(head.kind)}
@@ -262,7 +240,7 @@ export function UndoAnswerButton({
           noise for sighted users. A three-word label is the problem only for
           someone who cannot see the row it acts on. */}
       {preview && (
-        <Box component="span" id={UNDO_PREVIEW_ID} sx={visuallyHidden}>
+        <Box component="span" id={previewId} sx={visuallyHidden}>
           {preview}
         </Box>
       )}

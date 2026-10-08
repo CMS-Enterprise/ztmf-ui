@@ -38,7 +38,18 @@ export default function AnswerSideCell({ side }: Props) {
   }
   return (
     <>
-      <Typography variant="body2">{side.optionname}</Typography>
+      {/* A revision names an option the catalog may since have deleted; the
+          diff modal always has optionname, so its output is unchanged. */}
+      {side.optionname ? (
+        <Typography variant="body2">{side.optionname}</Typography>
+      ) : (
+        <Typography
+          variant="body2"
+          sx={{ color: 'text.secondary', fontStyle: 'italic' }}
+        >
+          Option no longer available
+        </Typography>
+      )}
       {/* Guarded only because a revision side may omit it; the diff modal
           always supplies a score, so its output is unchanged. */}
       {side.score != null && (

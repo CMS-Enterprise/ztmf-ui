@@ -1,3 +1,4 @@
+import { formatDateTime } from '@/utils/dates'
 import type { CarryForwardState } from './confirmState'
 
 /**
@@ -75,11 +76,8 @@ export const undoPreview = (s: {
   savedAt?: string
 }): string | undefined => {
   if (!s.restoresOptionName) return undefined
-  const when = s.savedAt ? new Date(s.savedAt) : undefined
-  const saved =
-    when && !isNaN(when.getTime())
-      ? `, saved ${when.toLocaleDateString(undefined, { dateStyle: 'long' })}`
-      : ''
+  const when = formatDateTime(s.savedAt, '')
+  const saved = when ? `, saved ${when}` : ''
   const justification = s.restoresNotes ? ' and its justification' : ''
   return `Restores the answer "${s.restoresOptionName}"${justification}${saved}.`
 }
