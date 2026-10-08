@@ -13,7 +13,7 @@
  *
  * @module views/OpDivDashboard/OpDivDashboard
  */
-import { useEffect, useMemo } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
@@ -24,10 +24,15 @@ import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import PageHeader from '@/components/ui/PageHeader'
 import { EmptyState } from '@/components/ui/EmptyState'
-import { useUsers } from '@/api/users'
+import { useUsers } from '@/utils/users'
+import { isAdmin } from '@/utils/userRoles'
 import { Routes } from '@/router/constants'
 import { useContextProp } from '../Title/Context'
-import OpDivSwitcher, { ALL_OPDIVS_LABEL } from './components/OpDivSwitcher'
+import OpDivSwitcher, {
+  ALL_OPDIVS_LABEL,
+  OpDivTitle,
+} from './components/OpDivSwitcher'
+import LoadErrorState from './components/LoadErrorState'
 import OpDivHeaderActions from './components/OpDivHeaderActions'
 import OpDivHero from './components/OpDivHero'
 import OpDivKpiRow, {
@@ -49,7 +54,7 @@ import {
 import { usersForOpDiv } from './opdivPeople'
 import { useOpDivDashboardData } from './useOpDivDashboardData'
 import { ALL_OPDIVS, useOpDivScope, writeLastOpDivId } from './useOpDivScope'
-import type { OpDiv } from '@/types'
+import type { FismaSystemType, OpDiv } from '@/types'
 
 /**
  * The OpDiv dashboard page.
@@ -58,16 +63,41 @@ import type { OpDiv } from '@/types'
 export default function OpDivDashboard() {
   const { opdivId } = useParams<{ opdivId: string }>()
   const { opdiv, visible, isAggregate, status } = useOpDivScope(opdivId)
-  const { selectedDatacall } = useContextProp()
+  const {
+    selectedDatacall,
+    showDecommissioned,
+    setShowDecommissioned,
+    fismaSystems,
+    fismaSystemsError,
+  } = useContextProp()
+  // The decommissioned list that was showing when the flag was cleared; held
+  // on until the active list replaces it.
+  const [staleSystems, setStaleSystems] = useState<FismaSystemType[] | null>(
+    null
+  )
+
+  // This page describes active posture, and /fismasystems?decommissioned=true
+  // SWAPS the list rather than adding to it - so while that flag is on there
+  // are no active systems to summarize and every figure here would read zero.
+  // The flag is shared layout state, so a user can arrive with it already set
+  // from the main dashboard, and this page carries no control to clear it.
+  useEffect(() => {
+    if (!showDecommissioned) return
+    setStaleSystems(fismaSystems)
+    setShowDecommissioned(false)
+  }, [showDecommissioned, setShowDecommissioned, fismaSystems])
+  // A failed refetch leaves the stale list in place; the body reports it.
+  const awaitingActiveSystems =
+    showDecommissioned || (staleSystems === fismaSystems && !fismaSystemsError)
 
   // Remember the OpDiv so a later bare /opdivs lands back here. Keyed on the
   // resolved id, so an unresolvable URL is never stored. The aggregate is not
   // remembered: it is not one of the OpDivs the landing picks between.
   useEffect(() => {
-    if (opdiv) writeLastOpDivId(opdiv.opdiv_id)
+    if (opdiv?.active) writeLastOpDivId(opdiv.opdiv_id)
   }, [opdiv])
 
-  if (status === 'loading') {
+  if (status === 'loading' || awaitingActiveSystems) {
     return (
       <Box
         sx={{
@@ -81,6 +111,8 @@ export default function OpDivDashboard() {
       </Box>
     )
   }
+
+  if (status === 'error') return <LoadErrorState what="OpDivs" />
 
   // Explain rather than silently redirect. An OpDiv-scoped admin who reaches
   // an id outside their grants would otherwise see a fully-rendered, entirely
@@ -157,18 +189,10 @@ function OpDivDashboardBody({
   // Null means "no OpDiv filter", which is the caller's whole server-scoped
   // set rather than a loop over visible ids - see scopeSystemsToOpDiv.
   const opdivId = isAggregate ? null : opdiv?.opdiv_id ?? null
-  const { showDecommissioned, setShowDecommissioned } = useContextProp()
+  const { fismaSystemsError, datacallsError, userInfo } = useContextProp()
   const data = useOpDivDashboardData(opdivId)
   const usersQuery = useUsers()
 
-  // This page describes active posture, and /fismasystems?decommissioned=true
-  // SWAPS the list rather than adding to it - so while that flag is on there
-  // are no active systems to summarize and every figure here would read zero.
-  // The flag is shared layout state, so a user can arrive with it already set
-  // from the main dashboard, and this page carries no control to clear it.
-  useEffect(() => {
-    if (showDecommissioned) setShowDecommissioned(false)
-  }, [showDecommissioned, setShowDecommissioned])
   // In the aggregate every admin the caller can see is relevant, so the
   // roster is not narrowed to one OpDiv's grants.
   const scopedUsers = useMemo(
@@ -187,10 +211,19 @@ function OpDivDashboardBody({
     ? `${scopeName} · Viewing ${datacallName}`
     : scopeName
 
+  // Ordered by dependency: scores mean nothing without the systems and calls.
+  const loadError = fismaSystemsError
+    ? 'systems'
+    : datacallsError
+      ? 'data calls'
+      : data.isError
+        ? 'scores'
+        : null
+
   return (
     <Box sx={{ pt: 3, pb: 4, boxSizing: 'border-box' }}>
       <PageHeader
-        title={switcher}
+        title={<OpDivTitle opdiv={opdiv} isAggregate={isAggregate} />}
         subtitle={subtitle}
         breadcrumbs={
           <BreadCrumbs
@@ -203,18 +236,23 @@ function OpDivDashboardBody({
           />
         }
         actions={
-          <OpDivHeaderActions
-            opdiv={opdiv}
-            isAggregate={isAggregate}
-            systems={systems}
-            maps={data.maps}
-          />
+          <>
+            {switcher}
+            <OpDivHeaderActions
+              opdiv={opdiv}
+              isAggregate={isAggregate}
+              systems={systems}
+              maps={data.maps}
+            />
+          </>
         }
       />
 
       <DatacallContextCard />
 
-      {data.isPending ? (
+      {loadError ? (
+        <LoadErrorState what={loadError} />
+      ) : data.isPending ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress aria-label="Loading OpDiv scores" />
         </Box>
@@ -364,7 +402,7 @@ function OpDivDashboardBody({
               id={NOT_STARTED_PANEL_ID}
               rows={data.notStarted}
               systemsInCall={data.completion.systemsInCall}
-              datacallId={data.pillars.anchorCall?.datacallid}
+              datacallName={data.pillars.anchorCall?.datacall}
             />
           </Box>
 
@@ -375,6 +413,8 @@ function OpDivDashboardBody({
             opdivId={opdivId}
             opdivCode={isAggregate ? ALL_OPDIVS_LABEL : opdiv?.code ?? ''}
             isPending={usersQuery.isPending}
+            isError={usersQuery.isError}
+            canManageUsers={isAdmin(userInfo)}
           />
         </Box>
       )}

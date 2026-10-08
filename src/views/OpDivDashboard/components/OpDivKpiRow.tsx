@@ -77,7 +77,7 @@ export default function OpDivKpiRow({
       : daysRemaining < 0
         ? 'deadline passed'
         : daysRemaining === 0
-          ? 'due today'
+          ? 'closes within a day'
           : `${daysRemaining} day${daysRemaining === 1 ? '' : 's'} left`
 
   const notStarted = completion.notStarted
@@ -95,7 +95,7 @@ export default function OpDivKpiRow({
       ? `${risk.highImpact} high-impact ${risk.highImpact === 1 ? 'system' : 'systems'} in scope: ${summary.hvaCount} HVA, ${summary.highFipsCount} High FIPS.`
       : 'No system here is flagged an HVA or carries a High FIPS impact level.',
     risk.unknownImpact > 0
-      ? `${risk.unknownImpact} ${risk.unknownImpact === 1 ? 'system has' : 'systems have'} neither designation recorded, so their impact is unknown rather than low.`
+      ? `${risk.unknownImpact} ${risk.unknownImpact === 1 ? 'system has' : 'systems have'} an HVA or FIPS designation unrecorded, so their impact is unknown rather than low.`
       : null,
     risk.unscored > 0
       ? `${risk.unscored} high-impact ${risk.unscored === 1 ? 'system has' : 'systems have'} no score to judge, and are excluded from this count.`
@@ -249,7 +249,9 @@ export default function OpDivKpiRow({
           value={delta.n > 0 ? declined : '—'}
           hint={
             delta.n === 0
-              ? 'no prior call to compare'
+              ? priorLabel
+                ? `none scored in both · vs ${priorLabel}`
+                : 'no prior call to compare'
               : declined > 0
                 ? `of ${delta.n} scored in both${priorLabel ? ` · vs ${priorLabel}` : ''}`
                 : `none of ${delta.n} lost ground`

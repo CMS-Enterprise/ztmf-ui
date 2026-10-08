@@ -21,7 +21,6 @@
  *
  * @module views/OpDivDashboard/opdivPillars
  */
-import { pillarRank } from '@/utils/sortPillars'
 import { tierForScore } from '@/utils/tierStyles'
 import type { ScoreAggregate, ScoreTier } from '@/types'
 
@@ -45,6 +44,51 @@ function pillarScoresBySystem(
     bySystem.set(row.fismasystemid, scores)
   }
   return bySystem
+}
+
+/**
+ * Pillar ids in the order the API serves them, merged across rows.
+ *
+ * Each row's pillar scores arrive ordered by pillars.ordr, but a reduced-scope
+ * row omits pillars, so first appearance alone would push them last when such
+ * a row comes first. Merges every row's sequence as precedence constraints;
+ * pillars no row orders relative to each other fall back to pillarid.
+ * @param {ScoreAggregate[]} aggregates - Rows from a pillar-bearing aggregate.
+ * @returns {number[]} Pillar ids in API order.
+ */
+export function pillarOrder(aggregates: ScoreAggregate[]): number[] {
+  const after = new Map<number, Set<number>>()
+  const inDegree = new Map<number, number>()
+  for (const row of aggregates) {
+    let prev: number | null = null
+    for (const { pillarid } of row.pillarscores ?? []) {
+      if (!after.has(pillarid)) {
+        after.set(pillarid, new Set())
+        inDegree.set(pillarid, 0)
+      }
+      const next: Set<number> | null =
+        prev === null ? null : (after.get(prev) as Set<number>)
+      if (next && prev !== pillarid && !next.has(pillarid)) {
+        next.add(pillarid)
+        inDegree.set(pillarid, (inDegree.get(pillarid) as number) + 1)
+      }
+      prev = pillarid
+    }
+  }
+
+  const order: number[] = []
+  const remaining = new Set(after.keys())
+  while (remaining.size > 0) {
+    const ready = [...remaining].filter((id) => inDegree.get(id) === 0)
+    // Rows that disagree leave a cycle; break it on pillarid rather than stall.
+    const id = Math.min(...(ready.length > 0 ? ready : remaining))
+    remaining.delete(id)
+    order.push(id)
+    for (const successor of after.get(id) as Set<number>) {
+      inDegree.set(successor, (inDegree.get(successor) as number) - 1)
+    }
+  }
+  return order
 }
 
 /** One pillar's average across the OpDiv. */
@@ -72,7 +116,7 @@ export type PillarAverage = {
  * for systems this page has no record of.
  * @param {ScoreAggregate[]} aggregates - Rows from a pillar-bearing aggregate.
  * @param {Set<number>} systemIds - The OpDiv's system ids.
- * @returns {PillarAverage[]} Averages in canonical pillar order.
+ * @returns {PillarAverage[]} Averages in API pillar order.
  */
 export function averageByPillar(
   aggregates: ScoreAggregate[],
@@ -121,6 +165,7 @@ export function averageByPillar(
     }
   }
 
+  const rank = new Map(pillarOrder(aggregates).map((id, i) => [id, i]))
   return [...sums.entries()]
     .map(([pillarid, { pillar, sum, n }]) => {
       const paired = deltas.get(pillarid)
@@ -141,8 +186,7 @@ export function averageByPillar(
     })
     .sort(
       (a, b) =>
-        pillarRank(a.pillar) - pillarRank(b.pillar) ||
-        a.pillar.localeCompare(b.pillar)
+        (rank.get(a.pillarid) as number) - (rank.get(b.pillarid) as number)
     )
 }
 
@@ -165,7 +209,7 @@ export type PillarExtremeCounts = {
  * different responses.
  *
  * A system with several pillars tied at its minimum contributes to the first
- * in canonical order only, so the counts sum to the number of systems rather
+ * in API pillar order only, so the counts sum to the number of systems rather
  * than double-counting ties.
  * @param {ScoreAggregate[]} aggregates - Rows from a pillar-bearing aggregate.
  * @param {Set<number>} systemIds - The OpDiv's system ids.
@@ -179,8 +223,8 @@ export function pillarExtremeCounts(
   for (const row of aggregates) {
     for (const p of row.pillarscores ?? []) names.set(p.pillarid, p.pillar)
   }
-  const ordered = [...names.entries()].sort(
-    (a, b) => pillarRank(a[1]) - pillarRank(b[1]) || a[1].localeCompare(b[1])
+  const ordered = pillarOrder(aggregates).map(
+    (id) => [id, names.get(id) as string] as const
   )
 
   const lowCounts = new Map<string, number>()
@@ -193,7 +237,7 @@ export function pillarExtremeCounts(
     let high: string | null = null
     let lowScore = Infinity
     let highScore = -Infinity
-    // Walk in canonical order so a tie resolves to the same pillar every time.
+    // Walk in API order so a tie resolves to the same pillar every time.
     for (const [pillarid, pillar] of ordered) {
       const score = scores.get(pillarid)
       if (score === undefined) continue

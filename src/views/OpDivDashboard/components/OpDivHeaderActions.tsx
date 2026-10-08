@@ -26,7 +26,7 @@ import {
   collectExportCallIds,
   deriveExportCallId,
 } from '@/views/Home/exportCall'
-import { exportSystemAnswers } from '@/utils/exportSystems'
+import { buildExportUrl, exportSystemAnswers } from '@/utils/exportSystems'
 import { ERROR_MESSAGES } from '@/constants'
 import { Routes } from '@/router/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
@@ -34,8 +34,13 @@ import { isAdmin, isUnscopedWriteAdmin } from '@/utils/userRoles'
 import { useContextProp } from '@/views/Title/Context'
 import EditOpDivModal from './EditOpDivModal'
 import { buildOpDivMailto } from '../opdivMailto'
+import { clearLastOpDivId } from '../useOpDivScope'
+import type { OpDivIndexState } from '../OpDivIndexRedirect'
 import type { DashboardMaps } from '@/views/Home/aggregateScores'
 import type { FismaSystemType, OpDiv } from '@/types'
+
+/** Longest export URL to send; CloudFront rejects URLs past ~8KB. */
+export const MAX_EXPORT_URL_LENGTH = 6000
 
 /** Props for {@link OpDivHeaderActions}. */
 export type OpDivHeaderActionsProps = {
@@ -67,6 +72,7 @@ export default function OpDivHeaderActions({
     datacalls,
     datacenterEnvironments,
     opdivs,
+    fismaSystems,
     setFismaSystems,
   } = useContextProp()
 
@@ -75,7 +81,9 @@ export default function OpDivHeaderActions({
   const [addOpen, setAddOpen] = useState(false)
   const [settingsOpen, setSettingsOpen] = useState(false)
 
-  const canAddSystem = isAdmin(userInfo)
+  // The create form only offers active OpDivs, so an inactive one cannot be
+  // prefilled and the action would quietly create a system somewhere else.
+  const canAddSystem = isAdmin(userInfo) && (isAggregate || !!opdiv?.active)
   const canManageOpDivs = isUnscopedWriteAdmin(userInfo)
   const isOwner = userInfo.role === 'OWNER'
   // Settings is worth offering when at least one of its controls is live.
@@ -103,11 +111,22 @@ export default function OpDivHeaderActions({
   const callName = (id: number) =>
     datacalls.find((dc) => dc.datacallid === id)?.datacall ?? `Call ${id}`
   const hasSystems = systemIds.length > 0
+  // When the page covers every active system the caller has, export without
+  // fsids, as Home's full export does: the server applies the same scope, and
+  // naming hundreds of ids overflows the URL.
+  const coversCallerScope =
+    isAggregate ||
+    systemIds.length === fismaSystems.filter((s) => !s.decommissioned).length
+  const exportIds = coversCallerScope ? undefined : systemIds
+  const exportTooLong =
+    !!exportIds &&
+    buildExportUrl(singleExportCallId ?? activeDataCallId, exportIds).length >
+      MAX_EXPORT_URL_LENGTH
 
   const runExport = async (callId: number) => {
     setExporting(true)
     try {
-      await exportSystemAnswers(callId, systemIds)
+      await exportSystemAnswers(callId, exportIds)
     } catch (error) {
       if (!isAuthHandled(error)) {
         notify(ERROR_MESSAGES.tryAgain, 'warning', { autoHideDuration: 4000 })
@@ -158,9 +177,11 @@ export default function OpDivHeaderActions({
         title={
           !hasSystems
             ? 'This OpDiv has no active systems to export'
-            : exportCallIds.length > 1
-              ? 'Choose which data call to export'
-              : `Export all ${systemIds.length} systems in ${scopeLabel}`
+            : exportTooLong
+              ? `${systemIds.length} systems are too many to export for one OpDiv in a single request`
+              : exportCallIds.length > 1
+                ? 'Choose which data call to export'
+                : `Export all ${systemIds.length} systems in ${scopeLabel}`
         }
       >
         <span>
@@ -172,7 +193,7 @@ export default function OpDivHeaderActions({
               exportCallIds.length > 1 ? <ArrowDropDownIcon /> : undefined
             }
             onClick={handleExportClick}
-            disabled={exporting || !hasSystems}
+            disabled={exporting || !hasSystems || exportTooLong}
             aria-haspopup={exportCallIds.length > 1 ? 'menu' : undefined}
           >
             {exporting ? 'Exporting…' : 'Export'}
@@ -315,7 +336,11 @@ export default function OpDivHeaderActions({
           canToggleDelegate={canManageOpDivs}
           // A deactivated OpDiv leaves the switcher, so staying on its
           // dashboard would strand the user on a page they can no longer reach.
-          onDeactivated={() => navigate(Routes.OPDIVS, { replace: true })}
+          onDeactivated={() => {
+            clearLastOpDivId()
+            const state: OpDivIndexState = { skipOpDivId: opdiv.opdiv_id }
+            navigate(Routes.OPDIVS, { replace: true, state })
+          }}
         />
       )}
     </>

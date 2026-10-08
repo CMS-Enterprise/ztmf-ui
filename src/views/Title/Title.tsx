@@ -94,6 +94,8 @@ export default function Title() {
     error: opdivsError,
   } = useOpDivs(true, { enabled: authenticated })
   const [fismaSystemsLoaded, setFismaSystemsLoaded] = useState(false)
+  const [fismaSystemsError, setFismaSystemsError] = useState(false)
+  const [datacallsError, setDatacallsError] = useState(false)
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
@@ -102,7 +104,9 @@ export default function Title() {
           apiPaths.fismaSystems.list(decommissioned)
         )
         setFismaSystems(res.data.data)
+        setFismaSystemsError(false)
       } catch (error) {
+        setFismaSystemsError(true)
         console.error(
           'Fetch systems error:',
           (error as { response?: { status?: number; data?: unknown } }).response
@@ -158,6 +162,7 @@ export default function Title() {
           res.data.data as datacall[]
         )
         setDatacalls(sorted)
+        setDatacallsError(false)
         if (sorted.length > 0) {
           setLatestDataCallId(sorted[0].datacallid)
           setLatestDatacall(sorted[0].datacall)
@@ -174,6 +179,7 @@ export default function Title() {
         }
       } catch (error) {
         if (signal?.aborted) return
+        setDatacallsError(true)
         console.error('Fetch latest datacall error:', error)
       }
     },
@@ -699,11 +705,14 @@ export default function Title() {
               setShowDecommissioned,
               fetchFismaSystems,
               fismaSystemsLoaded,
+              fismaSystemsError,
+              datacallsError,
               dashboardSearch,
               setDashboardSearch,
               datacenterEnvironments,
               opdivs,
               opdivsLoaded,
+              opdivsError: opdivsError != null,
             }}
           />
         </Box>

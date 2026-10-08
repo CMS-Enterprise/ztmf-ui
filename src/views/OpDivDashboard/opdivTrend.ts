@@ -72,6 +72,27 @@ export function selectTrendCalls(
   return sortDatacallsByDeadline(series).reverse()
 }
 
+/**
+ * The baseline call for a paired comparison: the latest call in the scope's
+ * cadence (see {@link selectTrendCalls}) due strictly before the anchor.
+ * @param {datacall[]} datacalls - All known data calls.
+ * @param {string | null} opdivCode - The OpDiv's code, or null to aggregate.
+ * @param {datacall | null} anchor - The call being reported.
+ * @returns {datacall | null} The prior call, or null when none precedes it.
+ */
+export function selectPriorCall(
+  datacalls: datacall[],
+  opdivCode: string | null,
+  anchor: datacall | null
+): datacall | null {
+  if (!anchor) return null
+  const cutoff = new Date(anchor.deadline).getTime()
+  const earlier = selectTrendCalls(datacalls, opdivCode).filter(
+    (dc) => new Date(dc.deadline).getTime() < cutoff
+  )
+  return earlier[earlier.length - 1] ?? null
+}
+
 /** One point on the trend line. */
 export type TrendPoint = {
   datacallid: number

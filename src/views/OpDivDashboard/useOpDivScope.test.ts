@@ -2,9 +2,13 @@ import { scopeSystemsToOpDiv } from './opdivAggregates'
 import {
   canAggregate,
   canViewOpDiv,
+  clearLastOpDivId,
   parseOpDivParam,
   preferredOpDiv,
+  readLastOpDivId,
+  scopeLoadFailed,
   visibleOpDivs,
+  writeLastOpDivId,
 } from './useOpDivScope'
 import { makeSystem } from './testFixtures'
 import type { OpDiv, UserRole, userData } from '@/types'
@@ -195,5 +199,37 @@ describe('preferredOpDiv', () => {
 
   it('returns null when there is nothing to land on', () => {
     expect(preferredOpDiv([])).toBeNull()
+  })
+})
+
+describe('clearLastOpDivId', () => {
+  it('forgets the remembered OpDiv, so a deactivated one is not landed on', () => {
+    const visible = visibleOpDivs(makeUser('OWNER'), CATALOG)
+    writeLastOpDivId(7)
+    clearLastOpDivId()
+    expect(readLastOpDivId(visible)).toBeNull()
+  })
+})
+
+describe('scopeLoadFailed', () => {
+  it('treats a failed, empty /opdivs as a failure rather than "none"', () => {
+    const userInfo = makeUser('OWNER')
+    expect(scopeLoadFailed({ userInfo, opdivs: [], opdivsError: true })).toBe(
+      true
+    )
+    // A failed background refetch keeps the cached list usable.
+    expect(
+      scopeLoadFailed({ userInfo, opdivs: CATALOG, opdivsError: true })
+    ).toBe(false)
+  })
+
+  it('fails on a systems error only when scope comes from the systems', () => {
+    const args = { opdivs: CATALOG, fismaSystemsError: true }
+    expect(
+      scopeLoadFailed({ ...args, userInfo: makeUser('OPDIV_ADMIN', null) })
+    ).toBe(true)
+    expect(
+      scopeLoadFailed({ ...args, userInfo: makeUser('OPDIV_ADMIN', [7]) })
+    ).toBe(false)
   })
 })

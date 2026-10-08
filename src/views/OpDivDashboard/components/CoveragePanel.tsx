@@ -43,6 +43,10 @@ export type CoveragePanelProps = {
   opdivId: number | null
   opdivCode: string
   isPending: boolean
+  /** The /users load failed, so an empty roster is unknown rather than none. */
+  isError?: boolean
+  /** Whether the viewer can write users; read-only tiers get "View". */
+  canManageUsers?: boolean
   /** Reference time for expiry, injected for deterministic tests. */
   now?: Date
 }
@@ -145,6 +149,8 @@ export default function CoveragePanel({
   opdivId,
   opdivCode,
   isPending,
+  isError = false,
+  canManageUsers = false,
   now,
 }: CoveragePanelProps) {
   const roster = adminTierRoster(scopedUsers)
@@ -180,7 +186,7 @@ export default function CoveragePanel({
             flexShrink: 0,
           }}
         >
-          Manage users →
+          {canManageUsers ? 'Manage users →' : 'View users →'}
         </Link>
       }
     >
@@ -207,7 +213,11 @@ export default function CoveragePanel({
                     roster.length === 1 ? 'administrator' : 'administrators'
                   }`}
             </Typography>
-            {roster.length === 0 ? (
+            {isError ? (
+              <Typography sx={{ fontSize: 13, color: colors.down }}>
+                Could not load users, so administrators cannot be listed.
+              </Typography>
+            ) : roster.length === 0 ? (
               <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
                 No admin-tier users are assigned to this OpDiv.
               </Typography>

@@ -7,7 +7,7 @@
  *
  * @module views/OpDivDashboard/components/ChartCard
  */
-import { ReactNode } from 'react'
+import { ReactNode, useId } from 'react'
 import Box from '@mui/material/Box'
 import Tooltip from '@mui/material/Tooltip'
 import IconButton from '@mui/material/IconButton'
@@ -51,9 +51,12 @@ export default function ChartCard({
   sx,
   id,
 }: ChartCardProps) {
+  const headingId = useId()
   return (
     <Card
       id={id}
+      role="region"
+      aria-labelledby={headingId}
       sx={{ display: 'flex', flexDirection: 'column', gap: 1.25, ...sx }}
     >
       <Box
@@ -66,13 +69,16 @@ export default function ChartCard({
       >
         <Box sx={{ minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            <Eyebrow>{eyebrow}</Eyebrow>
+            <Eyebrow component="h2" id={headingId}>
+              {eyebrow}
+            </Eyebrow>
             {info && (
-              <Tooltip title={info}>
+              // describeChild, or the button's aria-label wins and the explanation is never announced.
+              <Tooltip title={<span>{info}</span>} describeChild>
                 <IconButton
                   size="small"
                   aria-label={`About ${eyebrow}`}
-                  sx={{ p: 0.25, color: colors.neutral400 }}
+                  sx={{ p: 0.25, color: colors.neutral500 }}
                 >
                   <InfoOutlinedIcon sx={{ fontSize: 14 }} />
                 </IconButton>

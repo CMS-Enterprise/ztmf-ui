@@ -23,6 +23,7 @@ import WarningAmberIcon from '@mui/icons-material/WarningAmber'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import type { SxProps, Theme } from '@mui/material/styles'
 import { colors, fonts, radius, status } from '@/theme/tokens'
+import Eyebrow from '@/components/ui/Eyebrow'
 import { jumpToPanel } from './jumpToPanel'
 
 /** How urgent a tile is. */
@@ -95,23 +96,13 @@ export default function KpiTile({
         {Icon && (
           <Icon aria-hidden="true" sx={{ fontSize: 14, color: accent }} />
         )}
-        <Typography
-          sx={{
-            fontSize: 11,
-            fontWeight: 600,
-            letterSpacing: '0.08em',
-            textTransform: 'uppercase',
-            color: colors.neutral500,
-          }}
-        >
-          {label}
-        </Typography>
+        <Eyebrow>{label}</Eyebrow>
         {/* Signals that an explanation is a hover away. Decorative - the tile
             itself is the trigger, so this must not be a second target. */}
         {info && (
           <InfoOutlinedIcon
             aria-hidden="true"
-            sx={{ fontSize: 13, color: colors.neutral400, ml: 'auto' }}
+            sx={{ fontSize: 13, color: colors.neutral500, ml: 'auto' }}
           />
         )}
       </Box>
@@ -156,6 +147,10 @@ export default function KpiTile({
     textAlign: 'left' as const,
     gap: 0.5,
     minWidth: 0,
+    '&:focus-visible': {
+      outline: `2px solid ${colors.primary}`,
+      outlineOffset: 2,
+    },
   }
 
   const tile = jumpToId ? (
@@ -185,7 +180,7 @@ export default function KpiTile({
   // explanation as the tile's name. The explanation is a description; the
   // label and value are the name.
   return (
-    <Tooltip title={info} describeChild>
+    <Tooltip title={<span>{info}</span>} describeChild>
       {tile}
     </Tooltip>
   )

@@ -130,9 +130,12 @@ export type OpDivSummary = {
   highFipsCount: number
   fipsUnknownCount: number
   optimalAdvancedCount: number
-  highest: { score: number; acronym: string } | null
-  lowest: { score: number; acronym: string } | null
+  highest: RangeExtreme | null
+  lowest: RangeExtreme | null
 }
+
+/** One end of the OpDiv's score range; `tier` is the API's, when sent. */
+export type RangeExtreme = { score: number; acronym: string; tier?: ScoreTier }
 
 /**
  * Headline figures for one OpDiv.
@@ -151,8 +154,8 @@ export function summarizeOpDiv(rows: OpDivSystemRow[]): OpDivSummary {
   let highFipsCount = 0
   let fipsUnknownCount = 0
   let optimalAdvancedCount = 0
-  let highest: { score: number; acronym: string } | null = null
-  let lowest: { score: number; acronym: string } | null = null
+  let highest: RangeExtreme | null = null
+  let lowest: RangeExtreme | null = null
 
   for (const row of rows) {
     // Tri-state booleans: null is "unknown", never "no". Reporting an
@@ -169,10 +172,13 @@ export function summarizeOpDiv(rows: OpDivSystemRow[]): OpDivSummary {
     if (row.score === undefined) continue
     scoreSum += row.score
     scoredCount += 1
-    if (!highest || row.score > highest.score)
-      highest = { score: row.score, acronym: row.system.fismaacronym }
-    if (!lowest || row.score < lowest.score)
-      lowest = { score: row.score, acronym: row.system.fismaacronym }
+    const extreme = {
+      score: row.score,
+      acronym: row.system.fismaacronym,
+      tier: row.tier,
+    }
+    if (!highest || row.score > highest.score) highest = extreme
+    if (!lowest || row.score < lowest.score) lowest = extreme
   }
 
   return {
@@ -374,22 +380,6 @@ export function summarizeCompletion(
   }
 }
 
-/**
- * Compares a system's actual tier against its asserted target.
- * @param {ScoreTier} [actual] - The scored tier, if any.
- * @param {string | null} [target] - The asserted target tier, if any.
- * @returns {boolean | null} True/false, or null when the answer is unknowable.
- */
-export function meetsTarget(
-  actual: ScoreTier | undefined,
-  target: string | null | undefined
-): boolean | null {
-  if (!target || !actual) return null
-  const targetRank = TIER_RANK[target as ScoreTier]
-  if (targetRank === undefined) return null
-  return TIER_RANK[actual] >= targetRank
-}
-
 /** One system falling short of its asserted target. */
 export type TargetShortfall = {
   system: FismaSystemType
@@ -480,7 +470,7 @@ export type RiskSummary = {
   atOrAboveFloor: number
   /** High impact with no score row - never enrolled, not assessed-and-failing. */
   unscored: number
-  /** Systems with neither flag recorded, so their impact is unknown. */
+  /** Not high impact on what is recorded, but at least one flag unrecorded. */
   unknownImpact: number
 }
 
@@ -492,9 +482,10 @@ export type RiskSummary = {
  * which are weakest. Impact is the two flags the catalog records: HVA and a
  * High FIPS impact level.
  *
- * Tri-state nulls stay unknown, never "no": a system with neither flag recorded
- * is counted apart rather than quietly treated as low impact, because that
- * would shrink the risk list by assuming facts nobody has entered.
+ * Tri-state nulls stay unknown, never "no": a system with either flag
+ * unrecorded and neither positive is counted apart rather than quietly treated
+ * as low impact, because that would shrink the risk list by assuming facts
+ * nobody has entered.
  * @param {OpDivSystemRow[]} rows - The OpDiv's rows.
  * @returns {RiskSummary} The risk summary.
  */
@@ -511,7 +502,7 @@ export function summarizeRisk(rows: OpDivSystemRow[]): RiskSummary {
     if (row.system.hva === true) reasons.push('HVA')
     if (row.system.fips === 'High') reasons.push('High FIPS')
     if (reasons.length === 0) {
-      if (row.system.hva == null && row.system.fips == null) unknownImpact += 1
+      if (row.system.hva == null || row.system.fips == null) unknownImpact += 1
       continue
     }
 

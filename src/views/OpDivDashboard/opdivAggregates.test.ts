@@ -2,7 +2,6 @@ import {
   EXTREMES_PER_END,
   EXTREMES_THRESHOLD,
   buildOpDivRows,
-  meetsTarget,
   scopeSystemsToOpDiv,
   notStartedSystems,
   scoreBySystem,
@@ -153,20 +152,6 @@ describe('summarizeCompletion', () => {
     expect(
       summarizeCompletion(buildOpDivRows(systems, maps)).lastUpdatedAt
     ).toBe('2026-03-09T00:00:00Z')
-  })
-})
-
-describe('meetsTarget', () => {
-  it('is null when either side is unknown', () => {
-    expect(meetsTarget(undefined, 'Advanced')).toBeNull()
-    expect(meetsTarget('Advanced', null)).toBeNull()
-    expect(meetsTarget('Advanced', 'Nonsense')).toBeNull()
-  })
-
-  it('treats meeting the target as passing', () => {
-    expect(meetsTarget('Advanced', 'Advanced')).toBe(true)
-    expect(meetsTarget('Optimal', 'Advanced')).toBe(true)
-    expect(meetsTarget('Initial', 'Advanced')).toBe(false)
   })
 })
 
@@ -518,6 +503,18 @@ describe('summarizeRisk', () => {
     const risk = summarizeRisk(buildOpDivRows(systems, maps))
     expect(risk.unknownImpact).toBe(1)
     expect(risk.highImpact).toBe(0)
+  })
+
+  it('counts one unrecorded flag as unknown when the other is not positive', () => {
+    const systems = [
+      makeSystem({ fismasystemid: 1, hva: null, fips: 'Low' }),
+      makeSystem({ fismasystemid: 2, hva: false, fips: null }),
+      makeSystem({ fismasystemid: 3, hva: null, fips: 'High' }),
+      makeSystem({ fismasystemid: 4, hva: false, fips: 'Moderate' }),
+    ]
+    const risk = summarizeRisk(buildOpDivRows(systems, emptyMaps()))
+    expect(risk.unknownImpact).toBe(2)
+    expect(risk.highImpact).toBe(1)
   })
 
   it('separates a high-impact system with no score from one that is failing', () => {

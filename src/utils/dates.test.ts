@@ -65,16 +65,19 @@ describe('formatDateTime', () => {
 describe('daysUntil', () => {
   const now = new Date('2026-09-25T18:00:00Z')
 
-  it('counts whole calendar days, not elapsed hours', () => {
-    // A UTC-midnight deadline tomorrow is "1 day left" all day today, not 0.
-    expect(daysUntil('2026-09-26 00:00:00+00', now)).toBe(1)
+  it('floors to whole days left', () => {
+    expect(daysUntil('2026-09-27 00:00:00+00', now)).toBe(1)
+    expect(daysUntil('2026-09-30 18:00:00+00', now)).toBe(5)
   })
 
-  it('reads a deadline today as zero', () => {
-    expect(daysUntil('2026-09-25 00:00:00+00', now)).toBe(0)
+  it('reads under 24 hours left as zero', () => {
+    expect(daysUntil('2026-09-26 00:00:00+00', now)).toBe(0)
   })
 
-  it('goes negative once the deadline has passed', () => {
+  it('goes negative the moment the deadline passes', () => {
+    // A UTC-midnight deadline closed saves at that instant, not at day's end.
+    expect(daysUntil('2026-09-25 00:00:00+00', now)).toBe(-1)
+    expect(daysUntil(now, now)).toBe(-1)
     expect(daysUntil('2026-09-20 00:00:00+00', now)).toBe(-5)
   })
 

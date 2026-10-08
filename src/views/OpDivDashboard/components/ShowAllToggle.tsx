@@ -23,6 +23,7 @@ import Box from '@mui/material/Box'
 import ExpandLessIcon from '@mui/icons-material/ExpandLess'
 import ExpandMoreIcon from '@mui/icons-material/ExpandMore'
 import Typography from '@mui/material/Typography'
+import { visuallyHidden } from '@mui/utils'
 import { colors } from '@/theme/tokens'
 import { MAX_EXPANDED } from './useExpandableRows'
 
@@ -72,6 +73,10 @@ export default function ShowAllToggle({
           fontWeight: 600,
           color: colors.primary,
           '&:hover': { backgroundColor: colors.neutral50 },
+          '&:focus-visible': {
+            outline: `2px solid ${colors.primary}`,
+            outlineOffset: 2,
+          },
         }}
       >
         {expanded ? `Show fewer` : `Show all ${noun}`}
@@ -83,16 +88,7 @@ export default function ShowAllToggle({
         {/* The collapsed count is part of the button's name, so a screen reader
             hears what opening it will reveal rather than a bare "show all". */}
         {!expanded && (
-          <Box
-            component="span"
-            sx={{
-              position: 'absolute',
-              width: 1,
-              height: 1,
-              overflow: 'hidden',
-              clip: 'rect(0 0 0 0)',
-            }}
-          >
+          <Box component="span" sx={visuallyHidden}>
             {`, ${hidden} more hidden`}
           </Box>
         )}

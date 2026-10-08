@@ -8,11 +8,10 @@ import { useSearchParams } from 'react-router-dom'
  * Anything unparseable falls back to 'all' rather than filtering to an id that
  * matches nothing - a hand-edited or stale link should show the full list, not
  * an empty table that reads as "no users".
- * @param {URLSearchParams} params - The current query string.
+ * @param {string | null} raw - The `opdiv` query param.
  * @returns {number | 'all'} The seed value for the OpDiv facet.
  */
-function initialOpDivFilter(params: URLSearchParams): number | 'all' {
-  const raw = params.get('opdiv')
+function initialOpDivFilter(raw: string | null): number | 'all' {
   if (!raw || !/^\d+$/.test(raw)) return 'all'
   return Number(raw)
 }
@@ -44,12 +43,18 @@ export function useUserFilters() {
   const [searchParams] = useSearchParams()
   const [search, setSearch] = useState<string>('')
   const [roleFilter, setRoleFilter] = useState<string | 'all'>('all')
-  // Seeded once from the URL. Deliberately not kept in sync afterwards: the
-  // user is free to widen the facet, and rewriting the URL under them would
-  // fight that.
+  // Seeded from the URL and re-seeded when the param changes (the route does
+  // not remount, so a plain /users visit must clear an earlier deep link). The
+  // URL is never rewritten, so the user is still free to widen the facet.
+  const opdivParam = searchParams.get('opdiv')
+  const [seededFrom, setSeededFrom] = useState(opdivParam)
   const [opdivFilter, setOpDivFilter] = useState<number | 'all'>(() =>
-    initialOpDivFilter(searchParams)
+    initialOpDivFilter(opdivParam)
   )
+  if (opdivParam !== seededFrom) {
+    setSeededFrom(opdivParam)
+    setOpDivFilter(initialOpDivFilter(opdivParam))
+  }
   const [showDeleted, setShowDeleted] = useState<boolean>(false)
 
   const quickFilterValues = search.trim()

@@ -21,6 +21,7 @@ import CircularProgress from '@mui/material/CircularProgress'
 import IconButton from '@mui/material/IconButton'
 import Link from '@mui/material/Link'
 import Typography from '@mui/material/Typography'
+import { visuallyHidden } from '@mui/utils'
 import { Link as RouterLink } from 'react-router-dom'
 import ChevronLeftIcon from '@mui/icons-material/ChevronLeft'
 import ChevronRightIcon from '@mui/icons-material/ChevronRight'
@@ -35,6 +36,8 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
+import Eyebrow from '@/components/ui/Eyebrow'
+import Stat from '@/components/ui/Stat'
 import { colors, fonts } from '@/theme/tokens'
 import { tierForScore } from '@/utils/tierStyles'
 import BarList from './BarList'
@@ -72,24 +75,6 @@ export type TrendPanelProps = {
   tiers: TierCount[]
   /** The systems behind the step into the selected call. */
   movers: Movers
-}
-
-/** Uppercase label above a block in the detail area. */
-function DetailHeading({ children }: { children: React.ReactNode }) {
-  return (
-    <Typography
-      sx={{
-        fontSize: 10,
-        fontWeight: 600,
-        letterSpacing: '0.08em',
-        textTransform: 'uppercase',
-        color: colors.neutral500,
-        mb: 0.5,
-      }}
-    >
-      {children}
-    </Typography>
-  )
 }
 
 /**
@@ -147,53 +132,6 @@ function MoverRow({ mover }: { mover: ScoreMover }) {
           {mover.delta.toFixed(2)}
         </Typography>
       </Box>
-    </Box>
-  )
-}
-
-/**
- * One figure in the detail strip under the chart.
- * @param {{ label: string; value: React.ReactNode; hint?: string }} props - Content.
- * @returns {JSX.Element} The figure.
- */
-function DetailStat({
-  label,
-  value,
-  hint,
-}: {
-  label: string
-  value: React.ReactNode
-  hint?: string
-}) {
-  return (
-    <Box sx={{ minWidth: 92 }}>
-      <Typography
-        sx={{
-          fontSize: 10,
-          fontWeight: 600,
-          letterSpacing: '0.08em',
-          textTransform: 'uppercase',
-          color: colors.neutral500,
-        }}
-      >
-        {label}
-      </Typography>
-      <Typography
-        sx={{
-          fontFamily: fonts.mono,
-          fontSize: 18,
-          fontWeight: 800,
-          lineHeight: 1.2,
-          color: colors.ink,
-        }}
-      >
-        {value}
-      </Typography>
-      {hint && (
-        <Typography sx={{ fontSize: 11, color: colors.neutral500 }}>
-          {hint}
-        </Typography>
-      )}
     </Box>
   )
 }
@@ -275,13 +213,33 @@ export default function TrendPanel({
 
   return (
     <ChartCard eyebrow="Score trend" subtitle={subtitle} info={TREND_INFO}>
+      {/* Every plotted point as text; the chart stays its own recharts keyboard widget. */}
+      <Box component="table" sx={visuallyHidden}>
+        <caption>
+          {`Average Zero Trust score across ${points.length} data calls, from ${points[0].label} to ${points[points.length - 1].label}`}
+        </caption>
+        <thead>
+          <tr>
+            <th scope="col">Data call</th>
+            <th scope="col">Average score</th>
+            <th scope="col">Systems scored</th>
+          </tr>
+        </thead>
+        <tbody>
+          {points.map((p) => (
+            <tr key={p.datacallid}>
+              <th scope="row">{p.label}</th>
+              <td>{p.avg !== null ? p.avg.toFixed(2) : 'No score'}</td>
+              <td>{p.n}</td>
+            </tr>
+          ))}
+        </tbody>
+      </Box>
       <Box
         sx={{
           width: '100%',
           height: points.length > BRUSH_THRESHOLD ? 260 : 220,
         }}
-        role="img"
-        aria-label={`Line chart of this OpDiv's average Zero Trust score across ${points.length} data calls, from ${points[0].label} to ${points[points.length - 1].label}. The same values are listed as text below the chart.`}
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
@@ -292,6 +250,7 @@ export default function TrendPanel({
               if (typeof idx === 'number') stepTo(idx)
             }}
             style={{ cursor: 'pointer' }}
+            title="Score trend chart. The values are in the table before it."
           >
             <CartesianGrid
               stroke={colors.neutral200}
@@ -358,7 +317,7 @@ export default function TrendPanel({
                 dataKey="label"
                 height={24}
                 travellerWidth={8}
-                stroke={colors.neutral400}
+                stroke={colors.neutral500}
                 fill={colors.neutral50}
               />
             )}
@@ -379,18 +338,19 @@ export default function TrendPanel({
           borderTop: `1px solid ${colors.neutral200}`,
         }}
       >
+        {/* Announces each step; the visible readout is too scattered to be one live region. */}
+        <Box
+          role="status"
+          aria-live="polite"
+          aria-atomic="true"
+          sx={visuallyHidden}
+        >
+          {`${active.label}: average ${
+            active.avg !== null ? active.avg.toFixed(2) : 'not scored'
+          }, ${active.n} ${active.n === 1 ? 'system' : 'systems'} scored`}
+        </Box>
         <Box sx={{ minWidth: 190 }}>
-          <Typography
-            sx={{
-              fontSize: 10,
-              fontWeight: 600,
-              letterSpacing: '0.08em',
-              textTransform: 'uppercase',
-              color: colors.neutral500,
-            }}
-          >
-            Data call
-          </Typography>
+          <Eyebrow>Data call</Eyebrow>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
             <IconButton
               size="small"
@@ -417,17 +377,13 @@ export default function TrendPanel({
             </IconButton>
           </Box>
         </Box>
-        <DetailStat
+        <Stat
           label="Average"
           value={active.avg !== null ? active.avg.toFixed(2) : '—'}
           hint={active.avg !== null ? tierForScore(active.avg) : undefined}
         />
-        <DetailStat
-          label="Systems"
-          value={active.n}
-          hint="scored in this call"
-        />
-        <DetailStat
+        <Stat label="Systems" value={active.n} hint="scored in this call" />
+        <Stat
           label="Vs previous"
           value={
             step === null ? '—' : `${step > 0 ? '+' : ''}${step.toFixed(2)}`
@@ -435,7 +391,7 @@ export default function TrendPanel({
           hint={previous ? previous.label : 'first in series'}
         />
         {summary.net !== null && summary.first && summary.latest && (
-          <DetailStat
+          <Stat
             label="Net"
             value={`${summary.net > 0 ? '+' : ''}${summary.net.toFixed(2)}`}
             hint={`${summary.first.label} → ${summary.latest.label}`}
@@ -454,7 +410,7 @@ export default function TrendPanel({
         }}
       >
         <Box>
-          <DetailHeading>Tier mix in {active.label}</DetailHeading>
+          <Eyebrow sx={{ mb: 0.5 }}>Tier mix in {active.label}</Eyebrow>
           <BarList
             items={tiers.map((t) => ({
               label: t.tier,
@@ -472,11 +428,11 @@ export default function TrendPanel({
         </Box>
 
         <Box>
-          <DetailHeading>
+          <Eyebrow sx={{ mb: 0.5 }}>
             {previous
               ? `Biggest movers vs ${previous.label}`
               : 'Biggest movers'}
-          </DetailHeading>
+          </Eyebrow>
           {!previous ? (
             <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
               First call in the series, so there is nothing to compare against.
@@ -510,10 +466,11 @@ export default function TrendPanel({
         </Box>
       </Box>
 
-      {/* Every call as text, so no value is reachable only by pointing. One
-          quiet line rather than a row of controls - the arrows above already
-          carry the navigation. */}
-      <Typography sx={{ mt: 1.5, fontSize: 11, color: colors.neutral500 }}>
+      {/* Sighted twin of the hidden table, so hidden from assistive tech. */}
+      <Typography
+        aria-hidden="true"
+        sx={{ mt: 1.5, fontSize: 11, color: colors.neutral500 }}
+      >
         {points
           .map((p) => `${p.label} ${p.avg !== null ? p.avg.toFixed(2) : '—'}`)
           .join(' · ')}

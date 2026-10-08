@@ -15,6 +15,8 @@ export type StatProps = {
    * look out of place.
    */
   mono?: boolean
+  /** Qualifier under the value, e.g. a denominator or tier name. */
+  hint?: ReactNode
 }
 
 /**
@@ -24,7 +26,7 @@ export type StatProps = {
  * @param {StatProps} props - Component props.
  * @returns {JSX.Element} A stacked label + value.
  */
-export default function Stat({ label, value, mono = true }: StatProps) {
+export default function Stat({ label, value, mono = true, hint }: StatProps) {
   return (
     <Box>
       <Typography
@@ -47,6 +49,11 @@ export default function Stat({ label, value, mono = true }: StatProps) {
       >
         {value}
       </Typography>
+      {hint && (
+        <Typography sx={{ fontSize: 11, color: colors.neutral500 }}>
+          {hint}
+        </Typography>
+      )}
     </Box>
   )
 }

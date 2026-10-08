@@ -1,4 +1,5 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
@@ -150,7 +151,7 @@ function renderPage() {
     ],
     { initialEntries: ['/questionnaire/system/1002'] }
   )
-  const { unmount } = render(<RouterProvider router={router} />)
+  const { unmount } = renderWithQueryClient(<RouterProvider router={router} />)
   return { router, unmount }
 }
 

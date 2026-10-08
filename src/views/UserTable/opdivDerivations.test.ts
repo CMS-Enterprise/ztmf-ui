@@ -6,6 +6,7 @@ import {
   buildOpDivCodeMap,
   buildOpDivLabelMap,
   buildAssignableOpDivs,
+  buildFilterOpDivs,
   narrowToCallerScope,
 } from './opdivDerivations'
 import type { OpDiv, userData, UserRole } from '@/types'
@@ -111,5 +112,30 @@ describe('the read-only admin labelling path', () => {
     expect(
       narrowToCallerScope(buildAssignableOpDivs(ALL, false), readOnly)
     ).toEqual([])
+  })
+})
+
+describe('buildFilterOpDivs', () => {
+  const codes = (list: OpDiv[]) => list.map((od) => od.code)
+
+  it('offers read-only admins the active OpDivs, parent included', () => {
+    // Filtering is a read; the assignable set is empty for this tier.
+    expect(
+      codes(buildFilterOpDivs(ALL, user('HHS_READONLY_ADMIN'), 'all'))
+    ).toEqual(['ACF', 'CMS', 'HHS'])
+  })
+
+  it('narrows an OpDiv tier to its own grants', () => {
+    expect(
+      codes(buildFilterOpDivs(ALL, user('OPDIV_READONLY_ADMIN', [2]), 'all'))
+    ).toEqual(['CMS'])
+  })
+
+  it('always includes the active selection so it can be shown and cleared', () => {
+    expect(codes(buildFilterOpDivs(ALL, user('OWNER'), 4))).toContain('RETIRED')
+    expect(
+      codes(buildFilterOpDivs(ALL, user('OPDIV_READONLY_ADMIN', [2]), 3))
+    ).toEqual(['ACF', 'CMS'])
+    expect(codes(buildFilterOpDivs(ALL, user('OWNER'), 99))).toContain('#99')
   })
 })

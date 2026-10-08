@@ -13,6 +13,10 @@ import Typography from '@mui/material/Typography'
 import { Link as RouterLink } from 'react-router-dom'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import { colors, fonts } from '@/theme/tokens'
+import {
+  encodeDatacallSlug,
+  questionnairePath,
+} from '@/views/QuestionnairePage/deepLink'
 import ChartCard from './ChartCard'
 import ShowAllToggle from './ShowAllToggle'
 import { useExpandableRows } from './useExpandableRows'
@@ -30,8 +34,8 @@ export type NotStartedPanelProps = {
   rows: NoProgressRow[]
   /** Systems the call expects answers from, as the denominator. */
   systemsInCall: number
-  /** The call the questionnaire links should open. */
-  datacallId?: number
+  /** Name of the call the questionnaire links should open. */
+  datacallName?: string
   /** Scroll anchor, for the jump from the Not started tile. */
   id?: string
 }
@@ -44,7 +48,7 @@ export type NotStartedPanelProps = {
 export default function NotStartedPanel({
   rows,
   systemsInCall,
-  datacallId,
+  datacallName,
   id,
 }: NotStartedPanelProps) {
   const { listed, hidden, expanded, toggle, cappedAtMax } = useExpandableRows(
@@ -98,9 +102,10 @@ export default function NotStartedPanel({
                     component={RouterLink}
                     // Deep-links to the system's questionnaire for this call, so
                     // the panel hands off straight into the work.
-                    to={`/questionnaire/${system.fismaacronym}${
-                      datacallId ? `/${datacallId}` : ''
-                    }`}
+                    to={questionnairePath(
+                      system.fismasystemid,
+                      datacallName && encodeDatacallSlug(datacallName)
+                    )}
                     underline="hover"
                     title={system.fismaname}
                     sx={{

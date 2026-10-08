@@ -39,6 +39,10 @@ type ContextType = {
   // empty list is distinguishable from a pending one: a user with no active
   // systems must still reach not-found rather than an indefinite spinner.
   fismaSystemsLoaded: boolean
+  // True when the last systems fetch failed, so [] is not read as "no systems".
+  fismaSystemsError?: boolean
+  // True when the last /datacalls fetch failed.
+  datacallsError?: boolean
   // Datacenter-environment vocabulary, fetched once at the layout level.
   // Empty until the fetch resolves; consumers fall back to raw values.
   datacenterEnvironments: DataCenterEnvironment[]
@@ -47,6 +51,8 @@ type ContextType = {
   // False until the initial fetch settles, so an empty list is distinguishable
   // from a pending one. Stays true across later refreshes.
   opdivsLoaded: boolean
+  // True when the /opdivs load failed (opdivsLoaded is true then too).
+  opdivsError?: boolean
 }
 
 export function useContextProp() {

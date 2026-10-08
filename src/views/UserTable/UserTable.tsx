@@ -34,6 +34,7 @@ import { useSetUserOpDivs } from '@/utils/userOpdivs'
 import CONFIG from '@/utils/config'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
+import { buildFilterOpDivs } from './opdivDerivations'
 import Box from '@mui/material/Box'
 import CustomSnackbar from '../Snackbar/Snackbar'
 import AssignSystemModal from '../AssignSystemModal/AssignSystemModal'
@@ -148,7 +149,7 @@ export default function UserTable() {
   const apiRef = useGridApiRef()
   const accessibleGrid = useAccessibleGrid()
   const navigate = useNavigate()
-  const { userInfo } = useContextProp()
+  const { userInfo, opdivs } = useContextProp()
   // Write-tier admins get the create/edit/delete/assign controls; read-only
   // admins may view the table but every mutating control is withheld. The
   // backend is the security boundary - this only governs which controls render.
@@ -198,6 +199,10 @@ export default function UserTable() {
   } = useUserFilters()
   const { opdivOptions, allAssignableOpDivs, opdivCodeMap, opdivLabelMap } =
     useOpDivCatalog(isAdmin, userInfo)
+  const filterOpDivOptions = useMemo(
+    () => buildFilterOpDivs(opdivs, userInfo, opdivFilter),
+    [opdivs, userInfo, opdivFilter]
+  )
   // Global fisma-system metadata for the Assign Systems modal - fetched once
   // per mount so opening the modal only costs its two per-user reads.
   const { allSystems, decommSystems } = useSystemCatalog(isAdmin)
@@ -962,7 +967,7 @@ export default function UserTable() {
           roleOptions={roleOptions}
           opdivFilter={opdivFilter}
           setOpDivFilter={setOpDivFilter}
-          opdivOptions={opdivOptions}
+          opdivOptions={filterOpDivOptions}
           showDeleted={showDeleted}
           setShowDeleted={setShowDeleted}
         />

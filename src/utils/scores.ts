@@ -4,7 +4,7 @@
  * Keyed so requests that other pages already make (per-datacall aggregate and
  * progress) are cache hits rather than duplicates. See docs/data-fetching.md.
  *
- * @module api/scores
+ * @module utils/scores
  */
 import {
   useQueries,
@@ -160,9 +160,9 @@ export function usePillarAggregates(
 /**
  * The full per-cycle series across every data call, for trend charts.
  *
- * Expensive server-side - it spans every scored (system, call) pair - so it is
- * always opt-in via `enabled` and never requests pillars.
- * @param {QueryHookOptions} [options] - Standard enabled flag; pass false until visible.
+ * Expensive server-side - it spans every scored (system, call) pair - so it
+ * never requests pillars and is cached longer than the per-call queries.
+ * @param {QueryHookOptions} [options] - Standard enabled flag.
  * @returns {UseQueryResult<ScoreAggregate[]>} The query result.
  */
 export function useScoreHistory(

@@ -7,7 +7,7 @@
  *
  * @module views/OpDivDashboard/OpDivIndexRedirect
  */
-import { Navigate } from 'react-router-dom'
+import { Navigate, useLocation } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined'
@@ -15,22 +15,36 @@ import { EmptyState } from '@/components/ui/EmptyState'
 import { Routes, opdivDashboardPath } from '@/router/constants'
 import { hasAdminRead } from '@/utils/userRoles'
 import { useContextProp } from '../Title/Context'
+import LoadErrorState from './components/LoadErrorState'
 import {
   ALL_OPDIVS,
   canAggregate,
   needsSystemsFallback,
   preferredOpDiv,
   readLastOpDivId,
+  scopeLoadFailed,
   visibleOpDivs,
 } from './useOpDivScope'
+
+/** Navigation state: an OpDiv the landing must skip, e.g. one just deactivated. */
+export type OpDivIndexState = { skipOpDivId?: number }
 
 /**
  * Sends the user to their preferred OpDiv dashboard.
  * @returns {JSX.Element} A spinner, a redirect, or an empty state.
  */
 export default function OpDivIndexRedirect() {
-  const { opdivs, opdivsLoaded, fismaSystems, fismaSystemsLoaded, userInfo } =
-    useContextProp()
+  const {
+    opdivs,
+    opdivsLoaded,
+    opdivsError,
+    fismaSystems,
+    fismaSystemsLoaded,
+    fismaSystemsError,
+    userInfo,
+  } = useContextProp()
+  const skipOpDivId = (useLocation().state as OpDivIndexState | null)
+    ?.skipOpDivId
 
   // Gate on opdivsLoaded first and do NOT redirect while it is false. The
   // list is [] during Title's first fetch, so deciding here would bounce
@@ -54,11 +68,18 @@ export default function OpDivIndexRedirect() {
     )
   }
 
+  if (scopeLoadFailed({ userInfo, opdivs, opdivsError, fismaSystemsError })) {
+    return <LoadErrorState what="OpDivs" />
+  }
+
   if (!hasAdminRead(userInfo)) {
     return <Navigate to={Routes.ROOT} replace />
   }
 
-  const visible = visibleOpDivs(userInfo, opdivs, fismaSystems)
+  // The OpDiv list may not have refetched yet after a deactivation.
+  const visible = visibleOpDivs(userInfo, opdivs, fismaSystems).filter(
+    (od) => od.opdiv_id !== skipOpDivId
+  )
   const remembered = preferredOpDiv(visible)
   // With several OpDivs the aggregate is the only view that covers everything
   // the caller owns, and narrowing to one is a single click from there -

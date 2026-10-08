@@ -14,7 +14,7 @@ import {
   useDatacallProgress,
   usePillarAggregates,
   useScoreHistory,
-} from '@/api/scores'
+} from '@/utils/scores'
 import {
   buildDashboardMaps,
   type DashboardMaps,
@@ -48,6 +48,7 @@ import {
   buildTrendSeries,
   pairedDelta,
   pairedTierMovement,
+  selectPriorCall,
   selectTrendCalls,
   tierDistribution,
 } from './opdivTrend'
@@ -152,8 +153,11 @@ export function useOpDivDashboardData(
     isPending: scoresPending,
     isError: scoresError,
   } = useDatacallAggregates(activeDatacallIds)
-  const { progressPerCall, isPending: progressPending } =
-    useDatacallProgress(activeDatacallIds)
+  const {
+    progressPerCall,
+    isPending: progressPending,
+    isError: progressError,
+  } = useDatacallProgress(activeDatacallIds)
 
   const maps = useMemo(
     () => buildDashboardMaps(activeDatacallIds, scoresPerCall, progressPerCall),
@@ -180,13 +184,26 @@ export function useOpDivDashboardData(
   )
   const pillarQuery = usePillarAggregates(anchorCallId)
 
-  // The immediately-prior call is the next entry in the deadline-sorted list,
-  // NOT the next-lower datacallid: backfilled historical calls out-id the
-  // current one.
-  const priorCall = useMemo(() => {
-    const idx = datacalls.findIndex((dc) => dc.datacallid === anchorCallId)
-    return idx >= 0 ? datacalls[idx + 1] ?? null : null
-  }, [datacalls, anchorCallId])
+  // Each OpDiv's trend follows its own data-call cadence; mixing the two is
+  // what made the line oscillate. See selectTrendCalls.
+  const opdivCode = useMemo(
+    () =>
+      opdivId === null
+        ? null
+        : opdivs.find((od) => od.opdiv_id === opdivId)?.code ?? null,
+    [opdivs, opdivId]
+  )
+  const trendCalls = useMemo(
+    () => selectTrendCalls(datacalls, opdivCode),
+    [datacalls, opdivCode]
+  )
+
+  // The prior call in the scope's own cadence: the next call by deadline can
+  // belong to the other cadence and carry none of this OpDiv's systems.
+  const priorCall = useMemo(
+    () => selectPriorCall(datacalls, opdivCode, anchorCall),
+    [datacalls, opdivCode, anchorCall]
+  )
 
   // Anchor + prior together. The anchor is already in activeDatacallIds, so it
   // resolves from cache and only the prior call is a new request.
@@ -249,19 +266,6 @@ export function useOpDivDashboardData(
   // panel people actually read. It is still its own query, so the rest of the
   // page renders while it lands - it was never on the blocking path.
   const historyQuery = useScoreHistory()
-  // Each OpDiv's trend follows its own data-call cadence; mixing the two is
-  // what made the line oscillate. See selectTrendCalls.
-  const opdivCode = useMemo(
-    () =>
-      opdivId === null
-        ? null
-        : opdivs.find((od) => od.opdiv_id === opdivId)?.code ?? null,
-    [opdivs, opdivId]
-  )
-  const trendCalls = useMemo(
-    () => selectTrendCalls(datacalls, opdivCode),
-    [datacalls, opdivCode]
-  )
   const trendPoints = useMemo(
     () => buildTrendSeries(historyQuery.data ?? [], systemIds, trendCalls),
     [historyQuery.data, systemIds, trendCalls]
@@ -382,6 +386,6 @@ export function useOpDivDashboardData(
       activeDatacallIds.length === 0 ||
       scoresPending ||
       progressPending,
-    isError: scoresError,
+    isError: scoresError || progressError,
   }
 }

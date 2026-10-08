@@ -10,7 +10,7 @@
 import { tierForScore } from '@/utils/tierStyles'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import type { ScoreTier } from '@/types'
-import type { OpDivSummary } from '../opdivAggregates'
+import type { OpDivSummary, RangeExtreme } from '../opdivAggregates'
 
 /** One end of the score range, with the color its own tier earns. */
 export type RangeEnd = { text: string; tier: ScoreTier; color: string }
@@ -46,8 +46,8 @@ export function scoreRange(
   if (!lowest || !highest) {
     return { low: null, high: null, hint: 'nothing scored yet' }
   }
-  const end = (score: number): RangeEnd => {
-    const tier = tierForScore(score)
+  const end = ({ score, tier: apiTier }: RangeExtreme): RangeEnd => {
+    const tier = apiTier ?? tierForScore(score)
     // The chip palette, not the dot palette. tierDot is documented as accent
     // dots that sit BESIDE a value, and several of its colors fail WCAG AA as
     // text - Advanced (#C19A00) is 2.66:1 on white, which misses even the 3:1
@@ -60,14 +60,14 @@ export function scoreRange(
   // invites the reader to look for a spread that is not there.
   if (Math.abs(highest.score - lowest.score) < 0.005) {
     return {
-      low: end(lowest.score),
+      low: end(lowest),
       high: null,
-      hint: `all ${scoredCount} at ${tierForScore(lowest.score)}`,
+      hint: `all ${scoredCount} at ${end(lowest).tier}`,
     }
   }
   return {
-    low: end(lowest.score),
-    high: end(highest.score),
+    low: end(lowest),
+    high: end(highest),
     hint: `${lowest.acronym} low · ${highest.acronym} high`,
   }
 }

@@ -6,7 +6,8 @@
  * placeholders, and offers each header action only to the tier the backend
  * would accept it from.
  */
-import { screen } from '@testing-library/react'
+import { screen, within } from '@testing-library/react'
+import userEvent from '@testing-library/user-event'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType, OpDiv, UserRole, userData } from '@/types'
 import { EXTREMES_PER_END } from './opdivAggregates'
@@ -41,6 +42,9 @@ let mockScoreRows: {
 }[]
 let mockUsers: userData[]
 let mockOpDivId: string
+let mockContext: Record<string, unknown>
+let mockScoresError: boolean
+let mockUsersError: boolean
 const mockSetShowDecommissioned = jest.fn()
 
 // The axios instance transitively pulls in the hash router and LoginPage,
@@ -93,6 +97,7 @@ jest.mock('../Title/Context', () => ({
     datacenterEnvironments: [],
     opdivs: [OPDIV, OTHER_OPDIV],
     opdivsLoaded: true,
+    ...mockContext,
   }),
 }))
 
@@ -107,12 +112,12 @@ jest.mock('@/views/EditSystemModal/EditSystemModal', () => ({
   default: () => null,
 }))
 
-jest.mock('@/api/scores', () => ({
+jest.mock('@/utils/scores', () => ({
   __esModule: true,
   useDatacallAggregates: () => ({
     scoresPerCall: [mockScoreRows],
     isPending: false,
-    isError: false,
+    isError: mockScoresError,
   }),
   useDatacallProgress: () => ({
     progressPerCall: [
@@ -142,9 +147,19 @@ jest.mock('@/api/scores', () => ({
   useScoreHistory: () => ({ data: [], isPending: false, isError: false }),
 }))
 
-jest.mock('@/api/users', () => ({
+const mockExport = jest.fn().mockResolvedValue(undefined)
+jest.mock('@/utils/exportSystems', () => ({
+  ...jest.requireActual('@/utils/exportSystems'),
+  exportSystemAnswers: (...args: unknown[]) => mockExport(...args),
+}))
+
+jest.mock('@/utils/users', () => ({
   __esModule: true,
-  useUsers: () => ({ data: mockUsers, isPending: false }),
+  useUsers: () => ({
+    data: mockUsersError ? undefined : mockUsers,
+    isPending: false,
+    isError: mockUsersError,
+  }),
 }))
 
 import OpDivDashboard from './OpDivDashboard'
@@ -187,6 +202,9 @@ const makeUser = (role: UserRole): userData => ({
 
 beforeEach(() => {
   mockOpDivId = '7'
+  mockContext = {}
+  mockScoresError = false
+  mockUsersError = false
   mockUser = makeUser('OWNER')
   mockSystems = [
     makeSystem(1, { hva: true, fips: 'High' }),
@@ -223,6 +241,7 @@ beforeEach(() => {
     },
   ] as userData[]
   mockSetShowDecommissioned.mockClear()
+  mockExport.mockClear()
 })
 
 describe('OpDivDashboard', () => {
@@ -427,5 +446,148 @@ describe('OpDivDashboard', () => {
     // The explanation REPLACES the dashboard - a zeroed-out summary alongside
     // it would read as "this OpDiv has no systems".
     expect(screen.queryByText('Overall ZT score')).not.toBeInTheDocument()
+  })
+
+  describe('load failures', () => {
+    // Each of these used to render as a fact: "no OpDivs", "not found", an
+    // all-zero dashboard, an empty roster, or an endless spinner.
+    it('reports a failed /opdivs rather than "not found"', () => {
+      mockContext = { opdivs: [], opdivsError: true }
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByText('Could not load OpDivs')).toBeInTheDocument()
+      expect(screen.queryByText('OpDiv not found')).not.toBeInTheDocument()
+    })
+
+    it('reports a failed systems load rather than an all-zero dashboard', () => {
+      mockContext = { fismaSystems: [], fismaSystemsError: true }
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByText('Could not load systems')).toBeInTheDocument()
+      expect(screen.queryByText('Overall ZT score')).not.toBeInTheDocument()
+    })
+
+    it('reports a failed /datacalls rather than spinning forever', () => {
+      mockContext = { activeDatacallIds: [], datacallsError: true }
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByText('Could not load data calls')).toBeInTheDocument()
+    })
+
+    it('reports failed scores', () => {
+      mockScoresError = true
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByText('Could not load scores')).toBeInTheDocument()
+    })
+
+    it('does not call a failed users load an empty roster', () => {
+      mockUsersError = true
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByText(/Could not load users/)).toBeInTheDocument()
+      expect(
+        screen.queryByText(/No admin-tier users are assigned/)
+      ).not.toBeInTheDocument()
+    })
+  })
+
+  it('holds the skeleton while the decommissioned list is swapped out', () => {
+    mockContext = { showDecommissioned: true }
+    renderWithProviders(<OpDivDashboard />)
+    expect(mockSetShowDecommissioned).toHaveBeenCalledWith(false)
+    expect(screen.getByLabelText('Loading OpDiv')).toBeInTheDocument()
+    expect(screen.queryByText('Overall ZT score')).not.toBeInTheDocument()
+  })
+
+  it('keeps holding until the active list replaces the decommissioned one', () => {
+    const decommissioned = [makeSystem(1, { decommissioned: true })]
+    mockContext = { showDecommissioned: true, fismaSystems: decommissioned }
+    const { rerender } = renderWithProviders(<OpDivDashboard />)
+
+    // Flag cleared, refetch still in flight: the stale list is still in place.
+    mockContext = { showDecommissioned: false, fismaSystems: decommissioned }
+    rerender(<OpDivDashboard />)
+    expect(screen.getByLabelText('Loading OpDiv')).toBeInTheDocument()
+
+    mockContext = { showDecommissioned: false }
+    rerender(<OpDivDashboard />)
+    expect(screen.queryByLabelText('Loading OpDiv')).not.toBeInTheDocument()
+    expect(screen.getAllByText('3.40').length).toBeGreaterThan(0)
+  })
+
+  it('keeps the switcher out of the h1', () => {
+    renderWithProviders(<OpDivDashboard />)
+    const h1 = screen.getByRole('heading', { level: 1 })
+    expect(h1).toHaveTextContent('National Institutes of Health')
+    expect(within(h1).queryByRole('combobox')).not.toBeInTheDocument()
+    expect(
+      screen.getByRole('combobox', { name: 'Switch OpDiv' })
+    ).toBeInTheDocument()
+  })
+
+  it('shows an inactive OpDiv opened by URL as the current selection', () => {
+    mockContext = {
+      opdivs: [{ ...OPDIV, active: false }, OTHER_OPDIV],
+    }
+    renderWithProviders(<OpDivDashboard />)
+    expect(screen.getByRole('combobox', { name: 'Switch OpDiv' })).toHaveValue(
+      'NIH'
+    )
+  })
+
+  it('offers no Add system on an inactive OpDiv', () => {
+    // The create form only lists active OpDivs, so the prefill would be blank.
+    mockContext = { opdivs: [{ ...OPDIV, active: false }, OTHER_OPDIV] }
+    renderWithProviders(<OpDivDashboard />)
+    expect(
+      screen.queryByRole('button', { name: /add system/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('labels the users link for what a read-only admin can do there', () => {
+    mockUser = makeUser('OPDIV_READONLY_ADMIN')
+    renderWithProviders(<OpDivDashboard />)
+    expect(
+      screen.getByRole('link', { name: /view users/i })
+    ).toBeInTheDocument()
+    expect(
+      screen.queryByRole('link', { name: /manage users/i })
+    ).not.toBeInTheDocument()
+  })
+
+  it('links not-started systems to the id-keyed questionnaire route', () => {
+    renderWithProviders(<OpDivDashboard />)
+    expect(screen.getByRole('link', { name: 'SYS2' })).toHaveAttribute(
+      'href',
+      '/questionnaire/system/2/FY26_ZTM'
+    )
+  })
+
+  describe('export scope', () => {
+    // Every id rides the query string, and CloudFront rejects URLs past ~8KB.
+    it('sends no fsids in the aggregate, as the full export on Home does', async () => {
+      mockOpDivId = 'all'
+      renderWithProviders(<OpDivDashboard />)
+      await userEvent.click(screen.getByRole('button', { name: /^export$/i }))
+      expect(mockExport).toHaveBeenCalledWith(104, undefined)
+    })
+
+    it('sends no fsids when one OpDiv holds every system the caller has', async () => {
+      renderWithProviders(<OpDivDashboard />)
+      await userEvent.click(screen.getByRole('button', { name: /^export$/i }))
+      expect(mockExport).toHaveBeenCalledWith(104, undefined)
+    })
+
+    it('names the systems when the OpDiv is a subset of the caller scope', async () => {
+      mockSystems = [...mockSystems, makeSystem(3, { opdiv_id: 9 })]
+      renderWithProviders(<OpDivDashboard />)
+      await userEvent.click(screen.getByRole('button', { name: /^export$/i }))
+      expect(mockExport).toHaveBeenCalledWith(104, [1, 2])
+    })
+
+    it('disables, rather than fails, a subset too large for one URL', () => {
+      mockSystems = [
+        ...Array.from({ length: 700 }, (_, i) => makeSystem(10000 + i)),
+        makeSystem(3, { opdiv_id: 9 }),
+      ]
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByRole('button', { name: /^export$/i })).toBeDisabled()
+    })
   })
 })

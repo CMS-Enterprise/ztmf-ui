@@ -4,7 +4,7 @@
  * Not cached as vocabulary: grants and roles are edited on the Users page, and
  * a stale roster would misreport who covers an OpDiv.
  *
- * @module api/users
+ * @module utils/users
  */
 import { useQuery, type UseQueryResult } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'

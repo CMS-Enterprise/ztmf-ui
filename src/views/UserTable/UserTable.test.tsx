@@ -22,14 +22,10 @@ jest.mock('@/utils/config', () => ({
 
 // Title/Context is consumed via useOutletContext; the renderWithProviders
 // MemoryRouter has no matching outlet, so stub the hook directly.
+let mockUserInfo: Record<string, unknown>
 jest.mock('../Title/Context', () => ({
   useContextProp: () => ({
-    userInfo: {
-      userid: 'me',
-      role: 'OWNER',
-      email: 'me@x.gov',
-      fullname: 'Me',
-    },
+    userInfo: mockUserInfo,
     fismaSystems: [],
     setFismaSystems: jest.fn(),
     // The OpDiv catalog hook derives its projections from this shared list
@@ -37,6 +33,7 @@ jest.mock('../Title/Context', () => ({
     opdivs: [
       { opdiv_id: 1, code: 'CDC', name: 'CDC', is_parent: false, active: true },
       { opdiv_id: 2, code: 'NIH', name: 'NIH', is_parent: false, active: true },
+      { opdiv_id: 3, code: 'HHS', name: 'HHS', is_parent: true, active: true },
     ],
     latestDataCallId: 1,
     latestDatacall: 'FY2025',
@@ -89,6 +86,12 @@ const rows = [
 ]
 
 beforeEach(() => {
+  mockUserInfo = {
+    userid: 'me',
+    role: 'OWNER',
+    email: 'me@x.gov',
+    fullname: 'Me',
+  }
   mock.reset()
   mock.onGet('/users').reply(200, { data: rows })
 })
@@ -230,5 +233,37 @@ describe('UserTable', () => {
       expect(screen.queryByText('Leia Organa')).not.toBeInTheDocument()
     })
     expect(screen.getByText('Chewbacca')).toBeInTheDocument()
+  })
+
+  describe('OpDiv deep link', () => {
+    test('a read-only admin sees the seeded OpDiv in the facet and can clear it', async () => {
+      // The facet used to draw its options from the assignable set, which is
+      // empty for read-only tiers: the roster was narrowed with no visible
+      // filter and no way to widen it.
+      mockUserInfo = {
+        userid: 'me',
+        role: 'OPDIV_READONLY_ADMIN',
+        email: 'me@x.gov',
+        fullname: 'Me',
+        assignedopdivids: [2],
+      }
+      renderWithProviders(<UserTable />, { initialEntries: ['/users?opdiv=2'] })
+      expect(await screen.findByText('Han Solo')).toBeInTheDocument()
+      expect(screen.queryByText('Leia Organa')).not.toBeInTheDocument()
+
+      const facet = screen.getByRole('combobox', { name: 'Filter by OpDiv' })
+      expect(facet).toHaveValue('NIH')
+
+      await userEvent.clear(facet)
+      expect(await screen.findByText('Leia Organa')).toBeInTheDocument()
+    })
+
+    test('shows a deep link to the HHS parent row, which is not assignable', async () => {
+      renderWithProviders(<UserTable />, { initialEntries: ['/users?opdiv=3'] })
+      await screen.findByRole('combobox', { name: 'Filter by OpDiv' })
+      expect(
+        screen.getByRole('combobox', { name: 'Filter by OpDiv' })
+      ).toHaveValue('HHS')
+    })
   })
 })

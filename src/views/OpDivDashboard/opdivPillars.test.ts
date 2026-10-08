@@ -1,4 +1,8 @@
-import { averageByPillar, pillarExtremeCounts } from './opdivPillars'
+import {
+  averageByPillar,
+  pillarExtremeCounts,
+  pillarOrder,
+} from './opdivPillars'
 import type { ScoreAggregate } from '@/types'
 
 const agg = (
@@ -52,7 +56,9 @@ describe('averageByPillar', () => {
     expect(result[0].n).toBe(1)
   })
 
-  it('returns the canonical pillar order, not response order', () => {
+  it('keeps the order the API serves pillars in', () => {
+    // No client-side ranking by name (ztmf-misc#393): the API orders each
+    // row's pillars by pillars.ordr, so a response order wins over pillarid.
     const aggregates = [
       agg(1, [
         [5, 'Data', 3],
@@ -62,7 +68,7 @@ describe('averageByPillar', () => {
     ]
     expect(
       averageByPillar(aggregates, new Set([1])).map((p) => p.pillar)
-    ).toEqual(['Identity', 'Networks', 'Data'])
+    ).toEqual(['Data', 'Identity', 'Networks'])
   })
 
   it('ignores rows with no pillar detail', () => {
@@ -187,17 +193,17 @@ describe('pillarExtremeCounts', () => {
     expect(result.systems).toBe(3)
   })
 
-  it('counts a tie once, in canonical pillar order', () => {
+  it('counts a tie once, in API pillar order', () => {
     // Otherwise the counts exceed the system total and stop being readable
     // as "for N of M systems".
     const aggregates = [
       agg(1, [
-        [1, 'Identity', 2],
         [2, 'Devices', 2],
+        [1, 'Identity', 2],
       ]),
     ]
     const result = pillarExtremeCounts(aggregates, new Set([1]))
-    expect(result.weakest).toEqual({ pillar: 'Identity', count: 1 })
+    expect(result.weakest).toEqual({ pillar: 'Devices', count: 1 })
     expect(result.systems).toBe(1)
   })
 
@@ -215,5 +221,69 @@ describe('pillarExtremeCounts', () => {
       strongest: null,
       systems: 0,
     })
+  })
+})
+
+describe('pillarOrder', () => {
+  const SIX: [number, string, number][] = [
+    [1, 'Identity', 3],
+    [2, 'Devices', 3],
+    [3, 'Networks', 3],
+    [4, 'Applications', 3],
+    [5, 'Data', 3],
+    [6, 'CrossCutting', 3],
+  ]
+  const SAAS = SIX.filter(([id]) => id !== 2 && id !== 4)
+
+  it('slots pillars a SaaS row omits back into place when it comes first', () => {
+    // First appearance alone would push Devices and Applications to the end.
+    expect(pillarOrder([agg(1, SAAS), agg(2, SIX)])).toEqual([1, 2, 3, 4, 5, 6])
+  })
+
+  it('merges the sequences of rows that each carry only some pillars', () => {
+    const rows = [
+      agg(1, [
+        [1, 'Identity', 3],
+        [3, 'Networks', 3],
+      ]),
+      agg(2, [
+        [3, 'Networks', 3],
+        [6, 'CrossCutting', 3],
+      ]),
+      agg(3, [
+        [1, 'Identity', 3],
+        [2, 'Devices', 3],
+        [3, 'Networks', 3],
+      ]),
+    ]
+    expect(pillarOrder(rows)).toEqual([1, 2, 3, 6])
+  })
+
+  it('breaks an order no row settles on pillarid', () => {
+    const rows = [
+      agg(1, [
+        [1, 'Identity', 3],
+        [5, 'Data', 3],
+      ]),
+      agg(2, [
+        [1, 'Identity', 3],
+        [3, 'Networks', 3],
+      ]),
+    ]
+    expect(pillarOrder(rows)).toEqual([1, 3, 5])
+  })
+
+  it('still terminates when rows disagree', () => {
+    const rows = [
+      agg(1, [
+        [1, 'Identity', 3],
+        [2, 'Devices', 3],
+      ]),
+      agg(2, [
+        [2, 'Devices', 3],
+        [1, 'Identity', 3],
+      ]),
+    ]
+    expect(pillarOrder(rows)).toEqual([1, 2])
   })
 })

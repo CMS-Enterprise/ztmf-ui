@@ -89,11 +89,8 @@ export function formatDateTime(value: DateInput, fallback = EMPTY): string {
 const DAY_MS = 86_400_000
 
 /**
- * Whole days from now until a deadline.
- *
- * Counted between UTC calendar days rather than between instants, so a
- * deadline at UTC midnight does not read as "0 days left" for most of the day
- * before it. Negative once the deadline has passed; null when unparseable.
+ * Whole days left before a deadline instant, floored; 0 under 24h, negative
+ * once passed (the backend cuts off at the instant), null when unparseable.
  *
  * @param value - ISO string, Date, or nothing.
  * @param now - The moment to count from; injectable for tests.
@@ -104,7 +101,7 @@ export function daysUntil(
 ): number | null {
   const parsed = parse(value)
   if (!parsed) return null
-  const startOfDay = (d: Date) =>
-    Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())
-  return Math.round((startOfDay(parsed) - startOfDay(now)) / DAY_MS)
+  const remaining = parsed.getTime() - now.getTime()
+  if (remaining <= 0) return Math.min(-1, Math.ceil(remaining / DAY_MS))
+  return Math.floor(remaining / DAY_MS)
 }

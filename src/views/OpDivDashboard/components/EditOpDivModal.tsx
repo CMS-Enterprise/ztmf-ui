@@ -15,7 +15,7 @@
  *
  * @module views/OpDivDashboard/components/EditOpDivModal
  */
-import { useEffect, useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import Typography from '@mui/material/Typography'
@@ -69,10 +69,16 @@ export default function EditOpDivModal({
   const updateOpDiv = useUpdateOpDiv()
   const setDelegateEnabled = useSetOpDivDelegateEnabled()
 
-  // Re-seed each time the dialog opens, and when the switcher moves the page
-  // to a different OpDiv while it is closed.
+  // Seed on open and on a change of OpDiv only: a refetch of the same OpDiv
+  // mid-save must not revert typed values or wipe a returned field error.
+  const seededFor = useRef<number | null>(null)
   useEffect(() => {
-    if (!open) return
+    if (!open) {
+      seededFor.current = null
+      return
+    }
+    if (seededFor.current === opdiv.opdiv_id) return
+    seededFor.current = opdiv.opdiv_id
     setCode(opdiv.code)
     setName(opdiv.name)
     setActive(opdiv.active)
@@ -85,15 +91,12 @@ export default function EditOpDivModal({
 
   const handleSave = async () => {
     setFieldErrors({})
+    const deactivated = canManage && opdiv.active && !active
+    const delegateChanged =
+      canToggleDelegate && delegate !== opdiv.system_delegate_enabled
     try {
-      // The delegate capability has its own endpoint with a wider gate, so it
-      // is sent separately and only when it actually changed.
-      if (canToggleDelegate && delegate !== opdiv.system_delegate_enabled) {
-        await setDelegateEnabled.mutateAsync({
-          opdivId: opdiv.opdiv_id,
-          enabled: delegate,
-        })
-      }
+      // Identity first: it is the call that can fail validation, and nothing
+      // has been committed if it does.
       if (canManage) {
         await updateOpDiv.mutateAsync({
           opdivId: opdiv.opdiv_id,
@@ -106,9 +109,6 @@ export default function EditOpDivModal({
           },
         })
       }
-      const deactivated = canManage && opdiv.active && !active
-      onClose()
-      if (deactivated) onDeactivated?.()
     } catch (error) {
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
@@ -117,7 +117,31 @@ export default function EditOpDivModal({
         return
       }
       notify(parsed.message, 'error')
+      return
     }
+    // The delegate capability has its own endpoint with a wider gate, so it
+    // is sent separately and only when it actually changed.
+    if (delegateChanged) {
+      try {
+        await setDelegateEnabled.mutateAsync({
+          opdivId: opdiv.opdiv_id,
+          enabled: delegate,
+        })
+      } catch (error) {
+        if (isAuthHandled(error)) return
+        const { message } = parseApiError(error)
+        if (!canManage) {
+          notify(message, 'error')
+          return
+        }
+        notify(
+          `Saved code, name, Insights and Active, but not the System Delegate change: ${message}`,
+          'error'
+        )
+      }
+    }
+    onClose()
+    if (deactivated) onDeactivated?.()
   }
 
   const readOnlyLine = (label: string, value: string) => (

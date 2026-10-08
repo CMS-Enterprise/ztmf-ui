@@ -28,7 +28,12 @@ const LAST_OPDIV_KEY = 'ztmf.lastOpDivId'
 export const ALL_OPDIVS = 'all'
 
 /** Resolution outcome for a `:opdivId` URL segment. */
-export type OpDivScopeStatus = 'loading' | 'ok' | 'denied' | 'notfound'
+export type OpDivScopeStatus =
+  | 'loading'
+  | 'ok'
+  | 'denied'
+  | 'notfound'
+  | 'error'
 
 /**
  * The OpDivs a user may switch between: active, and narrowed to their own
@@ -164,6 +169,35 @@ export function writeLastOpDivId(opdivId: number): void {
 }
 
 /**
+ * Forgets the last-viewed OpDiv, e.g. once it has been deactivated.
+ * @returns {void}
+ */
+export function clearLastOpDivId(): void {
+  try {
+    window.sessionStorage.removeItem(LAST_OPDIV_KEY)
+  } catch {
+    // Ignored, as above.
+  }
+}
+
+/**
+ * Whether a list scope depends on failed to load, so [] is not "none".
+ * @param {object} ctx - The relevant Outlet context fields.
+ * @returns {boolean} True when resolution cannot be trusted.
+ */
+export function scopeLoadFailed(ctx: {
+  userInfo: userData
+  opdivs: OpDiv[]
+  opdivsError?: boolean
+  fismaSystemsError?: boolean
+}): boolean {
+  return (
+    (Boolean(ctx.opdivsError) && ctx.opdivs.length === 0) ||
+    (needsSystemsFallback(ctx.userInfo) && Boolean(ctx.fismaSystemsError))
+  )
+}
+
+/**
  * Where a bare /opdivs should land: the remembered OpDiv when it is still
  * visible, else the first by code.
  * @param {OpDiv[]} visible - The user's switchable OpDivs.
@@ -207,8 +241,15 @@ export type OpDivScope = {
  * @returns {OpDivScope} The switchable set, resolved OpDiv and status.
  */
 export function useOpDivScope(opdivIdParam?: string): OpDivScope {
-  const { opdivs, opdivsLoaded, fismaSystems, fismaSystemsLoaded, userInfo } =
-    useContextProp()
+  const {
+    opdivs,
+    opdivsLoaded,
+    opdivsError,
+    fismaSystems,
+    fismaSystemsLoaded,
+    fismaSystemsError,
+    userInfo,
+  } = useContextProp()
 
   return useMemo<OpDivScope>(() => {
     const visible = visibleOpDivs(userInfo, opdivs, fismaSystems)
@@ -222,6 +263,8 @@ export function useOpDivScope(opdivIdParam?: string): OpDivScope {
       (needsSystemsFallback(userInfo) && !fismaSystemsLoaded)
     )
       return { ...base, status: 'loading' }
+    if (scopeLoadFailed({ userInfo, opdivs, opdivsError, fismaSystemsError }))
+      return { ...base, status: 'error' }
     if (!hasAdminRead(userInfo)) return { ...base, status: 'denied' }
 
     // The aggregate needs no per-OpDiv access check: it applies no filter, so
@@ -241,8 +284,10 @@ export function useOpDivScope(opdivIdParam?: string): OpDivScope {
   }, [
     opdivs,
     opdivsLoaded,
+    opdivsError,
     fismaSystems,
     fismaSystemsLoaded,
+    fismaSystemsError,
     userInfo,
     opdivIdParam,
   ])

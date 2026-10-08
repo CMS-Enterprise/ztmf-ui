@@ -1,9 +1,8 @@
 /**
- * OpDiv identity + switcher, rendered as the dashboard's page title.
+ * OpDiv identity (the page title) and the switcher (a header action).
  *
- * With exactly one switchable OpDiv it degrades to a static badge + name:
- * offering a dropdown that can only reselect what is already shown reads as a
- * broken control. With more than one it also offers the aggregate.
+ * The switcher is omitted when there is only one option: a dropdown that can
+ * only reselect what is already shown reads as a broken control.
  *
  * @module views/OpDivDashboard/components/OpDivSwitcher
  */
@@ -42,10 +41,32 @@ export type OpDivSwitcherProps = {
 }
 
 /**
- * Renders the current scope and, when there is more than one to choose from,
- * a searchable switcher that routes to the selection.
+ * The page title: the OpDiv's code badge and name, or the aggregate label.
+ * Plain text only - it renders inside PageHeader's h1.
+ * @param {object} props - The current scope.
+ * @returns {JSX.Element} The title content.
+ */
+export function OpDivTitle({
+  opdiv,
+  isAggregate,
+}: Pick<OpDivSwitcherProps, 'opdiv' | 'isAggregate'>) {
+  if (isAggregate || !opdiv) return <>{ALL_OPDIVS_LABEL}</>
+  return (
+    <Box
+      component="span"
+      sx={{ display: 'inline-flex', alignItems: 'center', gap: 1.5 }}
+    >
+      <CodeBadge code={opdiv.code} muted={!opdiv.active} />
+      {opdiv.name}
+    </Box>
+  )
+}
+
+/**
+ * A searchable switcher that routes to the selection, or nothing when there
+ * is only one place to go.
  * @param {OpDivSwitcherProps} props - Current scope and the switchable set.
- * @returns {JSX.Element} The switcher.
+ * @returns {JSX.Element | null} The switcher.
  */
 export default function OpDivSwitcher({
   opdiv,
@@ -54,9 +75,14 @@ export default function OpDivSwitcher({
 }: OpDivSwitcherProps) {
   const navigate = useNavigate()
   const aggregateAvailable = canAggregate(visible)
-  // More than one OpDiv, or one OpDiv plus the aggregate, is something to
-  // choose between; a lone OpDiv is not.
-  const canSwitch = visible.length > 1
+  // An OpDiv opened by URL that is not switchable (inactive) still has to read
+  // as the current selection rather than falling back to another option.
+  const current =
+    !isAggregate &&
+    opdiv &&
+    !visible.some((od) => od.opdiv_id === opdiv.opdiv_id)
+      ? opdiv
+      : null
 
   const options: SwitcherOption[] = [
     ...(aggregateAvailable
@@ -68,6 +94,15 @@ export default function OpDivSwitcher({
           },
         ]
       : []),
+    ...(current
+      ? [
+          {
+            value: String(current.opdiv_id),
+            code: current.code,
+            name: `${current.name}${current.active ? '' : ' (inactive)'}`,
+          },
+        ]
+      : []),
     ...visible.map((od) => ({
       value: String(od.opdiv_id),
       code: od.code,
@@ -75,29 +110,8 @@ export default function OpDivSwitcher({
     })),
   ]
 
-  const identity = (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 1.5, minWidth: 0 }}>
-      {!isAggregate && opdiv && (
-        <CodeBadge code={opdiv.code} muted={!opdiv.active} />
-      )}
-      <Typography
-        component="span"
-        sx={{
-          fontSize: 28,
-          fontWeight: 800,
-          letterSpacing: '-0.02em',
-          color: colors.ink,
-          overflow: 'hidden',
-          textOverflow: 'ellipsis',
-          whiteSpace: 'nowrap',
-        }}
-      >
-        {isAggregate ? ALL_OPDIVS_LABEL : opdiv?.name ?? ''}
-      </Typography>
-    </Box>
-  )
-
-  if (!canSwitch) return identity
+  // A lone option can only reselect what is already shown.
+  if (options.length < 2) return null
 
   const selected =
     options.find(
@@ -105,51 +119,44 @@ export default function OpDivSwitcher({
     ) ?? options[0]
 
   return (
-    <Box sx={{ display: 'flex', alignItems: 'center', gap: 2, minWidth: 0 }}>
-      {identity}
-      <Autocomplete
-        size="small"
-        options={options}
-        disableClearable
-        getOptionLabel={(o) => o.code}
-        isOptionEqualToValue={(option, value) => option.value === value.value}
-        value={selected}
-        onChange={(_event, next) => {
-          if (!next) return
-          navigate(
-            next.value === ALL_OPDIVS
-              ? opdivDashboardPath(ALL_OPDIVS)
-              : opdivDashboardPath(next.value)
-          )
-        }}
-        renderOption={(props, option) => {
-          const { key, ...rest } = props
-          return (
-            <li key={key} {...rest}>
-              <Box
-                sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}
-              >
-                <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
-                  {option.code}
-                </Typography>
-                <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                  {option.name}
-                </Typography>
-              </Box>
-            </li>
-          )
-        }}
-        sx={{ width: 165, flexShrink: 0 }}
-        renderInput={(params) => (
-          <TextField
-            {...params}
-            inputProps={{
-              ...params.inputProps,
-              'aria-label': 'Switch OpDiv',
-            }}
-          />
-        )}
-      />
-    </Box>
+    <Autocomplete
+      size="small"
+      options={options}
+      disableClearable
+      getOptionLabel={(o) => o.code}
+      isOptionEqualToValue={(option, value) => option.value === value.value}
+      value={selected}
+      onChange={(_event, next) => {
+        if (!next) return
+        navigate(opdivDashboardPath(next.value))
+      }}
+      renderOption={(props, option) => {
+        const { key, ...rest } = props
+        return (
+          <li key={key} {...rest}>
+            <Box
+              sx={{ display: 'flex', flexDirection: 'column', width: '100%' }}
+            >
+              <Typography sx={{ fontSize: 13, fontWeight: 600 }}>
+                {option.code}
+              </Typography>
+              <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
+                {option.name}
+              </Typography>
+            </Box>
+          </li>
+        )
+      }}
+      sx={{ width: 165, flexShrink: 0 }}
+      renderInput={(params) => (
+        <TextField
+          {...params}
+          inputProps={{
+            ...params.inputProps,
+            'aria-label': 'Switch OpDiv',
+          }}
+        />
+      )}
+    />
   )
 }

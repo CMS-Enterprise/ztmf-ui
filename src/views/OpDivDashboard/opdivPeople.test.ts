@@ -1,5 +1,5 @@
 import {
-  adminTierCounts,
+  adminTierRoster,
   classifyDelegateExpiry,
   usersForOpDiv,
 } from './opdivPeople'
@@ -33,28 +33,29 @@ describe('usersForOpDiv', () => {
   })
 })
 
-describe('adminTierCounts', () => {
-  it('counts admin tiers only, in tier order', () => {
+describe('adminTierRoster', () => {
+  it('lists admin tiers only, most privileged first then by name', () => {
     const scoped = [
-      makeUser({ role: 'OPDIV_ADMIN' }),
-      makeUser({ role: 'OPDIV_ADMIN' }),
-      makeUser({ role: 'HHS_ADMIN' }),
+      makeUser({ role: 'OPDIV_ADMIN', fullname: 'Zed' }),
+      makeUser({ role: 'OPDIV_ADMIN', fullname: 'Amy' }),
+      makeUser({ role: 'HHS_ADMIN', fullname: 'Mo' }),
     ]
-    expect(adminTierCounts(scoped)).toEqual([
-      { role: 'HHS_ADMIN', count: 1 },
-      { role: 'OPDIV_ADMIN', count: 2 },
+    expect(adminTierRoster(scoped).map((u) => u.fullname)).toEqual([
+      'Mo',
+      'Amy',
+      'Zed',
     ])
   })
 
   it('excludes ISSO, ISSM and delegates, whose grant is not their scope', () => {
     // These roles can carry a legacy OpDiv grant the backend ignores when
-    // deciding what they can see, so counting them would overstate coverage.
+    // deciding what they can see, so listing them would overstate coverage.
     const scoped = [
       makeUser({ role: 'ISSO' }),
       makeUser({ role: 'ISSM' }),
       makeUser({ role: 'SYSTEM_DELEGATE' }),
     ]
-    expect(adminTierCounts(scoped)).toEqual([])
+    expect(adminTierRoster(scoped)).toEqual([])
   })
 })
 

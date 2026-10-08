@@ -79,6 +79,17 @@ describe('score range colors', () => {
     expect(contrastRatio(range.high!.color)).toBeGreaterThanOrEqual(4.5)
   })
 
+  it("uses the API's tier for each end, deriving only when it is absent", () => {
+    const range = scoreRange({
+      lowest: { score: 3.05, acronym: 'LOW', tier: 'Advanced' },
+      highest: { score: 4.8, acronym: 'HIGH' },
+      scoredCount: 2,
+    })
+
+    expect(range.low?.tier).toBe('Advanced')
+    expect(range.high?.tier).toBe('Optimal')
+  })
+
   it('the computation agrees with the failure that put this file here', () => {
     // Guards the math: the shade the tile originally shipped with must still
     // read as a failure.

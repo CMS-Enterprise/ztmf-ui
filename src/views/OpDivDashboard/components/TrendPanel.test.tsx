@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { MemoryRouter } from 'react-router-dom'
 import TrendPanel from './TrendPanel'
@@ -68,14 +68,16 @@ describe('TrendPanel', () => {
   it('describes the newest call when nothing is selected', () => {
     // Never blank: a detail strip with no selection would read as broken.
     renderPanel()
-    expect(screen.getByText('FY26 ZTM')).toBeInTheDocument()
-    expect(screen.getByText('3.20')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'FY26 ZTM: average 3.20, 7 systems scored'
+    )
   })
 
   it('describes the selected call instead', () => {
     renderPanel({ selectedCallId: 1 })
-    expect(screen.getByText('FY23 ZTM')).toBeInTheDocument()
-    expect(screen.getByText('2.64')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent(
+      'FY23 ZTM: average 2.64, 5 systems scored'
+    )
     // First in the series, so there is nothing to compare against.
     expect(screen.getByText('first in series')).toBeInTheDocument()
   })
@@ -85,7 +87,15 @@ describe('TrendPanel', () => {
     // no longer be plotted - describing a call that is not on the chart would
     // be worse than moving the selection.
     renderPanel({ selectedCallId: 999 })
-    expect(screen.getByText('FY26 ZTM')).toBeInTheDocument()
+    expect(screen.getByRole('status')).toHaveTextContent('FY26 ZTM')
+  })
+
+  it('lists every plotted point as a table, not only the selected one', () => {
+    renderPanel({ selectedCallId: 1 })
+    const rows = within(screen.getByRole('table')).getAllByRole('row')
+    // Header plus one row per call.
+    expect(rows).toHaveLength(POINTS.length + 1)
+    expect(rows[3]).toHaveTextContent('FY26 ZTM3.207')
   })
 
   it('steps through the series with the arrows, for readers without a pointer', async () => {

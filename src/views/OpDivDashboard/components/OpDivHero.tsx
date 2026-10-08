@@ -6,6 +6,7 @@
  *
  * @module views/OpDivDashboard/components/OpDivHero
  */
+import { useId } from 'react'
 import Box from '@mui/material/Box'
 import IconButton from '@mui/material/IconButton'
 import Tooltip from '@mui/material/Tooltip'
@@ -14,6 +15,7 @@ import Typography from '@mui/material/Typography'
 import Card from '@/components/ui/Card'
 import Eyebrow from '@/components/ui/Eyebrow'
 import TierLabel from '@/components/ui/TierLabel'
+import TrendLine from '@/components/ui/TrendLine'
 import { colors, fonts } from '@/theme/tokens'
 import { tierForScore } from '@/utils/tierStyles'
 import ScoreMeter from './ScoreMeter'
@@ -52,17 +54,24 @@ export default function OpDivHero({
   // An OpDiv average is not a graded system, so there is no API tier for it.
   // This is the documented exception where deriving from the number is right.
   const tier = avgScore !== null ? tierForScore(avgScore) : undefined
-  const flat = delta.delta !== null && Math.abs(delta.delta) < 0.005
+  const headingId = useId()
 
   return (
-    <Card sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}>
+    <Card
+      role="region"
+      aria-labelledby={headingId}
+      sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
+    >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-        <Eyebrow>Overall ZT score</Eyebrow>
-        <Tooltip title={HERO_INFO}>
+        <Eyebrow component="h2" id={headingId}>
+          Overall ZT score
+        </Eyebrow>
+        {/* describeChild, or the button's aria-label wins and the explanation is never announced. */}
+        <Tooltip title={<span>{HERO_INFO}</span>} describeChild>
           <IconButton
             size="small"
             aria-label="About the overall ZT score"
-            sx={{ p: 0.25, color: colors.neutral400 }}
+            sx={{ p: 0.25, color: colors.neutral500 }}
           >
             <InfoOutlinedIcon sx={{ fontSize: 14 }} />
           </IconButton>
@@ -72,12 +81,12 @@ export default function OpDivHero({
         <Typography
           component="p"
           sx={{
-            fontFamily: fonts.base,
+            fontFamily: fonts.mono,
             fontSize: 48,
-            fontWeight: 800,
+            fontWeight: 700,
             lineHeight: 1.1,
             letterSpacing: '-0.02em',
-            color: avgScore !== null ? colors.ink : colors.neutral400,
+            color: avgScore !== null ? colors.ink : colors.neutral500,
           }}
         >
           {avgScore !== null ? avgScore.toFixed(2) : '—'}
@@ -95,40 +104,23 @@ export default function OpDivHero({
             } of ${systemCount}`}
       </Typography>
 
-      {/* The comparison is paired over systems scored in BOTH calls, so the
-          denominator is named: an unpaired average lets a changed system mix
-          read as movement nobody earned. */}
-      {delta.delta !== null && delta.priorAvg !== null ? (
-        <Typography
-          sx={{
-            // Sits at the bottom once the card stretches to match the KPI
-            // block beside it, so the content spreads rather than clumping.
-            mt: 'auto',
-            pt: 0.5,
-            fontSize: 13,
-            fontWeight: 600,
-            color: flat
-              ? colors.neutral500
-              : delta.delta > 0
-                ? colors.up
-                : colors.down,
-          }}
-        >
-          {flat
-            ? 'No change'
-            : `${delta.delta > 0 ? '+' : ''}${delta.delta.toFixed(2)}`}
-          {priorLabel ? ` vs ${priorLabel}` : ''}
-          {` (was ${delta.priorAvg.toFixed(2)}, ${delta.n} ${
-            delta.n === 1 ? 'system' : 'systems'
-          } in both)`}
-        </Typography>
-      ) : (
-        <Typography
-          sx={{ mt: 'auto', pt: 0.5, fontSize: 13, color: colors.neutral500 }}
-        >
-          No prior data call to compare against.
-        </Typography>
-      )}
+      {/* Paired over systems in BOTH calls; names its own averages since they differ from the headline. */}
+      <Box sx={{ mt: 'auto', pt: 0.5 }}>
+        {delta.currentAvg !== null && delta.priorAvg !== null ? (
+          <TrendLine
+            current={delta.currentAvg}
+            previous={delta.priorAvg}
+            previousDatacallName={priorLabel}
+            pairedCount={delta.n}
+          />
+        ) : (
+          <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
+            {priorLabel
+              ? `No system was scored in both this call and ${priorLabel}.`
+              : 'No prior data call to compare against.'}
+          </Typography>
+        )}
+      </Box>
     </Card>
   )
 }

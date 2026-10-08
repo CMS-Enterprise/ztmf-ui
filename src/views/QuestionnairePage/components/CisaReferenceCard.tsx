@@ -2,7 +2,7 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import { colors } from '@/theme/tokens'
-import Card from './Card'
+import Card from '@/components/ui/Card'
 
 /**
  * Static CISA Zero Trust reference card shown at the bottom of the

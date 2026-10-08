@@ -1,5 +1,5 @@
-import { renderHook } from '@testing-library/react'
-import { MemoryRouter } from 'react-router-dom'
+import { act, renderHook } from '@testing-library/react'
+import { MemoryRouter, useNavigate } from 'react-router-dom'
 import type { ReactNode } from 'react'
 import { useUserFilters } from './useUserFilters'
 
@@ -49,5 +49,30 @@ describe('useUserFilters OpDiv deep link', () => {
       })
       expect(result.current.opdivFilter).toBe('all')
     }
+  })
+})
+
+describe('useUserFilters re-seeding', () => {
+  it('clears a deep-linked OpDiv when the URL drops ?opdiv=', () => {
+    // /users does not remount between visits, so the Users tab after a deep
+    // link must not keep the roster silently narrowed.
+    const { result } = renderHook(
+      () => ({ filters: useUserFilters(), navigate: useNavigate() }),
+      { wrapper: wrapper('/users?opdiv=9') }
+    )
+    expect(result.current.filters.opdivFilter).toBe(9)
+    act(() => result.current.navigate('/users'))
+    expect(result.current.filters.opdivFilter).toBe('all')
+    act(() => result.current.navigate('/users?opdiv=4'))
+    expect(result.current.filters.opdivFilter).toBe(4)
+  })
+
+  it('keeps a user-widened facet while the URL is unchanged', () => {
+    const { result, rerender } = renderHook(() => useUserFilters(), {
+      wrapper: wrapper('/users?opdiv=9'),
+    })
+    act(() => result.current.setOpDivFilter('all'))
+    rerender()
+    expect(result.current.opdivFilter).toBe('all')
   })
 })

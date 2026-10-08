@@ -1,4 +1,4 @@
-import { MAILTO_MAX_LENGTH, buildOpDivMailto } from './opdivMailto'
+import { MAILTO_MAX_LENGTH, bareAddress, buildOpDivMailto } from './opdivMailto'
 import { makeSystem } from './testFixtures'
 
 describe('buildOpDivMailto', () => {
@@ -76,5 +76,39 @@ describe('buildOpDivMailto', () => {
     expect(decodeURIComponent(result.href)).toContain(
       'NIH Zero Trust data call'
     )
+  })
+
+  it('strips display names so a comma in one cannot split the list', () => {
+    // mail.ParseAddress on the backend accepts both of these forms.
+    const result = buildOpDivMailto(
+      [
+        makeSystem({
+          fismasystemid: 1,
+          issoemail: '"Doe, Jane" <jane@example.gov>',
+          datacallcontact: 'poc@example.gov (Pat Contact)',
+        }),
+        makeSystem({
+          fismasystemid: 2,
+          issoemail: 'JANE@example.gov',
+          datacallcontact: undefined,
+        }),
+      ],
+      'NIH'
+    )
+    expect(result.addresses).toEqual(['jane@example.gov', 'poc@example.gov'])
+    expect(decodeURIComponent(result.href)).toContain(
+      'bcc=jane@example.gov,poc@example.gov&'
+    )
+  })
+})
+
+describe('bareAddress', () => {
+  it.each([
+    ['a@example.gov', 'a@example.gov'],
+    ['Jane <a@example.gov>', 'a@example.gov'],
+    ['"Doe, Jane" <a@example.gov>', 'a@example.gov'],
+    ['a@example.gov (Jane)', 'a@example.gov'],
+  ])('%s -> %s', (raw, expected) => {
+    expect(bareAddress(raw)).toBe(expected)
   })
 })

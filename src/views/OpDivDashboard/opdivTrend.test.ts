@@ -3,6 +3,7 @@ import {
   buildTrendSeries,
   pairedDelta,
   pairedTierMovement,
+  selectPriorCall,
   selectTrendCalls,
   tierDistribution,
 } from './opdivTrend'
@@ -261,6 +262,35 @@ describe('selectTrendCalls', () => {
         selectTrendCalls(CALLS, code).map((c) => c.datacall)
       ).not.toContain('Audit Fields Smoke Cycle')
     }
+  })
+
+  describe('selectPriorCall', () => {
+    const byName = (name: string) =>
+      CALLS.find((c) => c.datacall === name) as datacall
+
+    it('compares a non-CMS OpDiv against its previous annual call', () => {
+      // The next call by deadline is FY2025 Q3, which CDC never answered.
+      expect(selectPriorCall(CALLS, 'CDC', byName('FY25 ZTM'))?.datacall).toBe(
+        'FY24 ZTM'
+      )
+    })
+
+    it('compares CMS against its latest quarterly before the anchor', () => {
+      expect(selectPriorCall(CALLS, 'CMS', byName('FY26 ZTM'))?.datacall).toBe(
+        'FY2025 Q3'
+      )
+    })
+
+    it('follows the annual cadence in the aggregate', () => {
+      expect(selectPriorCall(CALLS, null, byName('FY26 ZTM'))?.datacall).toBe(
+        'FY25 ZTM'
+      )
+    })
+
+    it('has no prior for the first call in the series or no anchor', () => {
+      expect(selectPriorCall(CALLS, 'CDC', byName('FY23 ZTM'))).toBeNull()
+      expect(selectPriorCall(CALLS, 'CDC', null)).toBeNull()
+    })
   })
 
   it('gives CMS only its quarterly calls when no annual cycle exists', () => {

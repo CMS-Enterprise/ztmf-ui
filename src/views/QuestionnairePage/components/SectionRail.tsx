@@ -5,7 +5,7 @@ import RadioButtonUncheckedIcon from '@mui/icons-material/RadioButtonUnchecked'
 import RadioButtonCheckedIcon from '@mui/icons-material/RadioButtonChecked'
 import { colors, fonts, radius, status } from '@/theme/tokens'
 import type { FismaQuestion } from '@/types'
-import Card from './Card'
+import Card from '@/components/ui/Card'
 import CisaReferenceCard from './CisaReferenceCard'
 import { addSpace, type Category } from '../helpers'
 

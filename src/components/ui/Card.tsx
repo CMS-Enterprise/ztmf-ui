@@ -10,6 +10,10 @@ export type CardProps = {
   sx?: object
   /** Scroll anchor, for in-page jumps from a summary tile. */
   id?: string
+  /** Landmark role, e.g. "region" for a named dashboard panel. */
+  role?: string
+  /** Id of the element naming the card. */
+  'aria-labelledby'?: string
 }
 
 /**
@@ -19,10 +23,18 @@ export type CardProps = {
  * @param {CardProps} props - Body and optional sx.
  * @returns {JSX.Element} A simple card container.
  */
-export default function Card({ children, sx, id }: CardProps) {
+export default function Card({
+  children,
+  sx,
+  id,
+  role,
+  'aria-labelledby': labelledBy,
+}: CardProps) {
   return (
     <Box
       id={id}
+      role={role}
+      aria-labelledby={labelledBy}
       sx={{
         backgroundColor: colors.white,
         border: `1px solid ${colors.neutral200}`,

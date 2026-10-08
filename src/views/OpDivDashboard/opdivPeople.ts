@@ -11,7 +11,6 @@
  *
  * @module views/OpDivDashboard/opdivPeople
  */
-import { isOpDivTier } from '@/utils/userRoles'
 import type { UserRole, users } from '@/types'
 
 /** Admin tiers whose scope an OpDiv grant genuinely describes. */
@@ -39,30 +38,12 @@ export function usersForOpDiv(all: users[], opdivId: number): users[] {
   )
 }
 
-/** One role's headcount in an OpDiv. */
-export type RoleCount = { role: UserRole; count: number }
-
-/**
- * Admin-tier headcount for an OpDiv, in tier order.
- *
- * Deliberately excludes ISSO/ISSM/SYSTEM_DELEGATE: for those roles a grant is
- * not the scope, so a count would overstate coverage.
- * @param {users[]} scoped - Users holding a grant on the OpDiv.
- * @returns {RoleCount[]} Non-zero admin-tier counts, in tier order.
- */
-export function adminTierCounts(scoped: users[]): RoleCount[] {
-  return ADMIN_TIER_ROLES.map((role) => ({
-    role,
-    count: scoped.filter((u) => u.role === role).length,
-  })).filter((entry) => entry.count > 0)
-}
-
 /**
  * The OpDiv's admin-tier users, most privileged first then by name.
  *
- * Named rather than counted: "Owner 8" tells nobody who to ask. Same tier
- * restriction as {@link adminTierCounts} - an ISSO's OpDiv grant is not their
- * scope, so listing them here would misrepresent who covers the OpDiv.
+ * Named rather than counted: "Owner 8" tells nobody who to ask. Excludes
+ * ISSO/ISSM/SYSTEM_DELEGATE - an ISSO's OpDiv grant is not their scope, so
+ * listing them here would misrepresent who covers the OpDiv.
  * @param {users[]} scoped - Users holding a grant on the OpDiv.
  * @returns {users[]} Admin-tier users in tier order.
  */
@@ -74,15 +55,6 @@ export function adminTierRoster(scoped: users[]): users[] {
         ADMIN_TIER_ROLES.indexOf(a.role) - ADMIN_TIER_ROLES.indexOf(b.role) ||
         (a.fullname || a.email).localeCompare(b.fullname || b.email)
     )
-}
-
-/**
- * Whether an OpDiv grant actually determines this user's access scope.
- * @param {users} user - The user.
- * @returns {boolean} True for OpDiv-tier roles.
- */
-export function grantIsScope(user: users): boolean {
-  return isOpDivTier(user)
 }
 
 /** Delegates split by how close their access is to lapsing. */

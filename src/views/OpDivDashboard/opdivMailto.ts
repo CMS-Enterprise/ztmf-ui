@@ -31,6 +31,19 @@ export type OpDivMailto = {
 }
 
 /**
+ * Reduces a stored contact to its bare address. The backend validates with Go's
+ * mail.ParseAddress, which also accepts `"Doe, J" <j@x.gov>` and `j@x.gov (J)`;
+ * left as-is, a comma in a display name splits the joined recipient list.
+ * @param {string} raw - The stored value, already trimmed.
+ * @returns {string} The address alone.
+ */
+export function bareAddress(raw: string): string {
+  const angle = raw.match(/<([^<>]+)>\s*$/)
+  if (angle) return angle[1].trim()
+  return raw.replace(/\([^()]*\)/g, '').trim()
+}
+
+/**
  * Collects an OpDiv's contactable addresses and composes a mailto link.
  *
  * Recipients go in bcc: a data-call nudge to dozens of ISSOs should not
@@ -46,7 +59,7 @@ export function buildOpDivMailto(
   const seen = new Set<string>()
   for (const system of systems) {
     for (const raw of [system.issoemail, system.datacallcontact]) {
-      const address = raw?.trim()
+      const address = raw?.trim() ? bareAddress(raw.trim()) : ''
       if (!address) continue
       // Case-insensitive dedupe: the same person is often recorded with
       // different capitalization across systems.
