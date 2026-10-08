@@ -1,4 +1,5 @@
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { screen, waitFor, act } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import QuestionnairePage from './QuestionnairePage'
@@ -149,7 +150,7 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
     ],
     { initialEntries: [entry] }
   )
-  render(<RouterProvider router={router} />)
+  renderWithQueryClient(<RouterProvider router={router} />)
   return router
 }
 

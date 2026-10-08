@@ -404,6 +404,10 @@ export type users = {
   // older accounts is NOT the same as "never signed in" - keep any empty-state
   // wording neutral. /users/current always returns null for this field.
   last_seen?: string | null
+  // Time-boxed access expiry, RFC3339. A backend CHECK constrains it to
+  // SYSTEM_DELEGATE rows, so it is null for every other role - absence means
+  // "does not expire", not "expiry unknown".
+  access_expires_at?: string | null
 }
 
 export type datacall = {

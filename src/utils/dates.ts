@@ -84,3 +84,24 @@ export function formatDateTime(value: DateInput, fallback = EMPTY): string {
     minute: '2-digit',
   })
 }
+
+/** Milliseconds in a day. */
+const DAY_MS = 86_400_000
+
+/**
+ * Whole days left before a deadline instant, floored; 0 under 24h, negative
+ * once passed (the backend cuts off at the instant), null when unparseable.
+ *
+ * @param value - ISO string, Date, or nothing.
+ * @param now - The moment to count from; injectable for tests.
+ */
+export function daysUntil(
+  value: DateInput,
+  now: Date = new Date()
+): number | null {
+  const parsed = parse(value)
+  if (!parsed) return null
+  const remaining = parsed.getTime() - now.getTime()
+  if (remaining <= 0) return Math.min(-1, Math.ceil(remaining / DAY_MS))
+  return Math.floor(remaining / DAY_MS)
+}
