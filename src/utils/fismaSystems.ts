@@ -48,6 +48,53 @@ export function useFismaSystems(
   return { fismaSystems: data ?? EMPTY_LIST, fismaSystemsLoaded: !isPending }
 }
 
+/**
+ * Reads one FISMA system.
+ *
+ * @param systemId - The fismasystemid to read.
+ * @param signal - Optional AbortSignal to cancel the request.
+ * @returns The system, or undefined when the server has none.
+ */
+export async function fetchFismaSystem(
+  systemId: number,
+  signal?: AbortSignal
+): Promise<FismaSystemType | undefined> {
+  const res = await axiosInstance.get<{ data: FismaSystemType | null }>(
+    apiPaths.fismaSystems.detail(systemId),
+    { signal }
+  )
+  return res.data?.data ?? undefined
+}
+
+/**
+ * Reads one FISMA system for a component.
+ *
+ * The shared list is filtered, so a decommissioned system, or one created
+ * since the list loaded, is missing from it. Pages that can be opened by id
+ * read this as a fallback. A system that genuinely does not exist resolves to
+ * undefined rather than erroring, because the caller renders a placeholder
+ * for that case either way.
+ *
+ * Writes to this system invalidate the same key, so the detail repaints
+ * without the caller pushing a replacement into shared state.
+ *
+ * @param systemId - The fismasystemid to read.
+ * @param options - `enabled`, for a caller that only needs this when the
+ *   shared list came up short.
+ * @returns The query result; `data` is the system or undefined.
+ */
+export function useFismaSystem(
+  systemId: number,
+  options: QueryHookOptions = {}
+) {
+  return useQuery({
+    queryKey: queryKeys.fismaSystems.detail(systemId),
+    queryFn: ({ signal }) => fetchFismaSystem(systemId, signal),
+    enabled: options.enabled,
+    meta: { suppressErrorNotification: true },
+  })
+}
+
 /** Request body for PUT /fismasystems/{id}/target-maturity. */
 export type TargetMaturityInput = {
   target_maturity_tier: string

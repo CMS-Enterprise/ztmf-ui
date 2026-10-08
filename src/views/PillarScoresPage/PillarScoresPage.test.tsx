@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import PillarScoresPage from './PillarScoresPage'
@@ -25,6 +26,9 @@ const mockContext = {
       fismaname: 'Super Star Destroyer Executor Command Systems',
     },
   ],
+  // The page gates its single-system read on this, so a mock without it
+  // leaves that read disabled and the system unresolvable.
+  fismaSystemsLoaded: true,
   selectedDatacall,
   setFismaSystems: jest.fn(),
   setSelectedDatacall: jest.fn(),
@@ -71,7 +75,7 @@ it('routes back to system info for this system', async () => {
     ],
     { initialEntries: ['/systems/1002/pillar-scores'] }
   )
-  render(<RouterProvider router={router} />)
+  renderWithQueryClient(<RouterProvider router={router} />)
 
   await userEvent.click(
     await screen.findByRole('link', { name: 'System Info' })
@@ -94,7 +98,7 @@ it('routes to the selected data call questionnaire for this system', async () =>
     ],
     { initialEntries: ['/systems/1002/pillar-scores'] }
   )
-  render(<RouterProvider router={router} />)
+  renderWithQueryClient(<RouterProvider router={router} />)
 
   await userEvent.click(
     await screen.findByRole('link', { name: 'Questionnaire' })
@@ -138,7 +142,7 @@ it('resolves a system missing from the active list by id instead of leaking the 
     ],
     { initialEntries: ['/systems/1001/pillar-scores'] }
   )
-  render(<RouterProvider router={router} />)
+  renderWithQueryClient(<RouterProvider router={router} />)
 
   await waitFor(() =>
     expect(mockGet).toHaveBeenCalledWith(
@@ -146,7 +150,12 @@ it('resolves a system missing from the active list by id instead of leaking the 
       expect.anything()
     )
   )
-  expect(mockContext.setFismaSystems).toHaveBeenCalledWith(expect.any(Function))
+  // The system resolves from its own cached read. Nothing is pushed into the
+  // shared list any more, so the page no longer mutates context to render.
+  expect(mockContext.setFismaSystems).not.toHaveBeenCalled()
+  // Renders in both the header and the breadcrumb, so assert presence rather
+  // than a single node. The point is that neither shows the placeholder.
+  expect((await screen.findAllByText(/Death Star/)).length).toBeGreaterThan(0)
 })
 
 it('keeps the comparison modal independent from the selected data call', async () => {
@@ -175,7 +184,7 @@ it('keeps the comparison modal independent from the selected data call', async (
     ],
     { initialEntries: ['/systems/1002/pillar-scores'] }
   )
-  render(<RouterProvider router={router} />)
+  renderWithQueryClient(<RouterProvider router={router} />)
 
   await userEvent.click(
     await screen.findByRole('button', { name: 'Compare datacalls' })
