@@ -5,12 +5,15 @@
  * can be pinned without rendering and the component file keeps exporting only
  * a component.
  *
- * @module views/OpDivDashboard/components/scoreRange
+ * @module components/ScoreSummary/scoreRange
  */
 import { tierForScore } from '@/utils/tierStyles'
 import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 import type { ScoreTier } from '@/types'
-import type { OpDivSummary, RangeExtreme } from '../opdivAggregates'
+import type {
+  OpDivSummary,
+  RangeExtreme,
+} from '@/views/OpDivDashboard/opdivAggregates'
 
 /** One end of the score range, with the color its own tier earns. */
 export type RangeEnd = { text: string; tier: ScoreTier; color: string }

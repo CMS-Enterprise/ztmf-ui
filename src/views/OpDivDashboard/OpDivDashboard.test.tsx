@@ -194,7 +194,7 @@ jest.mock('@/utils/users', () => ({
 
 import OpDivDashboard from './OpDivDashboard'
 import OpDivIndexRedirect from './OpDivIndexRedirect'
-import { NOT_STARTED_PANEL_ID } from './components/OpDivKpiRow'
+import { NOT_STARTED_PANEL_ID } from '@/components/ScoreSummary/SummaryKpiRow'
 
 const makeSystem = (
   id: number,

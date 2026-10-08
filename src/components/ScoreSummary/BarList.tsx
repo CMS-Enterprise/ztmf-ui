@@ -13,7 +13,7 @@
  * It is also its own table view: the label and value are real text, so nothing
  * here is gated behind color or a tooltip.
  *
- * @module views/OpDivDashboard/components/BarList
+ * @module components/ScoreSummary/BarList
  */
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'

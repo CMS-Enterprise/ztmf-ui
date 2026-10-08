@@ -34,12 +34,12 @@ import OpDivSwitcher, {
 } from './components/OpDivSwitcher'
 import LoadErrorState from './components/LoadErrorState'
 import OpDivHeaderActions from './components/OpDivHeaderActions'
-import OpDivHero from './components/OpDivHero'
-import OpDivKpiRow, {
+import ScoreHero from '@/components/ScoreSummary/ScoreHero'
+import SummaryKpiRow, {
   NOT_STARTED_PANEL_ID,
   RISK_PANEL_ID,
-} from './components/OpDivKpiRow'
-import TrendPanel from './components/TrendPanel'
+} from '@/components/ScoreSummary/SummaryKpiRow'
+import TrendPanel from '@/components/ScoreSummary/TrendPanel'
 import RiskPanel from './components/RiskPanel'
 import NotStartedPanel from './components/NotStartedPanel'
 import CoveragePanel from './components/CoveragePanel'
@@ -272,14 +272,14 @@ function OpDivDashboardBody({
               alignItems: 'stretch',
             }}
           >
-            <OpDivHero
+            <ScoreHero
               avgScore={data.summary.avgScore}
               scoredCount={data.summary.scoredCount}
               systemCount={data.summary.systemCount}
               delta={data.delta}
               priorLabel={data.priorCall?.datacall}
             />
-            <OpDivKpiRow
+            <SummaryKpiRow
               summary={data.summary}
               completion={data.completion}
               risk={data.risk}

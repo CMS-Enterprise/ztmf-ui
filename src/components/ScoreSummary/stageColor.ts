@@ -7,11 +7,11 @@
  * buckets of a mostly-unscored OpDiv into a single flat grey ring. One
  * function means that disagreement cannot reappear.
  *
- * @module views/OpDivDashboard/components/stageColor
+ * @module components/ScoreSummary/stageColor
  */
 import { colors, tierDot } from '@/theme/tokens'
 import type { ScoreTier } from '@/types'
-import { NO_SCORE_LABEL } from '../opdivAggregates'
+import { NO_SCORE_LABEL } from '@/views/OpDivDashboard/opdivAggregates'
 
 /**
  * Fill for a maturity bucket.

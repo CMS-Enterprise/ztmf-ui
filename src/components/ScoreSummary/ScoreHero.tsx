@@ -4,7 +4,7 @@
  * Exactly one hero per view. The number is the chart - a single value with a
  * comparison does not want a plot, it wants to be readable from across a room.
  *
- * @module views/OpDivDashboard/components/OpDivHero
+ * @module components/ScoreSummary/ScoreHero
  */
 import { useId } from 'react'
 import Box from '@mui/material/Box'
@@ -19,14 +19,14 @@ import TrendLine from '@/components/ui/TrendLine'
 import { colors, fonts } from '@/theme/tokens'
 import { tierForScore } from '@/utils/tierStyles'
 import ScoreMeter from './ScoreMeter'
-import type { PairedDelta } from '../opdivTrend'
+import type { PairedDelta } from '@/views/OpDivDashboard/opdivTrend'
 
 /** Explains the headline figure and the scale behind it. */
 const HERO_INFO =
   "The average score of this scope's scored systems, on the 1.0-5.0 HHS maturity scale: Optimal from 4.10, Advanced from 3.10, Initial from 2.10, Traditional from 1.01. Systems with no score are left out of the average rather than counted as zero. The comparison below is paired system-by-system against the prior call, so a changed system mix cannot read as movement."
 
-/** Props for {@link OpDivHero}. */
-export type OpDivHeroProps = {
+/** Props for {@link ScoreHero}. */
+export type ScoreHeroProps = {
   /** Average score across scored systems, or null when none are scored. */
   avgScore: number | null
   /** Systems behind the average, for the denominator note. */
@@ -36,21 +36,28 @@ export type OpDivHeroProps = {
   delta: PairedDelta
   /** Display name of the baseline call, when there is one. */
   priorLabel?: string
+  /**
+   * What the page is scoped to, for the denominator note. The card is reused
+   * by the system-scoped dashboard, where "in this OpDiv" is simply wrong -
+   * an ISSO's scope is their assignments, which rarely covers an OpDiv.
+   */
+  scopeNoun?: string
 }
 
 /**
  * Renders the overall score, its tier, its position on the scale, and the
  * paired change against the prior data call.
- * @param {OpDivHeroProps} props - Score, denominators and comparison.
+ * @param {ScoreHeroProps} props - Score, denominators and comparison.
  * @returns {JSX.Element} The hero card.
  */
-export default function OpDivHero({
+export default function ScoreHero({
   avgScore,
   scoredCount,
   systemCount,
   delta,
   priorLabel,
-}: OpDivHeroProps) {
+  scopeNoun = 'this OpDiv',
+}: ScoreHeroProps) {
   // An OpDiv average is not a graded system, so there is no API tier for it.
   // This is the documented exception where deriving from the number is right.
   const tier = avgScore !== null ? tierForScore(avgScore) : undefined
@@ -98,7 +105,7 @@ export default function OpDivHero({
 
       <Typography sx={{ fontSize: 12, color: colors.neutral500, mt: 0.5 }}>
         {scoredCount === 0
-          ? `No scored systems yet · ${systemCount} in this OpDiv`
+          ? `No scored systems yet · ${systemCount} in ${scopeNoun}`
           : `Average of ${scoredCount} scored ${
               scoredCount === 1 ? 'system' : 'systems'
             } of ${systemCount}`}
