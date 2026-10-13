@@ -21,6 +21,12 @@ export const canUndoAnswer = (s: {
   /** scoreid !== 0 - an unanswered question has no row and no history. */
   hasScore: boolean
   priorReviewBlocked: boolean
+  /**
+   * On a closed call state is always 'none' and Confirm never shows, so the
+   * 'updated' clause is waived. Only admins get here: the server's deadline
+   * bypass marks their head undoable, everyone else is read-only.
+   */
+  isOpenCall: boolean
 }): boolean =>
   s.headUndoable &&
   // The load-bearing clause, and the reason this is not simply
@@ -38,7 +44,7 @@ export const canUndoAnswer = (s: {
   // headUndoable is already false in that case. It still earns its place for
   // the confirm path, where the head IS undoable and the chip would otherwise
   // offer Confirm and Undo together.
-  s.state === 'updated' &&
+  (s.state === 'updated' || (!s.isOpenCall && s.state === 'none')) &&
   s.hasScore &&
   !s.dirty &&
   !s.isReadOnly &&

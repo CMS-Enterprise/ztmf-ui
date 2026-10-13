@@ -641,6 +641,9 @@ export default function QuestionnarePage() {
     // only reappear after navigating away and back (ztmf-misc#392). The saved
     // row, not the selected radio, or every radio click would reset the review.
     questionScores[initQuestionChoice]?.status ?? null,
+    // Moves when the re-seed lands, so an undo that restores only the notes
+    // re-runs the initializer against them rather than the edited text.
+    initNotes,
   ])
   // A context that has not yet been evaluated is synchronously treated as
   // initializing. This keeps the editor and Next button blocked during the
@@ -725,6 +728,7 @@ export default function QuestionnarePage() {
     isReadOnly,
     hasScore: scoreid !== 0,
     priorReviewBlocked,
+    isOpenCall,
   })
   // Derived from the button so the sentence and the action it describes cannot
   // drift apart. !currentPriorResponse suppresses it on insights questions,
@@ -790,9 +794,16 @@ export default function QuestionnarePage() {
       await answerHistory.undo.mutateAsync(revisionid)
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       clearCurrentDraft()
+      // The strip's button unmounts on success; keep focus off <body>.
+      if (!answerHistory.open)
+        document.getElementById('view-answer-history')?.focus()
     } catch (error) {
       const outcome = classifyUndoError(error)
-      if (outcome.kind === 'handled') return
+      if (outcome.kind === 'handled') {
+        // A past-deadline 403 lands here; the refetch drops the stale button.
+        answerHistory.history.refetch()
+        return
+      }
       if (outcome.kind === 'conflict') {
         // Someone else wrote the answer, so the one on screen is stale too.
         answerHistory.history.refetch()
@@ -2294,8 +2305,8 @@ export default function QuestionnarePage() {
                     isReadOnly={isReadOnly}
                   />
                   {/* Only offered when there is something to show. History
-                      stays readable on a closed call, where the strip's Undo
-                      button is correctly absent. */}
+                      stays readable on a closed call, where admins can still
+                      undo from the drawer but the strip is absent. */}
                   {answerHistory.head && (
                     <Link
                       id="view-answer-history"

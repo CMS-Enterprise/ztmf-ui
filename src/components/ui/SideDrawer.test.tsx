@@ -31,3 +31,17 @@ it('closes from the header control', () => {
   fireEvent.click(screen.getByRole('button', { name: 'Close' }))
   expect(onClose).toHaveBeenCalled()
 })
+
+// Safari won't scroll a body with no focusable children unless the body
+// itself takes focus (axe scrollable-region-focusable).
+it('makes the scrolling body a focusable region named by the title', () => {
+  renderWithProviders(
+    <SideDrawer open onClose={jest.fn()} title="Answer history">
+      body
+    </SideDrawer>
+  )
+
+  const region = screen.getByRole('region', { name: 'Answer history' })
+  expect(region).toHaveAttribute('tabindex', '0')
+  expect(region).toHaveTextContent('body')
+})

@@ -1567,9 +1567,11 @@ describe('carried-forward confirmation', () => {
       ).toHaveValue('edited this cycle')
     )
 
-    fireEvent.click(
-      await screen.findByRole('button', { name: 'Undo last change' })
-    )
+    const undoButton = await screen.findByRole('button', {
+      name: 'Undo last change',
+    })
+    undoButton.focus()
+    fireEvent.click(undoButton)
 
     expect(
       await screen.findByText('Carried forward - not yet confirmed')
@@ -1580,6 +1582,13 @@ describe('carried-forward confirmation', () => {
       })
     ).toBeInTheDocument()
     expect(screen.getByText(HELPER_COPY)).toBeInTheDocument()
+    // The focused button unmounted; focus lands on View history, not <body>.
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAttribute(
+        'id',
+        'view-answer-history'
+      )
+    )
     await waitFor(() =>
       expect(
         screen.getByRole('textbox', { name: /supporting evidence/i })
@@ -1646,6 +1655,71 @@ describe('carried-forward confirmation', () => {
         name: 'Insert previous ISSO response into current response',
       })
     ).toBeInTheDocument()
+  })
+
+  it('re-arms the prior-response review when an undo restores only the justification', async () => {
+    // The undo's re-seed and the review initializer run in the same commit, so
+    // without initNotes in the context id the initializer reads the edited
+    // notes and never re-runs once the carried text is back.
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited], {
+      insightRows: [
+        {
+          fismasystemid: 1002,
+          questionid: 900,
+          synced_at: '2026-07-14T00:00:00Z',
+          payload: {
+            last_score_notes: 'carried justification',
+            last_datacall: 'FY2025 Q1',
+          },
+        },
+      ],
+    })
+
+    renderAt(DEEP_LINK)
+
+    const box = await screen.findByRole('textbox', { name: 'Current response' })
+    await waitFor(() => expect(box).toHaveValue('edited this cycle'))
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Undo last change' })
+    )
+
+    expect(
+      await screen.findByText('Carried forward - not yet confirmed')
+    ).toBeInTheDocument()
+    await waitFor(() =>
+      expect(
+        screen.getByRole('textbox', { name: 'Current response' })
+      ).toHaveValue('')
+    )
+    expect(
+      screen.getByRole('button', {
+        name: 'Insert previous ISSO response into current response',
+      })
+    ).toBeInTheDocument()
+  })
+
+  it('refetches history when an undo is refused past the deadline', async () => {
+    // The interceptor toasts the 403 and tags it handled; the refetch is what
+    // lets the server's call-closed reason take the stale button away.
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    axios.post.mockRejectedValue({ __authHandled: true })
+    const historyReads = () =>
+      axios.get.mock.calls.filter(
+        ([url]: [string]) => url === apiPaths.scores.revisions(edited.scoreid)
+      ).length
+
+    renderAt(DEEP_LINK)
+
+    const undoButton = await screen.findByRole('button', {
+      name: 'Undo last change',
+    })
+    const before = historyReads()
+    fireEvent.click(undoButton)
+
+    await waitFor(() => expect(historyReads()).toBeGreaterThan(before))
   })
 
   it('shows the badge but no Confirm button to a read-only admin', async () => {

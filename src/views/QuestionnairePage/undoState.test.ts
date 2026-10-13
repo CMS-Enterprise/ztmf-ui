@@ -12,7 +12,14 @@ describe('canUndoAnswer', () => {
     isReadOnly: false,
     hasScore: true,
     priorReviewBlocked: false,
+    isOpenCall: true,
   }
+
+  it('offers undo to an admin on a closed call, where the server allows it', () => {
+    expect(canUndoAnswer({ ...base, state: 'none', isOpenCall: false })).toBe(
+      true
+    )
+  })
 
   it('offers undo for an answer updated this cycle whose head is undoable', () => {
     expect(canUndoAnswer(base)).toBe(true)
@@ -24,7 +31,7 @@ describe('canUndoAnswer', () => {
       'the answer was not updated this cycle',
       { state: 'unconfirmed' as const },
     ],
-    ['the call is closed or status is unserved', { state: 'none' as const }],
+    ['status is unserved on an open call', { state: 'none' as const }],
     ['there are unsaved edits', { dirty: true }],
     ['the session is read-only', { isReadOnly: true }],
     ['the question has no answer row', { hasScore: false }],
@@ -58,7 +65,7 @@ describe('undoButtonLabel', () => {
  * `state === 'updated'` clause is what separates them, and this suite is what
  * stops someone relaxing that clause without noticing.
  *
- * Exhaustive rather than illustrative: 3 states x 2^5 flag combinations.
+ * Exhaustive rather than illustrative: 3 states x 2^6 flag combinations.
  */
 describe('Confirm and Undo are mutually exclusive', () => {
   const cases: {
@@ -68,6 +75,7 @@ describe('Confirm and Undo are mutually exclusive', () => {
     isReadOnly: boolean
     hasScore: boolean
     priorReviewBlocked: boolean
+    isOpenCall: boolean
   }[] = []
 
   for (const state of STATES)
@@ -76,17 +84,19 @@ describe('Confirm and Undo are mutually exclusive', () => {
         for (const isReadOnly of BOOLS)
           for (const hasScore of BOOLS)
             for (const priorReviewBlocked of BOOLS)
-              cases.push({
-                state,
-                headUndoable,
-                dirty,
-                isReadOnly,
-                hasScore,
-                priorReviewBlocked,
-              })
+              for (const isOpenCall of BOOLS)
+                cases.push({
+                  state,
+                  headUndoable,
+                  dirty,
+                  isReadOnly,
+                  hasScore,
+                  priorReviewBlocked,
+                  isOpenCall,
+                })
 
   it('covers every state and flag combination', () => {
-    expect(cases).toHaveLength(STATES.length * 2 ** 5)
+    expect(cases).toHaveLength(STATES.length * 2 ** 6)
   })
 
   it.each(cases)('never both true for %j', (c) => {
@@ -107,6 +117,7 @@ describe('Confirm and Undo are mutually exclusive', () => {
       isReadOnly: false,
       hasScore: true,
       priorReviewBlocked: false,
+      isOpenCall: true,
     }
     // A carried-forward answer awaiting review: Confirm only.
     expect(canConfirmCarryForward({ ...settled, state: 'unconfirmed' })).toBe(

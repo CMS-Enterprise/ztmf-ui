@@ -51,9 +51,8 @@ export function SideDrawer({
       anchor="right"
       open={open}
       onClose={onClose}
-      // MUI gives the Drawer root role="presentation" and, unlike Dialog, puts
-      // no dialog semantics on the Paper, so the panel would announce as
-      // nothing. Mirror what Modal gets from Dialog.
+      // MUI's Drawer puts no dialog semantics on the Paper, so add what Dialog
+      // provides, plus aria-modal for the focus trap.
       PaperProps={{
         id,
         role: 'dialog',
@@ -114,7 +113,25 @@ export function SideDrawer({
           </IconActionButton>
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: 'auto', px: 5, py: 4 }}>{children}</Box>
+        {/* Focusable so Safari keyboard users can scroll a body with no
+            controls in it (WCAG 2.1.1). */}
+        <Box
+          tabIndex={0}
+          role="region"
+          aria-labelledby={titleId}
+          sx={{
+            flex: 1,
+            overflowY: 'auto',
+            px: 5,
+            py: 4,
+            '&:focus-visible': {
+              outline: `2px solid ${colors.primary}`,
+              outlineOffset: -2,
+            },
+          }}
+        >
+          {children}
+        </Box>
 
         {footer && (
           <Box
