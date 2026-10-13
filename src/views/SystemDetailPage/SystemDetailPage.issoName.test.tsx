@@ -86,7 +86,6 @@ beforeEach(() => {
 function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
   mockCtx = {
     fismaSystems: [system],
-    setFismaSystems: jest.fn(),
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -244,7 +243,6 @@ test('clearing ISSO Name refetches instead of echoing the draft', async () => {
       queryKey: queryKeys.fismaSystems.detail(42),
     })
   })
-  expect(mockCtx.setFismaSystems).not.toHaveBeenCalled()
 })
 
 // A save must not silently change which systems the dashboard lists. The page

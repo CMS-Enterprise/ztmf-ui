@@ -74,7 +74,6 @@ beforeEach(() => {
     ],
     activeDatacallIds: [5],
     fismaSystems: [],
-    setFismaSystems: jest.fn(),
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',

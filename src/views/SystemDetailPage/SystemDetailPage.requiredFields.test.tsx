@@ -66,7 +66,6 @@ beforeEach(() => {
 function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
   mockCtx = {
     fismaSystems: [system],
-    setFismaSystems: jest.fn(),
     userInfo: {
       userid: '1',
       email: 'mon.mothma@rebellion.org',
@@ -87,7 +86,6 @@ function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
         system_delegate_enabled: false,
       },
     ],
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
   }
   return renderWithProviders(

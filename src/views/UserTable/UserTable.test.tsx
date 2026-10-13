@@ -31,7 +31,6 @@ jest.mock('../Title/Context', () => ({
       fullname: 'Me',
     },
     fismaSystems: [],
-    setFismaSystems: jest.fn(),
     // The OpDiv catalog hook derives its projections from this shared list
     // (Title fetches /opdivs once), so the columns and filter read it here.
     opdivs: [
@@ -46,7 +45,6 @@ jest.mock('../Title/Context', () => ({
     setSelectedDatacall: jest.fn(),
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
-    fetchFismaSystems: jest.fn(),
     dashboardSearch: '',
     setDashboardSearch: jest.fn(),
   }),

@@ -79,7 +79,6 @@ beforeEach(() => {
 function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
   mockCtx = {
     fismaSystems: [system],
-    setFismaSystems: jest.fn(),
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -97,7 +96,6 @@ function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
         system_delegate_enabled: false,
       },
     ],
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
     datacalls: [],
     selectedDatacall: null,
@@ -126,7 +124,6 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
   const system = BASE_SYSTEM
   const { queryClient } = renderPage(system)
   const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -155,9 +152,7 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
     )
   )
   // The write moves the system between the active and decommissioned lists
-  // and this page is showing it, so both reads are invalidated rather than
-  // the page splicing a replacement row into shared state.
-  expect(setFismaSystems).not.toHaveBeenCalled()
+  // and this page is showing it, so both reads are invalidated.
   await waitFor(() => {
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: queryKeys.fismaSystems.lists(),
@@ -217,7 +212,6 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
   const user = userEvent.setup()
   const { queryClient } = renderPage(decommissioned)
   const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -242,7 +236,6 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
   )
   // Same shape as the decommission path: the system moves back into the
   // active list and this page is showing it, so both reads are invalidated.
-  expect(setFismaSystems).not.toHaveBeenCalled()
   await waitFor(() => {
     expect(invalidate).toHaveBeenCalledWith({
       queryKey: queryKeys.fismaSystems.lists(),
@@ -302,7 +295,6 @@ test('falls back to a single-system fetch when the system is not in context', as
   } as unknown as FismaSystemType
   mockCtx = {
     fismaSystems: [other],
-    setFismaSystems: jest.fn(),
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -320,7 +312,6 @@ test('falls back to a single-system fetch when the system is not in context', as
         system_delegate_enabled: false,
       },
     ],
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
   }
   renderWithProviders(
@@ -350,8 +341,8 @@ test('a 400 on save routes the field error inline and keeps editing', async () =
 test('a 404 on decommission surfaces the system-not-found error', async () => {
   mock.onDelete(/fismasystems\/42$/).reply(404, {})
   const user = userEvent.setup()
-  renderPage(BASE_SYSTEM)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(BASE_SYSTEM)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -377,7 +368,8 @@ test('a 404 on decommission surfaces the system-not-found error', async () => {
     'success',
     expect.anything()
   )
-  expect(setFismaSystems).not.toHaveBeenCalled()
+  // Nothing was written, so nothing is refreshed.
+  expect(invalidate).not.toHaveBeenCalled()
 })
 
 test('a failed reactivate does not exit the decommissioned state', async () => {
@@ -388,8 +380,8 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
   } as unknown as FismaSystemType
   mock.onPut(/fismasystems\/42\/reactivate$/).reply(500, {})
   const user = userEvent.setup()
-  renderPage(decommissioned)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(decommissioned)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -412,7 +404,8 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
     'success',
     expect.anything()
   )
-  expect(setFismaSystems).not.toHaveBeenCalled()
+  // Nothing was written, so nothing is refreshed.
+  expect(invalidate).not.toHaveBeenCalled()
 })
 
 test('a reactivate refused for a taken acronym shows the backend reason, not "invalid input"', async () => {
@@ -431,8 +424,8 @@ test('a reactivate refused for a taken acronym shows the backend reason, not "in
     data: { fismaacronym: reason },
   })
   const user = userEvent.setup()
-  renderPage(decommissioned)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(decommissioned)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -445,7 +438,8 @@ test('a reactivate refused for a taken acronym shows the backend reason, not "in
 
   await waitFor(() => expect(notify).toHaveBeenCalledWith(reason, 'error'))
   expect(notify).not.toHaveBeenCalledWith('invalid input', 'error')
-  expect(setFismaSystems).not.toHaveBeenCalled()
+  // Nothing was written, so nothing is refreshed.
+  expect(invalidate).not.toHaveBeenCalled()
 })
 
 test('toggling data-lake sync in edit mode updates the draft', async () => {

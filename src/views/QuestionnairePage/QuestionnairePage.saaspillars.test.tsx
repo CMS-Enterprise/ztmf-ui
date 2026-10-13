@@ -141,10 +141,8 @@ function makeCtx(
     datacalls: [FUTURE_CALL, CURRENT_CALL, HISTORICAL_CALL],
     activeDatacallIds: [latest.datacallid],
     fismaSystems: [system],
-    setFismaSystems: jest.fn(),
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
-    fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [
       {
         datacenterenvironment: 'SaaS',

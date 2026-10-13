@@ -5,16 +5,17 @@ import type { userData } from '@/types'
 //
 // #569's QuickSearchToolbar unit tests lock in that "Clear filters" calls
 // setShowDecommissioned(false). But the behavior that actually drops the
-// decommissioned rows is Title's refetch effect - fetchFismaSystems keyed on
-// showDecommissioned - which no unit test exercises. This test renders the REAL
-// Title so that effect runs, and drives showDecommissioned through the real
-// Outlet context to assert the fetch hits the unparameterized GET /fismasystems
-// on clear (and ?decommissioned=true when enabled), with rows added/dropped.
+// decommissioned rows lives in Title, where showDecommissioned is part of the
+// systems query key. Toggling it swaps between two cached lists, so enabling
+// the filter fetches ?decommissioned=true once and clearing it serves the
+// active-only list already in cache. This test renders the REAL Title and
+// drives showDecommissioned through the real Outlet context to assert both the
+// row changes and that the clear costs no request.
 //
 // Mock setup mirrors Title.test.tsx, except Outlet renders a lightweight harness
 // that consumes the passed context (Title's real setShowDecommissioned + live
 // fismaSystems) - standing in for the deep Home > FismaTable > DataGrid subtree
-// so the test targets Title's refetch, not the DataGrid.
+// so the test targets Title, not the DataGrid.
 jest.mock('react-router-dom', () => ({
   __esModule: true,
   useLoaderData: jest.fn(),

@@ -30,7 +30,6 @@ const mockContext = {
   // leaves that read disabled and the system unresolvable.
   fismaSystemsLoaded: true,
   selectedDatacall,
-  setFismaSystems: jest.fn(),
   setSelectedDatacall: jest.fn(),
   toggleActiveDatacall: jest.fn(),
   latestDataCallId: 5,
@@ -150,9 +149,7 @@ it('resolves a system missing from the active list by id instead of leaking the 
       expect.anything()
     )
   )
-  // The system resolves from its own cached read. Nothing is pushed into the
-  // shared list any more, so the page no longer mutates context to render.
-  expect(mockContext.setFismaSystems).not.toHaveBeenCalled()
+  // The system resolves from its own cached read, not from the shared list.
   // Renders in both the header and the breadcrumb, so assert presence rather
   // than a single node. The point is that neither shows the placeholder.
   expect((await screen.findAllByText(/Death Star/)).length).toBeGreaterThan(0)
