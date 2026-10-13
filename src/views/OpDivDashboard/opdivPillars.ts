@@ -196,7 +196,7 @@ export type PillarExtremeCounts = {
   weakest: { pillar: string; count: number } | null
   /** The pillar that is highest for the most systems. */
   strongest: { pillar: string; count: number } | null
-  /** Systems with pillar detail behind the counts. */
+  /** Systems whose pillars differ, so they have a weakest and a strongest. */
   systems: number
 }
 
@@ -208,9 +208,10 @@ export type PillarExtremeCounts = {
  * at a pillar or because every system is mediocre at it, and those call for
  * different responses.
  *
- * A system with several pillars tied at its minimum contributes to the first
- * in API pillar order only, so the counts sum to the number of systems rather
- * than double-counting ties.
+ * Only a single pillar counts as a system's weakest or strongest: with
+ * several tied at that end, crediting any one of them would favor whichever
+ * the API lists first. Pillar scores are coarse, so ties are common, and a
+ * system whose pillars are all equal is left out entirely.
  * @param {ScoreAggregate[]} aggregates - Rows from a pillar-bearing aggregate.
  * @param {Set<number>} systemIds - The OpDiv's system ids.
  * @returns {PillarExtremeCounts} The most common weakest and strongest pillars.
@@ -232,26 +233,26 @@ export function pillarExtremeCounts(
   let systems = 0
 
   for (const [, scores] of pillarScoresBySystem(aggregates, systemIds)) {
-    systems += 1
-    let low: string | null = null
-    let high: string | null = null
-    let lowScore = Infinity
-    let highScore = -Infinity
-    // Walk in API order so a tie resolves to the same pillar every time.
-    for (const [pillarid, pillar] of ordered) {
+    const present = ordered.flatMap(([pillarid, pillar]) => {
       const score = scores.get(pillarid)
-      if (score === undefined) continue
-      if (score < lowScore) {
-        lowScore = score
-        low = pillar
-      }
-      if (score > highScore) {
-        highScore = score
-        high = pillar
-      }
+      return score === undefined ? [] : [{ pillar, score }]
+    })
+    if (present.length === 0) continue
+    const lowScore = Math.min(...present.map((p) => p.score))
+    const highScore = Math.max(...present.map((p) => p.score))
+    if (lowScore === highScore) continue
+    systems += 1
+    const lows = present.filter((p) => p.score === lowScore)
+    const highs = present.filter((p) => p.score === highScore)
+    if (lows.length === 1) {
+      lowCounts.set(lows[0].pillar, (lowCounts.get(lows[0].pillar) ?? 0) + 1)
     }
-    if (low) lowCounts.set(low, (lowCounts.get(low) ?? 0) + 1)
-    if (high) highCounts.set(high, (highCounts.get(high) ?? 0) + 1)
+    if (highs.length === 1) {
+      highCounts.set(
+        highs[0].pillar,
+        (highCounts.get(highs[0].pillar) ?? 0) + 1
+      )
+    }
   }
 
   const top = (counts: Map<string, number>) => {

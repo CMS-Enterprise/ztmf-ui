@@ -90,7 +90,7 @@ export default function OpDivSwitcher({
           {
             value: ALL_OPDIVS,
             code: ALL_OPDIVS_LABEL,
-            name: `Every OpDiv you can see (${visible.length})`,
+            name: 'Every OpDiv you can see',
           },
         ]
       : []),

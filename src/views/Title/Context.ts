@@ -41,8 +41,13 @@ type ContextType = {
   fismaSystemsLoaded: boolean
   // True when the last systems fetch failed, so [] is not read as "no systems".
   fismaSystemsError?: boolean
+  // Whether the latest settled systems fetch asked for the decommissioned list,
+  // so a page that clears the flag can tell when the active list has settled.
+  fismaSystemsFetchedDecommissioned: boolean
   // True when the last /datacalls fetch failed.
   datacallsError?: boolean
+  // False until the first /datacalls fetch settles, so "none exist" is not read as pending.
+  datacallsLoaded: boolean
   // Datacenter-environment vocabulary, fetched once at the layout level.
   // Empty until the fetch resolves; consumers fall back to raw values.
   datacenterEnvironments: DataCenterEnvironment[]

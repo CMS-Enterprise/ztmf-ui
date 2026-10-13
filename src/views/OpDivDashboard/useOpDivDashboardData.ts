@@ -8,6 +8,7 @@
  * @module views/OpDivDashboard/useOpDivDashboardData
  */
 import { useMemo, useState } from 'react'
+import { parseDatacallName } from '@/utils/datacallGrouping'
 import { daysUntil } from '@/utils/dates'
 import {
   useDatacallAggregates,
@@ -112,6 +113,8 @@ export type OpDivDashboardData = {
   /** True until the blocking systems + score/progress pair has settled. */
   isPending: boolean
   isError: boolean
+  /** The data calls loaded and there are none, so there is nothing to score. */
+  noDatacalls: boolean
 }
 
 /**
@@ -127,6 +130,7 @@ export function useOpDivDashboardData(
     fismaSystems,
     fismaSystemsLoaded,
     datacalls,
+    datacallsLoaded,
     activeDatacallIds,
     selectedDatacall,
     latestDataCallId,
@@ -146,8 +150,8 @@ export function useOpDivDashboardData(
   )
   const systemIds = useMemo(() => systemIdSet(systems), [systems])
 
-  // R1 + R2: the blocking pair, keyed identically to the main dashboard's
-  // requests so the two share cache entries rather than duplicating them.
+  // R1 + R2: the blocking pair, keyed to match the main dashboard's requests
+  // so the two share cache entries once Home reads through the query layer.
   const {
     scoresPerCall,
     isPending: scoresPending,
@@ -174,16 +178,6 @@ export function useOpDivDashboardData(
     return latest ? new Date() > new Date(latest.deadline) : false
   }, [datacalls, latestDataCallId])
 
-  // The pillar chart describes ONE call. Requesting pillars for every active
-  // call would multiply the payload by the pillar count for a chart that can
-  // only show one profile; activeDatacallIds is newest-deadline-first.
-  const anchorCallId = selectedDatacall?.datacallid ?? activeDatacallIds[0]
-  const anchorCall = useMemo(
-    () => datacalls.find((dc) => dc.datacallid === anchorCallId) ?? null,
-    [datacalls, anchorCallId]
-  )
-  const pillarQuery = usePillarAggregates(anchorCallId)
-
   // Each OpDiv's trend follows its own data-call cadence; mixing the two is
   // what made the line oscillate. See selectTrendCalls.
   const opdivCode = useMemo(
@@ -197,6 +191,31 @@ export function useOpDivDashboardData(
     () => selectTrendCalls(datacalls, opdivCode),
     [datacalls, opdivCode]
   )
+
+  // The pillar chart describes ONE call. Requesting pillars for every active
+  // call would multiply the payload by the pillar count for a chart that can
+  // only show one profile. Without an explicit pick it is the newest active
+  // call in this OpDiv's cadence (activeDatacallIds is newest-first), else the
+  // newest one outside both cadences, so a year with CMS quarterlies never
+  // anchors another OpDiv to one of them. None of either leaves no anchor.
+  const anchorCallId = useMemo(() => {
+    if (selectedDatacall) return selectedDatacall.datacallid
+    const inCadence = new Set(trendCalls.map((dc) => dc.datacallid))
+    const unclassified = new Set(
+      datacalls
+        .filter((dc) => parseDatacallName(dc.datacall).tenant === 'Other')
+        .map((dc) => dc.datacallid)
+    )
+    return (
+      activeDatacallIds.find((id) => inCadence.has(id)) ??
+      activeDatacallIds.find((id) => unclassified.has(id))
+    )
+  }, [selectedDatacall, trendCalls, datacalls, activeDatacallIds])
+  const anchorCall = useMemo(
+    () => datacalls.find((dc) => dc.datacallid === anchorCallId) ?? null,
+    [datacalls, anchorCallId]
+  )
+  const pillarQuery = usePillarAggregates(anchorCallId)
 
   // The prior call in the scope's own cadence: the next call by deadline can
   // belong to the other cadence and carry none of this OpDiv's systems.
@@ -359,7 +378,8 @@ export function useOpDivDashboardData(
       anchorCall,
       averages: pillarAverages,
       extremes: pillarExtremes,
-      isPending: pillarQuery.isPending,
+      // A disabled query reports pending; with no anchor there is nothing to wait for.
+      isPending: anchorCallId !== undefined && pillarQuery.isPending,
     },
     tierMovement,
     delta,
@@ -379,13 +399,11 @@ export function useOpDivDashboardData(
       tiers: trendTiers,
       movers: trendMovers,
     },
-    // activeDatacallIds is [] while Title is still fetching /datacalls, which
-    // is not "loaded and empty" - hold the skeleton through that window too.
     isPending:
       !fismaSystemsLoaded ||
-      activeDatacallIds.length === 0 ||
-      scoresPending ||
-      progressPending,
+      !datacallsLoaded ||
+      (activeDatacallIds.length > 0 && (scoresPending || progressPending)),
     isError: scoresError || progressError,
+    noDatacalls: datacallsLoaded && activeDatacallIds.length === 0,
   }
 }

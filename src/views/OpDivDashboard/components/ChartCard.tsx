@@ -73,7 +73,7 @@ export default function ChartCard({
               {eyebrow}
             </Eyebrow>
             {info && (
-              // describeChild, or the button's aria-label wins and the explanation is never announced.
+              // describeChild, or the open tooltip becomes the button's name and replaces "About …".
               <Tooltip title={<span>{info}</span>} describeChild>
                 <IconButton
                   size="small"

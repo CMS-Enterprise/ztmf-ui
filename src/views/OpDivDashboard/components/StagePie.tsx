@@ -79,7 +79,8 @@ export default function StagePie({
         aria-label={`Donut chart of ${stage.total} systems by maturity stage. The same counts are listed beside the chart.`}
       >
         <ResponsiveContainer width="100%" height="100%">
-          <PieChart>
+          {/* No recharts keyboard layer: inside role="img" it is an unnamed tab stop. */}
+          <PieChart accessibilityLayer={false}>
             <Pie
               data={data}
               dataKey="count"

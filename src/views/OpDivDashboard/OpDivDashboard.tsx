@@ -13,13 +13,14 @@
  *
  * @module views/OpDivDashboard/OpDivDashboard
  */
-import { useEffect, useMemo, useState } from 'react'
+import { useEffect, useMemo } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
 import Box from '@mui/material/Box'
 import Button from '@mui/material/Button'
 import CircularProgress from '@mui/material/CircularProgress'
 import BusinessOutlinedIcon from '@mui/icons-material/BusinessOutlined'
 import BlockOutlinedIcon from '@mui/icons-material/BlockOutlined'
+import EventBusyOutlinedIcon from '@mui/icons-material/EventBusyOutlined'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import PageHeader from '@/components/ui/PageHeader'
@@ -54,7 +55,7 @@ import {
 import { usersForOpDiv } from './opdivPeople'
 import { useOpDivDashboardData } from './useOpDivDashboardData'
 import { ALL_OPDIVS, useOpDivScope, writeLastOpDivId } from './useOpDivScope'
-import type { FismaSystemType, OpDiv } from '@/types'
+import type { OpDiv } from '@/types'
 
 /**
  * The OpDiv dashboard page.
@@ -67,14 +68,8 @@ export default function OpDivDashboard() {
     selectedDatacall,
     showDecommissioned,
     setShowDecommissioned,
-    fismaSystems,
-    fismaSystemsError,
+    fismaSystemsFetchedDecommissioned,
   } = useContextProp()
-  // The decommissioned list that was showing when the flag was cleared; held
-  // on until the active list replaces it.
-  const [staleSystems, setStaleSystems] = useState<FismaSystemType[] | null>(
-    null
-  )
 
   // This page describes active posture, and /fismasystems?decommissioned=true
   // SWAPS the list rather than adding to it - so while that flag is on there
@@ -83,12 +78,12 @@ export default function OpDivDashboard() {
   // from the main dashboard, and this page carries no control to clear it.
   useEffect(() => {
     if (!showDecommissioned) return
-    setStaleSystems(fismaSystems)
     setShowDecommissioned(false)
-  }, [showDecommissioned, setShowDecommissioned, fismaSystems])
-  // A failed refetch leaves the stale list in place; the body reports it.
+  }, [showDecommissioned, setShowDecommissioned])
+  // Waits until the active list's request settles. A failed one leaves the
+  // old list in place; the body reports it.
   const awaitingActiveSystems =
-    showDecommissioned || (staleSystems === fismaSystems && !fismaSystemsError)
+    showDecommissioned || fismaSystemsFetchedDecommissioned
 
   // Remember the OpDiv so a later bare /opdivs lands back here. Keyed on the
   // resolved id, so an unresolvable URL is never stored. The aggregate is not
@@ -153,7 +148,6 @@ export default function OpDivDashboard() {
     <OpDivDashboardBody
       opdiv={opdiv}
       isAggregate={isAggregate}
-      visibleCount={visible.length}
       switcher={
         <OpDivSwitcher
           opdiv={opdiv}
@@ -175,21 +169,20 @@ export default function OpDivDashboard() {
 function OpDivDashboardBody({
   opdiv,
   isAggregate,
-  visibleCount,
   switcher,
   datacallName,
 }: {
   /** Null in the aggregate view. */
   opdiv: OpDiv | null
   isAggregate: boolean
-  visibleCount: number
   switcher: React.ReactNode
   datacallName?: string
 }) {
   // Null means "no OpDiv filter", which is the caller's whole server-scoped
   // set rather than a loop over visible ids - see scopeSystemsToOpDiv.
   const opdivId = isAggregate ? null : opdiv?.opdiv_id ?? null
-  const { fismaSystemsError, datacallsError, userInfo } = useContextProp()
+  const { fismaSystemsError, datacallsError, datacalls, userInfo } =
+    useContextProp()
   const data = useOpDivDashboardData(opdivId)
   const usersQuery = useUsers()
 
@@ -203,9 +196,15 @@ function OpDivDashboardBody({
     [usersQuery.data, opdivId]
   )
   const systems = useMemo(() => data.rows.map((r) => r.system), [data.rows])
+  // From the rows, not the switchable list: an inactive OpDiv's systems still count.
+  const opdivCount = useMemo(
+    () =>
+      new Set(systems.map((s) => s.opdiv_id).filter((id) => id != null)).size,
+    [systems]
+  )
 
   const scopeName = isAggregate
-    ? `${visibleCount} OpDivs · ${data.summary.systemCount} systems`
+    ? `${opdivCount} ${opdivCount === 1 ? 'OpDiv' : 'OpDivs'} · ${data.summary.systemCount} systems`
     : opdiv?.name ?? ''
   const subtitle = datacallName
     ? `${scopeName} · Viewing ${datacallName}`
@@ -255,6 +254,15 @@ function OpDivDashboardBody({
       ) : data.isPending ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
           <CircularProgress aria-label="Loading OpDiv scores" />
+        </Box>
+      ) : data.noDatacalls ? (
+        <Box sx={{ pt: 6, pb: 4 }}>
+          <EmptyState
+            icon={<EventBusyOutlinedIcon />}
+            title="No data calls yet"
+            description="Scores and progress appear here once a data call has been opened."
+            tone="neutral"
+          />
         </Box>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5, mb: 2 }}>
@@ -402,7 +410,7 @@ function OpDivDashboardBody({
               id={NOT_STARTED_PANEL_ID}
               rows={data.notStarted}
               systemsInCall={data.completion.systemsInCall}
-              datacallName={data.pillars.anchorCall?.datacall}
+              datacalls={datacalls}
             />
           </Box>
 

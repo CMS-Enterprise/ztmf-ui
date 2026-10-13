@@ -111,17 +111,19 @@ export default function OpDivHeaderActions({
   const callName = (id: number) =>
     datacalls.find((dc) => dc.datacallid === id)?.datacall ?? `Call ${id}`
   const hasSystems = systemIds.length > 0
-  // When the page covers every active system the caller has, export without
-  // fsids, as Home's full export does: the server applies the same scope, and
-  // naming hundreds of ids overflows the URL.
+  // Name the systems whenever the URL allows, so the export matches the page.
+  // Too many to name: when the page covers the caller's whole active scope,
+  // export unfiltered as Home's full export does (the server applies the same
+  // scope, plus decommissioned systems scored in the call); otherwise refuse.
   const coversCallerScope =
     isAggregate ||
     systemIds.length === fismaSystems.filter((s) => !s.decommissioned).length
-  const exportIds = coversCallerScope ? undefined : systemIds
-  const exportTooLong =
-    !!exportIds &&
-    buildExportUrl(singleExportCallId ?? activeDataCallId, exportIds).length >
-      MAX_EXPORT_URL_LENGTH
+  const idsFit =
+    buildExportUrl(singleExportCallId ?? activeDataCallId, systemIds).length <=
+    MAX_EXPORT_URL_LENGTH
+  const exportUnfiltered = !idsFit && coversCallerScope
+  const exportIds = exportUnfiltered ? undefined : systemIds
+  const exportTooLong = !idsFit && !coversCallerScope
 
   const runExport = async (callId: number) => {
     setExporting(true)
@@ -181,10 +183,14 @@ export default function OpDivHeaderActions({
               ? `${systemIds.length} systems are too many to export for one OpDiv in a single request`
               : exportCallIds.length > 1
                 ? 'Choose which data call to export'
-                : `Export all ${systemIds.length} systems in ${scopeLabel}`
+                : exportUnfiltered
+                  ? // Unfiltered, so the server's set can include decommissioned systems scored in the call.
+                    `Export every system in ${scopeLabel}`
+                  : `Export all ${systemIds.length} systems in ${scopeLabel}`
         }
       >
-        <span>
+        {/* flex, so the header row's stretch reaches the button like its siblings. */}
+        <span style={{ display: 'flex' }}>
           <Button
             variant="outlined"
             color="primary"

@@ -16,6 +16,7 @@
  *
  * @module views/OpDivDashboard/components/TrendPanel
  */
+import { useState } from 'react'
 import Box from '@mui/material/Box'
 import CircularProgress from '@mui/material/CircularProgress'
 import IconButton from '@mui/material/IconButton'
@@ -42,6 +43,7 @@ import { colors, fonts } from '@/theme/tokens'
 import { tierForScore } from '@/utils/tierStyles'
 import BarList from './BarList'
 import ChartCard from './ChartCard'
+import { clickedIndex, windowContaining, type IndexWindow } from './chartIndex'
 import { stageColor } from './stageColor'
 import {
   summarizeTrend,
@@ -157,6 +159,15 @@ export default function TrendPanel({
   const subtitle = ['Active systems only, scored in each call', cadenceNote]
     .filter(Boolean)
     .join(' · ')
+  // The brush window is controlled: recharts counts a clicked index from it,
+  // the arrows have to slide it, and it resets when the series changes.
+  const seriesKey = `${points[0]?.datacallid}-${points[points.length - 1]?.datacallid}-${points.length}`
+  const fullWindow: IndexWindow = {
+    start: 0,
+    end: Math.max(points.length - 1, 0),
+  }
+  const [brush, setBrush] = useState({ seriesKey, win: fullWindow })
+  const win = brush.seriesKey === seriesKey ? brush.win : fullWindow
 
   if (isPending) {
     return (
@@ -208,7 +219,9 @@ export default function TrendPanel({
 
   const stepTo = (idx: number) => {
     const next = points[idx]
-    if (next) onSelectCall(next.datacallid)
+    if (!next) return
+    setBrush({ seriesKey, win: windowContaining(win, idx) })
+    onSelectCall(next.datacallid)
   }
 
   return (
@@ -243,11 +256,12 @@ export default function TrendPanel({
       >
         <ResponsiveContainer width="100%" height="100%">
           <LineChart
+            key={seriesKey}
             data={points}
             margin={{ top: 8, right: 16, bottom: 4, left: -18 }}
             onClick={(state) => {
-              const idx = state?.activeTooltipIndex
-              if (typeof idx === 'number') stepTo(idx)
+              const idx = clickedIndex(state)
+              if (idx !== null) stepTo(win.start + idx)
             }}
             style={{ cursor: 'pointer' }}
             title="Score trend chart. The values are in the table before it."
@@ -317,6 +331,17 @@ export default function TrendPanel({
                 dataKey="label"
                 height={24}
                 travellerWidth={8}
+                startIndex={win.start}
+                endIndex={win.end}
+                onChange={(range) =>
+                  setBrush({
+                    seriesKey,
+                    win: {
+                      start: range.startIndex ?? fullWindow.start,
+                      end: range.endIndex ?? fullWindow.end,
+                    },
+                  })
+                }
                 stroke={colors.neutral500}
                 fill={colors.neutral50}
               />

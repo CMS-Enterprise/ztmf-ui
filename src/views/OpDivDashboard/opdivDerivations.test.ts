@@ -14,12 +14,18 @@ import {
   summarizeCompletion,
   summarizeOpDiv,
   summarizeRisk,
+  summarizeTargetGap,
+  type OpDivSystemRow,
 } from './opdivAggregates'
 import { breakdownByFips, breakdownByServiceModel } from './opdivBreakdowns'
 import { averageByOpDiv } from './opdivByOpDiv'
 import { MAILTO_MAX_LENGTH, buildOpDivMailto } from './opdivMailto'
 import { adminTierRoster, classifyDelegateExpiry } from './opdivPeople'
-import { averageByPillar, pillarOrder } from './opdivPillars'
+import {
+  averageByPillar,
+  pillarExtremeCounts,
+  pillarOrder,
+} from './opdivPillars'
 import {
   biggestMovers,
   buildTrendSeries,
@@ -35,10 +41,12 @@ import {
   visibleOpDivs,
 } from './useOpDivScope'
 import { makeProgress, makeSystem } from './testFixtures'
+import { clickedIndex, windowContaining } from './components/chartIndex'
 import type { DashboardMaps } from '@/views/Home/aggregateScores'
 import type {
   OpDiv,
   ScoreAggregate,
+  ScoreTier,
   UserRole,
   datacall,
   userData,
@@ -328,6 +336,88 @@ describe('unknown impact', () => {
   })
 })
 
+describe('clickedIndex', () => {
+  it('reads the string index recharts 3 passes to onClick', () => {
+    expect(clickedIndex({ activeTooltipIndex: '2' })).toBe(2)
+    expect(clickedIndex({ activeTooltipIndex: '0' })).toBe(0)
+  })
+
+  it('is null when the click hit no point', () => {
+    expect(clickedIndex({ activeTooltipIndex: null })).toBeNull()
+    expect(clickedIndex({})).toBeNull()
+    expect(clickedIndex(null)).toBeNull()
+    expect(clickedIndex({ activeTooltipIndex: 'node-a' })).toBeNull()
+  })
+})
+
+describe('windowContaining', () => {
+  const win = { start: 4, end: 6 }
+
+  it('leaves a window that already holds the index', () => {
+    expect(windowContaining(win, 5)).toBe(win)
+  })
+
+  it('slides just far enough, keeping the width', () => {
+    expect(windowContaining(win, 2)).toEqual({ start: 2, end: 4 })
+    expect(windowContaining(win, 9)).toEqual({ start: 7, end: 9 })
+  })
+})
+
+describe('summarizeTargetGap', () => {
+  const row = (
+    id: number,
+    target: string | null,
+    tier?: ScoreTier
+  ): OpDivSystemRow => ({
+    system: makeSystem({
+      fismasystemid: id,
+      fismaacronym: `SYS${id}`,
+      target_maturity_tier: target,
+    }),
+    tier,
+  })
+
+  it('counts a null or unrecognized target as no target, not the Advanced default', () => {
+    const gap = summarizeTargetGap([
+      row(1, null, 'Traditional'),
+      row(2, 'Elite', 'Traditional'),
+    ])
+    expect(gap).toMatchObject({ noTarget: 2, below: 0, shortfalls: [] })
+  })
+
+  it('counts a target with no tier as unscored, not below', () => {
+    expect(summarizeTargetGap([row(1, 'Advanced')])).toMatchObject({
+      unscored: 1,
+      below: 0,
+    })
+  })
+
+  it('compares tiers by rank', () => {
+    const gap = summarizeTargetGap([
+      row(1, 'Advanced', 'Initial'),
+      row(2, 'Initial', 'Advanced'),
+      row(3, 'Initial', 'Initial'),
+    ])
+    expect(gap).toMatchObject({ below: 1, atOrAbove: 2 })
+    expect(gap.shortfalls).toEqual([
+      expect.objectContaining({
+        actual: 'Initial',
+        target: 'Advanced',
+        gap: 1,
+      }),
+    ])
+  })
+
+  it('orders shortfalls by gap, then acronym', () => {
+    const gap = summarizeTargetGap([
+      row(3, 'Advanced', 'Initial'),
+      row(1, 'Advanced', 'Initial'),
+      row(2, 'Optimal', 'Traditional'),
+    ])
+    expect(gap.shortfalls.map((s) => s.system.fismasystemid)).toEqual([2, 1, 3])
+  })
+})
+
 describe('pillarOrder', () => {
   const SIX: [number, string, number][] = [
     [1, 'Identity', 3],
@@ -350,6 +440,41 @@ describe('pillarOrder', () => {
       'Data',
       'Identity',
     ])
+  })
+
+  it('leaves a system with every pillar equal out of the weakest and strongest', () => {
+    const flat = SIX.map(
+      ([id, name]) => [id, name, 1] as [number, string, number]
+    )
+    const rows = [
+      withPillars(1, flat),
+      withPillars(2, flat),
+      withPillars(3, [
+        [1, 'Identity', 3],
+        [2, 'Devices', 1],
+        [3, 'Networks', 2],
+      ]),
+    ]
+    expect(pillarExtremeCounts(rows, new Set([1, 2, 3]))).toEqual({
+      weakest: { pillar: 'Devices', count: 1 },
+      strongest: { pillar: 'Identity', count: 1 },
+      systems: 1,
+    })
+  })
+
+  it('credits no pillar at an end where several are tied', () => {
+    const rows = [
+      withPillars(1, [
+        [1, 'Identity', 1],
+        [2, 'Devices', 1],
+        [3, 'Networks', 3],
+      ]),
+    ]
+    expect(pillarExtremeCounts(rows, new Set([1]))).toEqual({
+      weakest: null,
+      strongest: { pillar: 'Networks', count: 1 },
+      systems: 1,
+    })
   })
 
   it('slots pillars a SaaS row omits back into place when it comes first', () => {

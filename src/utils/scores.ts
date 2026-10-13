@@ -1,8 +1,9 @@
 /**
  * Query hooks for the score endpoints.
  *
- * Keyed so requests that other pages already make (per-datacall aggregate and
- * progress) are cache hits rather than duplicates. See docs/data-fetching.md.
+ * Keyed to match the per-datacall aggregate and progress requests Home makes,
+ * so they become cache hits once Home reads through the query layer. See
+ * docs/data-fetching.md.
  *
  * @module utils/scores
  */

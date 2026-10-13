@@ -6,7 +6,12 @@
  *
  * @module utils/users
  */
-import { useQuery, type UseQueryResult } from '@tanstack/react-query'
+import {
+  useQuery,
+  useQueryClient,
+  type QueryClient,
+  type UseQueryResult,
+} from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import { type QueryHookOptions } from '@/queryClient'
@@ -38,4 +43,22 @@ export function useUsers(
     queryFn: ({ signal }) => fetchUsers(signal),
     enabled: options.enabled !== false,
   })
+}
+
+/**
+ * Marks the cached user list stale after a user, grant or delegate write.
+ * @param {QueryClient} queryClient - The app's query client.
+ * @returns {void}
+ */
+export function invalidateUserList(queryClient: QueryClient): void {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.users.list() })
+}
+
+/**
+ * {@link invalidateUserList} bound to the current query client.
+ * @returns {() => void} Call after a successful write.
+ */
+export function useInvalidateUserList(): () => void {
+  const queryClient = useQueryClient()
+  return () => invalidateUserList(queryClient)
 }

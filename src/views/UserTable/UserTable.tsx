@@ -31,6 +31,7 @@ import {
   roleLabel,
 } from '@/utils/userRoles'
 import { useSetUserOpDivs } from '@/utils/userOpdivs'
+import { useInvalidateUserList } from '@/utils/users'
 import CONFIG from '@/utils/config'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { useContextProp } from '../Title/Context'
@@ -213,6 +214,7 @@ export default function UserTable() {
   // Grants for a newly created row. Existing rows are edited through the
   // grant modal, which refreshes the row on save.
   const grantMutation = useSetUserOpDivs()
+  const invalidateUserList = useInvalidateUserList()
   const handleRowEditStop: GridEventListener<'rowEditStop'> = (
     params,
     event
@@ -351,6 +353,7 @@ export default function UserTable() {
         }
 
         const res = await axiosInstance.post('/users', body)
+        invalidateUserList()
         const createdUser = res.data.data
         updatedRow.userid = createdUser.userid
 
@@ -407,6 +410,7 @@ export default function UserTable() {
           fullname: updatedRow?.fullname,
           role: updatedRow?.role,
         })
+        invalidateUserList()
         snackbar.show(STATUS_MESSAGES.saved, 'success')
       } catch (error) {
         if (isAuthHandled(error)) return updatedRow
@@ -457,6 +461,7 @@ export default function UserTable() {
     }
     try {
       await axiosInstance.delete(`/users/${target.userid}`)
+      invalidateUserList()
       setRows((prev) => prev.filter((row) => row.userid !== target.userid))
       notify(`Saved - Delete User ${target.fullname}`, 'success', {
         autoHideDuration: 2000,
@@ -477,6 +482,7 @@ export default function UserTable() {
     if (!confirm || !target) return
     try {
       await axiosInstance.put(`/users/${target.userid}/restore`)
+      invalidateUserList()
       setRows((prev) => prev.filter((row) => row.userid !== target.userid))
       notify(`Saved - Restore User ${target.fullname}`, 'success', {
         autoHideDuration: 2000,

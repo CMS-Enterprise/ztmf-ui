@@ -21,6 +21,7 @@ import ChartCard from './ChartCard'
 import ShowAllToggle from './ShowAllToggle'
 import { useExpandableRows } from './useExpandableRows'
 import type { NoProgressRow } from '../opdivAggregates'
+import type { datacall } from '@/types'
 
 /** Explains the figure in the card header. */
 const NOT_STARTED_INFO =
@@ -34,8 +35,8 @@ export type NotStartedPanelProps = {
   rows: NoProgressRow[]
   /** Systems the call expects answers from, as the denominator. */
   systemsInCall: number
-  /** Name of the call the questionnaire links should open. */
-  datacallName?: string
+  /** Known calls, to name each row's own call in its questionnaire link. */
+  datacalls: datacall[]
   /** Scroll anchor, for the jump from the Not started tile. */
   id?: string
 }
@@ -48,9 +49,13 @@ export type NotStartedPanelProps = {
 export default function NotStartedPanel({
   rows,
   systemsInCall,
-  datacallName,
+  datacalls,
   id,
 }: NotStartedPanelProps) {
+  const callSlug = (datacallid?: number) => {
+    const name = datacalls.find((dc) => dc.datacallid === datacallid)?.datacall
+    return name && encodeDatacallSlug(name)
+  }
   const { listed, hidden, expanded, toggle, cappedAtMax } = useExpandableRows(
     rows,
     MAX_LISTED
@@ -83,7 +88,10 @@ export default function NotStartedPanel({
         <>
           <Box component="ul" sx={{ listStyle: 'none', m: 0, p: 0 }}>
             {listed.map(
-              ({ row: { system, progress }, awaitingConfirmation }) => (
+              ({
+                row: { system, progress, datacallid },
+                awaitingConfirmation,
+              }) => (
                 <Box
                   component="li"
                   key={system.fismasystemid}
@@ -100,11 +108,12 @@ export default function NotStartedPanel({
                       be, so nothing lined up down the list. */}
                   <Link
                     component={RouterLink}
-                    // Deep-links to the system's questionnaire for this call, so
-                    // the panel hands off straight into the work.
+                    // Deep-links to the system's questionnaire for the call it
+                    // was measured against, which in a multi-call year differs
+                    // by cadence.
                     to={questionnairePath(
                       system.fismasystemid,
-                      datacallName && encodeDatacallSlug(datacallName)
+                      callSlug(datacallid)
                     )}
                     underline="hover"
                     title={system.fismaname}

@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { userData, UserRole } from '@/types'
 import { Routes } from '@/router/constants'
@@ -9,6 +9,12 @@ import { Routes } from '@/router/constants'
 // LoginPage.test, react-router-dom is mocked module-wide and the loader /
 // location are driven per-test. Link and Outlet are stubbed to bare wrappers
 // because the account menu and page body only need to render, not navigate.
+type MockOutletContext = {
+  activeDatacallIds?: number[]
+  fismaSystems?: { fismasystemid: number }[]
+  setShowDecommissioned?: (on: boolean) => void
+}
+let mockOutletContext: MockOutletContext | undefined
 jest.mock('react-router-dom', () => ({
   __esModule: true,
   useLoaderData: jest.fn(),
@@ -18,7 +24,22 @@ jest.mock('react-router-dom', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to?: string }) => (
     <a href={typeof to === 'string' ? to : '/'}>{children}</a>
   ),
-  Outlet: () => <div>OUTLET</div>,
+  Outlet: ({ context }: { context?: MockOutletContext }) => {
+    mockOutletContext = context
+    return (
+      <>
+        <div>OUTLET</div>
+        <div data-testid="active-datacall-ids">
+          {JSON.stringify(context?.activeDatacallIds ?? [])}
+        </div>
+        <div data-testid="system-ids">
+          {JSON.stringify(
+            (context?.fismaSystems ?? []).map((s) => s.fismasystemid)
+          )}
+        </div>
+      </>
+    )
+  },
 }))
 
 // The header does a burst of reference-data fetches on mount (systems,
@@ -59,9 +80,13 @@ jest.mock('@/views/EditSystemModal/EditSystemModal', () => ({
   __esModule: true,
   default: () => null,
 }))
+let mockOnDatacallCreated: (() => void) | undefined
 jest.mock('@/views/DatacallModal/DataCallModal', () => ({
   __esModule: true,
-  default: () => null,
+  default: ({ onCreated }: { onCreated: () => void }) => {
+    mockOnDatacallCreated = onCreated
+    return null
+  },
 }))
 jest.mock('@/components/Footer/Footer', () => ({
   __esModule: true,
@@ -288,5 +313,64 @@ describe('Title logout affordance', () => {
     // Broadcast is independent of the POST result (best-effort).
     expect(mockedBroadcastLogout).toHaveBeenCalled()
     errSpy.mockRestore()
+  })
+})
+
+describe('Title data call selection', () => {
+  it('selects the first data call once it is created', async () => {
+    const created = {
+      datacallid: 1,
+      datacall: 'FY26 ZTM',
+      datecreated: '2025-10-01',
+      deadline: '2026-09-11',
+    }
+    let datacalls: (typeof created)[] = []
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url === '/datacalls' ? datacalls : [] } })
+    )
+    renderTitleFor('OWNER')
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith('/datacalls', expect.anything())
+    )
+    expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[]')
+
+    datacalls = [created]
+    mockOnDatacallCreated?.()
+    await waitFor(() =>
+      expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[1]')
+    )
+  })
+})
+
+describe('Title systems fetch', () => {
+  it('ignores a slower response to a request that was superseded', async () => {
+    let resolveDecommissioned: (value: unknown) => void = () => {}
+    mockedGet.mockImplementation((url: string) => {
+      if (url === '/fismasystems?decommissioned=true') {
+        return new Promise((resolve) => {
+          resolveDecommissioned = resolve
+        })
+      }
+      if (url === '/fismasystems') {
+        return Promise.resolve({ data: { data: [{ fismasystemid: 1 }] } })
+      }
+      return Promise.resolve({ data: { data: [] } })
+    })
+    renderTitleFor('OWNER')
+    await waitFor(() =>
+      expect(screen.getByTestId('system-ids')).toHaveTextContent('[1]')
+    )
+
+    act(() => mockOutletContext?.setShowDecommissioned?.(true))
+    act(() => mockOutletContext?.setShowDecommissioned?.(false))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith(
+        '/fismasystems?decommissioned=true'
+      )
+    )
+    await act(async () => {
+      resolveDecommissioned({ data: { data: [{ fismasystemid: 99 }] } })
+    })
+    expect(screen.getByTestId('system-ids')).toHaveTextContent('[1]')
   })
 })

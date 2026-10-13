@@ -56,6 +56,7 @@ let mockContext: Record<string, unknown>
 let mockScoresError: boolean
 let mockUsersError: boolean
 const mockSetShowDecommissioned = jest.fn()
+const mockPillarCallIds: (number | undefined)[] = []
 
 // The axios instance transitively pulls in the hash router and LoginPage,
 // whose config module reads import.meta - not transformable under jest. Every
@@ -77,6 +78,8 @@ jest.mock('../Title/Context', () => ({
   useContextProp: () => ({
     fismaSystems: mockSystems,
     fismaSystemsLoaded: true,
+    fismaSystemsFetchedDecommissioned: false,
+    datacallsLoaded: true,
     setFismaSystems: jest.fn(),
     userInfo: mockUser,
     latestDataCallId: 104,
@@ -153,7 +156,10 @@ jest.mock('@/utils/scores', () => ({
     isPending: false,
     isError: false,
   }),
-  usePillarAggregates: () => ({ data: [], isPending: false }),
+  usePillarAggregates: (id?: number) => {
+    mockPillarCallIds.push(id)
+    return { data: [], isPending: false }
+  },
   useScoreHistory: () => ({
     data: mockHistory,
     isPending: false,
@@ -282,6 +288,7 @@ beforeEach(() => {
   })
   mockNotify.mockReset()
   mockSetShowDecommissioned.mockClear()
+  mockPillarCallIds.length = 0
   mockExport.mockClear()
 })
 
@@ -453,6 +460,8 @@ describe('OpDivDashboard', () => {
     renderWithProviders(<OpDivDashboard />)
 
     expect(screen.getByText('All OpDivs')).toBeInTheDocument()
+    // Counted from the rows, so the parent row's systems name their OpDiv too.
+    expect(screen.getByText(/^3 OpDivs · 3 systems/)).toBeInTheDocument()
     const systems = screen.getByText('Systems').closest('div')
       ?.parentElement as HTMLElement
     expect(systems).toHaveTextContent('3')
@@ -514,6 +523,22 @@ describe('OpDivDashboard', () => {
       expect(screen.getByText('Could not load data calls')).toBeInTheDocument()
     })
 
+    it('says there are no data calls rather than spinning forever', () => {
+      mockContext = { datacalls: [], activeDatacallIds: [] }
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByText('No data calls yet')).toBeInTheDocument()
+      expect(
+        screen.queryByLabelText('Loading OpDiv scores')
+      ).not.toBeInTheDocument()
+    })
+
+    it('keeps loading while the data calls are still being fetched', () => {
+      mockContext = { activeDatacallIds: [], datacallsLoaded: false }
+      renderWithProviders(<OpDivDashboard />)
+      expect(screen.getByLabelText('Loading OpDiv scores')).toBeInTheDocument()
+      expect(screen.queryByText('No data calls yet')).not.toBeInTheDocument()
+    })
+
     it('reports failed scores', () => {
       mockScoresError = true
       renderWithProviders(<OpDivDashboard />)
@@ -538,13 +563,17 @@ describe('OpDivDashboard', () => {
     expect(screen.queryByText('Overall ZT score')).not.toBeInTheDocument()
   })
 
-  it('keeps holding until the active list replaces the decommissioned one', () => {
+  it('keeps holding until the active list request settles', () => {
     const decommissioned = [makeSystem(1, { decommissioned: true })]
-    mockContext = { showDecommissioned: true, fismaSystems: decommissioned }
+    mockContext = {
+      showDecommissioned: true,
+      fismaSystems: decommissioned,
+      fismaSystemsFetchedDecommissioned: true,
+    }
     const { rerender } = renderWithProviders(<OpDivDashboard />)
 
-    // Flag cleared, refetch still in flight: the stale list is still in place.
-    mockContext = { showDecommissioned: false, fismaSystems: decommissioned }
+    // Flag cleared, refetch still in flight: the old list is still in place.
+    mockContext = { ...mockContext, showDecommissioned: false }
     rerender(<OpDivDashboard />)
     expect(screen.getByLabelText('Loading OpDiv')).toBeInTheDocument()
 
@@ -552,6 +581,17 @@ describe('OpDivDashboard', () => {
     rerender(<OpDivDashboard />)
     expect(screen.queryByLabelText('Loading OpDiv')).not.toBeInTheDocument()
     expect(screen.getAllByText('3.40').length).toBeGreaterThan(0)
+  })
+
+  it('keeps holding through an earlier failed load', () => {
+    mockContext = {
+      showDecommissioned: false,
+      fismaSystems: [makeSystem(1, { decommissioned: true })],
+      fismaSystemsFetchedDecommissioned: true,
+      fismaSystemsError: true,
+    }
+    renderWithProviders(<OpDivDashboard />)
+    expect(screen.getByLabelText('Loading OpDiv')).toBeInTheDocument()
   })
 
   it('keeps the switcher out of the h1', () => {
@@ -604,14 +644,17 @@ describe('OpDivDashboard', () => {
 
   describe('export scope', () => {
     // Every id rides the query string, and CloudFront rejects URLs past ~8KB.
-    it('sends no fsids in the aggregate, as the full export on Home does', async () => {
+    // Named ids keep the CSV to the active systems the page counts.
+    it('names the systems when they fit, even covering the whole scope', async () => {
       mockOpDivId = 'all'
       renderWithProviders(<OpDivDashboard />)
       await userEvent.click(screen.getByRole('button', { name: /^export$/i }))
-      expect(mockExport).toHaveBeenCalledWith(104, undefined)
+      expect(mockExport).toHaveBeenCalledWith(104, [1, 2])
     })
 
-    it('sends no fsids when one OpDiv holds every system the caller has', async () => {
+    it('sends no fsids when the whole scope is too many to name', async () => {
+      mockOpDivId = 'all'
+      mockSystems = Array.from({ length: 700 }, (_, i) => makeSystem(10000 + i))
       renderWithProviders(<OpDivDashboard />)
       await userEvent.click(screen.getByRole('button', { name: /^export$/i }))
       expect(mockExport).toHaveBeenCalledWith(104, undefined)
@@ -668,6 +711,52 @@ describe('OpDivDashboard', () => {
     expect(document.activeElement).toBe(
       document.getElementById(NOT_STARTED_PANEL_ID)
     )
+  })
+
+  it("anchors the pillars to the OpDiv's own cadence, not a newer CMS quarterly", () => {
+    const call = (datacallid: number, name: string, deadline: string) => ({
+      datacallid,
+      datacall: name,
+      datecreated: '2024-10-01',
+      deadline,
+    })
+    mockContext = {
+      datacalls: [
+        call(201, 'FY2025 Q4', '2025-09-30'),
+        call(200, 'FY25 ZTM', '2025-06-30'),
+      ],
+      activeDatacallIds: [201, 200],
+      selectedDatacall: null,
+    }
+    renderWithProviders(<OpDivDashboard />)
+    // The anchor is requested first; the prior call (if any) after it.
+    expect(mockPillarCallIds[0]).toBe(200)
+    expect(mockPillarCallIds).not.toContain(201)
+    // Measured against the quarterly, so it links there, not to the anchor.
+    expect(screen.getByRole('link', { name: 'SYS2' })).toHaveAttribute(
+      'href',
+      '/questionnaire/system/2/FY2025_Q4'
+    )
+  })
+
+  it.each([
+    ['never borrows the other cadence', 'FY2027 Q1', undefined],
+    ['falls back to a call outside both cadences', 'Smoke Cycle', 300],
+  ])('anchors the pillars: %s', (_label, name, expected) => {
+    mockContext = {
+      datacalls: [
+        {
+          datacallid: 300,
+          datacall: name,
+          datecreated: '2026-10-01',
+          deadline: '2027-09-30',
+        },
+      ],
+      activeDatacallIds: [300],
+      selectedDatacall: null,
+    }
+    renderWithProviders(<OpDivDashboard />)
+    expect(mockPillarCallIds[0]).toBe(expected)
   })
 
   it('offers a text table of the trend', () => {
