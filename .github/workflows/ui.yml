@@ -7,12 +7,17 @@ on:
         type: string
         description: environment to deploy to
         required: true
+      deploy:
+        type: boolean
+        description: sync the bundle to S3 and invalidate CloudFront; false runs lint, tests, and the build only
+        default: true
 
 jobs:
   deploy:
-    name: Deploy
+    name: ${{ inputs.deploy && 'Deploy' || 'Build and test' }}
     runs-on: ubuntu-latest
-    environment: ${{ inputs.environment }}
+    # No environment when only testing, so a PR check records no deployment.
+    environment: ${{ inputs.deploy && inputs.environment || '' }}
     permissions:
       id-token: write
       contents: read
@@ -72,6 +77,7 @@ jobs:
         run: yarn build:${{ inputs.environment }}
 
       - name: Get AWS Creds
+        if: inputs.deploy
         uses: aws-actions/configure-aws-credentials@e6de054238d6b7531b4efff3b6587d9aade6a06c # v6.2.3
         with:
           role-to-assume: ${{ secrets.ROLEARN }}
@@ -79,15 +85,18 @@ jobs:
           aws-region: us-east-1
 
       - name: Write empty runtime config
+        if: inputs.deploy
         # public/config.js is gitignored (it carries the local auth-bypass
         # token), so the build emits no config.js. Ship an empty stub so the
         # index.html script tag resolves instead of 404ing on every load.
         run: echo 'window.ZTMF_RUNTIME_CONFIG = {}' > ./dist/config.js
 
       - name: AWS Sync
+        if: inputs.deploy
         run: aws s3 sync ./dist s3://${{ secrets.BUCKET_NAME }}/ --delete
 
       - name: Invalidate CloudFront Cache
+        if: inputs.deploy
         run: |
           if [ -n "${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }}" ]; then
             aws cloudfront create-invalidation --distribution-id ${{ secrets.CLOUDFRONT_DISTRIBUTION_ID }} --paths "/*"

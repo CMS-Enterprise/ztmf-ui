@@ -149,8 +149,8 @@ Transforms raw `diffResults` into `{ pillar, entries[] }[]` ordered to match the
 
 1. Build a `Map<pillarid, { pillar, entries[] }>` via `functionPillarMap.get(entry.functionid)`
 2. Entries with no matching pillar go into `uncategorized[]` (race: questions fetch still in flight)
-3. Sort groups by `PILLAR_ORDER.indexOf(pillar.pillar)` — unknown pillars sort to end
-4. Within each group, sort entries by `PILLAR_FUNCTION_MAP[pillarName].indexOf(functionName)`
+3. Sort groups by `pillar.order` (the API's `pillars.ordr`), `pillarid` as tiebreak
+4. Entries are not sorted — see §8
 5. Append `uncategorized` as a final "Other" group if any exist
 
 ### 4.6 Table Structure
@@ -266,15 +266,20 @@ Response: `{ data: FismaQuestion[] }`
 
 ## 8. Pillar and Function Ordering
 
-Source: `src/constants.ts` — `PILLAR_ORDER` and `PILLAR_FUNCTION_MAP`.
+Source: the API. `/fismasystems/:id/questions` returns rows ordered by
+`pillars.ordr, questions.ordr, functions.ordr, questionid`, and `/scores/diff`
+sorts by the same ranks, so a diff arrives in questionnaire order.
 
-| Pillar       | Functions (canonical order)                                                                                                                                                                                                         |
-| ------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Identity     | Authentication-Users, IdentityStores-Users, RiskAssessment, AccessManagement, Identity-VisibilityAnalytics, Identity-AutomationOrchestration, Identity-Governance                                                                   |
-| Devices      | PolicyEnforcement, AssetRiskManagement, ResourceAccess, Device-ThreatProtection, Device-VisibilityAnalytics, Device-AutomationOrchestration, Device-Governance                                                                      |
-| Networks     | NetworkSegmentation, NetworkTrafficManagement, Network-Encryption, NetworkResilience, Network-VisibilityAnalytics, Network-AutomationOrchestration, Network-Governance                                                              |
-| Applications | AccessAuthorization-Users, Application-ThreatProtection, AccessibleApplications, SecureDevDeployWorkflow, Application-SecurityTesting, Application-VisibilityAnalytics, Application-AutomationOrchestration, Application-Governance |
-| Data         | DataInventoryManagement, DataCategorization, DataAvailability, DataAccess, DataEncryption, Data-VisibilityAnalytics, Data-AutomationOrchestration, Data-Governance                                                                  |
+The modal only re-derives the **group** order, because it builds groups from a
+`Map` keyed on `pillarid` and a Map's iteration order is insertion order, not
+pillar order. It sorts those groups by `pillar.order`, with `pillarid` as the
+tiebreak. Entries inside a group keep the order they arrived in.
+
+Until ztmf-misc#393 this was done with `PILLAR_ORDER` and `PILLAR_FUNCTION_MAP`
+in `src/constants.ts`, hardcoded lists keyed on pillar and function _names_.
+Anything not in them sorted to the end, so renaming a function or adding a
+question silently dropped it to the bottom of its pillar. Both are deleted, and
+an ESLint `no-restricted-imports` rule refuses to let them back.
 
 ---
 

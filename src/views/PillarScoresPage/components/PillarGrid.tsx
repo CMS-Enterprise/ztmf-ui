@@ -1,4 +1,3 @@
-import { useMemo } from 'react'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { colors, fonts, radius, tierDot } from '@/theme/tokens'
@@ -6,7 +5,6 @@ import type { ScoreAggregate, ScoreTier } from '@/types'
 import Card from './Card'
 import TierChip from './TierChip'
 import CompactTrend from './CompactTrend'
-import { pillarRank } from './helpers'
 import { findComparisonPillarScore } from '../radarData'
 
 /**
@@ -28,7 +26,7 @@ export type PillarGridProps = {
 /**
  * Six-or-so pillar tiles in a 3-column grid. Each tile renders the pillar
  * name, tier chip, large score, a compact trend indicator, and a tier-
- * colored progress bar. Tiles are sorted by the canonical pillar order so
+ * colored progress bar. Tiles render in the order the API serves them so
  * the layout is stable across systems.
  * @param {PillarGridProps} props - Component props.
  * @returns {JSX.Element} The pillar grid.
@@ -37,10 +35,10 @@ export default function PillarGrid({
   latestScore,
   previousScore,
 }: PillarGridProps) {
-  const sorted = useMemo(() => {
-    const list = latestScore.pillarscores ?? []
-    return [...list].sort((a, b) => pillarRank(a.pillar) - pillarRank(b.pillar))
-  }, [latestScore])
+  // No client-side sort: /scores/aggregate orders pillar scores by pillars.ordr,
+  // the same rank the questionnaire renders in (ztmf-misc#393). Re-ranking here
+  // through a hardcoded name list is what let the two disagree.
+  const sorted = latestScore.pillarscores ?? []
   return (
     <Box
       sx={{

@@ -43,18 +43,17 @@ The project uses GitHub Actions for continuous integration and deployment. The w
 
 The workflows are orchestrated differently based on the environment:
 
-**Development Environment (`orchestration-dev.yml`)**
+**PR checks (`orchestration-dev.yml`)**
 
 - Triggered on pull requests to the main branch
-- Runs analysis on all PRs
-- For non-draft PRs, checks for changes in the backend code
-- If backend changes are detected, runs the backend workflow for DEV
-- Finally runs the infrastructure workflow for DEV
+- Runs analysis on all non-draft PRs, then the UI workflow's lint, tests, and build without deploying
+- Deploys nothing: PR previews run in per-PR environments (`orchestration-pr.yml`)
 
-**Production Environment (`orchestration-prod.yml`)**
+**dev and prod (`orchestration-prod.yml`)**
 
 - Triggered when a pull request to main is merged (closed with merge)
-- Runs analysis, backend, and infrastructure workflows sequentially for PROD
+- Runs analysis, then the UI workflow for dev, then the same for prod
+- prod runs only if the dev deploy succeeded
 - Only executes if the PR was actually merged
 
 ## Getting Started

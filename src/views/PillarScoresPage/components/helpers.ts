@@ -1,24 +1,8 @@
-import { PILLAR_ORDER } from '@/constants'
-
 /**
  * Pure helpers shared across the Pillar Scores view layer. Kept separate
  * from any component module so React Fast Refresh can hot-swap components
  * without invalidating the surrounding helpers.
  */
-
-/**
- * Returns the index of a pillar name in the canonical {@link PILLAR_ORDER},
- * or {@link Number.MAX_SAFE_INTEGER} when the name is unknown. Used as a
- * sort key so callers can stably order pillar rows without needing to know
- * the canonical sequence themselves.
- * @param {string | undefined} name - Pillar name.
- * @returns {number} The sort index, MAX_SAFE_INTEGER for unknown names.
- */
-export function pillarRank(name: string | undefined): number {
-  if (!name) return Number.MAX_SAFE_INTEGER
-  const i = PILLAR_ORDER.indexOf(name)
-  return i === -1 ? Number.MAX_SAFE_INTEGER : i
-}
 
 /**
  * Classifies the delta between a current and previous score as up, down or

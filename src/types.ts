@@ -218,6 +218,9 @@ export type FismaFunction = {
   function: string
   description: string
   datacenterenvironment: string
+  // Rank among the functions of one question, from functions.ordr. The API
+  // already sorts by it; no client code should sort on it.
+  order: number
 }
 export type FismaQuestion = {
   questionid: number

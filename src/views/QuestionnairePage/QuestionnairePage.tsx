@@ -39,8 +39,6 @@ import {
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { outlinedChipSx } from '@/utils/chipStyles'
-import { sortPillars } from '@/utils/sortPillars'
-import { sortFunctions } from '@/utils/sortFunctions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
@@ -70,7 +68,7 @@ import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
-import { addSpace, type Category } from './helpers'
+import { addSpace, groupQuestionsByPillar, type Category } from './helpers'
 // Aliased because a local state variable named `datacall` shadows the type.
 import type { datacall as Datacall } from '@/types'
 import ClosedDatacallBanner from './components/ClosedDatacallBanner'
@@ -972,11 +970,7 @@ export default function QuestionnarePage() {
               setNoQuestions(true)
               setLoadingQuestion(false)
             } else {
-              const organizedData: Record<string, FismaQuestion[]> = {}
               data.forEach((question: FismaQuestion) => {
-                if (!organizedData[question.pillar.pillar]) {
-                  organizedData[question.pillar.pillar] = []
-                }
                 questionData[question.function.functionid] = {
                   questionid: question.questionid,
                   question: question.question,
@@ -985,23 +979,14 @@ export default function QuestionnarePage() {
                   pillar: question.pillar.pillar,
                   function: question.function.function,
                 }
-                organizedData[question.pillar.pillar].push(question)
               })
               // The reduced-pillar rule is applied by the API for the cycle
               // requested above (ztmf#545), so whatever comes back is already
-              // the right set.
-              const sortedPillars = sortPillars(Object.keys(organizedData))
-              const categoriesData: Category[] = sortedPillars.map((pillar) => {
-                const sortedSteps = sortFunctions(pillar, organizedData[pillar])
-                const sortedStepFuncId = sortedSteps.map(
-                  (d) => d.function.functionid
-                )
-                sortedFuncId = [...sortedFuncId, ...sortedStepFuncId]
-                return {
-                  name: pillar,
-                  steps: sortedSteps,
-                }
-              })
+              // the right set, in the right order (ztmf-misc#393).
+              const categoriesData: Category[] = groupQuestionsByPillar(data)
+              sortedFuncId = categoriesData.flatMap((category) =>
+                category.steps.map((step) => step.function.functionid)
+              )
               const funcIdToIdx = sortedFuncId.reduce(
                 (
                   acc: { [key: number]: number },

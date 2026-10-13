@@ -182,6 +182,49 @@ so the write resolves on its own and the list catches up behind it. Both
 styles are in use, and the reason for the choice belongs in a comment next to
 it.
 
+### Where a mutation lives
+
+A write goes in the `src/utils/` module for its domain, next to the fetcher it
+calls, not inline in the component. The module exports the plain async fetcher
+and a thin hook over it, which is what makes the call testable without
+rendering anything and lets a second caller reuse it later. `massEmails.ts`,
+`datacalls.ts` and `fismaSystems.ts` are the smallest complete examples.
+
+The hook owns invalidation and nothing else. It does not toast, because a form
+may need to route a 400's field map to its inputs rather than raise a banner,
+and it does not hold the in-flight flag for the caller beyond `isPending`.
+
+```ts
+export function useCreateDatacall() {
+  const queryClient = useQueryClient()
+  return useMutation({
+    mutationFn: createDatacall,
+    onSuccess: () => {
+      void queryClient.invalidateQueries({ queryKey: queryKeys.datacalls.all })
+    },
+  })
+}
+```
+
+Invalidate the smallest prefix that covers what changed. `datacalls.all`
+covers every cached list under that prefix; a per-system write uses
+`fismaSystems.detail(id)` so a sibling system's entry is untouched. Write a
+test that seeds two entries and asserts only the right one is invalidated,
+since an over-broad prefix passes a single-key assertion.
+
+A write that changes no server state this app reads invalidates nothing, and
+says so in the hook's doc comment rather than leaving the reader to wonder.
+`useSendMassEmail` is the example.
+
+### Invalidating a key nothing reads yet
+
+While the epic is mid-flight, a write may be migrated before its reader is. An
+invalidation then reaches nothing and the caller still refreshes through a
+callback prop. Add the invalidation anyway, keep the callback, and comment at
+both ends so the pair is removed together when the read becomes a query.
+Leaving the invalidation out instead means whoever migrates the read has to
+find every writer that should have had one.
+
 Mutations retain local error handling because forms may need field-level
 errors from `parseApiError`. Do not add a global `MutationCache.onError` while
 mutation callers also notify locally; doing both would produce duplicate
