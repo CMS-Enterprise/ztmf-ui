@@ -1,4 +1,5 @@
-import { useQueries } from '@tanstack/react-query'
+import { useCallback } from 'react'
+import { useQueries, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import type { ScoreAggregate, ScoreProgress } from '@/types'
@@ -99,4 +100,27 @@ export function useDashboardScores(datacallIds: number[]): {
     progressPerCall: progress.map((q) => q.data ?? []),
     loading: [...aggregates, ...progress].some((q) => q.isPending),
   }
+}
+
+/**
+ * Marks every cached score read stale after a write to an answer.
+ *
+ * The dashboard's aggregates and its progress counts are both derived from
+ * answers, and they sit under the default stale time, so without this a user
+ * who saves and returns within the minute reads their old score out of cache.
+ * The questionnaire's own score list is derived from the same write.
+ *
+ * The whole `scores` prefix goes rather than the keys for one data call: a
+ * write carries the system and call it touched, but `diff` and the
+ * per-system aggregate are keyed on neither, and a stale row in any of them
+ * is the bug this exists to prevent. These lists are small and the refetch
+ * only happens for the ones on screen.
+ *
+ * @returns A callback to run after a score write succeeds.
+ */
+export function useInvalidateScores(): () => void {
+  const queryClient = useQueryClient()
+  return useCallback(() => {
+    void queryClient.invalidateQueries({ queryKey: queryKeys.scores.all })
+  }, [queryClient])
 }

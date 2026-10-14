@@ -26,6 +26,7 @@ import {
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
+import { useInvalidateScores } from '@/utils/scores'
 import { apiPaths } from '@/api/keys'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import {
@@ -144,6 +145,10 @@ export default function QuestionnarePage() {
     opdivs,
     opdivsLoaded,
   } = useContextProp()
+  // The dashboard reads scores through the cache now, so a write here has to
+  // say so or a save followed by a return to the dashboard inside the stale
+  // window shows the old number.
+  const invalidateScores = useInvalidateScores()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
   const isReadOnly =
@@ -714,6 +719,7 @@ export default function QuestionnarePage() {
         return { ...prev, [entry[0]]: { ...entry[1], status: 'done' } }
       })
       fetchQuestionScores(system, setQuestionScores)
+      invalidateScores()
       return true
     } catch (error) {
       if (isAuthHandled(error)) return false
@@ -857,6 +863,7 @@ export default function QuestionnarePage() {
           : current
       )
       fetchQuestionScores(system, setQuestionScores)
+      invalidateScores()
     } catch (error) {
       if (isAuthHandled(error)) return
       console.error('Error saving score:', error)
