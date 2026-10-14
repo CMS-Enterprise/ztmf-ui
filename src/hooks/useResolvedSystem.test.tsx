@@ -32,9 +32,11 @@ const DEATH_STAR = {
 } as FismaSystemType
 
 let replaceList: (list: FismaSystemType[]) => void
+let retry: (() => void) | undefined
 
 function Probe({ id }: { id: number }) {
   const r = useResolvedSystem(id)
+  retry = r.status === 'error' ? r.retry : undefined
   return (
     <div data-testid="status">
       {r.status}
@@ -136,3 +138,33 @@ test('an invalid id is not-found without a request', () => {
   expect(status()).toBe('not-found')
   expect(get).not.toHaveBeenCalled()
 })
+
+test('a 403 reads as not-found, so the page never reveals the system exists', async () => {
+  get.mockRejectedValue(
+    Object.assign(new Error('403'), { response: { status: 403 } })
+  )
+  render(<Harness id={1001} initial={[]} loaded />)
+  await waitFor(() => expect(status()).toBe('not-found'))
+})
+
+test.each([
+  [
+    'a 5xx',
+    () => Object.assign(new Error('500'), { response: { status: 500 } }),
+  ],
+  ['a network failure', () => new Error('Network Error')],
+])(
+  '%s is an error, not not-found, and retry runs the lookup again',
+  async (_label, makeError) => {
+    get.mockRejectedValueOnce(makeError())
+    render(<Harness id={1001} initial={[]} loaded />)
+    await waitFor(() => expect(status()).toBe('error'))
+
+    get.mockResolvedValueOnce({ data: { data: DEATH_STAR } })
+    act(() => retry!())
+    await waitFor(() =>
+      expect(status()).toBe('found:Death Star Orbital Battle Station')
+    )
+    expect(get).toHaveBeenCalledTimes(2)
+  }
+)

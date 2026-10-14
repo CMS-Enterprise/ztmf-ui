@@ -193,7 +193,11 @@ it('shows not-found instead of spinning for a user with no accessible systems', 
   mockContext.fismaSystems = []
   mockGet.mockImplementation((url: string) =>
     url === '/fismasystems/1002'
-      ? Promise.reject(new Error('Request failed with status code 404'))
+      ? Promise.reject(
+          Object.assign(new Error('Request failed with status code 404'), {
+            response: { status: 404 },
+          })
+        )
       : Promise.resolve({ data: { data: [] } })
   )
   try {
@@ -212,6 +216,51 @@ it('shows not-found instead of spinning for a user with no accessible systems', 
       screen.getByText(/you may not have access to it/)
     ).toBeInTheDocument()
     expect(screen.getByText('Not found')).toBeInTheDocument()
+  } finally {
+    mockContext.fismaSystems = saved
+  }
+})
+
+it('shows a retryable error, not not-found, when the system lookup fails', async () => {
+  // A 5xx or a network drop says nothing about whether the system exists or is
+  // the caller's, so the page must not suggest a missing system or access.
+  const saved = mockContext.fismaSystems
+  mockContext.fismaSystems = []
+  let failNext = true
+  mockGet.mockImplementation((url: string) => {
+    if (url !== '/fismasystems/1002')
+      return Promise.resolve({ data: { data: [] } })
+    if (failNext) {
+      failNext = false
+      return Promise.reject(new Error('Network Error'))
+    }
+    return Promise.reject(
+      Object.assign(new Error('Request failed with status code 404'), {
+        response: { status: 404 },
+      })
+    )
+  })
+  try {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/systems/:fismasystemid/pillar-scores',
+          element: <PillarScoresPage />,
+        },
+      ],
+      { initialEntries: ['/systems/1002/pillar-scores'] }
+    )
+    render(<RouterProvider router={router} />)
+    expect(
+      await screen.findByText('Could not load this system')
+    ).toBeInTheDocument()
+    expect(screen.queryByText('System not found')).not.toBeInTheDocument()
+    expect(
+      screen.queryByText(/you may not have access/)
+    ).not.toBeInTheDocument()
+
+    await userEvent.click(screen.getByRole('button', { name: 'Try again' }))
+    expect(await screen.findByText('System not found')).toBeInTheDocument()
   } finally {
     mockContext.fismaSystems = saved
   }

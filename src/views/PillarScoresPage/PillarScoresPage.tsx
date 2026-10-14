@@ -1,9 +1,10 @@
 import { useEffect, useState } from 'react'
 import { Link as RouterLink, useParams } from 'react-router-dom'
-import { Box, Button, CircularProgress, Typography } from '@mui/material'
+import { Box, Button, CircularProgress } from '@mui/material'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import SystemLookupFailure from '@/components/SystemLookupFailure/SystemLookupFailure'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import PillarScoresContent from './PillarScoresContent'
 import axiosInstance from '@/axiosConfig'
@@ -106,19 +107,19 @@ export default function PillarScoresPage() {
     )
   }
 
-  // Same not-found state as the System Detail page.
+  // Same not-found and error states as the System Detail page.
   if (resolution.status === 'not-found') {
     return (
-      <Box sx={{ mt: 4 }}>
-        <BreadCrumbs segmentLabels={{ [fismasystemid ?? '']: 'Not found' }} />
-        <Typography variant="h5" color="error" sx={{ mt: 2 }}>
-          System not found
-        </Typography>
-        <Typography color="text.secondary" sx={{ mt: 1 }}>
-          Could not find a system with ID &ldquo;{fismasystemid}&rdquo;. It may
-          not exist, or you may not have access to it.
-        </Typography>
-      </Box>
+      <SystemLookupFailure status="not-found" systemIdParam={fismasystemid} />
+    )
+  }
+  if (resolution.status === 'error') {
+    return (
+      <SystemLookupFailure
+        status="error"
+        systemIdParam={fismasystemid}
+        onRetry={resolution.retry}
+      />
     )
   }
 

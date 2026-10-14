@@ -25,6 +25,7 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import SystemLookupFailure from '@/components/SystemLookupFailure/SystemLookupFailure'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import { StatusChip, CodeBadge } from '@/components/ui/StatusChip'
@@ -573,19 +574,18 @@ export default function SystemDetailPage() {
     )
   }
 
-  // System not found
+  if (resolution.status === 'error') {
+    return (
+      <SystemLookupFailure
+        status="error"
+        systemIdParam={fismasystemid}
+        onRetry={resolution.retry}
+      />
+    )
+  }
   if (!system) {
     return (
-      <Box sx={{ mt: 4 }}>
-        <BreadCrumbs segmentLabels={{ [fismasystemid!]: 'Not found' }} />
-        <Typography variant="h5" color="error" sx={{ mt: 2 }}>
-          System not found
-        </Typography>
-        <Typography color="text.secondary" sx={{ mt: 1 }}>
-          Could not find a system with ID &ldquo;{fismasystemid}&rdquo;. It may
-          not exist, or you may not have access to it.
-        </Typography>
-      </Box>
+      <SystemLookupFailure status="not-found" systemIdParam={fismasystemid} />
     )
   }
 

@@ -9,6 +9,11 @@ export type SystemResolution =
   | { status: 'resolving'; system: undefined }
   | { status: 'found'; system: FismaSystemType }
   | { status: 'not-found'; system: undefined }
+  | { status: 'error'; system: undefined; retry: () => void }
+
+// The API answers 403 for a system outside the caller's scope and 404 for one
+// that does not exist. Both read as not-found so the page never reveals which.
+const MISSING_STATUSES = new Set([403, 404])
 
 /**
  * Resolves a system from its id for a page addressed by URL (System Detail,
@@ -26,6 +31,10 @@ export type SystemResolution =
  *   if (resolution.status === 'not-found') return <NotFound />
  *   const { system } = resolution
  *
+ * A lookup that fails for any other reason (a 5xx, a network drop, a timeout)
+ * resolves to `error` with a `retry`, not to not-found: the system may well
+ * exist and be the caller's, so the page should not suggest otherwise.
+ *
  * @param {number} systemId - The system id from the URL. A non-positive or
  *   non-numeric id resolves to not-found without a request.
  * @returns {SystemResolution} The lookup status and, once found, the system.
@@ -42,13 +51,17 @@ export function useResolvedSystem(systemId: number): SystemResolution {
   const [settled, setSettled] = useState<{
     id: number
     list: FismaSystemType[]
+    failed: boolean
   } | null>(null)
+  // Bumped by retry() to run the lookup again for the same id and list.
+  const [attempt, setAttempt] = useState(0)
 
   useEffect(() => {
     if (listed || !fismaSystemsLoaded || !validId) return
     const listAtStart = fismaSystems
     const controller = new AbortController()
     const load = async () => {
+      let failed = false
       try {
         const res = await axiosInstance.get(
           apiPaths.fismaSystems.detail(systemId),
@@ -62,14 +75,15 @@ export function useResolvedSystem(systemId: number): SystemResolution {
               : [...prev, data]
           )
         }
-      } catch {
-        // A cancelled request is not an answer. Anything else, including a
-        // 5xx or network failure, resolves to not-found: the page cannot tell
-        // "missing" from "unreachable", so its copy covers both.
+      } catch (err) {
+        // A cancelled request is not an answer.
         if (controller.signal.aborted) return
+        const status = (err as { response?: { status?: number } })?.response
+          ?.status
+        failed = !(status !== undefined && MISSING_STATUSES.has(status))
       } finally {
         if (!controller.signal.aborted) {
-          setSettled({ id: systemId, list: listAtStart })
+          setSettled({ id: systemId, list: listAtStart, failed })
         }
       }
     }
@@ -82,6 +96,7 @@ export function useResolvedSystem(systemId: number): SystemResolution {
     validId,
     systemId,
     setFismaSystems,
+    attempt,
   ])
 
   if (listed) return { status: 'found', system: listed }
@@ -91,6 +106,16 @@ export function useResolvedSystem(systemId: number): SystemResolution {
     settled?.id === systemId &&
     settled.list === fismaSystems
   ) {
+    if (settled.failed) {
+      return {
+        status: 'error',
+        system: undefined,
+        retry: () => {
+          setSettled(null)
+          setAttempt((n) => n + 1)
+        },
+      }
+    }
     return { status: 'not-found', system: undefined }
   }
   return { status: 'resolving', system: undefined }
