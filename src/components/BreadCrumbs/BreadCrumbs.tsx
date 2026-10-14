@@ -22,6 +22,10 @@ interface LinkRouterProps extends LinkProps {
 function LinkRouter(props: LinkRouterProps) {
   return <Link {...props} component={RouterLink as React.ElementType} />
 }
+// Both override maps are keyed by the decoded segment, and each key applies to
+// the first segment it matches only. Ids repeat across segments (system 5 with
+// data call 5 in /questionnaire/system/5/5/...), and every caller overrides the
+// earliest one, so a later repeat keeps its own crumb.
 interface BreadCrumbsProps {
   /** Display text for a path segment, keyed by the decoded segment. */
   segmentLabels?: Record<string, string>
@@ -78,30 +82,32 @@ export default function BreadCrumbs({
           segment === RouteIds.QUESTIONNAIRE_SYSTEM
         )
     )
-  const path = crumbs.map((rawValue, i) => {
-    const value = (() => {
-      try {
-        return decodeURIComponent(rawValue)
-      } catch {
-        return rawValue
-      }
-    })()
-    const displayText =
-      segmentLabels && segmentLabels[value]
-        ? segmentLabels[value]
-        : ROUTE_SEGMENT_LABELS[value] ??
-          (() => {
-            const text = value.replace(/[_-]/g, ' ')
-            return /^[A-Z]/.test(text) ? text : capitalize(text)
-          })()
+  const values = crumbs.map((rawValue) => {
+    try {
+      return decodeURIComponent(rawValue)
+    } catch {
+      return rawValue
+    }
+  })
+  const path = values.map((value, i) => {
+    const isFirstMatch = values.indexOf(value) === i
+    const label = isFirstMatch ? segmentLabels?.[value] : undefined
+    const displayText = label
+      ? label
+      : ROUTE_SEGMENT_LABELS[value] ??
+        (() => {
+          const text = value.replace(/[_-]/g, ' ')
+          return /^[A-Z]/.test(text) ? text : capitalize(text)
+        })()
     const isLast = i === crumbs.length - 1
-    const to = !isLast ? segmentLinks?.[value] : undefined
+    const to = !isLast && isFirstMatch ? segmentLinks?.[value] : undefined
+    const key = `${i}-${value}`
     if (to) {
       return (
         <LinkRouter
           underline="hover"
           to={to}
-          key={value}
+          key={key}
           sx={{
             fontSize: 12,
             fontWeight: 500,
@@ -123,7 +129,7 @@ export default function BreadCrumbs({
           fontWeight: 500,
           color: colors.neutral500,
         }}
-        key={value}
+        key={key}
       >
         {displayText}
       </Typography>

@@ -221,6 +221,19 @@ it('opens the deep-linked :pillar/:function instead of the first', async () => {
   )
 })
 
+it('links the system crumb to System Detail', async () => {
+  renderAt(
+    '/questionnaire/system/1002/FY2025_Death_Star_Assessment/networks/imperial-network-security'
+  )
+
+  const crumb = await screen.findByRole('link', { name: 'SSD-EX' })
+  expect(crumb).toHaveAttribute('href', '/systems/1002')
+  // The data call crumb names no page of its own, so it stays plain text.
+  expect(
+    screen.queryByRole('link', { name: 'FY2025 Death Star Assessment' })
+  ).not.toBeInTheDocument()
+})
+
 it('falls back to the first function when the URL omits :pillar/:function', async () => {
   renderAt('/questionnaire/system/1002')
 

@@ -114,4 +114,22 @@ describe('BreadCrumbs', () => {
     renderAt('/questionnaire/acumen%20gss', { 'acumen gss': 'ACUMEN-GSS' })
     expect(screen.getByText('ACUMEN-GSS')).toBeInTheDocument()
   })
+
+  it('applies an override to the first matching segment only', () => {
+    // System 5 answering data call 5: the id repeats, and only the system
+    // segment is the caller's to relabel and link.
+    renderAt(
+      '/questionnaire/system/5/5/identity/authentication',
+      { '5': 'ACME' },
+      { '5': '/systems/5' }
+    )
+    const links = screen.getAllByRole('link')
+    expect(links.map((a) => a.textContent)).toEqual(['Dashboard', 'ACME'])
+    expect(screen.getByRole('link', { name: 'ACME' })).toHaveAttribute(
+      'href',
+      '/systems/5'
+    )
+    expect(screen.getAllByText('ACME')).toHaveLength(1)
+    expect(screen.getByText('5')).toBeInTheDocument()
+  })
 })
