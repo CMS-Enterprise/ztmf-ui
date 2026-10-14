@@ -1,10 +1,9 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import QuestionnairePage from './QuestionnairePage'
 import type { userData } from '@/types'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 
 // ztmf-misc#289 / ztmf#545: the reduced-pillar rule now lives in the API, which
 // applies it to the cycle named by the `datacallid` param. The page's remaining
@@ -187,14 +186,7 @@ function renderPage(fismasystemid = SAAS_SYSTEM.fismasystemid) {
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
     { initialEntries: [`/questionnaire/system/${fismasystemid}`] }
   )
-  // QueryClientProvider, not renderWithProviders: that helper hardcodes
-  // MemoryRouter, and these suites deliberately use a data router. A fresh
-  // client per render keeps cached history from leaking between tests.
-  return render(
-    <QueryClientProvider client={createTestQueryClient()}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  )
+  return renderWithQueryClient(<RouterProvider router={router} />)
 }
 
 it('renders the reduced set the API serves for the current cycle', async () => {

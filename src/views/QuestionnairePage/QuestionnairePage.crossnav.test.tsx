@@ -1,11 +1,10 @@
-import { act, render, screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import QuestionnairePage from './QuestionnairePage'
 import type { userData } from '@/types'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 
 // Cross-navigation coverage for ui#610: the questionnaire header needs a link
 // back to System Info and a Pillar Scores button, alongside the existing
@@ -152,14 +151,7 @@ function renderPage() {
     ],
     { initialEntries: ['/questionnaire/system/1002'] }
   )
-  // QueryClientProvider, not renderWithProviders: that helper hardcodes
-  // MemoryRouter, and these suites deliberately use a data router. A fresh
-  // client per render keeps cached history from leaking between tests.
-  const { unmount } = render(
-    <QueryClientProvider client={createTestQueryClient()}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  )
+  const { unmount } = renderWithQueryClient(<RouterProvider router={router} />)
   return { router, unmount }
 }
 

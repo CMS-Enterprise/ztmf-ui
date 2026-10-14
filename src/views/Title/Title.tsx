@@ -15,7 +15,7 @@ import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
-import { useState, useEffect, useCallback, useMemo } from 'react'
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { groupDatacallsByYear } from '@/utils/datacallGrouping'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
@@ -94,15 +94,31 @@ export default function Title() {
     error: opdivsError,
   } = useOpDivs(true, { enabled: authenticated })
   const [fismaSystemsLoaded, setFismaSystemsLoaded] = useState(false)
+  const [fismaSystemsError, setFismaSystemsError] = useState(false)
+  // Which list the latest settled systems request asked for; superseded
+  // requests never write.
+  const [
+    fismaSystemsFetchedDecommissioned,
+    setFismaSystemsFetchedDecommissioned,
+  ] = useState(false)
+  const systemsRequestRef = useRef(0)
+  const [datacallsError, setDatacallsError] = useState(false)
+  const [datacallsLoaded, setDatacallsLoaded] = useState(false)
 
   const fetchFismaSystems = useCallback(
     async (decommissioned: boolean = false) => {
+      const request = ++systemsRequestRef.current
+      const isLatest = () => request === systemsRequestRef.current
       try {
         const res = await axiosInstance.get(
           apiPaths.fismaSystems.list(decommissioned)
         )
+        if (!isLatest()) return
         setFismaSystems(res.data.data)
+        setFismaSystemsError(false)
       } catch (error) {
+        if (!isLatest()) return
+        setFismaSystemsError(true)
         console.error(
           'Fetch systems error:',
           (error as { response?: { status?: number; data?: unknown } }).response
@@ -111,7 +127,10 @@ export default function Title() {
             ?.data
         )
       } finally {
-        setFismaSystemsLoaded(true)
+        if (isLatest()) {
+          setFismaSystemsLoaded(true)
+          setFismaSystemsFetchedDecommissioned(decommissioned)
+        }
       }
     },
     []
@@ -158,23 +177,32 @@ export default function Title() {
           res.data.data as datacall[]
         )
         setDatacalls(sorted)
+        setDatacallsError(false)
         if (sorted.length > 0) {
           setLatestDataCallId(sorted[0].datacallid)
           setLatestDatacall(sorted[0].datacall)
           setLatestDeadline(sorted[0].deadline)
-          // Default to the latest year with data, all of its calls toggled on -
-          // initial load only; a post-create refetch keeps the user's selection.
-          if (resetSelection) {
-            const [firstGroup] = groupDatacallsByYear(sorted)
-            if (firstGroup) {
+          // Default to the latest year with data, all of its calls toggled on.
+          // A post-create refetch keeps the user's selection, unless there was
+          // none because this is the first call.
+          const [firstGroup] = groupDatacallsByYear(sorted)
+          if (firstGroup) {
+            const ids = firstGroup.calls.map((c) => c.datacallid)
+            if (resetSelection) {
               setActiveYear(firstGroup.year)
-              setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+              setActiveDatacallIds(ids)
+            } else {
+              setActiveYear((prev) => prev ?? firstGroup.year)
+              setActiveDatacallIds((prev) => (prev.length > 0 ? prev : ids))
             }
           }
         }
       } catch (error) {
         if (signal?.aborted) return
+        setDatacallsError(true)
         console.error('Fetch latest datacall error:', error)
+      } finally {
+        if (!signal?.aborted) setDatacallsLoaded(true)
       }
     },
     []
@@ -357,11 +385,16 @@ export default function Title() {
     },
     {
       label: 'OpDivs',
-      to: Routes.ADMIN_OPDIVS,
-      active: location.pathname.startsWith('/admin/opdivs'),
-      // OWNER manages OpDivs fully; an HHS admin reaches the page only to
-      // flip the per-OpDiv System Delegate toggle.
-      show: isUnscopedWriteAdmin(userInfo),
+      to: Routes.OPDIVS,
+      // Exact-or-slash rather than a bare startsWith: /opdivs now has both a
+      // dashboard (/opdivs/:id) and the management grid (/opdivs/manage)
+      // under it, and the tab must light up for all of them.
+      active:
+        location.pathname === Routes.OPDIVS ||
+        location.pathname.startsWith(`${Routes.OPDIVS}/`),
+      // Every admin tier lands on the per-OpDiv dashboard. The OWNER/HHS-only
+      // management grid is a header action inside the tab, not a nav item.
+      show: hasAdminRead,
     },
     {
       label: 'Events',
@@ -694,11 +727,16 @@ export default function Title() {
               setShowDecommissioned,
               fetchFismaSystems,
               fismaSystemsLoaded,
+              fismaSystemsError,
+              fismaSystemsFetchedDecommissioned,
+              datacallsError,
+              datacallsLoaded,
               dashboardSearch,
               setDashboardSearch,
               datacenterEnvironments,
               opdivs,
               opdivsLoaded,
+              opdivsError: opdivsError != null,
             }}
           />
         </Box>

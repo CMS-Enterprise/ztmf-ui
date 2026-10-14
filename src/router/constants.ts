@@ -15,6 +15,11 @@ export enum RouteIds {
   SIGNIN = 'signin',
   SYSTEM_DETAIL = 'system-detail',
   PILLAR_SCORES = 'pillar-scores',
+  OPDIVS = 'opdivs',
+  OPDIVS_MANAGE = 'opdivs-manage',
+  OPDIV_DASHBOARD = 'opdiv-dashboard',
+  // Retained only as the legacy redirect source. The management grid now
+  // lives under the OpDivs tab at OPDIVS_MANAGE.
   ADMIN_OPDIVS = 'admin-opdivs',
   ADMIN_EVENTS = 'admin-events',
 }
@@ -40,6 +45,17 @@ export enum Routes {
   SIGNIN = `/${RouteIds.SIGNIN}`,
   SYSTEM_DETAIL = '/systems/:fismasystemid',
   PILLAR_SCORES = '/systems/:fismasystemid/pillar-scores',
+  OPDIVS = `/${RouteIds.OPDIVS}`,
+  OPDIVS_MANAGE = `/${RouteIds.OPDIVS}/manage`,
+  OPDIV_DASHBOARD = `/${RouteIds.OPDIVS}/:opdivId`,
   ADMIN_OPDIVS = '/admin/opdivs',
   ADMIN_EVENTS = '/admin/events',
 }
+
+/**
+ * Path to one OpDiv's dashboard, for links and redirects.
+ * @param {number | string} opdivId - An OpDiv id, or 'all' for the aggregate.
+ * @returns {string} The dashboard path.
+ */
+export const opdivDashboardPath = (opdivId: number | string): string =>
+  `/${RouteIds.OPDIVS}/${opdivId}`

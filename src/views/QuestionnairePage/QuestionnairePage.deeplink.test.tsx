@@ -1,11 +1,10 @@
-import { render, screen, waitFor, act } from '@testing-library/react'
+import { screen, waitFor, act } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import QuestionnairePage from './QuestionnairePage'
 import type { userData } from '@/types'
 import { apiPaths } from '@/api/keys'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 
 // Deep-link integration test for #500 / #732: a questionnaire URL reached by
 // paste / refresh / bookmark (no router location.state) must resolve the
@@ -151,14 +150,7 @@ function renderAt(entry: string | { pathname: string; state: unknown }) {
     ],
     { initialEntries: [entry] }
   )
-  // QueryClientProvider, not renderWithProviders: that helper hardcodes
-  // MemoryRouter, and these suites deliberately use a data router. A fresh
-  // client per render keeps cached history from leaking between tests.
-  render(
-    <QueryClientProvider client={createTestQueryClient()}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  )
+  renderWithQueryClient(<RouterProvider router={router} />)
   return router
 }
 

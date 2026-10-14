@@ -14,6 +14,8 @@ export type TrendLineProps = {
   /** Human-readable previous-period name (e.g. "FY2022"); included in the
    *  trend copy when present. */
   previousDatacallName?: string
+  /** Size of a paired comparison; names both paired averages so the delta subtracts. */
+  pairedCount?: number
 }
 
 /**
@@ -28,6 +30,7 @@ export default function TrendLine({
   current,
   previous,
   previousDatacallName,
+  pairedCount,
 }: TrendLineProps) {
   if (typeof previous !== 'number') {
     return (
@@ -63,7 +66,11 @@ export default function TrendLine({
       <span>
         {flat ? 'No change' : `${up ? '+' : ''}${delta.toFixed(2)}`}
         {previousDatacallName ? ` vs ${previousDatacallName}` : ''}
-        {` (was ${previous.toFixed(2)})`}
+        {pairedCount === undefined
+          ? ` (was ${previous.toFixed(2)})`
+          : ` (paired avg ${current.toFixed(2)}, was ${previous.toFixed(2)}, ${pairedCount} ${
+              pairedCount === 1 ? 'system' : 'systems'
+            } in both)`}
       </span>
     </Box>
   )

@@ -1,6 +1,5 @@
 import {
   fireEvent,
-  render,
   screen,
   waitFor,
   act,
@@ -10,7 +9,8 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import { COMPLETE_HINT_MSG, NEXT_HINT_MSG } from '@/constants'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import type { userData } from '@/types'
 
 // Rendered-component coverage for three QuestionnairePage effect paths from
@@ -117,8 +117,6 @@ jest.mock('../Title/Context', () => ({
 
 // Import after mocks so the page picks them up.
 import QuestionnairePage from './QuestionnairePage'
-import { QueryClientProvider } from '@tanstack/react-query'
-import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 
 const QUESTIONS = [
   {
@@ -212,15 +210,8 @@ function renderAt(path: string) {
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
     { initialEntries: [path] }
   )
-  // QueryClientProvider, not renderWithProviders: that helper hardcodes
-  // MemoryRouter, and these suites deliberately use a data router. A fresh
-  // client per render keeps cached history from leaking between tests.
-  const provider = (
-    <QueryClientProvider client={createTestQueryClient()}>
-      <RouterProvider router={router} />
-    </QueryClientProvider>
-  )
-  const utils = render(provider)
+  const provider = <RouterProvider router={router} />
+  const utils = renderWithQueryClient(provider)
   return { ...utils, rerender: () => utils.rerender(provider) }
 }
 
@@ -1409,6 +1400,22 @@ describe('carried-forward confirmation', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('1 of 2')).toBeInTheDocument()
     expect(screen.getByText('1 of 1 answered')).toBeInTheDocument()
+  })
+
+  it('marks cached score queries stale after a confirm, so dashboards refetch', async () => {
+    installScoreMocks([carried7006()])
+    const { queryClient } = renderAt(DEEP_LINK)
+    const aggregateKey = queryKeys.scores.aggregateByDatacall(1)
+    queryClient.setQueryData(aggregateKey, [])
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    )
+    await waitFor(() =>
+      expect(queryClient.getQueryState(aggregateKey)?.isInvalidated).toBe(true)
+    )
   })
 
   it('excludes score rows outside the current questionnaire from the top progress count', async () => {
