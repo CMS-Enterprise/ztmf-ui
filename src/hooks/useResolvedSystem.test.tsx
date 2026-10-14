@@ -147,6 +147,37 @@ test('a 403 reads as not-found, so the page never reveals the system exists', as
   await waitFor(() => expect(status()).toBe('not-found'))
 })
 
+test('the lookup opts out of the interceptor permission snackbar', async () => {
+  // Without this the toast says the opposite of the page: a scoped-out id
+  // raises it and a genuinely missing one does not, which is exactly the
+  // distinction not-found exists to hide.
+  get.mockRejectedValue(
+    Object.assign(new Error('403'), { response: { status: 403 } })
+  )
+  render(<Harness id={1001} initial={[]} loaded />)
+  await waitFor(() => expect(status()).toBe('not-found'))
+  expect(get).toHaveBeenCalledWith(
+    expect.any(String),
+    expect.objectContaining({ skipPermissionNotification: true })
+  )
+})
+
+test('a 401 keeps resolving rather than flashing the failure screen', async () => {
+  // The interceptor is already navigating to sign-in. Settling here would
+  // show "Could not load this system" and its Try again button for the
+  // moment before the redirect lands.
+  get.mockRejectedValue(
+    Object.assign(new Error('401'), {
+      response: { status: 401 },
+      __authHandled: true,
+    })
+  )
+  render(<Harness id={1001} initial={[]} loaded />)
+  await waitFor(() => expect(get).toHaveBeenCalled())
+  await new Promise((r) => setTimeout(r, 50))
+  expect(status()).toBe('resolving')
+})
+
 test.each([
   [
     'a 5xx',

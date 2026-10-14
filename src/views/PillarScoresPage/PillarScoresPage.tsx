@@ -33,6 +33,10 @@ export default function PillarScoresPage() {
     useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const systemId = Number(fismasystemid)
+  // BreadCrumbs matches the raw URL segment, so the override has to be keyed
+  // on it rather than on the parsed number: /systems/05 renders system 5 but
+  // its segment reads "05".
+  const systemIdParam = fismasystemid ?? ''
   // Resolves from the shared list, or fetches by id when the system is not in
   // it (decommissioned, or a deep link), so a missing system reaches a
   // not-found state instead of a placeholder or an endless spinner.
@@ -43,8 +47,12 @@ export default function PillarScoresPage() {
   const [loading, setLoading] = useState<boolean>(true)
   const [compareOpen, setCompareOpen] = useState<boolean>(false)
 
+  // Gated on the resolution, not just the id: a system outside the caller's
+  // scope answers 403 here too, and the snackbar that raises would contradict
+  // the not-found page underneath it.
+  const resolved = resolution.status === 'found'
   useEffect(() => {
-    if (!systemId) return
+    if (!systemId || !resolved) return
     const controller = new AbortController()
     async function fetchScores() {
       try {
@@ -65,7 +73,7 @@ export default function PillarScoresPage() {
     return () => {
       controller.abort()
     }
-  }, [systemId])
+  }, [systemId, resolved])
 
   const systemName = system?.fismaname ?? ''
   const systemAcronym = system?.fismaacronym ?? ''
@@ -130,8 +138,8 @@ export default function PillarScoresPage() {
         subtitle={subtitle}
         breadcrumbs={
           <BreadCrumbs
-            segmentLabels={{ [systemId]: systemName }}
-            segmentLinks={{ [systemId]: `/systems/${systemId}` }}
+            segmentLabels={{ [systemIdParam]: systemName }}
+            segmentLinks={{ [systemIdParam]: `/systems/${systemId}` }}
           />
         }
         actions={

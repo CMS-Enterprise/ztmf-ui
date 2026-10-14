@@ -266,6 +266,64 @@ it('shows a retryable error, not not-found, when the system lookup fails', async
   }
 })
 
+it('does not request scores for a system it could not resolve', async () => {
+  // /scores/aggregate answers 403 for an out-of-scope system too, and that
+  // snackbar would land on top of the not-found page.
+  const saved = mockContext.fismaSystems
+  mockContext.fismaSystems = []
+  mockGet.mockImplementation((url: string) =>
+    url === '/fismasystems/1002'
+      ? Promise.reject(
+          Object.assign(new Error('Request failed with status code 403'), {
+            response: { status: 403 },
+          })
+        )
+      : Promise.resolve({ data: { data: [] } })
+  )
+  try {
+    const router = createMemoryRouter(
+      [
+        {
+          path: '/systems/:fismasystemid/pillar-scores',
+          element: <PillarScoresPage />,
+        },
+      ],
+      { initialEntries: ['/systems/1002/pillar-scores'] }
+    )
+    render(<RouterProvider router={router} />)
+    expect(await screen.findByText('System not found')).toBeInTheDocument()
+    expect(
+      mockGet.mock.calls.filter(([url]: [string]) =>
+        url.startsWith('/scores/aggregate')
+      )
+    ).toHaveLength(0)
+  } finally {
+    mockContext.fismaSystems = saved
+  }
+})
+
+it('labels the system crumb from the raw URL segment, not the parsed id', async () => {
+  // BreadCrumbs matches the segment as written, so keying the override on
+  // Number(fismasystemid) left a padded id rendering as an unlinked "01002".
+  const router = createMemoryRouter(
+    [
+      {
+        path: '/systems/:fismasystemid/pillar-scores',
+        element: <PillarScoresPage />,
+      },
+      { path: '/systems/:fismasystemid', element: <div>system info</div> },
+    ],
+    { initialEntries: ['/systems/01002/pillar-scores'] }
+  )
+  render(<RouterProvider router={router} />)
+
+  const crumb = await screen.findByRole('link', {
+    name: 'Super Star Destroyer Executor Command Systems',
+  })
+  expect(crumb).toHaveAttribute('href', '/systems/1002')
+  expect(screen.queryByText('01002')).not.toBeInTheDocument()
+})
+
 it("links the system crumb back to the system's detail page", async () => {
   const router = createMemoryRouter(
     [

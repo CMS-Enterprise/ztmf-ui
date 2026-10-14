@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { useContextProp } from '@/views/Title/Context'
+import { isAuthHandled } from '@/utils/notify'
 import type { FismaSystemType } from '@/types'
 
 /** Where a by-id system lookup stands. */
@@ -13,6 +14,9 @@ export type SystemResolution =
 
 // The API answers 403 for a system outside the caller's scope and 404 for one
 // that does not exist. Both read as not-found so the page never reveals which.
+// The request also opts out of the interceptor's 403 snackbar, or the toast
+// would reveal what the page is careful not to: an id that exists raises it
+// and a missing one does not.
 const MISSING_STATUSES = new Set([403, 404])
 
 /**
@@ -60,12 +64,16 @@ export function useResolvedSystem(systemId: number): SystemResolution {
     if (listed || !fismaSystemsLoaded || !validId) return
     const listAtStart = fismaSystems
     const controller = new AbortController()
+    const settle = (failed: boolean) => {
+      if (!controller.signal.aborted) {
+        setSettled({ id: systemId, list: listAtStart, failed })
+      }
+    }
     const load = async () => {
-      let failed = false
       try {
         const res = await axiosInstance.get(
           apiPaths.fismaSystems.detail(systemId),
-          { signal: controller.signal }
+          { signal: controller.signal, skipPermissionNotification: true }
         )
         const data: FismaSystemType | undefined = res.data?.data
         if (data) {
@@ -75,16 +83,21 @@ export function useResolvedSystem(systemId: number): SystemResolution {
               : [...prev, data]
           )
         }
+        settle(false)
       } catch (err) {
         // A cancelled request is not an answer.
         if (controller.signal.aborted) return
         const status = (err as { response?: { status?: number } })?.response
           ?.status
-        failed = !(status !== undefined && MISSING_STATUSES.has(status))
-      } finally {
-        if (!controller.signal.aborted) {
-          setSettled({ id: systemId, list: listAtStart, failed })
+        if (status !== undefined && MISSING_STATUSES.has(status)) {
+          settle(false)
+          return
         }
+        // A 401 is already navigating to sign-in. Settling would put the
+        // failure screen and its Try again button on screen for the moment
+        // before the redirect lands.
+        if (isAuthHandled(err)) return
+        settle(true)
       }
     }
     void load()
