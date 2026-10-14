@@ -121,7 +121,7 @@ describe('the summary band tiles', () => {
     async (label) => {
       const user = userEvent.setup()
       renderWithProviders(<Home />)
-      expect(await screen.findByText('Your systems at a glance')).toBeVisible()
+      expect(await screen.findByText('At a glance')).toBeVisible()
       expect(tableProps.notUpdatedOnly).toBe(false)
 
       await user.click(

@@ -297,7 +297,7 @@ export default function SummaryKpiRow({
           label="Systems"
           value={summary.systemCount.toLocaleString('en-US')}
           hint={`${completion.systemsInCall.toLocaleString('en-US')} in this call`}
-          info={`Active systems attributed to ${scopeNoun}. Decommissioned systems are excluded from every figure here, whatever the Show decommissioned toggle is set to elsewhere in the app.`}
+          info={`Active systems in ${scopeNoun}. Decommissioned systems are excluded from every figure here, whatever the Show decommissioned toggle is set to elsewhere in the app.`}
         />
         <KpiTile
           label="At Advanced or better"
@@ -314,7 +314,7 @@ export default function SummaryKpiRow({
           valueColor={
             summary.optimalAdvancedCount > 0 ? colors.up : colors.neutral500
           }
-          info={`Scored systems holding Optimal or Advanced. Measured over the systems with a score, not over every system - a system that was never enrolled has no tier to hold, and counting it as a miss would understate ${scopeNoun.replace(/^this /, 'the ')}.`}
+          info={`Scored systems holding Optimal or Advanced. Measured over the systems with a score, not over every system - a system that was never enrolled has no tier to hold, and counting it as a miss would understate the share.`}
         />
       </Box>
     </Box>

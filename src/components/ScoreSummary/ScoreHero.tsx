@@ -42,6 +42,8 @@ export type ScoreHeroProps = {
    * an ISSO's scope is their assignments, which rarely covers an OpDiv.
    */
   scopeNoun?: string
+  /** Heading level for the eyebrow, h3 when nested under a section heading. */
+  headingLevel?: 'h2' | 'h3'
 }
 
 /**
@@ -57,6 +59,7 @@ export default function ScoreHero({
   delta,
   priorLabel,
   scopeNoun = 'this OpDiv',
+  headingLevel = 'h2',
 }: ScoreHeroProps) {
   // An OpDiv average is not a graded system, so there is no API tier for it.
   // This is the documented exception where deriving from the number is right.
@@ -70,10 +73,10 @@ export default function ScoreHero({
       sx={{ display: 'flex', flexDirection: 'column', gap: 0.5 }}
     >
       <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-        <Eyebrow component="h2" id={headingId}>
+        <Eyebrow component={headingLevel} id={headingId}>
           Overall ZT score
         </Eyebrow>
-        {/* describeChild, or the button's aria-label wins and the explanation is never announced. */}
+        {/* describeChild, so the explanation is announced as a description and the button keeps its aria-label as its name. */}
         <Tooltip title={<span>{HERO_INFO}</span>} describeChild>
           <IconButton
             size="small"

@@ -61,7 +61,7 @@ export default function HomePageContainer() {
   // OpDiv, an HHS admin's estate. Admins who want per-OpDiv depth go to the
   // OpDiv dashboard, which is built for it.
 
-  // Same gate FismaTable puts on its "Not updated only" switch (ui#639).
+  // Same gate FismaTable puts on its "Not updated only" switch.
   const latestDeadlinePassed = useMemo(() => {
     if (!latestDataCallId) return false
     const latest = datacalls.find((d) => d.datacallid === latestDataCallId)

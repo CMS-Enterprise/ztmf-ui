@@ -18,7 +18,11 @@ jest.mock('./useMySystemsData', () => ({
   },
 }))
 
-jest.mock('@/components/ScoreSummary/ScoreHero', () => () => null)
+const mockScoreHero = jest.fn((_props: Record<string, unknown>) => null)
+jest.mock(
+  '@/components/ScoreSummary/ScoreHero',
+  () => (props: Record<string, unknown>) => mockScoreHero(props)
+)
 
 import { screen, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
@@ -30,6 +34,7 @@ import { actionableBandData, emptyBandData } from './testFixtures'
 beforeEach(() => {
   window.localStorage.clear()
   historyArg = undefined
+  mockScoreHero.mockClear()
   mockData = emptyBandData()
   mockCtx = {
     showDecommissioned: false,
@@ -55,10 +60,21 @@ describe('decommissioned stand-down', () => {
   it('renders the band normally when the flag is off', () => {
     renderWithProviders(<MySystemsBand />)
 
-    expect(screen.getByText('Your systems at a glance')).toBeVisible()
+    expect(screen.getByText('At a glance')).toBeVisible()
     expect(
       screen.queryByText(/Showing decommissioned systems/i)
     ).not.toBeInTheDocument()
+  })
+
+  it('nests the score heading under the band heading', () => {
+    renderWithProviders(<MySystemsBand />)
+
+    expect(
+      screen.getByRole('heading', { level: 2, name: 'At a glance' })
+    ).toBeVisible()
+    expect(mockScoreHero).toHaveBeenCalledWith(
+      expect.objectContaining({ headingLevel: 'h3' })
+    )
   })
 })
 
@@ -104,7 +120,7 @@ describe('collapse preference', () => {
     expect(readCollapsed()).toBe(true)
     expect(() => writeCollapsed(false)).not.toThrow()
     renderWithProviders(<MySystemsBand />)
-    expect(screen.getByText('Your systems at a glance')).toBeVisible()
+    expect(screen.getByText('At a glance')).toBeVisible()
 
     getItem.mockRestore()
     setItem.mockRestore()
@@ -164,7 +180,7 @@ describe('detail', () => {
 
     expect(
       within(detailRegion()).getByText(
-        'No scored data calls yet for your systems.'
+        'No scored data calls yet for your scope.'
       )
     ).toBeVisible()
   })
@@ -229,6 +245,22 @@ describe('tiles that filter the systems table', () => {
     expect(screen.getByText('High impact at risk')).toBeInTheDocument()
     expect(
       screen.queryByRole('button', { name: /^High impact at risk/ })
+    ).not.toBeInTheDocument()
+  })
+})
+
+describe('load failure', () => {
+  it('withholds the figures rather than reading a failed load as all clear', () => {
+    mockData = { ...actionableBandData(), isError: true }
+    renderWithProviders(
+      <MySystemsBand tableJump={{ targetId: 'table', onJump: jest.fn() }} />
+    )
+
+    expect(screen.getByText(/summary could not be loaded/i)).toBeVisible()
+    expect(mockScoreHero).not.toHaveBeenCalled()
+    expect(screen.queryByText(/^Not started/)).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /detail/i })
     ).not.toBeInTheDocument()
   })
 })

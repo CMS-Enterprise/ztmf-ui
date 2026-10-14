@@ -35,6 +35,8 @@ export type ChartCardProps = {
   sx?: object
   /** Scroll anchor, for in-page jumps from a summary tile. */
   id?: string
+  /** Heading level for the eyebrow, h3 when nested under a section heading. */
+  headingLevel?: 'h2' | 'h3'
 }
 
 /**
@@ -50,6 +52,7 @@ export default function ChartCard({
   children,
   sx,
   id,
+  headingLevel = 'h2',
 }: ChartCardProps) {
   const headingId = useId()
   return (
@@ -69,7 +72,7 @@ export default function ChartCard({
       >
         <Box sx={{ minWidth: 0 }}>
           <Box sx={{ display: 'flex', alignItems: 'center', gap: 0.25 }}>
-            <Eyebrow component="h2" id={headingId}>
+            <Eyebrow component={headingLevel} id={headingId}>
               {eyebrow}
             </Eyebrow>
             {info && (

@@ -570,6 +570,28 @@ describe('progress', () => {
       notStarted: 1,
     })
   })
+
+  it('can leave closed-call rows out of not started, matching the table filter', () => {
+    const CLOSED_CALL = 90
+    const systems = [
+      makeSystem({ fismasystemid: 1, fismaacronym: 'FRESH' }),
+      makeSystem({ fismasystemid: 2, fismaacronym: 'PAST' }),
+    ]
+    const maps = emptyMaps()
+    maps.chosenCallMap = { 1: OPEN_CALL, 2: CLOSED_CALL }
+    maps.progressMap = {
+      1: makeProgress(1, { questionsexpected: 40, questionsanswered: 0 }),
+      2: makeProgress(2, { questionsexpected: 40, questionsanswered: 0 }),
+    }
+    const mixed = buildOpDivRows(systems, maps)
+
+    expect(summarizeCompletion(mixed, OPEN_CALL, false).notStarted).toBe(2)
+    expect(summarizeCompletion(mixed, OPEN_CALL, false, true)).toMatchObject({
+      systemsInCall: 2,
+      notStarted: 1,
+      awaitingConfirmation: 0,
+    })
+  })
 })
 
 describe('list caps', () => {

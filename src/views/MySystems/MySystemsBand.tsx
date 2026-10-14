@@ -33,8 +33,8 @@ import { colors } from '@/theme/tokens'
 import { readCollapsed, writeCollapsed } from './collapsePreference'
 import { useMySystemsData, type MySystemsData } from './useMySystemsData'
 
-/** How the figures describe their own scope. Never "this OpDiv" - see #747. */
-const SCOPE_NOUN = 'your systems'
+/** How the figures describe their own scope. Never "this OpDiv": the band covers whatever the caller can see. */
+const SCOPE_NOUN = 'your scope'
 
 /** Info-text suffix for the two tiles that filter the systems table. */
 const TABLE_JUMP_NOTE =
@@ -124,24 +124,36 @@ function BandContent({
           component="h2"
           sx={{ fontSize: 15, fontWeight: 600, color: colors.ink }}
         >
-          Your systems at a glance
+          At a glance
         </Typography>
-        <Button
-          size="small"
-          onClick={onToggle}
-          endIcon={collapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
-          aria-expanded={!collapsed}
-          aria-controls={detailId}
-          sx={{ fontSize: 13, textTransform: 'none' }}
-        >
-          {collapsed ? 'Show detail' : 'Hide detail'}
-        </Button>
+        {!data.isError && (
+          <Button
+            size="small"
+            onClick={onToggle}
+            endIcon={collapsed ? <ExpandMoreIcon /> : <ExpandLessIcon />}
+            aria-expanded={!collapsed}
+            aria-controls={detailId}
+            sx={{ fontSize: 13, textTransform: 'none' }}
+          >
+            {collapsed ? 'Show detail' : 'Hide detail'}
+          </Button>
+        )}
       </Box>
 
       {data.isPending ? (
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
-          <CircularProgress aria-label="Loading your systems summary" />
+          <CircularProgress aria-label="Loading the summary" />
         </Box>
+      ) : data.isError ? (
+        // A failed read leaves the counts short, and a short count reads as an
+        // all-clear, so the figures are withheld rather than shown.
+        <Card>
+          <Typography sx={{ fontSize: 13, color: colors.neutral700 }}>
+            The summary could not be loaded, so it is hidden rather than shown
+            incomplete. Scores and progress in the table below may also be
+            missing. Reload the page to try again.
+          </Typography>
+        </Card>
       ) : (
         <Box sx={{ display: 'flex', flexDirection: 'column', gap: 1.5 }}>
           <HeadlineRow data={data} tableJump={tableJump} />
@@ -164,6 +176,7 @@ function BandContent({
                 tiers={data.trend.tiers}
                 movers={data.trend.movers}
                 scopeNoun={SCOPE_NOUN}
+                headingLevel="h3"
               />
             )}
           </Box>
@@ -205,6 +218,7 @@ function HeadlineRow({
         delta={data.delta}
         priorLabel={data.priorCall?.datacall}
         scopeNoun={SCOPE_NOUN}
+        headingLevel="h3"
       />
       <SummaryKpiRow
         summary={data.summary}

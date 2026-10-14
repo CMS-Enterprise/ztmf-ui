@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react'
 import { parseDatacallName } from '@/utils/datacallGrouping'
 import { daysUntil } from '@/utils/dates'
+import { isOpenCallInView } from '@/views/FismaTable/dashboardFilters'
 import {
   useDatacallAggregates,
   useDatacallProgress,
@@ -130,6 +131,11 @@ export type OpDivDashboardOptions = {
   includePillars?: boolean
   /** Whether to fetch the full score history behind the trend, default true. */
   includeHistory?: boolean
+  /**
+   * While the open call is in view, count only its rows as not started, so the
+   * figure matches the systems table's "Not updated only" filter. Default false.
+   */
+  outstandingMatchesTable?: boolean
 }
 
 /**
@@ -147,6 +153,7 @@ export function useOpDivDashboardData(
     trendOpDivCode,
     includePillars = true,
     includeHistory = true,
+    outstandingMatchesTable = false,
   } = options
   const {
     fismaSystems,
@@ -356,9 +363,18 @@ export function useOpDivDashboardData(
   )
 
   const summary = useMemo(() => summarizeOpDiv(rows), [rows])
+  const outstandingOnCurrentCallOnly =
+    outstandingMatchesTable &&
+    isOpenCallInView(latestDataCallId, latestDeadlinePassed, activeDatacallIds)
   const completion = useMemo(
-    () => summarizeCompletion(rows, latestDataCallId, latestDeadlinePassed),
-    [rows, latestDataCallId, latestDeadlinePassed]
+    () =>
+      summarizeCompletion(
+        rows,
+        latestDataCallId,
+        latestDeadlinePassed,
+        outstandingOnCurrentCallOnly
+      ),
+    [rows, latestDataCallId, latestDeadlinePassed, outstandingOnCurrentCallOnly]
   )
   const targetGap = useMemo(() => summarizeTargetGap(rows), [rows])
   const risk = useMemo(() => summarizeRisk(rows), [rows])

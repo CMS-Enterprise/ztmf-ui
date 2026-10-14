@@ -1,9 +1,11 @@
 // Which score queries the band lets through: the history only once expanded,
 // and the pillar aggregates never, since the band renders no pillar figures.
 
+// Mutable so a test can seed systems; the factory reads it at call time.
+let mockSystems: unknown[] = []
 jest.mock('@/views/Title/Context', () => ({
   useContextProp: () => ({
-    fismaSystems: [],
+    fismaSystems: mockSystems,
     fismaSystemsLoaded: true,
     datacalls: [
       {
@@ -19,13 +21,14 @@ jest.mock('@/views/Title/Context', () => ({
         deadline: '2025-06-30',
       },
     ],
-    activeDatacallIds: [2],
+    activeDatacallIds: [2, 1],
     selectedDatacall: null,
     latestDataCallId: 2,
     opdivs: [],
   }),
 }))
 
+let mockProgressPerCall: unknown[][] = [[], []]
 const mockPillarAggregates = jest.fn()
 const mockScoreHistory = jest.fn()
 jest.mock('@/utils/scores', () => ({
@@ -36,7 +39,7 @@ jest.mock('@/utils/scores', () => ({
     isError: false,
   }),
   useDatacallProgress: () => ({
-    progressPerCall: [],
+    progressPerCall: mockProgressPerCall,
     isPending: false,
     isError: false,
   }),
@@ -53,12 +56,15 @@ jest.mock('@/utils/scores', () => ({
 import { renderHook } from '@testing-library/react'
 import { useMySystemsData } from './useMySystemsData'
 import { useOpDivDashboardData } from '@/views/OpDivDashboard/useOpDivDashboardData'
+import { makeProgress, makeSystem } from '@/views/OpDivDashboard/testFixtures'
 
 /** The `enabled` flag every call to a query hook was made with. */
 const enabledFlags = (mock: jest.Mock) =>
   mock.mock.calls.map((args) => (args.at(-1) as { enabled?: boolean }).enabled)
 
 beforeEach(() => {
+  mockSystems = []
+  mockProgressPerCall = [[], []]
   mockPillarAggregates.mockClear()
   mockScoreHistory.mockClear()
 })
@@ -83,4 +89,20 @@ test('the OpDiv dashboard still fetches both by default', () => {
 
   expect(enabledFlags(mockScoreHistory)).toEqual([true])
   expect(enabledFlags(mockPillarAggregates)).toEqual([true, true])
+})
+
+test('not started counts only what the table filter can show', () => {
+  // A system whose only progress is on the closed call, untouched there. The
+  // table's "Not updated only" filter never shows a closed-call row.
+  mockSystems = [makeSystem({ fismasystemid: 5 })]
+  mockProgressPerCall = [
+    [],
+    [makeProgress(5, { questionsexpected: 40, questionsanswered: 0 })],
+  ]
+
+  const band = renderHook(() => useMySystemsData(false)).result.current
+  const opdiv = renderHook(() => useOpDivDashboardData(null)).result.current
+
+  expect(band.completion.notStarted).toBe(0)
+  expect(opdiv.completion.notStarted).toBe(1)
 })
