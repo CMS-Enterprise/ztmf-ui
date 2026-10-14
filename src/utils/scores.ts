@@ -48,6 +48,10 @@ export async function fetchScoreProgress(
  * the prior call is also switched on, the two collapse into one request
  * instead of asking for the same aggregate twice.
  *
+ * A failed read stays silent. The dashboard renders a system with no scores
+ * the same way whether the read failed or the system is genuinely unscored,
+ * and the fan-out means one bad call would otherwise toast on every visit.
+ *
  * @param datacallId - The data call to aggregate.
  * @returns Options to pass to useQuery or useQueries.
  */
@@ -56,11 +60,13 @@ export function scoreAggregateQuery(datacallId: number) {
     queryKey: queryKeys.scores.aggregateByDatacall(datacallId),
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       fetchScoreAggregate(datacallId, signal),
+    meta: { suppressErrorNotification: true },
   }
 }
 
 /**
- * Query options for one data call's progress.
+ * Query options for one data call's progress. Silent on failure for the same
+ * reason as the aggregate above.
  *
  * @param datacallId - The data call to report on.
  * @returns Options to pass to useQuery or useQueries.
@@ -70,6 +76,7 @@ export function scoreProgressQuery(datacallId: number) {
     queryKey: queryKeys.scores.progress(datacallId),
     queryFn: ({ signal }: { signal: AbortSignal }) =>
       fetchScoreProgress(datacallId, signal),
+    meta: { suppressErrorNotification: true },
   }
 }
 

@@ -2,6 +2,11 @@ import MockAdapter from 'axios-mock-adapter'
 
 // Replace the app's axios instance with a bare one so the real interceptor's
 // router graph stays out of this suite.
+jest.mock('@/utils/notify', () => {
+  const actual = jest.requireActual('@/utils/notify')
+  return { ...actual, notify: jest.fn() }
+})
+
 jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
@@ -11,6 +16,7 @@ import { renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import axiosInstance from '@/axiosConfig'
+import { notify } from '@/utils/notify'
 import {
   fetchScoreAggregate,
   fetchScoreProgress,
@@ -18,7 +24,9 @@ import {
 } from './scores'
 
 const mock = new MockAdapter(axiosInstance)
+const mockedNotify = notify as jest.Mock
 afterEach(() => mock.reset())
+beforeEach(() => mockedNotify.mockClear())
 
 const aggUrl = (id: number) => `/scores/aggregate?datacallid=${id}`
 const progUrl = (id: number) => `/scores/progress?datacallid=${id}`
@@ -67,5 +75,22 @@ describe('useDashboardScores', () => {
     // would silently attribute one call's scores to another.
     expect(result.current.scoresPerCall[0]).toHaveLength(1)
     expect(result.current.progressPerCall[1]).toHaveLength(1)
+  })
+})
+
+describe('score query options', () => {
+  // The dashboard renders an unscored system the same way whether the read
+  // failed or the system has no score, and the fan-out means one bad call
+  // would toast on every visit. The code this replaced only logged.
+  it('keep a failed read out of the global snackbar', async () => {
+    mock.onGet(aggUrl(1)).reply(500)
+    mock.onGet(progUrl(1)).reply(500)
+
+    const { result } = renderHook(() => useDashboardScores([1]), {
+      wrapper: queryWrapper(createTestQueryClient()),
+    })
+
+    await waitFor(() => expect(result.current.loading).toBe(false))
+    expect(mockedNotify).not.toHaveBeenCalled()
   })
 })

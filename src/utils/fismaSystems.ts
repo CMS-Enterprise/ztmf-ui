@@ -51,19 +51,23 @@ export function useFismaSystems(
 /**
  * Reads one FISMA system.
  *
+ * Null, not undefined, when the server has none: a query whose function
+ * resolves undefined is rejected by TanStack Query, which would turn a
+ * served "no such system" into a failed query and a retry.
+ *
  * @param systemId - The fismasystemid to read.
  * @param signal - Optional AbortSignal to cancel the request.
- * @returns The system, or undefined when the server has none.
+ * @returns The system, or null when the server has none.
  */
 export async function fetchFismaSystem(
   systemId: number,
   signal?: AbortSignal
-): Promise<FismaSystemType | undefined> {
+): Promise<FismaSystemType | null> {
   const res = await axiosInstance.get<{ data: FismaSystemType | null }>(
     apiPaths.fismaSystems.detail(systemId),
     { signal }
   )
-  return res.data?.data ?? undefined
+  return res.data?.data ?? null
 }
 
 /**
@@ -72,8 +76,8 @@ export async function fetchFismaSystem(
  * The shared list is filtered, so a decommissioned system, or one created
  * since the list loaded, is missing from it. Pages that can be opened by id
  * read this as a fallback. A system that genuinely does not exist resolves to
- * undefined rather than erroring, because the caller renders a placeholder
- * for that case either way.
+ * null rather than erroring, because the caller renders a placeholder for
+ * that case either way.
  *
  * Writes to this system invalidate the same key, so the detail repaints
  * without the caller pushing a replacement into shared state.
@@ -81,7 +85,8 @@ export async function fetchFismaSystem(
  * @param systemId - The fismasystemid to read.
  * @param options - `enabled`, for a caller that only needs this when the
  *   shared list came up short.
- * @returns The query result; `data` is the system or undefined.
+ * @returns The query result; `data` is the system, or null when there is
+ *   none and undefined until the read settles.
  */
 export function useFismaSystem(
   systemId: number,
