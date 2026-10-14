@@ -19,7 +19,7 @@ jest.mock('../Title/Context', () => ({
   useContextProp: () => mockCtx,
 }))
 
-import { screen, waitFor, within, fireEvent } from '@testing-library/react'
+import { screen, waitFor, within, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import MockAdapter from 'axios-mock-adapter'
@@ -76,9 +76,18 @@ beforeEach(() => {
   mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
-function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
+function renderPage(
+  system: FismaSystemType,
+  role: UserRole = 'OWNER',
+  // The list the page sees, which is not always the system it is showing: a
+  // decommissioned system is absent from the active list.
+  systems: FismaSystemType[] = [system]
+) {
   mockCtx = {
-    fismaSystems: [system],
+    fismaSystems: systems,
+    // The page waits on this rather than on a non-empty list, since a scoped
+    // user with no active systems has an empty one all session.
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -295,6 +304,9 @@ test('falls back to a single-system fetch when the system is not in context', as
   } as unknown as FismaSystemType
   mockCtx = {
     fismaSystems: [other],
+    // The page waits on this rather than on a non-empty list, since a scoped
+    // user with no active systems has an empty one all session.
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -322,6 +334,62 @@ test('falls back to a single-system fetch when the system is not in context', as
   )
 
   await waitFor(() => expect(fetchedId).toContain('fismasystems/42'))
+})
+
+// A scoped user with no active systems, or a failed list load, has an empty
+// list for the whole session. Waiting on the list being non-empty meant the
+// by-id read answered and the page spun anyway.
+test('resolves a deep link for a user whose active list is empty', async () => {
+  mock.onGet(/fismasystems\/42$/).reply(200, { data: { ...BASE_SYSTEM } })
+
+  renderPage(BASE_SYSTEM, 'OWNER', [])
+
+  expect(await screen.findByText('System identity')).toBeInTheDocument()
+})
+
+// isFetching is true for background refetches too, not only the first load.
+// A save, an ISSO adopt, or just crossing the stale window all refetch this
+// key, and gating the whole page on it swapped a rendered page for a spinner
+// each time, taking card edit state and scroll position with it.
+test('a background refetch does not blank an already resolved page', async () => {
+  mock.onGet(/fismasystems\/42$/).reply(200, { data: { ...BASE_SYSTEM } })
+  // Empty list, so the page resolves through the by-id read rather than the
+  // seeded entry, and a refetch of that key is observable here.
+  const { queryClient } = renderPage(BASE_SYSTEM, 'OWNER', [])
+  await screen.findByText('System identity')
+
+  // Hold the refetch open so it is genuinely in flight at the assertion.
+  mock.reset()
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  mock.onGet(/fismasystems\/42$/).reply(() => new Promise(() => {}))
+  act(() => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.fismaSystems.detail(42),
+    })
+  })
+  await waitFor(() => expect(queryClient.isFetching()).toBeGreaterThan(0))
+
+  expect(screen.getByText('System identity')).toBeInTheDocument()
+})
+
+// A save can move the system out of the view the page is showing. The list
+// then comes back without it and the by-id read takes over, which used to
+// blank the page and drop card edit state and scroll position with it.
+test('keeps rendering when a refetch drops the system from the current view', async () => {
+  mock.onGet(/fismasystems\/42$/).reply(200, { data: { ...BASE_SYSTEM } })
+  const { rerender } = renderPage(BASE_SYSTEM)
+  await screen.findByText('System identity')
+
+  // The refetched list no longer carries the system. Same render, so the
+  // seeded cache entry is still there for the by-id read to serve.
+  mockCtx = { ...mockCtx, fismaSystems: [] }
+  rerender(
+    <Routes>
+      <Route path="/systems/:fismasystemid" element={<SystemDetailPage />} />
+    </Routes>
+  )
+
+  expect(screen.getByText('System identity')).toBeInTheDocument()
 })
 
 test('a 400 on save routes the field error inline and keeps editing', async () => {

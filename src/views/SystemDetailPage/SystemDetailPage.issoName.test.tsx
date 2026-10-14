@@ -86,6 +86,9 @@ beforeEach(() => {
 function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
   mockCtx = {
     fismaSystems: [system],
+    // The page waits on this rather than on a non-empty list, since a scoped
+    // user with no active systems has an empty one all session.
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',

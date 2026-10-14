@@ -87,7 +87,25 @@ export default function SystemDetailPage() {
     enabled: fismaSystemsLoaded && listSystem === null,
   })
   const system = listSystem ?? detailQuery.data ?? null
-  const retryingFetch = detailQuery.isFetching
+
+  // Seed the per-system key from the list while the system is still in it. A
+  // save can move the system out of the current view, and then the list comes
+  // back without it and the by-id read starts from nothing, so the page would
+  // blank until that read answers. With the seed the read has the last known
+  // row to serve while it refreshes underneath.
+  useEffect(() => {
+    if (!listSystem) return
+    queryClient.setQueryData(
+      queryKeys.fismaSystems.detail(systemId),
+      listSystem
+    )
+  }, [listSystem, systemId, queryClient])
+
+  // Only a lookup with nothing to show waits. isFetching alone is true for
+  // background refetches too, which would swap a rendered page for a spinner
+  // on every save and every staleness refresh, losing card edit state and
+  // scroll position with it.
+  const retryingFetch = !system && detailQuery.isFetching
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
@@ -544,8 +562,10 @@ export default function SystemDetailPage() {
     )
   }
 
-  // Loading state: context hasn't populated yet, or retrying fetch for individual system
-  if (fismaSystems.length === 0 || retryingFetch) {
+  // Loading state: the shared list has not settled yet, or the by-id read is
+  // running with nothing to show. An empty list is not a loading state: a
+  // scoped user with no active systems has one for the whole session.
+  if (!fismaSystemsLoaded || retryingFetch) {
     return (
       <Box
         sx={{
