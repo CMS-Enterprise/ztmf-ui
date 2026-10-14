@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
+import { invalidateUserList } from '@/utils/users'
 import type { QueryHookOptions } from '@/queryClient'
 import type { DelegateRow, DelegateCandidate, OpDiv } from '@/types'
 
@@ -198,7 +199,8 @@ export function useDelegateCandidates(
 
 /**
  * Builds a system-scoped delegate mutation. Every delegate write changes both
- * the roster and who is still eligible to attach, so both are invalidated. The
+ * the roster and who is still eligible to attach, so both are invalidated, as
+ * is the user list, which carries each delegate's expiry. The
  * roster is awaited so the section's dialogs close over the refreshed list;
  * the candidate lists are not, since nothing acts on them at that moment.
  * Error handling stays with the caller.
@@ -214,6 +216,7 @@ function useSystemDelegateMutation<TVariables>(
       void queryClient.invalidateQueries({
         queryKey: queryKeys.fismaSystems.delegateCandidateLists(systemId),
       })
+      invalidateUserList(queryClient)
       return queryClient.invalidateQueries({
         queryKey: queryKeys.fismaSystems.delegates(systemId),
       })

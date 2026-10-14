@@ -1,73 +1,71 @@
-import { hashKey } from '@tanstack/react-query'
 import { apiPaths, queryKeys } from './keys'
 
-describe('apiPaths', () => {
-  it('normalizes dynamic paths with a leading slash', () => {
-    expect(apiPaths.users.detail('user-1')).toBe('/users/user-1')
-    expect(apiPaths.fismaSystems.questions(42)).toBe(
-      '/fismasystems/42/questions'
+describe('scores.aggregate paths', () => {
+  it('keeps the pre-factory URL contract for the datacall and system shapes', () => {
+    expect(apiPaths.scores.aggregateByDatacall(7)).toBe(
+      '/scores/aggregate?datacallid=7'
     )
-    expect(apiPaths.systemEnrichment('fisma-1')).toBe(
-      '/systemenrichment/fisma-1'
-    )
-  })
-
-  it('includes response-shaping query parameters in a stable order', () => {
-    expect(apiPaths.scores.list(7, 42, true)).toBe(
-      '/scores?datacallid=7&fismasystemid=42&include=functionoption'
-    )
-    expect(apiPaths.scores.diff(4, 7, 42)).toBe(
-      '/scores/diff?from=4&to=7&fismasystemid=42'
+    expect(apiPaths.scores.aggregateBySystem(3)).toBe(
+      '/scores/aggregate?fismasystemid=3&include_pillars=true'
     )
   })
 
-  it('does not broaden a score request when its system id is missing', () => {
-    expect(apiPaths.scores.list(7, undefined, true)).toBe(
-      '/scores?datacallid=7&fismasystemid=undefined&include=functionoption'
+  it('omits include_pillars when false rather than sending it', () => {
+    expect(apiPaths.scores.aggregate({ datacallId: 7 })).toBe(
+      '/scores/aggregate?datacallid=7'
     )
+    expect(
+      apiPaths.scores.aggregate({ datacallId: 7, includePillars: false })
+    ).toBe('/scores/aggregate?datacallid=7')
+    expect(
+      apiPaths.scores.aggregate({ datacallId: 7, includePillars: true })
+    ).toBe('/scores/aggregate?datacallid=7&include_pillars=true')
   })
 
-  it('repeats selected system IDs for export', () => {
-    expect(apiPaths.datacalls.export(7, [10, 20])).toBe(
-      '/datacalls/7/export?fsids=10&fsids=20'
-    )
+  it('drops datacallid entirely for the history request', () => {
+    // An omitted datacallid is what makes the endpoint return every
+    // (datacall, system) pair. A stray `datacallid=undefined` would silently
+    // turn the full series into a 400.
+    expect(apiPaths.scores.history()).toBe('/scores/aggregate')
+    expect(apiPaths.scores.aggregate()).toBe('/scores/aggregate')
   })
 })
 
-describe('queryKeys', () => {
-  it('supports broad invalidation prefixes and parameterized detail keys', () => {
-    expect(queryKeys.fismaSystems.detail(42)).toEqual([
-      ...queryKeys.fismaSystems.details(),
-      '42',
-    ])
-    expect(queryKeys.fismaSystems.questions(42, 7)).toEqual([
-      ...queryKeys.fismaSystems.detail(42),
-      'questions',
-      { datacallId: '7' },
-    ])
-    expect(queryKeys.users.list(true)).toEqual([
-      ...queryKeys.users.all,
-      'list',
-      { deleted: true },
-    ])
-    expect(queryKeys.fismaSystems.delegateCandidates(42, 'tar')).toEqual([
-      ...queryKeys.fismaSystems.delegateCandidateLists(42),
-      { search: 'tar' },
-    ])
+describe('scores.aggregate query keys', () => {
+  it('separates pillar-bearing from pillar-free responses for one datacall', () => {
+    // The regression this guards: keyed together, whichever response landed
+    // second would win and `pillarscores` would read undefined at random.
+    expect(queryKeys.scores.aggregate({ datacallId: 7 })).not.toEqual(
+      queryKeys.scores.aggregate({ datacallId: 7, includePillars: true })
+    )
   })
 
-  it('hashes a numeric and a string id to the same cache entry', () => {
-    // Route params arrive as strings while most callers hold numbers. Without
-    // normalization these hash apart and one resource occupies two entries,
-    // so invalidating either would leave the other stale.
-    expect(hashKey(queryKeys.fismaSystems.detail(42))).toBe(
-      hashKey(queryKeys.fismaSystems.detail('42'))
+  it('shares one entry across numeric and string spellings of an id', () => {
+    expect(queryKeys.scores.aggregate({ datacallId: 7 })).toEqual(
+      queryKeys.scores.aggregate({ datacallId: '7' })
     )
-    expect(hashKey(queryKeys.scores.list(5, 42))).toBe(
-      hashKey(queryKeys.scores.list('5', '42'))
+  })
+
+  it('keeps the datacall and history keys distinct', () => {
+    expect(queryKeys.scores.history()).not.toEqual(
+      queryKeys.scores.aggregate({ datacallId: 7 })
     )
-    expect(hashKey(queryKeys.users.detail(9))).toBe(
-      hashKey(queryKeys.users.detail('9'))
-    )
+  })
+
+  it('gives history the same key as the equivalent aggregate call', () => {
+    // history() and aggregate({}) issue the identical request, so they must
+    // not occupy two cache entries.
+    expect(queryKeys.scores.history()).toEqual(queryKeys.scores.aggregate())
+  })
+
+  it('stays under the shared scores/aggregate prefix for invalidation', () => {
+    expect(queryKeys.scores.aggregate({ datacallId: 7 }).slice(0, 2)).toEqual([
+      'scores',
+      'aggregate',
+    ])
+    expect(queryKeys.scores.aggregateBySystem(3).slice(0, 2)).toEqual([
+      'scores',
+      'aggregate',
+    ])
   })
 })

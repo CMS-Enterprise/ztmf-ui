@@ -4,6 +4,7 @@ import Chip from '@mui/material/Chip'
 import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import Typography from '@mui/material/Typography'
 import { useParams } from 'react-router-dom'
+import { useQueryClient } from '@tanstack/react-query'
 import { Spinner } from '@cmsgov/design-system'
 import { colors, status } from '@/theme/tokens'
 import Alert from '@mui/material/Alert'
@@ -26,7 +27,7 @@ import {
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
 import {
   ERROR_MESSAGES,
@@ -77,7 +78,7 @@ import EyebrowLine from './components/EyebrowLine'
 import SectionRail from './components/SectionRail'
 import QuestionnaireProgress from './components/QuestionnaireProgress'
 import SaveIndicator from './components/SaveIndicator'
-import Card from './components/Card'
+import Card from '@/components/ui/Card'
 import {
   saveDraft,
   loadDraft,
@@ -144,6 +145,7 @@ export default function QuestionnarePage() {
     opdivs,
     opdivsLoaded,
   } = useContextProp()
+  const queryClient = useQueryClient()
   const [isPastDeadline, setIsPastDeadline] = React.useState<boolean>(false)
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
   const isReadOnly =
@@ -699,6 +701,7 @@ export default function QuestionnarePage() {
   const confirmScoreById = async (id: number): Promise<boolean> => {
     try {
       await axiosInstance.put(apiPaths.scores.confirm(id))
+      void queryClient.invalidateQueries({ queryKey: queryKeys.scores.all })
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       clearCurrentDraft()
       setPriorReview((current) =>
@@ -848,6 +851,7 @@ export default function QuestionnarePage() {
           datacallid: datacallID,
         })
       }
+      void queryClient.invalidateQueries({ queryKey: queryKeys.scores.all })
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setLastSavedAt(new Date())
       clearCurrentDraft()

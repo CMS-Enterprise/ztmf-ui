@@ -70,6 +70,9 @@ export type OpDivInput = {
   name: string
   is_parent?: boolean
   active?: boolean
+  // Per-OpDiv ZTMF Insights capability. The backend only touches the column
+  // when the field is present, so callers that omit it leave it untouched.
+  insights_enabled?: boolean
 }
 
 /**

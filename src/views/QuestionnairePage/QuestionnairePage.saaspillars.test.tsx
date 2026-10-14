@@ -1,4 +1,5 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { screen, waitFor } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import QuestionnairePage from './QuestionnairePage'
@@ -185,7 +186,7 @@ function renderPage(fismasystemid = SAAS_SYSTEM.fismasystemid) {
     [{ path: AppRoutes.QUESTIONNAIRE, element: <QuestionnairePage /> }],
     { initialEntries: [`/questionnaire/system/${fismasystemid}`] }
   )
-  return render(<RouterProvider router={router} />)
+  return renderWithQueryClient(<RouterProvider router={router} />)
 }
 
 it('renders the reduced set the API serves for the current cycle', async () => {

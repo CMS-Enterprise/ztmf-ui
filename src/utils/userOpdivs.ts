@@ -1,6 +1,7 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
+import { invalidateUserList } from '@/utils/users'
 import type { QueryHookOptions } from '@/queryClient'
 
 /**
@@ -102,6 +103,7 @@ export function useSetUserOpDivs() {
         queryKey: queryKeys.users.assignedOpdivs(userid),
         refetchType: 'none',
       })
+      invalidateUserList(queryClient)
     },
   })
 }

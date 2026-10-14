@@ -1,6 +1,5 @@
 import {
   fireEvent,
-  render,
   screen,
   waitFor,
   act,
@@ -10,7 +9,8 @@ import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import { COMPLETE_HINT_MSG, NEXT_HINT_MSG } from '@/constants'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import type { userData } from '@/types'
 
 // Rendered-component coverage for three QuestionnairePage effect paths from
@@ -211,7 +211,7 @@ function renderAt(path: string) {
     { initialEntries: [path] }
   )
   const provider = <RouterProvider router={router} />
-  const utils = render(provider)
+  const utils = renderWithQueryClient(provider)
   return { ...utils, rerender: () => utils.rerender(provider) }
 }
 
@@ -1366,6 +1366,22 @@ describe('carried-forward confirmation', () => {
     ).not.toBeInTheDocument()
     expect(screen.getByText('1 of 2')).toBeInTheDocument()
     expect(screen.getByText('1 of 1 answered')).toBeInTheDocument()
+  })
+
+  it('marks cached score queries stale after a confirm, so dashboards refetch', async () => {
+    installScoreMocks([carried7006()])
+    const { queryClient } = renderAt(DEEP_LINK)
+    const aggregateKey = queryKeys.scores.aggregateByDatacall(1)
+    queryClient.setQueryData(aggregateKey, [])
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    )
+    await waitFor(() =>
+      expect(queryClient.getQueryState(aggregateKey)?.isInvalidated).toBe(true)
+    )
   })
 
   it('excludes score rows outside the current questionnaire from the top progress count', async () => {
