@@ -24,7 +24,7 @@ export interface UsersToolbarProps {
   opdivFilter: number | 'all'
   /** OpDiv filter change handler. */
   setOpDivFilter: (value: number | 'all') => void
-  /** Full OpDiv list available to the actor. */
+  /** OpDivs the actor can filter by, including the active selection. */
   opdivOptions: OpDiv[]
   /** Whether the table is showing deactivated users. */
   showDeleted: boolean
@@ -150,6 +150,7 @@ export default function UsersToolbar({
                 </Typography>
                 <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
                   {option.name}
+                  {option.active ? '' : ' (inactive)'}
                 </Typography>
               </Box>
             </li>

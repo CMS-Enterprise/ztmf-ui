@@ -23,7 +23,7 @@ import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
-import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
+import AnswerSideCell from '@/components/AnswerSideCell/AnswerSideCell'
 import type {
   datacall,
   ScoreDiffEntry,
@@ -288,32 +288,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
 
   const latestId = datacalls[0]?.datacallid ?? -1
 
-  const renderSide = (side: ScoreDiffEntry['from']) => {
-    if (!side) {
-      return <em style={{ color: '#666' }}>{'No answer'}</em>
-    }
-    return (
-      <>
-        <Typography variant="body2">{side.optionname}</Typography>
-        <Typography variant="caption" sx={{ color: 'text.secondary' }}>
-          score {side.score}/5
-        </Typography>
-        {side.notes && (
-          <Box sx={{ mt: 0.5 }}>
-            <AISummaryBadge show={side.notes_is_ai_summary === true} />
-            <Typography
-              variant="caption"
-              display="block"
-              sx={{ color: 'text.secondary', fontStyle: 'italic' }}
-            >
-              {side.notes}
-            </Typography>
-          </Box>
-        )}
-      </>
-    )
-  }
-
   return (
     <Modal
       open={open}
@@ -536,8 +510,12 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
                           {entry.question}
                         </Typography>
                       </TableCell>
-                      <TableCell>{renderSide(entry.from)}</TableCell>
-                      <TableCell>{renderSide(entry.to)}</TableCell>
+                      <TableCell>
+                        <AnswerSideCell side={entry.from} />
+                      </TableCell>
+                      <TableCell>
+                        <AnswerSideCell side={entry.to} />
+                      </TableCell>
                       <TableCell>
                         {entry.changed_by
                           ? `${entry.changed_by.name} (${entry.changed_by.role})`

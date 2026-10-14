@@ -1,5 +1,5 @@
 import Box from '@mui/material/Box'
-import Card from './Card'
+import Card from '@/components/ui/Card'
 import PillarGroup from './PillarGroup'
 import type { Category } from '../helpers'
 

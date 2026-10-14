@@ -59,3 +59,34 @@ export function narrowToCallerScope(
   const own = new Set(userInfo.assignedopdivids ?? [])
   return assignable.filter((od) => own.has(od.opdiv_id))
 }
+
+/**
+ * Options for the roster's OpDiv filter facet. Wider than the assignable set:
+ * filtering is a read, so it covers read-only admins and the HHS parent, and
+ * the active selection (e.g. an inactive OpDiv from a deep link) is always an
+ * option so the facet can show it and clear it.
+ */
+export function buildFilterOpDivs(
+  opdivs: OpDiv[],
+  userInfo: userData,
+  selected: number | 'all'
+): OpDiv[] {
+  const options = narrowToCallerScope(
+    opdivs.filter((od) => od.active),
+    userInfo
+  )
+  if (selected !== 'all' && !options.some((od) => od.opdiv_id === selected)) {
+    const known = opdivs.find((od) => od.opdiv_id === selected)
+    options.push(
+      known ?? {
+        opdiv_id: selected,
+        code: `#${selected}`,
+        name: 'Unknown OpDiv',
+        is_parent: false,
+        active: false,
+        system_delegate_enabled: false,
+      }
+    )
+  }
+  return options.sort((a, b) => a.code.localeCompare(b.code))
+}
