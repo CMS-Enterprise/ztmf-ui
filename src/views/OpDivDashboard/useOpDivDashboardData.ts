@@ -132,10 +132,10 @@ export type OpDivDashboardOptions = {
   /** Whether to fetch the full score history behind the trend, default true. */
   includeHistory?: boolean
   /**
-   * While the open call is in view, count only its rows as not started, so the
-   * figure matches the systems table's "Not updated only" filter. Default false.
+   * While the open call is in view, summarize completion over its rows only, so
+   * the figures match the systems table's "Not updated only" filter. Default false.
    */
-  outstandingMatchesTable?: boolean
+  completionOpenCallOnly?: boolean
 }
 
 /**
@@ -153,7 +153,7 @@ export function useOpDivDashboardData(
     trendOpDivCode,
     includePillars = true,
     includeHistory = true,
-    outstandingMatchesTable = false,
+    completionOpenCallOnly = false,
   } = options
   const {
     fismaSystems,
@@ -363,8 +363,8 @@ export function useOpDivDashboardData(
   )
 
   const summary = useMemo(() => summarizeOpDiv(rows), [rows])
-  const outstandingOnCurrentCallOnly =
-    outstandingMatchesTable &&
+  const openCallOnly =
+    completionOpenCallOnly &&
     isOpenCallInView(latestDataCallId, latestDeadlinePassed, activeDatacallIds)
   const completion = useMemo(
     () =>
@@ -372,9 +372,9 @@ export function useOpDivDashboardData(
         rows,
         latestDataCallId,
         latestDeadlinePassed,
-        outstandingOnCurrentCallOnly
+        openCallOnly
       ),
-    [rows, latestDataCallId, latestDeadlinePassed, outstandingOnCurrentCallOnly]
+    [rows, latestDataCallId, latestDeadlinePassed, openCallOnly]
   )
   const targetGap = useMemo(() => summarizeTargetGap(rows), [rows])
   const risk = useMemo(() => summarizeRisk(rows), [rows])

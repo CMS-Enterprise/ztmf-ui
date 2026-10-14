@@ -91,7 +91,7 @@ test('the OpDiv dashboard still fetches both by default', () => {
   expect(enabledFlags(mockPillarAggregates)).toEqual([true, true])
 })
 
-test('not started counts only what the table filter can show', () => {
+test('completion counts only what the table filter can show', () => {
   // A system whose only progress is on the closed call, untouched there. The
   // table's "Not updated only" filter never shows a closed-call row.
   mockSystems = [makeSystem({ fismasystemid: 5 })]
@@ -103,6 +103,6 @@ test('not started counts only what the table filter can show', () => {
   const band = renderHook(() => useMySystemsData(false)).result.current
   const opdiv = renderHook(() => useOpDivDashboardData(null)).result.current
 
-  expect(band.completion.notStarted).toBe(0)
-  expect(opdiv.completion.notStarted).toBe(1)
+  expect(band.completion).toMatchObject({ systemsInCall: 0, notStarted: 0 })
+  expect(opdiv.completion).toMatchObject({ systemsInCall: 1, notStarted: 1 })
 })

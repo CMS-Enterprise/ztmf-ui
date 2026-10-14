@@ -2,7 +2,8 @@ import FismaTable from '../FismaTable/FismaTable'
 import { useCallback, useState, useMemo } from 'react'
 import { useDatacallAggregates, useDatacallProgress } from '@/utils/scores'
 import { useContextProp } from '../Title/Context'
-import { Box, Button, CircularProgress } from '@mui/material'
+import { Box, Button, CircularProgress, Typography } from '@mui/material'
+import { visuallyHidden } from '@mui/utils'
 import AddIcon from '@mui/icons-material/Add'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -221,6 +222,10 @@ export default function HomePageContainer() {
             : undefined
         }
       />
+      {/* Hidden, so the table gets its own section rather than sitting under the band's h2. */}
+      <Typography component="h2" sx={visuallyHidden}>
+        Systems
+      </Typography>
       <Box id={SYSTEMS_TABLE_ID} sx={{ borderRadius: `${radius.card}px` }}>
         <FismaTable
           scores={scoreMap}

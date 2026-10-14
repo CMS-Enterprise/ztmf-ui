@@ -234,8 +234,19 @@ describe('FismaTable', () => {
       ).not.toBeChecked()
     })
 
+    it('leaves it on while the open call is in view', async () => {
+      openCallInView()
+      const onChange = jest.fn()
+      renderControlled(true, onChange)
+
+      expect(
+        await screen.findByRole('checkbox', { name: 'Not updated only' })
+      ).toBeChecked()
+      expect(onChange).not.toHaveBeenCalled()
+    })
+
     it('asks the parent to clear it when the open call is out of view', () => {
-      // ui#639: a historical year is selected, so the filter would empty the grid.
+      // A historical year is selected, so the filter would empty the grid.
       const onChange = jest.fn()
       renderControlled(true, onChange)
 

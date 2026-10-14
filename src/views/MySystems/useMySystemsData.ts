@@ -48,6 +48,6 @@ export function useMySystemsData(includeHistory = true): MySystemsData {
     trendOpDivCode: trendCode,
     includePillars: false,
     includeHistory,
-    outstandingMatchesTable: true,
+    completionOpenCallOnly: true,
   })
 }

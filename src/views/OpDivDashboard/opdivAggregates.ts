@@ -313,15 +313,15 @@ export type CompletionSummary = {
  * @param {OpDivSystemRow[]} rows - The OpDiv's rows.
  * @param {number} latestDataCallId - The newest call's id.
  * @param {boolean} latestDeadlinePassed - Whether that call has closed.
- * @param {boolean} [outstandingOnCurrentCallOnly] - Count only open-call rows
- *   as not started, matching the table's "Not updated only" filter.
+ * @param {boolean} [openCallOnly] - Summarize only open-call rows, so every
+ *   figure matches what the table's "Not updated only" filter can show.
  * @returns {CompletionSummary} The completion summary.
  */
 export function summarizeCompletion(
   rows: OpDivSystemRow[],
   latestDataCallId = 0,
   latestDeadlinePassed = false,
-  outstandingOnCurrentCallOnly = false
+  openCallOnly = false
 ): CompletionSummary {
   let systemsInCall = 0
   let systemsComplete = 0
@@ -342,6 +342,7 @@ export function summarizeCompletion(
       latestDataCallId,
       latestDeadlinePassed
     )
+    if (openCallOnly && !current) continue
     if (current) currentCallRows += 1
     const state = progressState(row, current)
 
@@ -350,11 +351,8 @@ export function summarizeCompletion(
     questionsAnswered += p.questionsanswered ?? 0
     questionsUpdated += p.questionsupdated
     if (state === 'complete') systemsComplete += 1
-    const countsAsOutstanding = current || !outstandingOnCurrentCallOnly
-    if (countsAsOutstanding && NO_PROGRESS_STATES.includes(state))
-      notStarted += 1
-    if (countsAsOutstanding && state === 'awaiting-confirmation')
-      awaitingConfirmation += 1
+    if (NO_PROGRESS_STATES.includes(state)) notStarted += 1
+    if (state === 'awaiting-confirmation') awaitingConfirmation += 1
 
     if (p.lastupdatedat) {
       const t = new Date(p.lastupdatedat).getTime()

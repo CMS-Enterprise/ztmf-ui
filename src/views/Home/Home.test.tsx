@@ -37,7 +37,7 @@ jest.mock('../EditSystemModal/EditSystemModal', () => (props: object) => {
   return null
 })
 
-import { act, screen } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Home from './Home'
 import { actionableBandData } from '../MySystems/testFixtures'
@@ -136,7 +136,7 @@ describe('the summary band tiles', () => {
   )
 
   it("follows the table's own changes to the filter", async () => {
-    // Clear filters and the ui#639 reset both go through this callback.
+    // Clear filters and the historical-year reset both go through this callback.
     const user = userEvent.setup()
     renderWithProviders(<Home />)
     await user.click(
@@ -149,6 +149,36 @@ describe('the summary band tiles', () => {
     })
 
     expect(tableProps.notUpdatedOnly).toBe(false)
+  })
+
+  it('keeps the filter on across a year switch that keeps the open call in view', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderWithProviders(<Home />)
+    await user.click(
+      await screen.findByRole('button', { name: /^Not started/ })
+    )
+    expect(tableProps.notUpdatedOnly).toBe(true)
+
+    // Adding a closed call means new score queries, so the table unmounts
+    // behind the spinner and remounts once they settle.
+    mockCtx = {
+      ...mockCtx,
+      activeDatacallIds: [5, 4],
+      datacalls: [
+        ...(mockCtx.datacalls as object[]),
+        {
+          datacallid: 4,
+          datacall: 'FY25 ZTM',
+          datecreated: '2024-10-01T00:00:00Z',
+          deadline: '2025-06-30T23:59:59Z',
+        },
+      ],
+    }
+    tableProps = {}
+    rerender(<Home />)
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+
+    await waitFor(() => expect(tableProps.notUpdatedOnly).toBe(true))
   })
 
   it('leaves the tiles plain when the open call is not in view', async () => {
