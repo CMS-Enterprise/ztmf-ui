@@ -169,13 +169,16 @@ export function useAnswerHistory({
   const undo = useMutation({
     mutationFn: (expectedHeadRevisionId: number) =>
       undoScoreRevision(scoreid, expectedHeadRevisionId),
-    onSuccess: () => {
+    // Pins the undone row: a pending mutation runs the latest options, so
+    // after navigation `scoreid` here would name the new question.
+    onMutate: () => ({ scoreid }),
+    onSuccess: (_data, _revisionid, pinned) => {
       // Imperative, for the reason on refetchScores above.
       refetchScores()
       // Returned, not voided: the drawer stays open over the result, so its
       // rows must be the post-undo ones before the pending state clears.
       return queryClient.invalidateQueries({
-        queryKey: queryKeys.scores.revisions(scoreid),
+        queryKey: queryKeys.scores.revisions(pinned.scoreid),
       })
     },
     // No onError here. docs/data-fetching.md keeps mutation error handling at

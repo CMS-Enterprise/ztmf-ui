@@ -1,5 +1,5 @@
 import MockAdapter from 'axios-mock-adapter'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
 
 jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
@@ -197,6 +197,42 @@ test('refreshes history when the edit stamp moves, but not when navigation clear
   rerender({ writeStamp: 't3|done' })
   await new Promise((resolve) => setTimeout(resolve, 50))
   expect(mock.history.get).toHaveLength(2)
+})
+
+test('invalidates the undone question, not the one navigated to mid-request', async () => {
+  const OTHER_ID = 4213
+  mock.onGet(apiPaths.scores.revisions(SCORE_ID)).reply(200, { data: HISTORY })
+  mock.onGet(apiPaths.scores.revisions(OTHER_ID)).reply(200, { data: HISTORY })
+  let respond: (value: [number, unknown]) => void = () => {}
+  mock
+    .onPost(apiPaths.scores.undo(SCORE_ID))
+    .reply(() => new Promise((resolve) => (respond = resolve)))
+  const queryClient = createTestQueryClient()
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+  const { result, rerender } = renderHook(
+    ({ scoreid }: { scoreid: number }) =>
+      useAnswerHistory({ scoreid, refetchScores: jest.fn() }),
+    { wrapper: queryWrapper(queryClient), initialProps: { scoreid: SCORE_ID } }
+  )
+  await waitFor(() => expect(result.current.head).not.toBeNull())
+
+  let pending: Promise<unknown> = Promise.resolve()
+  act(() => {
+    pending = result.current.undo.mutateAsync(91)
+  })
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  rerender({ scoreid: OTHER_ID })
+  await act(async () => {
+    respond([200, { data: { score: {}, revision: {}, head: {} } }])
+    await pending
+  })
+
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(SCORE_ID),
+  })
+  expect(invalidate).not.toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(OTHER_ID),
+  })
 })
 
 describe('classifyUndoError', () => {

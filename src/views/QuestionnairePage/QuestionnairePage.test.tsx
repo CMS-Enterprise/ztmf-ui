@@ -2,6 +2,7 @@ import {
   fireEvent,
   screen,
   waitFor,
+  within,
   act,
   configure as rtlConfigure,
 } from '@testing-library/react'
@@ -1361,6 +1362,51 @@ describe('carried-forward confirmation', () => {
     })
   }
 
+  // Overlays the history route with a full head row, swapped for `after` once
+  // the undo POST is sent, so a test can watch the server retire the button.
+  function serveHistory(
+    scoreid: number,
+    {
+      after = {},
+      undo,
+    }: { after?: Record<string, unknown>; undo?: () => Promise<unknown> } = {}
+  ) {
+    const head = {
+      revisionid: 91,
+      scoreid,
+      revision_no: 2,
+      kind: 'update',
+      createdat: '2026-09-18T14:02:11Z',
+      actor: { userid: 'u-1', name: 'Isso User', email: '', role: 'ISSO' },
+      prev: { optionname: 'Baseline', notes: 'carried justification' },
+      new: { optionname: 'Baseline', notes: 'edited this cycle' },
+      undoable: true,
+    }
+    let undone = false
+    const baseGet = axios.get.getMockImplementation()!
+    const basePost = axios.post.getMockImplementation()!
+    axios.get.mockImplementation((url: string) => {
+      if (url !== apiPaths.scores.revisions(scoreid)) return baseGet(url)
+      const current = undone ? { ...head, ...after } : head
+      return Promise.resolve({
+        data: {
+          data: {
+            scoreid,
+            fismasystemid: 1002,
+            datacallid: 5,
+            head: current,
+            revisions: [current],
+          },
+        },
+      })
+    })
+    axios.post.mockImplementation((url: string, ...rest: unknown[]) => {
+      if (url !== apiPaths.scores.undo(scoreid)) return basePost(url, ...rest)
+      undone = true
+      return undo ? undo() : basePost(url, ...rest)
+    })
+  }
+
   it('badges an unconfirmed carried-forward answer in the question view and sidebar, and confirms it with one dedicated PUT', async () => {
     installScoreMocks([carried7006()])
 
@@ -1721,26 +1767,79 @@ describe('carried-forward confirmation', () => {
     ).toBeInTheDocument()
   })
 
-  it('refetches history when an undo is refused past the deadline', async () => {
+  it('drops the Undo button and keeps focus off <body> when an undo is refused past the deadline', async () => {
     // The interceptor toasts the 403 and tags it handled; the refetch is what
     // lets the server's call-closed reason take the stale button away.
     const edited = { ...carried7006('done'), notes: 'edited this cycle' }
     installScoreMocks([edited])
-    axios.post.mockRejectedValue({ __authHandled: true })
-    const historyReads = () =>
-      axios.get.mock.calls.filter(
-        ([url]: [string]) => url === apiPaths.scores.revisions(edited.scoreid)
-      ).length
+    serveHistory(edited.scoreid, {
+      after: { undoable: false, reason: 'This data call is closed.' },
+      undo: () => Promise.reject({ __authHandled: true }),
+    })
 
     renderAt(DEEP_LINK)
 
     const undoButton = await screen.findByRole('button', {
       name: 'Undo last change',
     })
-    const before = historyReads()
+    undoButton.focus()
     fireEvent.click(undoButton)
 
-    await waitFor(() => expect(historyReads()).toBeGreaterThan(before))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Undo last change' })
+      ).not.toBeInTheDocument()
+    )
+    expect(document.activeElement).toHaveAttribute('id', 'view-answer-history')
+  })
+
+  it('keeps focus inside the drawer after an undo from it', async () => {
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    serveHistory(edited.scoreid, {
+      after: { kind: 'undo', undoable: false },
+    })
+
+    renderAt(DEEP_LINK)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View history' }))
+    const drawer = await screen.findByRole('dialog', { name: 'Answer history' })
+    const undoButton = await within(drawer).findByRole('button', {
+      name: 'Undo last change',
+    })
+    undoButton.focus()
+    fireEvent.click(undoButton)
+
+    await waitFor(() =>
+      expect(
+        within(drawer).queryByRole('button', { name: 'Undo last change' })
+      ).not.toBeInTheDocument()
+    )
+    await waitFor(() => expect(document.activeElement).toBe(drawer))
+  })
+
+  it('offers an admin Undo in the drawer on a closed call, but not in the strip', async () => {
+    // OWNER keeps write access past the deadline, and the server's admin
+    // bypass marks the head undoable.
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    serveHistory(edited.scoreid)
+    setMockCtx(makeCtx(closedCallCtx()))
+
+    renderAt(DEEP_LINK)
+
+    // Checked before opening: the modal drawer aria-hides the page behind it.
+    const viewHistory = await screen.findByRole('button', {
+      name: 'View history',
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Undo last change' })
+    ).not.toBeInTheDocument()
+    fireEvent.click(viewHistory)
+    const drawer = await screen.findByRole('dialog', { name: 'Answer history' })
+    expect(
+      await within(drawer).findByRole('button', { name: 'Undo last change' })
+    ).toBeInTheDocument()
   })
 
   it('shows the badge but no Confirm button to a read-only admin', async () => {

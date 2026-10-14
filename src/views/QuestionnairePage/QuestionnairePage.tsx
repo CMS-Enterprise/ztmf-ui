@@ -46,7 +46,10 @@ import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
-import AnswerHistoryPanel, { UndoAnswerButton } from './AnswerHistoryPanel'
+import AnswerHistoryPanel, {
+  ANSWER_HISTORY_PANEL_ID,
+  UndoAnswerButton,
+} from './AnswerHistoryPanel'
 import { canUndoAnswer, undoPreview } from './undoState'
 import {
   useAnswerHistory,
@@ -788,23 +791,39 @@ export default function QuestionnarePage() {
   // value the head revision replaced, sending that revision's id so the server
   // refuses rather than silently reverting a change this session never saw.
   const undoInFlight = React.useRef(false)
+  // questionId, not scoreid: scoreid only moves once the next question loads.
+  const undoContextRef = React.useRef('')
+  undoContextRef.current = `${system}:${questionId}`
   const handleUndoClick = async (revisionid: number) => {
     // isPending lags the click by a render; a double-click would otherwise
     // send the same token twice and report its own undo as a conflict.
     if (undoInFlight.current) return
     undoInFlight.current = true
+    const undoContext = undoContextRef.current
+    const movedOn = () => undoContextRef.current !== undoContext
+    // The Undo button can unmount when history refetches; keep focus off
+    // <body>. Skipped if the user has since moved to another question.
+    const refocus = () => {
+      if (movedOn()) return
+      document
+        .getElementById(
+          answerHistory.open ? ANSWER_HISTORY_PANEL_ID : 'view-answer-history'
+        )
+        ?.focus()
+    }
     try {
       await answerHistory.undo.mutateAsync(revisionid)
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      // The draft state now belongs to whichever question is on screen.
+      if (movedOn()) return
       clearCurrentDraft()
-      // The strip's button unmounts on success; keep focus off <body>.
-      if (!answerHistory.open)
-        document.getElementById('view-answer-history')?.focus()
+      refocus()
     } catch (error) {
       const outcome = classifyUndoError(error)
       if (outcome.kind === 'handled') {
         // A past-deadline 403 lands here; the refetch drops the stale button.
         answerHistory.history.refetch()
+        refocus()
         return
       }
       if (outcome.kind === 'conflict') {
@@ -812,6 +831,7 @@ export default function QuestionnarePage() {
         answerHistory.history.refetch()
         fetchQuestionScores(system, setQuestionScores)
         notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
+        refocus()
         return
       }
       if (outcome.kind === 'refused') {
@@ -820,6 +840,7 @@ export default function QuestionnarePage() {
         answerHistory.history.refetch()
         fetchQuestionScores(system, setQuestionScores)
         notify(outcome.message, 'warning', { autoHideDuration: 6000 })
+        refocus()
         return
       }
       notify(outcome.message, 'error', { autoHideDuration: 2500 })
