@@ -15,6 +15,8 @@ const ROUTE_SEGMENT_LABELS: Record<string, string> = {
 
 // Prefix of the admin routes (/admin/opdivs, /admin/events); see below.
 const ADMIN_SEGMENT = 'admin'
+// Prefix of the system routes (/systems/:id, /systems/:id/pillar-scores).
+const SYSTEMS_SEGMENT = 'systems'
 interface LinkRouterProps extends LinkProps {
   to: string
   replace?: boolean
@@ -68,14 +70,24 @@ export default function BreadCrumbs({
   // Path segments that name no page get no crumb:
   // - `admin` (/admin/opdivs, /admin/events): OpDivs and Events are top-level
   //   nav tabs like Users, so their trail should read the same way.
+  // - `systems` (/systems/:id, /systems/:id/pillar-scores): the Dashboard is
+  //   the systems list, so the crumb before it already goes where this one
+  //   would, and the crumb after it names the specific system.
   // - the questionnaire's fixed `system` segment (/questionnaire/system/:id/...),
   //   which only disambiguates the route.
+  //
+  // `questionnaire` stays, though /questionnaire alone has no route either. It
+  // is the only crumb naming what the page is: drop it and the trail reads
+  // Dashboard / ACME / FY26 ZTM / Identity with nothing saying questionnaire.
   const crumbs = location.pathname
     .split('/')
     .filter((x) => x)
     .filter(
       (segment, i, all) =>
-        !(i === 0 && segment === ADMIN_SEGMENT) &&
+        !(
+          i === 0 &&
+          (segment === ADMIN_SEGMENT || segment === SYSTEMS_SEGMENT)
+        ) &&
         !(
           i === 1 &&
           all[0] === RouteIds.QUESTIONNAIRE &&

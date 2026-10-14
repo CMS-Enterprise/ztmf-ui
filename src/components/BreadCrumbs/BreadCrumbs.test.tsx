@@ -1,4 +1,4 @@
-import { render, screen } from '@testing-library/react'
+import { render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router-dom'
 import BreadCrumbs from './BreadCrumbs'
 
@@ -12,6 +12,14 @@ function renderAt(
       <BreadCrumbs segmentLabels={segmentLabels} segmentLinks={segmentLinks} />
     </MemoryRouter>
   )
+}
+
+/** The trail as rendered, in order, links and plain crumbs alike. */
+function crumbText(): string[] {
+  return within(screen.getByLabelText('breadcrumb'))
+    .getAllByRole('listitem')
+    .map((li) => li.textContent?.trim() ?? '')
+    .filter((t) => t && t !== '/')
 }
 
 describe('BreadCrumbs', () => {
@@ -89,10 +97,32 @@ describe('BreadCrumbs', () => {
     expect(
       screen.getByRole('link', { name: 'Super Star Destroyer' })
     ).toHaveAttribute('href', '/systems/1002')
-    // A segment with no link stays plain text: there is no /systems page.
-    expect(
-      screen.queryByRole('link', { name: 'Systems' })
-    ).not.toBeInTheDocument()
+    // `systems` names no page and gets no crumb at all now, linked or not.
+    expect(screen.queryByText('Systems')).not.toBeInTheDocument()
+  })
+
+  it('drops the systems segment, which names no page the Dashboard is not', () => {
+    renderAt('/systems/1002/pillar-scores', { '1002': 'Super Star Destroyer' })
+    expect(crumbText()).toEqual([
+      'Dashboard',
+      'Super Star Destroyer',
+      'Pillar scores',
+    ])
+  })
+
+  it('keeps the questionnaire segment, the only crumb naming the page', () => {
+    // /questionnaire alone has no route either, but dropping it leaves the
+    // trail with nothing saying what the user is looking at.
+    renderAt('/questionnaire/system/1002/FY26_ZTM/identity', {
+      '1002': 'SSD-EX',
+    })
+    expect(crumbText()).toEqual([
+      'Dashboard',
+      'Questionnaire',
+      'SSD-EX',
+      'FY26 ZTM',
+      'Identity',
+    ])
   })
 
   it('never links the last crumb and marks it as the current page', () => {
