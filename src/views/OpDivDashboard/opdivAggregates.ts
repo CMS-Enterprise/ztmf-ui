@@ -313,12 +313,15 @@ export type CompletionSummary = {
  * @param {OpDivSystemRow[]} rows - The OpDiv's rows.
  * @param {number} latestDataCallId - The newest call's id.
  * @param {boolean} latestDeadlinePassed - Whether that call has closed.
+ * @param {boolean} [openCallOnly] - Summarize only open-call rows, so every
+ *   figure matches what the table's "Not updated only" filter can show.
  * @returns {CompletionSummary} The completion summary.
  */
 export function summarizeCompletion(
   rows: OpDivSystemRow[],
   latestDataCallId = 0,
-  latestDeadlinePassed = false
+  latestDeadlinePassed = false,
+  openCallOnly = false
 ): CompletionSummary {
   let systemsInCall = 0
   let systemsComplete = 0
@@ -339,6 +342,7 @@ export function summarizeCompletion(
       latestDataCallId,
       latestDeadlinePassed
     )
+    if (openCallOnly && !current) continue
     if (current) currentCallRows += 1
     const state = progressState(row, current)
 

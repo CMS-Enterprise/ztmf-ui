@@ -16,10 +16,10 @@ import Typography from '@mui/material/Typography'
 import { Link as RouterLink } from 'react-router-dom'
 import Link from '@mui/material/Link'
 import { colors, fonts, radius } from '@/theme/tokens'
-import ChartCard from './ChartCard'
+import ChartCard from '@/components/ScoreSummary/ChartCard'
 import ShowAllToggle from './ShowAllToggle'
 import { useExpandableRows } from './useExpandableRows'
-import { stageColor } from './stageColor'
+import { stageColor } from '@/components/ScoreSummary/stageColor'
 import {
   RISK_TIER_FLOOR,
   type RiskRow,

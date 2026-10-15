@@ -41,7 +41,10 @@ import {
   visibleOpDivs,
 } from './useOpDivScope'
 import { makeProgress, makeSystem } from './testFixtures'
-import { clickedIndex, windowContaining } from './components/chartIndex'
+import {
+  clickedIndex,
+  windowContaining,
+} from '@/components/ScoreSummary/chartIndex'
 import type { DashboardMaps } from '@/views/Home/aggregateScores'
 import type {
   OpDiv,
@@ -566,6 +569,40 @@ describe('progress', () => {
       systemsComplete: 2,
       notStarted: 1,
     })
+  })
+
+  it('can summarize only open-call rows, matching the table filter', () => {
+    // One system partly confirmed on the open call, one shown on a closed call
+    // at 0/40. Counted together, the tile read "0/2 · all 2 underway".
+    const CLOSED_CALL = 90
+    const systems = [
+      makeSystem({ fismasystemid: 1, fismaacronym: 'WORKING' }),
+      makeSystem({ fismasystemid: 2, fismaacronym: 'PAST' }),
+    ]
+    const maps = emptyMaps()
+    maps.chosenCallMap = { 1: OPEN_CALL, 2: CLOSED_CALL }
+    maps.progressMap = {
+      1: makeProgress(1, {
+        questionsexpected: 40,
+        questionsanswered: 40,
+        questionsupdated: 12,
+      }),
+      2: makeProgress(2, { questionsexpected: 40, questionsanswered: 0 }),
+    }
+    const mixed = buildOpDivRows(systems, maps)
+
+    expect(summarizeCompletion(mixed, OPEN_CALL, false)).toMatchObject({
+      systemsInCall: 2,
+      notStarted: 1,
+    })
+    const open = summarizeCompletion(mixed, OPEN_CALL, false, true)
+    expect(open).toMatchObject({
+      systemsInCall: 1,
+      notStarted: 0,
+      awaitingConfirmation: 0,
+      measuresConfirmations: true,
+    })
+    expect(open.progressPct).toBeCloseTo(30)
   })
 })
 
