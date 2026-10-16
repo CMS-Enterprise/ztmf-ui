@@ -41,6 +41,30 @@ function withQuery(
 }
 
 /**
+ * The three dimensions of a `/scores/aggregate` request. Every combination is
+ * a distinct response, so path and cache key are built from one shared shape
+ * to keep them in lockstep.
+ *
+ * Omitting `datacallId` is meaningful, not a mistake: the endpoint then
+ * returns one row per (datacall, system) pair, which is the full historical
+ * series. That request is expensive server-side - see `history`.
+ */
+type ScoreAggregateParams = {
+  datacallId?: ApiId
+  systemId?: ApiId
+  includePillars?: boolean
+}
+
+function scoresAggregatePath(params: ScoreAggregateParams): string {
+  return withQuery('/scores/aggregate', {
+    datacallid: params.datacallId,
+    fismasystemid: params.systemId,
+    // Omit rather than send `false`, matching fismaSystems.list.
+    include_pillars: params.includePillars || undefined,
+  })
+}
+
+/**
  * Canonical API paths. Callers may continue using Axios directly, but endpoint
  * spelling and dynamic path construction live here instead of in each view.
  *
@@ -101,6 +125,8 @@ export const apiPaths = {
     root: '/scores',
     detail: (scoreId: ApiId) => `/scores/${scoreId}`,
     confirm: (scoreId: ApiId) => `/scores/${scoreId}/confirm`,
+    revisions: (scoreId: ApiId) => `/scores/${scoreId}/revisions`,
+    undo: (scoreId: ApiId) => `/scores/${scoreId}/revisions/undo`,
     list: (
       datacallId: ApiId,
       systemId: ApiId | undefined,
@@ -113,16 +139,24 @@ export const apiPaths = {
         fismasystemid: String(systemId),
         include: includeFunctionOption ? 'functionoption' : undefined,
       }),
+    aggregate: (params: ScoreAggregateParams = {}) =>
+      scoresAggregatePath(params),
     aggregateByDatacall: (datacallId: ApiId) =>
-      withQuery('/scores/aggregate', { datacallid: datacallId }),
+      scoresAggregatePath({ datacallId }),
     // `systemId` is temporarily optional while the current questionnaire
     // context is being migrated; retain its existing request shape until the
     // query layer gives that state an explicit enabled guard.
     aggregateBySystem: (systemId: ApiId | undefined) =>
-      withQuery('/scores/aggregate', {
-        fismasystemid: String(systemId),
-        include_pillars: true,
+      scoresAggregatePath({
+        systemId: String(systemId),
+        includePillars: true,
       }),
+    /**
+     * Full per-cycle series across every data call. Spans every scored
+     * (system, call) pair server-side, so treat it as a lazy request and
+     * never combine it with `includePillars`.
+     */
+    history: () => scoresAggregatePath({}),
     progress: (datacallId: ApiId) =>
       withQuery('/scores/progress', { datacallid: datacallId }),
     diff: (fromDatacallId: ApiId, toDatacallId: ApiId, systemId: ApiId) =>
@@ -166,6 +200,26 @@ function keyId(id: ApiId): string
 function keyId(id: ApiId | undefined): string | undefined
 function keyId(id: ApiId | undefined): string | undefined {
   return id === undefined ? undefined : String(id)
+}
+
+/**
+ * Cache key for `/scores/aggregate`, carrying all three request dimensions.
+ *
+ * `includePillars` is part of the key on purpose: the pillar-bearing and
+ * pillar-free responses for the same data call are different payloads, and
+ * keying them together would let whichever landed second win, so a consumer
+ * reading `pillarscores` would intermittently see `undefined`.
+ */
+function scoresAggregateKey(params: ScoreAggregateParams) {
+  return [
+    'scores',
+    'aggregate',
+    {
+      datacallId: keyId(params.datacallId),
+      systemId: keyId(params.systemId),
+      includePillars: params.includePillars === true,
+    },
+  ] as const
 }
 
 /**
@@ -235,6 +289,11 @@ export const queryKeys = {
   },
   scores: {
     all: ['scores'] as const,
+    detail: (scoreId: ApiId) => ['scores', 'detail', keyId(scoreId)] as const,
+    // Hangs off the detail segment so invalidating a score also drops its
+    // history, matching the fisma-systems delegates sub-resource shape.
+    revisions: (scoreId: ApiId) =>
+      ['scores', 'detail', keyId(scoreId), 'revisions'] as const,
     list: (datacallId: ApiId, systemId: ApiId, includeFunctionOption = false) =>
       [
         'scores',
@@ -245,14 +304,15 @@ export const queryKeys = {
           includeFunctionOption,
         },
       ] as const,
+    aggregate: (params: ScoreAggregateParams = {}) =>
+      scoresAggregateKey(params),
     aggregateByDatacall: (datacallId: ApiId) =>
-      ['scores', 'aggregate', { datacallId: keyId(datacallId) }] as const,
+      scoresAggregateKey({ datacallId }),
     aggregateBySystem: (systemId: ApiId) =>
-      [
-        'scores',
-        'aggregate',
-        { systemId: keyId(systemId), includePillars: true },
-      ] as const,
+      scoresAggregateKey({ systemId, includePillars: true }),
+    /** Key for {@link apiPaths.scores.history} - the same request as
+     *  `aggregate({})`, named for the trend chart that reads it. */
+    history: () => scoresAggregateKey({}),
     progress: (datacallId: ApiId) =>
       ['scores', 'progress', { datacallId: keyId(datacallId) }] as const,
     diff: (fromDatacallId: ApiId, toDatacallId: ApiId, systemId: ApiId) =>

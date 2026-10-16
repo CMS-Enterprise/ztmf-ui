@@ -1,177 +1,191 @@
-import { useCallback, useMemo } from 'react'
+/**
+ * Query hooks for the score endpoints.
+ *
+ * Keyed to match the per-datacall aggregate and progress requests Home makes,
+ * so they become cache hits once Home reads through the query layer. See
+ * docs/data-fetching.md.
+ *
+ * @module utils/scores
+ */
 import {
   useQueries,
-  useQueryClient,
+  useQuery,
   type UseQueryResult,
 } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
+import { type QueryHookOptions } from '@/queryClient'
 import { EMPTY_LIST } from '@/utils/emptyList'
 import type { ScoreAggregate, ScoreProgress } from '@/types'
 
+/** Historical data calls are immutable; only the newest call's rows move. */
+const HISTORY_STALE_MS = 5 * 60_000
+const HISTORY_GC_MS = 10 * 60_000
+
 /**
- * Reads the score aggregate for one data call.
+ * Fetches score aggregates. Omitting `datacallId` returns the full per-cycle
+ * series - see `apiPaths.scores.history`.
  *
- * @param datacallId - The data call to aggregate.
- * @param signal - Optional AbortSignal to cancel the request.
- * @returns One row per system in the call (empty array when none).
+ * Always resolves to an array: the backend serializes an empty result as JSON
+ * null on some endpoints (ztmf#346).
+ * @param {object} params - datacallId / systemId / includePillars.
+ * @param {AbortSignal} [signal] - Abort signal from the query.
+ * @returns {Promise<ScoreAggregate[]>} The aggregate rows.
  */
-export async function fetchScoreAggregate(
-  datacallId: number,
+export async function fetchScoreAggregates(
+  params: {
+    datacallId?: number
+    systemId?: number
+    includePillars?: boolean
+  } = {},
   signal?: AbortSignal
 ): Promise<ScoreAggregate[]> {
-  const res = await axiosInstance.get<{ data: ScoreAggregate[] | null }>(
-    apiPaths.scores.aggregateByDatacall(datacallId),
+  const response = await axiosInstance.get<{ data: ScoreAggregate[] | null }>(
+    apiPaths.scores.aggregate(params),
     { signal }
   )
-  return res.data.data ?? []
+  return response.data.data ?? []
 }
 
 /**
- * Reads questionnaire progress for one data call.
- *
- * @param datacallId - The data call to report on.
- * @param signal - Optional AbortSignal to cancel the request.
- * @returns One row per system in the call (empty array when none).
+ * Fetches per-system questionnaire progress for one data call.
+ * @param {number} datacallId - The data call.
+ * @param {AbortSignal} [signal] - Abort signal from the query.
+ * @returns {Promise<ScoreProgress[]>} The progress rows.
  */
 export async function fetchScoreProgress(
   datacallId: number,
   signal?: AbortSignal
 ): Promise<ScoreProgress[]> {
-  const res = await axiosInstance.get<{ data: ScoreProgress[] | null }>(
+  const response = await axiosInstance.get<{ data: ScoreProgress[] | null }>(
     apiPaths.scores.progress(datacallId),
     { signal }
   )
-  return res.data.data ?? []
+  return response.data.data ?? []
 }
 
 /**
- * Query options for one data call's aggregate.
+ * Per-datacall aggregates for a set of calls, as an array aligned to
+ * `datacallIds` by index - the shape `buildDashboardMaps` consumes.
  *
- * Exported as options rather than a hook so the dashboard's fan-out and its
- * single prior-call read can share them. Sharing the key is the point: when
- * the prior call is also switched on, the two collapse into one request
- * instead of asking for the same aggregate twice.
- *
- * A failed read stays silent. The dashboard renders a system with no scores
- * the same way whether the read failed or the system is genuinely unscored,
- * and the fan-out means one bad call would otherwise toast on every visit.
- *
- * @param datacallId - The data call to aggregate.
- * @returns Options to pass to useQuery or useQueries.
+ * A failed or still-pending call yields EMPTY_LIST rather than collapsing the
+ * array, preserving both the index alignment and the "one call's failure does
+ * not sink the batch" behavior the dashboard relies on.
+ * @param {number[]} datacallIds - Active call ids, newest first.
+ * @param {QueryHookOptions} [options] - Standard enabled flag.
+ * @returns {{scoresPerCall: ScoreAggregate[][], isPending: boolean, isError: boolean}} Aligned rows and load state.
  */
-export function scoreAggregateQuery(datacallId: number) {
-  return {
-    queryKey: queryKeys.scores.aggregateByDatacall(datacallId),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      fetchScoreAggregate(datacallId, signal),
-    meta: { suppressErrorNotification: true },
-  }
-}
-
-/**
- * Query options for one data call's progress. Silent on failure for the same
- * reason as the aggregate above.
- *
- * @param datacallId - The data call to report on.
- * @returns Options to pass to useQuery or useQueries.
- */
-export function scoreProgressQuery(datacallId: number) {
-  return {
-    queryKey: queryKeys.scores.progress(datacallId),
-    queryFn: ({ signal }: { signal: AbortSignal }) =>
-      fetchScoreProgress(datacallId, signal),
-    meta: { suppressErrorNotification: true },
-  }
-}
-
-/**
- * Reads the aggregate and progress for several data calls at once.
- *
- * One failed call does not sink the batch: a rejected query resolves to an
- * empty list here, matching the per-request catch this replaces, so the
- * dashboard still renders every call that did answer.
- *
- * The returned object is referentially stable while the underlying results
- * are, so a caller can use it as a memo dependency.
- *
- * @param datacallIds - The calls to read, in the order the caller merges them.
- * @returns The per-call rows in that same order, and whether every read is
- *   still on its first load.
- */
-/**
- * Folds one set of per-call results into the rows and the first-load flag.
- *
- * Declared at module scope so its identity is stable: `combine` runs on every
- * render when the function itself changes, and its memoized result is what
- * keeps the caller's derived maps from being rebuilt on every keystroke and
- * every row checkbox.
- *
- * `pending` is every read still on its first load, not any read in flight.
- * Switching another data call on adds pending queries beside ones that
- * already answered, and treating that as loading would swap the dashboard
- * for a spinner and take the user's filters and sort with it.
- *
- * @param results - One result per data call, in the order asked for.
- * @returns The rows per call, and whether nothing has arrived yet.
- */
-function combineRows<T>(results: Array<UseQueryResult<T[]>>): {
-  rows: T[][]
-  pending: boolean
-} {
-  return {
-    rows: results.map((q) => q.data ?? (EMPTY_LIST as T[])),
-    pending: results.length > 0 && results.every((q) => q.isPending),
-  }
-}
-
-const combineAggregates = (results: Array<UseQueryResult<ScoreAggregate[]>>) =>
-  combineRows(results)
-const combineProgress = (results: Array<UseQueryResult<ScoreProgress[]>>) =>
-  combineRows(results)
-
-export function useDashboardScores(datacallIds: number[]): {
+export function useDatacallAggregates(
+  datacallIds: number[],
+  options: QueryHookOptions = {}
+): {
   scoresPerCall: ScoreAggregate[][]
-  progressPerCall: ScoreProgress[][]
-  loading: boolean
+  isPending: boolean
+  isInitialLoad: boolean
+  isError: boolean
 } {
-  const aggregates = useQueries({
-    queries: datacallIds.map(scoreAggregateQuery),
-    combine: combineAggregates,
-  })
-  const progress = useQueries({
-    queries: datacallIds.map(scoreProgressQuery),
-    combine: combineProgress,
-  })
-  return useMemo(
-    () => ({
-      scoresPerCall: aggregates.rows,
-      progressPerCall: progress.rows,
-      loading: aggregates.pending || progress.pending,
+  return useQueries({
+    queries: datacallIds.map((id) => ({
+      queryKey: queryKeys.scores.aggregate({ datacallId: id }),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchScoreAggregates({ datacallId: id }, signal),
+      enabled: options.enabled !== false,
+      // The dashboard renders an unscored system the same way whether the
+      // read failed or the system has no score, and the fan-out means one
+      // bad call would toast on every visit.
+      meta: { suppressErrorNotification: true },
+    })),
+    // `combine` is structurally memoized by the library, so the returned
+    // arrays keep a stable identity between renders and a consumer can use
+    // them as memo dependencies without re-running on every paint.
+    combine: (results) => ({
+      scoresPerCall: results.map((r) => r.data ?? (EMPTY_LIST as never[])),
+      isPending: results.some((r) => r.isPending),
+      // Distinct from isPending: switching another data call on adds pending
+      // queries beside ones that already answered, and a caller that swaps
+      // its whole view for a spinner then would lose the user's filters.
+      isInitialLoad: results.length > 0 && results.every((r) => r.isPending),
+      isError: results.some((r) => r.isError),
     }),
-    [aggregates, progress]
-  )
+  })
 }
 
 /**
- * Marks every cached score read stale after a write to an answer.
- *
- * The dashboard's aggregates and its progress counts are both derived from
- * answers, and they sit under the default stale time, so without this a user
- * who saves and returns within the minute reads their old score out of cache.
- * The questionnaire's own score list is derived from the same write.
- *
- * The whole `scores` prefix goes rather than the keys for one data call: a
- * write carries the system and call it touched, but `diff` and the
- * per-system aggregate are keyed on neither, and a stale row in any of them
- * is the bug this exists to prevent. These lists are small and the refetch
- * only happens for the ones on screen.
- *
- * @returns A callback to run after a score write succeeds.
+ * Per-datacall progress rows, aligned to `datacallIds` by index.
+ * @param {number[]} datacallIds - Active call ids, newest first.
+ * @param {QueryHookOptions} [options] - Standard enabled flag.
+ * @returns {{progressPerCall: ScoreProgress[][], isPending: boolean, isError: boolean}} Aligned rows and load state.
  */
-export function useInvalidateScores(): () => void {
-  const queryClient = useQueryClient()
-  return useCallback(() => {
-    void queryClient.invalidateQueries({ queryKey: queryKeys.scores.all })
-  }, [queryClient])
+export function useDatacallProgress(
+  datacallIds: number[],
+  options: QueryHookOptions = {}
+): {
+  progressPerCall: ScoreProgress[][]
+  isPending: boolean
+  isInitialLoad: boolean
+  isError: boolean
+} {
+  return useQueries({
+    queries: datacallIds.map((id) => ({
+      queryKey: queryKeys.scores.progress(id),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        fetchScoreProgress(id, signal),
+      enabled: options.enabled !== false,
+      meta: { suppressErrorNotification: true },
+    })),
+    combine: (results) => ({
+      progressPerCall: results.map((r) => r.data ?? (EMPTY_LIST as never[])),
+      isPending: results.some((r) => r.isPending),
+      isInitialLoad: results.length > 0 && results.every((r) => r.isPending),
+      isError: results.some((r) => r.isError),
+    }),
+  })
+}
+
+/**
+ * Pillar-level detail for ONE data call.
+ *
+ * Deliberately a single call rather than the whole active set: pillars
+ * multiply the row count by roughly the pillar count, and one anchor call is
+ * enough to chart a pillar profile.
+ * @param {number} [datacallId] - The anchor call; disabled when undefined.
+ * @param {QueryHookOptions} [options] - Standard enabled flag.
+ * @returns {UseQueryResult<ScoreAggregate[]>} The query result.
+ */
+export function usePillarAggregates(
+  datacallId: number | undefined,
+  options: QueryHookOptions = {}
+): UseQueryResult<ScoreAggregate[]> {
+  return useQuery({
+    queryKey: queryKeys.scores.aggregate({
+      datacallId,
+      includePillars: true,
+    }),
+    queryFn: ({ signal }) =>
+      fetchScoreAggregates(
+        { datacallId: datacallId as number, includePillars: true },
+        signal
+      ),
+    enabled: datacallId !== undefined && options.enabled !== false,
+  })
+}
+
+/**
+ * The full per-cycle series across every data call, for trend charts.
+ *
+ * Expensive server-side - it spans every scored (system, call) pair - so it
+ * never requests pillars and is cached longer than the per-call queries.
+ * @param {QueryHookOptions} [options] - Standard enabled flag.
+ * @returns {UseQueryResult<ScoreAggregate[]>} The query result.
+ */
+export function useScoreHistory(
+  options: QueryHookOptions = {}
+): UseQueryResult<ScoreAggregate[]> {
+  return useQuery({
+    queryKey: queryKeys.scores.history(),
+    queryFn: ({ signal }) => fetchScoreAggregates({}, signal),
+    enabled: options.enabled !== false,
+    staleTime: HISTORY_STALE_MS,
+    gcTime: HISTORY_GC_MS,
+  })
 }

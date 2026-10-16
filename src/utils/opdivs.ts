@@ -53,20 +53,26 @@ export async function fetchOpDivs(
  *
  * @param includeInactive - Pass true to include deactivated rows.
  * @param options - See QueryHookOptions.
- * @returns The rows and whether the load has settled (on failure too).
+ * @returns The rows, whether the load has settled (on failure too), and
+ *   whether it failed. The toast comes from the cache boundary, but the
+ *   OpDiv scope guards branch on the failure themselves.
  */
 export function useOpDivs(
   includeInactive = false,
   options: QueryHookOptions = {}
-): { opdivs: OpDiv[]; opdivsLoaded: boolean } {
-  const { data, isPending } = useQuery({
+): { opdivs: OpDiv[]; opdivsLoaded: boolean; opdivsError: boolean } {
+  const { data, isPending, isError } = useQuery({
     queryKey: queryKeys.opdivs.list(includeInactive),
     queryFn: ({ signal }) => fetchOpDivs(includeInactive, signal),
     enabled: options.enabled,
     meta: { errorMessage: OPDIVS_LOAD_ERROR },
     ...vocabularyQueryOptions,
   })
-  return { opdivs: data ?? EMPTY_LIST, opdivsLoaded: !isPending }
+  return {
+    opdivs: data ?? EMPTY_LIST,
+    opdivsLoaded: !isPending,
+    opdivsError: isError,
+  }
 }
 
 /**
@@ -78,6 +84,9 @@ export type OpDivInput = {
   name: string
   is_parent?: boolean
   active?: boolean
+  // Per-OpDiv ZTMF Insights capability. The backend only touches the column
+  // when the field is present, so callers that omit it leave it untouched.
+  insights_enabled?: boolean
 }
 
 /**

@@ -37,14 +37,20 @@ export async function fetchDatacalls(
 export function useDatacalls(options: QueryHookOptions = {}): {
   datacalls: datacall[]
   datacallsLoaded: boolean
+  datacallsError: boolean
 } {
-  const { data, isPending } = useQuery({
+  const { data, isPending, isError } = useQuery({
     queryKey: queryKeys.datacalls.list(),
     queryFn: ({ signal }) => fetchDatacalls(signal),
     select: sortDatacallsByDeadline,
     enabled: options.enabled,
   })
-  return { datacalls: data ?? EMPTY_LIST, datacallsLoaded: !isPending }
+  return {
+    datacalls: data ?? EMPTY_LIST,
+    datacallsLoaded: !isPending,
+    // The OpDiv dashboard renders its own message when this read fails.
+    datacallsError: isError,
+  }
 }
 
 /** Request body for POST /datacalls. */

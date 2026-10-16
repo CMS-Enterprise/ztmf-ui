@@ -8,20 +8,33 @@ export type CardProps = {
   children: ReactNode
   /** Optional sx overrides spread onto the outer wrapper. */
   sx?: object
+  /** Scroll anchor, for in-page jumps from a summary tile. */
+  id?: string
+  /** Landmark role, e.g. "region" for a named dashboard panel. */
+  role?: string
+  /** Id of the element naming the card. */
+  'aria-labelledby'?: string
 }
 
 /**
- * Plain white card with a token-driven 1px border and 10px radius. Used as
- * the visual wrapper for every section of the Pillar Scores page (overall
- * score, pillar tiles, trend radar, question breakdown). Kept in this
- * subfolder rather than ds/ because the page is the only consumer; if a
- * second page ever wants the exact same shell, promote it to ds/Card.
+ * Plain white card with a token-driven 1px border and 10px radius. The
+ * standard section wrapper on the Pillar Scores and OpDiv Dashboard pages
+ * (overall score, pillar tiles, charts, question breakdown).
  * @param {CardProps} props - Body and optional sx.
  * @returns {JSX.Element} A simple card container.
  */
-export default function Card({ children, sx }: CardProps) {
+export default function Card({
+  children,
+  sx,
+  id,
+  role,
+  'aria-labelledby': labelledBy,
+}: CardProps) {
   return (
     <Box
+      id={id}
+      role={role}
+      aria-labelledby={labelledBy}
       sx={{
         backgroundColor: colors.white,
         border: `1px solid ${colors.neutral200}`,

@@ -34,18 +34,35 @@ export async function fetchFismaSystems(
  * @param decommissioned - Pass true to include decommissioned systems.
  * @param options - `enabled`, for a layout that must not fetch before the
  *   session loader has authenticated.
- * @returns The rows and whether the first load has settled.
+ * @param decommissioned - Pass true to include decommissioned systems.
+ * @param options - See QueryHookOptions.
+ * @returns The rows, whether the first load has settled, whether it failed,
+ *   and which variant the served rows belong to. The OpDiv dashboard needs
+ *   the last two: it renders its own load-failure state, and it has to know
+ *   whether the rows it has include decommissioned systems.
  */
 export function useFismaSystems(
   decommissioned: boolean,
   options: QueryHookOptions = {}
-): { fismaSystems: FismaSystemType[]; fismaSystemsLoaded: boolean } {
-  const { data, isPending } = useQuery({
+): {
+  fismaSystems: FismaSystemType[]
+  fismaSystemsLoaded: boolean
+  fismaSystemsError: boolean
+  fismaSystemsFetchedDecommissioned: boolean
+} {
+  const { data, isPending, isError } = useQuery({
     queryKey: queryKeys.fismaSystems.list(decommissioned),
     queryFn: ({ signal }) => fetchFismaSystems(decommissioned, signal),
     enabled: options.enabled,
   })
-  return { fismaSystems: data ?? EMPTY_LIST, fismaSystemsLoaded: !isPending }
+  return {
+    fismaSystems: data ?? EMPTY_LIST,
+    fismaSystemsLoaded: !isPending,
+    fismaSystemsError: isError,
+    // The flag is part of the cache key, so whatever rows are being served
+    // were fetched with it. Without data there is nothing to describe.
+    fismaSystemsFetchedDecommissioned: data !== undefined && decommissioned,
+  }
 }
 
 /**

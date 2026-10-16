@@ -1,11 +1,11 @@
 import FismaTable from '../FismaTable/FismaTable'
-import StatisticsBlocks from '../StatisticBlocks/StatisticsBlocks'
-import { useState, useMemo } from 'react'
-import { useQuery, useQueryClient } from '@tanstack/react-query'
+import { useCallback, useState, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/keys'
-import { useDashboardScores, scoreAggregateQuery } from '@/utils/scores'
+import { useDatacallAggregates, useDatacallProgress } from '@/utils/scores'
 import { useContextProp } from '../Title/Context'
-import { Box, Button, CircularProgress } from '@mui/material'
+import { Box, Button, CircularProgress, Typography } from '@mui/material'
+import { visuallyHidden } from '@mui/utils'
 import AddIcon from '@mui/icons-material/Add'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
@@ -15,33 +15,19 @@ import EditSystemModal from '../EditSystemModal/EditSystemModal'
 import { EMPTY_SYSTEM } from '../EditSystemModal/emptySystem'
 import { exportSystemAnswers } from '@/utils/exportSystems'
 import { isAdmin as checkIsAdmin } from '@/utils/userRoles'
+import MySystemsBand from '../MySystems/MySystemsBand'
+import { jumpToPanel } from '@/components/ScoreSummary/jumpToPanel'
+import { isOpenCallInView } from '../FismaTable/dashboardFilters'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { ERROR_MESSAGES } from '@/constants'
-import { colors } from '@/theme/tokens'
+import { colors, radius } from '@/theme/tokens'
 import _ from 'lodash'
-import type { ScoreAggregate, FismaSystemType } from '@/types'
+import type { FismaSystemType } from '@/types'
 import { buildDashboardMaps } from './aggregateScores'
 import { deriveExportCallId } from './exportCall'
 
-/** Short fiscal-year label, e.g. "FY2022 ..." -> "FY22". Falls back to the name. */
-function shortFy(name: string | undefined): string {
-  if (!name) return ''
-  const match = name.match(/FY(\d{4})/i)
-  return match ? `FY${match[1].slice(2)}` : name
-}
-
-/** Average of the systemscore values in a score aggregate response. */
-function averageScore(aggregates: ScoreAggregate[]): number {
-  let sum = 0
-  let count = 0
-  for (const a of aggregates) {
-    if (a.systemscore) {
-      sum += a.systemscore
-      count += 1
-    }
-  }
-  return count > 0 ? sum / count : 0
-}
+/** Jump target for the band's Not started and Answers to confirm tiles. */
+const SYSTEMS_TABLE_ID = 'dashboard-systems-table'
 
 /**
  * Dashboard view: page header with export/add actions, the datacall context
@@ -49,60 +35,79 @@ function averageScore(aggregates: ScoreAggregate[]): number {
  * @returns {JSX.Element} The dashboard.
  */
 export default function HomePageContainer() {
+  const queryClient = useQueryClient()
   const [exporting, setExporting] = useState<boolean>(false)
   // Lifted so the Export CSV action can scope itself to the user's selection.
   // Empty array (default) -> export every system in the active datacall, which
   // matches the prior "select nothing, export all" behavior.
   const [selectedRows, setSelectedRows] = useState<number[]>([])
   const [addOpen, setAddOpen] = useState<boolean>(false)
+  // Lifted so the band's tiles can turn on the table's "Not updated only" filter.
+  const [notUpdatedOnly, setNotUpdatedOnly] = useState<boolean>(false)
   const {
     latestDataCallId,
     selectedDatacall,
+    activeDatacallIds,
     datacalls,
     datacallsLoaded,
-    activeDatacallIds,
     fismaSystems,
     userInfo,
     datacenterEnvironments,
     opdivs,
   } = useContextProp()
-  const queryClient = useQueryClient()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const datacallName = selectedDatacall?.datacall ?? ''
   const systemCount = fismaSystems.length
   const isAdmin = checkIsAdmin(userInfo)
+  // Everyone gets the band, so the dashboard reads the same whoever opens it.
+  // The band describes whatever /fismasystems returned for this caller, which
+  // the backend has already narrowed: an ISSO's assignments, an OpDiv admin's
+  // OpDiv, an HHS admin's estate. Admins who want per-OpDiv depth go to the
+  // OpDiv dashboard, which is built for it.
 
-  const { scoresPerCall, progressPerCall, loading } =
-    useDashboardScores(activeDatacallIds)
-  // Merged per system, choosing the call each system most recently updated.
-  // Scores and progress are merged together because the chosen call depends
-  // on both.
+  // Same gate FismaTable puts on its "Not updated only" switch.
+  const latestDeadlinePassed = useMemo(() => {
+    if (!latestDataCallId) return false
+    const latest = datacalls.find((d) => d.datacallid === latestDataCallId)
+    return latest ? new Date() > new Date(latest.deadline) : false
+  }, [datacalls, latestDataCallId])
+  const openCallInView = isOpenCallInView(
+    latestDataCallId,
+    latestDeadlinePassed,
+    activeDatacallIds
+  )
+  const showNotUpdated = useCallback((id: string) => {
+    setNotUpdatedOnly(true)
+    jumpToPanel(id)
+  }, [])
+
+  // Aggregate every active call in the year, then merge per system, choosing
+  // the call each system most recently updated. Scores and progress are read
+  // together because the chosen call depends on both. A single call's failure
+  // yields an empty list rather than sinking the batch - see useDatacallAggregates.
+  const { scoresPerCall, isInitialLoad: scoresFirstLoad } =
+    useDatacallAggregates(activeDatacallIds)
+  const { progressPerCall, isInitialLoad: progressFirstLoad } =
+    useDatacallProgress(activeDatacallIds)
+
   const { scoreMap, progressMap, systemCallMap, chosenCallMap } = useMemo(
     () => buildDashboardMaps(activeDatacallIds, scoresPerCall, progressPerCall),
     [activeDatacallIds, scoresPerCall, progressPerCall]
   )
 
-  // Average score for the immediately-prior datacall, for the Avg ZT trend.
-  // datacalls arrives deadline-sorted (newest first), so the prior call is
-  // the next entry after the active one - NOT the next-lower datacallid,
-  // which historical loads can out-id (#393).
-  const priorCall = useMemo(() => {
-    const activeIdx = datacalls.findIndex(
-      (dc) => dc.datacallid === activeDataCallId
-    )
-    return activeIdx >= 0 ? datacalls[activeIdx + 1] : undefined
-  }, [datacalls, activeDataCallId])
-  // Same key the fan-out above uses, so when the prior call is also switched
-  // on the two share one request instead of asking for the same aggregate
-  // twice. A failure just hides the trend.
-  const priorQuery = useQuery({
-    ...scoreAggregateQuery(priorCall?.datacallid ?? 0),
-    enabled: priorCall !== undefined,
-  })
-  const priorAvg =
-    priorCall && priorQuery.data ? averageScore(priorQuery.data) : undefined
-  const priorLabel =
-    priorCall && priorQuery.data ? shortFy(priorCall.datacall) : ''
+  // Three separate waits. The data calls decide which scores to ask for, so
+  // nothing can be rendered before they land. Once they have landed, a
+  // selection has not been derived yet for one paint, so hold through that
+  // too - but only when there are calls to select, or an environment with
+  // none would spin for good. After that, wait only while there is nothing
+  // to show: treating any read in flight as loading would swap the dashboard
+  // for a spinner whenever another call is switched on, unmounting
+  // FismaTable and taking the user's filters and sort with it.
+  const loading =
+    !datacallsLoaded ||
+    (datacalls.length > 0 && activeDatacallIds.length === 0) ||
+    scoresFirstLoad ||
+    progressFirstLoad
 
   // The single call the export targets, or null (button disabled) when the
   // selection spans more than one call. Derivation logic + rationale live in
@@ -143,10 +148,7 @@ export default function HomePageContainer() {
     setAddOpen(false)
   }
 
-  // The data calls decide which scores to ask for, so an empty selection
-  // before they land is not an answer. Rendering then would show every system
-  // unscored for a moment, then flip to the spinner once the ids arrive.
-  if (!datacallsLoaded || loading) {
+  if (loading) {
     return (
       <Box
         sx={{
@@ -222,20 +224,34 @@ export default function HomePageContainer() {
 
       <DatacallContextCard />
 
-      <StatisticsBlocks
-        scores={scoreMap}
-        progress={progressMap}
-        priorAvg={priorAvg}
-        priorLabel={priorLabel}
+      {/* Replaces the old stat tiles for everyone. Those described an estate -
+          highest, lowest, how many at Optimal - which answered nothing for a
+          reader holding three systems and little more for one holding a
+          thousand. This says what needs action instead, at whatever scope the
+          caller has. */}
+      <MySystemsBand
+        tableJump={
+          openCallInView
+            ? { targetId: SYSTEMS_TABLE_ID, onJump: showNotUpdated }
+            : undefined
+        }
       />
-      <FismaTable
-        scores={scoreMap}
-        selectedRows={selectedRows}
-        onSelectionChange={setSelectedRows}
-        progress={progressMap}
-        systemCallMap={systemCallMap}
-        chosenCallMap={chosenCallMap}
-      />
+      {/* Hidden, so the table gets its own section rather than sitting under the band's h2. */}
+      <Typography component="h2" sx={visuallyHidden}>
+        Systems
+      </Typography>
+      <Box id={SYSTEMS_TABLE_ID} sx={{ borderRadius: `${radius.card}px` }}>
+        <FismaTable
+          scores={scoreMap}
+          selectedRows={selectedRows}
+          onSelectionChange={setSelectedRows}
+          progress={progressMap}
+          systemCallMap={systemCallMap}
+          chosenCallMap={chosenCallMap}
+          notUpdatedOnly={notUpdatedOnly}
+          onNotUpdatedOnlyChange={setNotUpdatedOnly}
+        />
+      </Box>
 
       <EditSystemModal
         title="Add"

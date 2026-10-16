@@ -73,11 +73,13 @@ export default function Title() {
   const [dashboardSearch, setDashboardSearch] = useState<string>('')
   const authenticated = loaderData.status === 200
   const queryClient = useQueryClient()
-  const { fismaSystems, fismaSystemsLoaded } = useFismaSystems(
-    showDecommissioned,
-    { enabled: authenticated }
-  )
-  const { datacalls, datacallsLoaded } = useDatacalls({
+  const {
+    fismaSystems,
+    fismaSystemsLoaded,
+    fismaSystemsError,
+    fismaSystemsFetchedDecommissioned,
+  } = useFismaSystems(showDecommissioned, { enabled: authenticated })
+  const { datacalls, datacallsLoaded, datacallsError } = useDatacalls({
     enabled: authenticated,
   })
   // Datacenter-environment vocabulary is reference data shared by the system
@@ -92,7 +94,9 @@ export default function Title() {
   // deactivated OpDiv still resolves its name. opdivsLoaded distinguishes
   // "not fetched yet" from "fetched, and there are none" - both are an empty
   // list, and the questionnaire's insights gate needs the difference.
-  const { opdivs, opdivsLoaded } = useOpDivs(true, { enabled: authenticated })
+  const { opdivs, opdivsLoaded, opdivsError } = useOpDivs(true, {
+    enabled: authenticated,
+  })
 
   useEffect(() => {
     if (loaderData.status === 200) void clearOtherUserDrafts(userInfo.userid)
@@ -276,11 +280,16 @@ export default function Title() {
     },
     {
       label: 'OpDivs',
-      to: Routes.ADMIN_OPDIVS,
-      active: location.pathname.startsWith('/admin/opdivs'),
-      // OWNER manages OpDivs fully; an HHS admin reaches the page only to
-      // flip the per-OpDiv System Delegate toggle.
-      show: isUnscopedWriteAdmin(userInfo),
+      to: Routes.OPDIVS,
+      // Exact-or-slash rather than a bare startsWith: /opdivs now has both a
+      // dashboard (/opdivs/:id) and the management grid (/opdivs/manage)
+      // under it, and the tab must light up for all of them.
+      active:
+        location.pathname === Routes.OPDIVS ||
+        location.pathname.startsWith(`${Routes.OPDIVS}/`),
+      // Every admin tier lands on the per-OpDiv dashboard. The OWNER/HHS-only
+      // management grid is a header action inside the tab, not a nav item.
+      show: hasAdminRead,
     },
     {
       label: 'Events',
@@ -612,11 +621,15 @@ export default function Title() {
               showDecommissioned,
               setShowDecommissioned,
               fismaSystemsLoaded,
+              fismaSystemsError,
+              fismaSystemsFetchedDecommissioned,
+              datacallsError,
               dashboardSearch,
               setDashboardSearch,
               datacenterEnvironments,
               opdivs,
               opdivsLoaded,
+              opdivsError,
             }}
           />
         </Box>

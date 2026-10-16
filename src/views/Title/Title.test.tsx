@@ -1,4 +1,4 @@
-import { screen, waitFor } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { userData, UserRole } from '@/types'
 import { Routes } from '@/router/constants'
@@ -9,6 +9,12 @@ import { Routes } from '@/router/constants'
 // LoginPage.test, react-router-dom is mocked module-wide and the loader /
 // location are driven per-test. Link and Outlet are stubbed to bare wrappers
 // because the account menu and page body only need to render, not navigate.
+type MockOutletContext = {
+  activeDatacallIds?: number[]
+  fismaSystems?: { fismasystemid: number }[]
+  setShowDecommissioned?: (on: boolean) => void
+}
+let mockOutletContext: MockOutletContext | undefined
 jest.mock('react-router-dom', () => ({
   __esModule: true,
   useLoaderData: jest.fn(),
@@ -18,7 +24,22 @@ jest.mock('react-router-dom', () => ({
   Link: ({ children, to }: { children: React.ReactNode; to?: string }) => (
     <a href={typeof to === 'string' ? to : '/'}>{children}</a>
   ),
-  Outlet: () => <div>OUTLET</div>,
+  Outlet: ({ context }: { context?: MockOutletContext }) => {
+    mockOutletContext = context
+    return (
+      <>
+        <div>OUTLET</div>
+        <div data-testid="active-datacall-ids">
+          {JSON.stringify(context?.activeDatacallIds ?? [])}
+        </div>
+        <div data-testid="system-ids">
+          {JSON.stringify(
+            (context?.fismaSystems ?? []).map((s) => s.fismasystemid)
+          )}
+        </div>
+      </>
+    )
+  },
 }))
 
 // The header does a burst of reference-data fetches on mount (systems,
@@ -93,6 +114,7 @@ import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
 import { notify } from '@/utils/notify'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
+import { queryKeys } from '@/api/keys'
 import Title from './Title'
 
 const mockedUseLoaderData = useLoaderData as jest.Mock
@@ -116,7 +138,7 @@ function makeUser(role: UserRole): userData {
 function renderTitleFor(role: UserRole) {
   mockedUseLoaderData.mockReturnValue({ status: 200, response: makeUser(role) })
   mockedUseLocation.mockReturnValue({ pathname: '/' })
-  renderWithQueryClient(<Title />)
+  return renderWithQueryClient(<Title />)
 }
 
 const originalLocation = window.location
@@ -204,6 +226,39 @@ describe('Title logout affordance', () => {
     }
   )
 
+  it.each([
+    'OWNER',
+    'HHS_ADMIN',
+    'HHS_READONLY_ADMIN',
+    'OPDIV_ADMIN',
+    'OPDIV_READONLY_ADMIN',
+  ] as UserRole[])(
+    'shows the OpDivs nav link for the admin tier %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      // The tab now leads to the per-OpDiv dashboard, which every admin tier
+      // can read - the OWNER/HHS-only management grid sits behind a header
+      // action inside it, not behind the tab itself.
+      const link = await screen.findByRole('link', { name: 'OpDivs' })
+      expect(link).toHaveAttribute('href', expect.stringContaining('/opdivs'))
+    }
+  )
+
+  it.each(['ISSO', 'ISSM', 'SYSTEM_DELEGATE'] as UserRole[])(
+    'hides the OpDivs nav link from the system-scoped tier %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      // These tiers hold system-level scope only: the backend does not honor
+      // an OpDiv grant for them, so an OpDiv-wide view would misreport.
+      await screen.findByRole('button', { name: /^account:/i })
+      expect(
+        screen.queryByRole('link', { name: 'OpDivs' })
+      ).not.toBeInTheDocument()
+    }
+  )
+
   it('calls the logout endpoint and lands the user on the sign-in page', async () => {
     renderTitleFor('ISSO')
 
@@ -255,5 +310,74 @@ describe('Title logout affordance', () => {
     // Broadcast is independent of the POST result (best-effort).
     expect(mockedBroadcastLogout).toHaveBeenCalled()
     errSpy.mockRestore()
+  })
+})
+
+describe('Title data call selection', () => {
+  it('selects the first data call once it is created', async () => {
+    const created = {
+      datacallid: 1,
+      datacall: 'FY26 ZTM',
+      datecreated: '2025-10-01',
+      deadline: '2026-09-11',
+    }
+    let datacalls: (typeof created)[] = []
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url === '/datacalls' ? datacalls : [] } })
+    )
+    const { queryClient } = renderTitleFor('OWNER')
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith('/datacalls', expect.anything())
+    )
+    expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[]')
+
+    datacalls = [created]
+    await act(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.datacalls.all,
+      })
+    })
+
+    await waitFor(() =>
+      expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[1]')
+    )
+  })
+})
+
+describe('Title systems fetch', () => {
+  it('keeps the active list when a slow decommissioned read lands late', async () => {
+    let resolveDecommissioned: (value: unknown) => void = () => {}
+    mockedGet.mockImplementation((url: string) => {
+      if (url === '/fismasystems?decommissioned=true') {
+        return new Promise((resolve) => {
+          resolveDecommissioned = resolve
+        })
+      }
+      if (url === '/fismasystems') {
+        return Promise.resolve({ data: { data: [{ fismasystemid: 1 }] } })
+      }
+      return Promise.resolve({ data: { data: [] } })
+    })
+    renderTitleFor('OWNER')
+    await waitFor(() =>
+      expect(screen.getByTestId('system-ids')).toHaveTextContent('[1]')
+    )
+
+    act(() => mockOutletContext?.setShowDecommissioned?.(true))
+    await waitFor(() =>
+      expect(mockedGet).toHaveBeenCalledWith(
+        '/fismasystems?decommissioned=true',
+        expect.anything()
+      )
+    )
+    act(() => mockOutletContext?.setShowDecommissioned?.(false))
+
+    await act(async () => {
+      resolveDecommissioned({ data: { data: [{ fismasystemid: 99 }] } })
+    })
+
+    // The late rows land under their own key, so the active view still shows
+    // the active list rather than being overwritten by them.
+    expect(screen.getByTestId('system-ids')).toHaveTextContent('[1]')
   })
 })

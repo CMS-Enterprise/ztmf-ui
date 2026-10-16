@@ -401,6 +401,10 @@ export type users = {
   // older accounts is NOT the same as "never signed in" - keep any empty-state
   // wording neutral. /users/current always returns null for this field.
   last_seen?: string | null
+  // Time-boxed access expiry, RFC3339. A backend CHECK constrains it to
+  // SYSTEM_DELEGATE rows, so it is null for every other role - absence means
+  // "does not expire", not "expiry unknown".
+  access_expires_at?: string | null
 }
 
 export type datacall = {
@@ -438,6 +442,9 @@ export type FismaTableProps = {
   // The single call chosen for each system's dashboard row (most-recently-updated),
   // used so Pillar Scores opens on the same call the table is displaying.
   chosenCallMap?: Record<number, number>
+  /** Controls the "Not updated only" filter when set; uncontrolled otherwise. */
+  notUpdatedOnly?: boolean
+  onNotUpdatedOnlyChange?: (value: boolean) => void
 }
 
 export type ThemeColor =
@@ -627,4 +634,80 @@ export type Insight = {
   questionid: number
   payload: InsightPayload
   synced_at: string
+}
+
+// ── Score revisions (GET /api/v1/scores/{scoreid}/revisions) ───────────
+// Append-only answer history (ztmf-misc#391). A revision records both sides
+// of one change, so the drawer can show before → after without reconstructing
+// anything client-side.
+//
+// Undo is head-only: the server marks every other row `undoable: false` and
+// supplies the `reason` verbatim. The client renders that string and never
+// re-derives the policy, which is what keeps one copy of the rules.
+
+/** What produced a revision. 'translate' is reserved for ztmf-misc#397. */
+export type ScoreRevisionKind =
+  | 'create'
+  | 'update'
+  | 'confirm'
+  | 'undo'
+  | 'translate'
+
+/**
+ * One side of a change. Deliberately NOT ScoreDiffSide: that type requires
+ * optionname and score, which a revision omits when the catalog row it named
+ * has since been deleted - score_revisions carries no FK to the catalog so
+ * that history survives its edits.
+ */
+export type ScoreRevisionSide = {
+  functionoptionid: number
+  optionname?: string
+  score?: number
+  notes: string | null
+  notes_is_ai_summary: boolean
+  status: ScoreStatus
+}
+
+export type ScoreRevision = {
+  revisionid: number
+  scoreid: number
+  revision_no: number
+  kind: ScoreRevisionKind
+  createdat: string
+  actor?: LastEditedBy
+  /** null exactly when kind is 'create' - there is no earlier value. */
+  prev: ScoreRevisionSide | null
+  new: ScoreRevisionSide
+  undoes_revisionid?: number
+  undoable: boolean
+  /** Present exactly when undoable is false. Rendered verbatim. */
+  reason?: string
+}
+
+/**
+ * The head is projected separately from the list because it is the only part
+ * the strip reads: its revisionid is the optimistic-concurrency token and its
+ * kind decides the button label.
+ */
+export type ScoreRevisionHead = {
+  revisionid: number
+  revision_no: number
+  kind: ScoreRevisionKind
+  undoable: boolean
+  reason?: string
+}
+
+export type ScoreHistory = {
+  scoreid: number
+  fismasystemid: number
+  datacallid: number
+  /** null when the answer has no recorded history (e.g. carried forward). */
+  head: ScoreRevisionHead | null
+  revisions: ScoreRevision[]
+}
+
+export type ScoreUndoResult = {
+  score: QuestionScores
+  revision: ScoreRevision
+  head: ScoreRevisionHead
 }

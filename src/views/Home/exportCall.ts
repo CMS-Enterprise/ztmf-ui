@@ -23,6 +23,36 @@ export function deriveExportCallId(
   chosenCallMap: Record<number, number>,
   activeDataCallId: number
 ): number | null {
+  const selectedCallIds = collectExportCallIds(
+    selectedRows,
+    systemCallMap,
+    chosenCallMap
+  )
+  if (selectedCallIds.length === 1) return selectedCallIds[0]
+  if (selectedCallIds.length === 0) return activeDataCallId
+  return null
+}
+
+/**
+ * Every data call the given systems have answers in.
+ *
+ * The set {@link deriveExportCallId} collapses to a single target. Exposed
+ * separately so a caller can offer the choice instead of disabling: the export
+ * endpoint is per-call, and while FY26 onward runs a single call per year, the
+ * earlier years that ran several remain viewable, so a selection spanning two
+ * calls is a reachable state rather than an error.
+ * @param {number[]} selectedRows - Selected fismasystemids.
+ * @param {Record<number, number[]>} systemCallMap - System id -> call ids it
+ *   has scores in.
+ * @param {Record<number, number>} chosenCallMap - System id -> the call the
+ *   dashboard displays the row against.
+ * @returns {number[]} The distinct call ids, in first-seen order.
+ */
+export function collectExportCallIds(
+  selectedRows: number[],
+  systemCallMap: Record<number, number[]>,
+  chosenCallMap: Record<number, number>
+): number[] {
   const selectedCallIds = new Set<number>()
   for (const id of selectedRows) {
     const scoreCalls = systemCallMap[id] ?? []
@@ -33,7 +63,5 @@ export function deriveExportCallId(
       if (chosen != null) selectedCallIds.add(chosen)
     }
   }
-  if (selectedCallIds.size === 1) return [...selectedCallIds][0]
-  if (selectedCallIds.size === 0) return activeDataCallId
-  return null
+  return [...selectedCallIds]
 }

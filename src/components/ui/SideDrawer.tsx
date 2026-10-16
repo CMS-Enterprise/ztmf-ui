@@ -1,4 +1,4 @@
-import { ReactNode } from 'react'
+import { ReactNode, useId } from 'react'
 import Drawer from '@mui/material/Drawer'
 import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
@@ -22,6 +22,8 @@ export type SideDrawerProps = {
   footer?: ReactNode
   /** Drawer width in pixels. Defaults to 480. */
   width?: number
+  /** Optional id for the drawer panel, for tests and scan scoping. */
+  id?: string
 }
 
 /**
@@ -41,9 +43,23 @@ export function SideDrawer({
   children,
   footer,
   width = 480,
+  id,
 }: SideDrawerProps) {
+  const titleId = useId()
   return (
-    <Drawer anchor="right" open={open} onClose={onClose}>
+    <Drawer
+      anchor="right"
+      open={open}
+      onClose={onClose}
+      // MUI's Drawer puts no dialog semantics on the Paper, so add what Dialog
+      // provides, plus aria-modal for the focus trap.
+      PaperProps={{
+        id,
+        role: 'dialog',
+        'aria-modal': true,
+        'aria-labelledby': titleId,
+      }}
+    >
       <Box
         sx={{
           width: { xs: '100vw', sm: width },
@@ -81,6 +97,8 @@ export function SideDrawer({
               </Typography>
             )}
             <Typography
+              id={titleId}
+              component="h2"
               sx={{ fontSize: 17, fontWeight: 700, color: colors.ink }}
             >
               {title}
@@ -95,7 +113,25 @@ export function SideDrawer({
           </IconActionButton>
         </Box>
 
-        <Box sx={{ flex: 1, overflowY: 'auto', px: 5, py: 4 }}>{children}</Box>
+        {/* Focusable so Safari keyboard users can scroll a body with no
+            controls in it (WCAG 2.1.1). */}
+        <Box
+          tabIndex={0}
+          role="region"
+          aria-labelledby={titleId}
+          sx={{
+            flex: 1,
+            overflowY: 'auto',
+            px: 5,
+            py: 4,
+            '&:focus-visible': {
+              outline: `2px solid ${colors.primary}`,
+              outlineOffset: -2,
+            },
+          }}
+        >
+          {children}
+        </Box>
 
         {footer && (
           <Box

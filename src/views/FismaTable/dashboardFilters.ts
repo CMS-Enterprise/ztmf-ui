@@ -16,7 +16,7 @@ export type DashboardFilterState = {
    * When true, keep only systems whose displayed call is the open one (ui#639).
    * An opt-in focus filter, deliberately default-off: hiding closed-call rows
    * by default would drop them silently from the view and the row-selection
-   * export, and disagree with the stat tiles, which count all systems.
+   * export, and disagree with the summary band, which counts all systems.
    */
   openCallOnly: boolean
 }
