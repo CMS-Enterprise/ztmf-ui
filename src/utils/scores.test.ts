@@ -78,6 +78,50 @@ describe('useDashboardScores', () => {
   })
 })
 
+// FismaTable rebuilds its rows from the maps the dashboard derives from
+// this, so a fresh object every render makes every checkbox click recompute
+// the grid.
+it('returns the same object across renders while the data is unchanged', async () => {
+  mock.onGet(aggUrl(3)).reply(200, { data: [{ fismasystemid: 33 }] })
+  mock.onGet(progUrl(3)).reply(200, { data: [] })
+
+  const { result, rerender } = renderHook(() => useDashboardScores([3]), {
+    wrapper: queryWrapper(createTestQueryClient()),
+  })
+
+  await waitFor(() => expect(result.current.loading).toBe(false))
+  const first = result.current
+  rerender()
+  rerender()
+  expect(result.current).toBe(first)
+  expect(result.current.scoresPerCall).toBe(first.scoresPerCall)
+})
+
+// The spinner this drives replaces the whole dashboard, so it has to mean
+// "nothing to show yet", not "a read is in flight". Switching another call
+// on would otherwise unmount the table and lose the user's filters.
+it('stays out of the loading state when one call has already answered', async () => {
+  mock.onGet(aggUrl(1)).reply(200, { data: [{ fismasystemid: 11 }] })
+  mock.onGet(progUrl(1)).reply(200, { data: [] })
+  // The second call never answers, standing in for one just switched on.
+  mock.onGet(aggUrl(2)).reply(() => new Promise(() => {}))
+  mock.onGet(progUrl(2)).reply(() => new Promise(() => {}))
+
+  const { result, rerender } = renderHook(
+    ({ ids }) => useDashboardScores(ids),
+    {
+      wrapper: queryWrapper(createTestQueryClient()),
+      initialProps: { ids: [1] },
+    }
+  )
+  await waitFor(() => expect(result.current.loading).toBe(false))
+
+  rerender({ ids: [1, 2] })
+
+  expect(result.current.loading).toBe(false)
+  expect(result.current.scoresPerCall[0]).toHaveLength(1)
+})
+
 describe('score query options', () => {
   // The dashboard renders an unscored system the same way whether the read
   // failed or the system has no score, and the fan-out means one bad call

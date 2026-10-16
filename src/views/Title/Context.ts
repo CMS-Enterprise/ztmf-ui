@@ -15,6 +15,9 @@ type ContextType = {
   latestDeadline: string
   // All data calls (deadline-sorted) for resolving a call id to its name.
   datacalls: datacall[]
+  // Whether that read has settled. An empty list is a real answer, so the
+  // dashboard cannot tell "no calls yet" from "none exist" without this.
+  datacallsLoaded: boolean
   // The data calls whose scores/progress the dashboard aggregates - the active
   // year's calls, toggleable. selectedDatacall is the single active call when
   // exactly one is on (drives the single-id flows), else null while aggregating.

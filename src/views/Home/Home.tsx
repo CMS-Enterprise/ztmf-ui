@@ -59,6 +59,7 @@ export default function HomePageContainer() {
     latestDataCallId,
     selectedDatacall,
     datacalls,
+    datacallsLoaded,
     activeDatacallIds,
     fismaSystems,
     userInfo,
@@ -142,7 +143,10 @@ export default function HomePageContainer() {
     setAddOpen(false)
   }
 
-  if (loading) {
+  // The data calls decide which scores to ask for, so an empty selection
+  // before they land is not an answer. Rendering then would show every system
+  // unscored for a moment, then flip to the spinner once the ids arrive.
+  if (!datacallsLoaded || loading) {
     return (
       <Box
         sx={{

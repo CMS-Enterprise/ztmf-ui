@@ -77,7 +77,9 @@ export default function Title() {
     showDecommissioned,
     { enabled: authenticated }
   )
-  const { datacalls } = useDatacalls({ enabled: authenticated })
+  const { datacalls, datacallsLoaded } = useDatacalls({
+    enabled: authenticated,
+  })
   // Datacenter-environment vocabulary is reference data shared by the system
   // form (dropdown) and the questionnaire pillar filter, so it is fetched
   // once here and passed down via context. Failure is non-fatal: consumers
@@ -602,6 +604,7 @@ export default function Title() {
               latestDatacall,
               latestDeadline,
               datacalls,
+              datacallsLoaded,
               activeDatacallIds,
               selectedDatacall,
               setSelectedDatacall,
