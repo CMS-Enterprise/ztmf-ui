@@ -5,16 +5,17 @@ import type { userData } from '@/types'
 //
 // #569's QuickSearchToolbar unit tests lock in that "Clear filters" calls
 // setShowDecommissioned(false). But the behavior that actually drops the
-// decommissioned rows is Title's refetch effect - fetchFismaSystems keyed on
-// showDecommissioned - which no unit test exercises. This test renders the REAL
-// Title so that effect runs, and drives showDecommissioned through the real
-// Outlet context to assert the fetch hits the unparameterized GET /fismasystems
-// on clear (and ?decommissioned=true when enabled), with rows added/dropped.
+// decommissioned rows lives in Title, where showDecommissioned is part of the
+// systems query key. Toggling it swaps between two cached lists, so enabling
+// the filter fetches ?decommissioned=true once and clearing it serves the
+// active-only list already in cache. This test renders the REAL Title and
+// drives showDecommissioned through the real Outlet context to assert both the
+// row changes and that the clear costs no request.
 //
 // Mock setup mirrors Title.test.tsx, except Outlet renders a lightweight harness
 // that consumes the passed context (Title's real setShowDecommissioned + live
 // fismaSystems) - standing in for the deep Home > FismaTable > DataGrid subtree
-// so the test targets Title's refetch, not the DataGrid.
+// so the test targets Title, not the DataGrid.
 jest.mock('react-router-dom', () => ({
   __esModule: true,
   useLoaderData: jest.fn(),
@@ -165,8 +166,8 @@ afterEach(() => {
   })
 })
 
-describe('Title - Clear filters drops decommissioned rows via refetch (#572)', () => {
-  it('refetches the unparameterized endpoint on clear, dropping decommissioned rows', async () => {
+describe('Title - Clear filters drops decommissioned rows (#572)', () => {
+  it('swaps back to the cached active-only list on clear, with no refetch', async () => {
     renderWithQueryClient(<Title />)
 
     // 1. Mount: active-only load against the unparameterized endpoint.
@@ -183,15 +184,17 @@ describe('Title - Clear filters drops decommissioned rows via refetch (#572)', (
     expect(await screen.findByText('Decommissioned Zeta')).toBeInTheDocument()
     expect(fismaSystemsCalls()).toContain('/fismasystems?decommissioned=true')
 
-    // 3. Clear filters (setShowDecommissioned(false)): the refetch fires against
-    //    the UNPARAMETERIZED endpoint and the decommissioned row leaves the grid.
+    // 3. Clear filters (setShowDecommissioned(false)): the decommissioned row
+    //    leaves the grid, which is what #572 is about.
+    const before = fismaSystemsCalls().length
     fireEvent.click(screen.getByRole('button', { name: 'clear-filters' }))
     await waitFor(() =>
       expect(screen.queryByText('Decommissioned Zeta')).not.toBeInTheDocument()
     )
-    // The most recent systems fetch was the plain endpoint, not ?decommissioned.
-    const calls = fismaSystemsCalls()
-    expect(calls[calls.length - 1]).toBe('/fismasystems')
     expect(screen.getByText('Active Alpha')).toBeInTheDocument()
+    // The flag is part of the cache key, so clearing swaps back to the list
+    // already fetched at mount rather than asking for it again. #572 used to
+    // be fixed by that refetch; it is now fixed without one.
+    expect(fismaSystemsCalls()).toHaveLength(before)
   })
 })

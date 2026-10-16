@@ -81,6 +81,7 @@ export function useDatacallAggregates(
 ): {
   scoresPerCall: ScoreAggregate[][]
   isPending: boolean
+  isInitialLoad: boolean
   isError: boolean
 } {
   return useQueries({
@@ -89,6 +90,10 @@ export function useDatacallAggregates(
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         fetchScoreAggregates({ datacallId: id }, signal),
       enabled: options.enabled !== false,
+      // The dashboard renders an unscored system the same way whether the
+      // read failed or the system has no score, and the fan-out means one
+      // bad call would toast on every visit.
+      meta: { suppressErrorNotification: true },
     })),
     // `combine` is structurally memoized by the library, so the returned
     // arrays keep a stable identity between renders and a consumer can use
@@ -96,6 +101,10 @@ export function useDatacallAggregates(
     combine: (results) => ({
       scoresPerCall: results.map((r) => r.data ?? (EMPTY_LIST as never[])),
       isPending: results.some((r) => r.isPending),
+      // Distinct from isPending: switching another data call on adds pending
+      // queries beside ones that already answered, and a caller that swaps
+      // its whole view for a spinner then would lose the user's filters.
+      isInitialLoad: results.length > 0 && results.every((r) => r.isPending),
       isError: results.some((r) => r.isError),
     }),
   })
@@ -113,6 +122,7 @@ export function useDatacallProgress(
 ): {
   progressPerCall: ScoreProgress[][]
   isPending: boolean
+  isInitialLoad: boolean
   isError: boolean
 } {
   return useQueries({
@@ -121,10 +131,12 @@ export function useDatacallProgress(
       queryFn: ({ signal }: { signal: AbortSignal }) =>
         fetchScoreProgress(id, signal),
       enabled: options.enabled !== false,
+      meta: { suppressErrorNotification: true },
     })),
     combine: (results) => ({
       progressPerCall: results.map((r) => r.data ?? (EMPTY_LIST as never[])),
       isPending: results.some((r) => r.isPending),
+      isInitialLoad: results.length > 0 && results.every((r) => r.isPending),
       isError: results.some((r) => r.isError),
     }),
   })

@@ -86,9 +86,11 @@ beforeEach(() => {
         deadline: '2099-12-31T23:59:59Z',
       },
     ],
+    // An empty selection before the calls land is not an answer, so the
+    // dashboard waits on this rather than on the id list being non-empty.
+    datacallsLoaded: true,
     activeDatacallIds: [5],
     fismaSystems: [],
-    setFismaSystems: jest.fn(),
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -110,6 +112,22 @@ test('the Add system modal receives the shared OpDiv list', async () => {
   expect(modalProps.mode).toBe('create')
   // The full list, inactive included: the modal filters to active itself.
   expect(modalProps.opdivs).toEqual(OPDIVS)
+})
+
+// On a cold load the data calls have not arrived, so the selection is empty
+// and no scores are asked for. Rendering then showed every system unscored
+// for a moment, then the spinner once the ids landed, then the real numbers.
+test('waits for the data calls instead of rendering an unscored table', async () => {
+  mockCtx.datacallsLoaded = false
+  mockCtx.datacalls = []
+  mockCtx.activeDatacallIds = []
+
+  renderWithProviders(<Home />)
+
+  expect(await screen.findByRole('progressbar')).toBeInTheDocument()
+  expect(
+    screen.queryByRole('button', { name: 'Add system' })
+  ).not.toBeInTheDocument()
 })
 
 describe('the summary band tiles', () => {
@@ -159,8 +177,9 @@ describe('the summary band tiles', () => {
     )
     expect(tableProps.notUpdatedOnly).toBe(true)
 
-    // Adding a closed call means new score queries, so the table unmounts
-    // behind the spinner and remounts once they settle.
+    // Adding a closed call means new score queries. The calls already in view
+    // have answered, so the table stays mounted while those load rather than
+    // being replaced by the page spinner.
     mockCtx = {
       ...mockCtx,
       activeDatacallIds: [5, 4],
@@ -176,7 +195,7 @@ describe('the summary band tiles', () => {
     }
     tableProps = {}
     rerender(<Home />)
-    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+    expect(screen.queryByRole('progressbar')).not.toBeInTheDocument()
 
     await waitFor(() => expect(tableProps.notUpdatedOnly).toBe(true))
   })

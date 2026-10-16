@@ -7,12 +7,16 @@ jest.mock('@/axiosConfig', () => {
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
 })
 
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import { queryKeys } from '@/api/keys'
 import axiosInstance from '@/axiosConfig'
-import { setTargetMaturity, useSetTargetMaturity } from './fismaSystems'
+import {
+  setTargetMaturity,
+  useFismaSystem,
+  useSetTargetMaturity,
+} from './fismaSystems'
 import type { FismaSystemType } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
@@ -28,6 +32,25 @@ const SAVED = {
   fismasystemid: SYSTEM_ID,
   target_maturity_tier: 'Advanced',
 } as unknown as FismaSystemType
+
+describe('useFismaSystem', () => {
+  // TanStack Query rejects a queryFn that resolves undefined, so returning it
+  // for a served "no such system" would fail the query and retry a request
+  // the server already answered.
+  it('resolves a served null to null rather than failing the query', async () => {
+    mock.onGet(`/fismasystems/${SYSTEM_ID}`).reply(200, { data: null })
+
+    const { result } = renderHook(
+      () => useFismaSystem(SYSTEM_ID, { enabled: true }),
+      { wrapper: queryWrapper(createTestQueryClient()) }
+    )
+
+    await waitFor(() => expect(result.current.isPending).toBe(false))
+    expect(result.current.isError).toBe(false)
+    expect(result.current.data).toBeNull()
+    expect(mock.history.get).toHaveLength(1)
+  })
+})
 
 describe('setTargetMaturity', () => {
   it('puts the tier and justification and returns the echoed record', async () => {

@@ -80,13 +80,9 @@ jest.mock('@/views/EditSystemModal/EditSystemModal', () => ({
   __esModule: true,
   default: () => null,
 }))
-let mockOnDatacallCreated: (() => void) | undefined
 jest.mock('@/views/DatacallModal/DataCallModal', () => ({
   __esModule: true,
-  default: ({ onCreated }: { onCreated: () => void }) => {
-    mockOnDatacallCreated = onCreated
-    return null
-  },
+  default: () => null,
 }))
 jest.mock('@/components/Footer/Footer', () => ({
   __esModule: true,
@@ -118,6 +114,7 @@ import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
 import { notify } from '@/utils/notify'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
+import { queryKeys } from '@/api/keys'
 import Title from './Title'
 
 const mockedUseLoaderData = useLoaderData as jest.Mock
@@ -141,7 +138,7 @@ function makeUser(role: UserRole): userData {
 function renderTitleFor(role: UserRole) {
   mockedUseLoaderData.mockReturnValue({ status: 200, response: makeUser(role) })
   mockedUseLocation.mockReturnValue({ pathname: '/' })
-  renderWithQueryClient(<Title />)
+  return renderWithQueryClient(<Title />)
 }
 
 const originalLocation = window.location
@@ -328,14 +325,19 @@ describe('Title data call selection', () => {
     mockedGet.mockImplementation((url: string) =>
       Promise.resolve({ data: { data: url === '/datacalls' ? datacalls : [] } })
     )
-    renderTitleFor('OWNER')
+    const { queryClient } = renderTitleFor('OWNER')
     await waitFor(() =>
       expect(mockedGet).toHaveBeenCalledWith('/datacalls', expect.anything())
     )
     expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[]')
 
     datacalls = [created]
-    mockOnDatacallCreated?.()
+    await act(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.datacalls.all,
+      })
+    })
+
     await waitFor(() =>
       expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[1]')
     )
@@ -343,7 +345,7 @@ describe('Title data call selection', () => {
 })
 
 describe('Title systems fetch', () => {
-  it('ignores a slower response to a request that was superseded', async () => {
+  it('keeps the active list when a slow decommissioned read lands late', async () => {
     let resolveDecommissioned: (value: unknown) => void = () => {}
     mockedGet.mockImplementation((url: string) => {
       if (url === '/fismasystems?decommissioned=true') {
@@ -362,15 +364,20 @@ describe('Title systems fetch', () => {
     )
 
     act(() => mockOutletContext?.setShowDecommissioned?.(true))
-    act(() => mockOutletContext?.setShowDecommissioned?.(false))
     await waitFor(() =>
       expect(mockedGet).toHaveBeenCalledWith(
-        '/fismasystems?decommissioned=true'
+        '/fismasystems?decommissioned=true',
+        expect.anything()
       )
     )
+    act(() => mockOutletContext?.setShowDecommissioned?.(false))
+
     await act(async () => {
       resolveDecommissioned({ data: { data: [{ fismasystemid: 99 }] } })
     })
+
+    // The late rows land under their own key, so the active view still shows
+    // the active list rather than being overwritten by them.
     expect(screen.getByTestId('system-ids')).toHaveTextContent('[1]')
   })
 })

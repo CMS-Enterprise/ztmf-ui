@@ -5,12 +5,12 @@ import {
   act,
   configure as rtlConfigure,
 } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import { COMPLETE_HINT_MSG, NEXT_HINT_MSG } from '@/constants'
 import { apiPaths, queryKeys } from '@/api/keys'
-import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import type { userData } from '@/types'
 
 // Rendered-component coverage for three QuestionnairePage effect paths from
@@ -193,10 +193,8 @@ function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
     ],
     activeDatacallIds: [5],
     fismaSystems: [SSD_EX],
-    setFismaSystems: jest.fn(),
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
-    fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
     opdivs: [],
     opdivsLoaded: true,
@@ -217,6 +215,38 @@ function renderAt(path: string) {
 
 const DEEP_LINK =
   '/questionnaire/system/1002/FY2026_Q1/identity/imperial-identity-verification'
+
+// The dashboard reads its aggregates and progress counts through the query
+// cache under the default stale time, and both are derived from answers. A
+// write here that does not invalidate leaves a user who saves and returns
+// within the minute reading their old score out of cache, which is the bug
+// the cache was introduced to fix.
+describe('score writes invalidate the cached reads', () => {
+  it('on a saved answer', async () => {
+    const user = userEvent.setup()
+    axios.get.mockImplementation((url: string) => {
+      if (url.includes('/questions'))
+        return Promise.resolve({ data: { data: QUESTIONS } })
+      if (url.includes('/options'))
+        return Promise.resolve({ data: { data: OPTIONS_7006 } })
+      return Promise.resolve({ data: { data: [] } })
+    })
+    axios.post.mockResolvedValue({ data: { data: {} } })
+
+    const { queryClient } = renderAt(DEEP_LINK)
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    await user.click(await screen.findByLabelText(/baseline/i))
+    await user.click(screen.getByText(/^Next question/i))
+
+    await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: queryKeys.scores.all,
+      })
+    )
+  })
+})
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -1360,6 +1390,30 @@ describe('carried-forward confirmation', () => {
       return Promise.resolve({ data: { data: {} } })
     })
   }
+
+  // Same reason as the save path above: a confirm changes the answer's status,
+  // which the dashboard's progress count is derived from.
+  it('invalidates the cached score reads on a confirm', async () => {
+    installScoreMocks([carried7006()])
+
+    const { queryClient } = renderAt(DEEP_LINK)
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    )
+
+    await waitFor(() =>
+      expect(axios.put).toHaveBeenCalledWith(apiPaths.scores.confirm(6001))
+    )
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: queryKeys.scores.all,
+      })
+    )
+  })
 
   it('badges an unconfirmed carried-forward answer in the question view and sidebar, and confirms it with one dedicated PUT', async () => {
     installScoreMocks([carried7006()])
