@@ -67,6 +67,7 @@ function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
   mockCtx = {
     fismaSystems: [system],
     setFismaSystems: jest.fn(),
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'mon.mothma@rebellion.org',
