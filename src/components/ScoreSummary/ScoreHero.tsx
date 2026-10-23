@@ -80,7 +80,12 @@ export default function ScoreHero({
           <IconButton
             size="small"
             aria-label="About the overall ZT score"
-            sx={{ p: 0.25, color: colors.neutral500 }}
+            sx={{
+              p: 0.25,
+              minWidth: 24,
+              minHeight: 24,
+              color: colors.neutral500,
+            }}
           >
             <InfoOutlinedIcon sx={{ fontSize: 14 }} />
           </IconButton>

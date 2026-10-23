@@ -71,7 +71,12 @@ export default function HeroRow({
             <IconButton
               size="small"
               aria-label="How the overall ZT score is calculated"
-              sx={{ p: 0.25, color: colors.neutral500 }}
+              sx={{
+                p: 0.25,
+                minWidth: 24,
+                minHeight: 24,
+                color: colors.neutral500,
+              }}
             >
               <InfoOutlinedIcon sx={{ fontSize: 14 }} />
             </IconButton>
