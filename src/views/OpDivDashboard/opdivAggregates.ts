@@ -31,9 +31,9 @@ import type { DashboardMaps } from '@/views/Home/aggregateScores'
  *
  * `score` is undefined when the system has no aggregate row at all - it was
  * never enrolled in any active call. That is a different state from a system
- * that is enrolled but unanswered, which comes back scored at the floor with
- * tier "Not Assessed". Collapsing the two would report never-enrolled systems
- * as assessed-and-failing.
+ * that is enrolled but unanswered, which comes back scored at the 1.25 floor
+ * (every unanswered question counts as a 1). Collapsing the two would report
+ * never-enrolled systems as assessed-and-failing.
  */
 export type OpDivSystemRow = {
   system: FismaSystemType
@@ -107,7 +107,7 @@ export function buildOpDivRows(
       maps.scoreMap[system.fismasystemid]
     return {
       system,
-      // Truthiness, not presence: backend scores are floored at 1.0, so a 0
+      // Truthiness, not presence: backend scores are floored at 1.25, so a 0
       // only comes from an absent or null score coalesced upstream and must
       // not count as scored.
       score: entry?.score ? entry.score : undefined,
@@ -141,7 +141,7 @@ export type RangeExtreme = { score: number; acronym: string; tier?: ScoreTier }
  * Headline figures for one OpDiv.
  *
  * The average divides by scored systems, not by all of them: a never-enrolled
- * system has no score to average, and counting it as 0 (or as the 1.0 floor)
+ * system has no score to average, and counting it as 0 (or as the 1.25 floor)
  * would drag the OpDiv's headline number toward a value no system holds.
  * @param {OpDivSystemRow[]} rows - The OpDiv's rows.
  * @returns {OpDivSummary} The summary.
@@ -580,7 +580,7 @@ export type ScoreSpread = { min: number; median: number; max: number }
  * The spread of a scored set.
  *
  * The median earns its place next to the headline average: a long tail of
- * systems sitting at the 1.00 floor drags a mean somewhere no real system is,
+ * systems sitting at the 1.25 floor drags a mean somewhere no real system is,
  * and the two numbers diverging is exactly the signal that the OpDiv is split
  * rather than uniformly mid-range.
  * @param {SystemScoreBar[]} bars - Scored systems, in any order.
