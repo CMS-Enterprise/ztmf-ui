@@ -79,3 +79,10 @@ export function tierForScore(score: number): ScoreTier {
   if (hundredths >= 101) return 'Traditional'
   return 'Not Assessed'
 }
+
+/**
+ * How a ZTMF score is built, for help text beside an overall score. Mirrors
+ * the HHS scorecard formula in backend/internal/model/scores.go.
+ */
+export const SCORING_FORMULA =
+  'Each pillar is the average of its 1-4 answers times 1.25 (sum x 5 / maximum), so 1.25 to 5.0; an unanswered question counts as 1, and a pillar with nothing answered is Not Assessed. A system score is the average of its pillar scores.'

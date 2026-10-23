@@ -9,7 +9,7 @@ import { findComparisonPillarScore } from '../radarData'
 
 /**
  * Highest possible zero trust score on the user-facing scale. The backend
- * computes scores on a 1.0-5.0 scale via the +1 shift at aggregation
+ * computes scores on a 1.0-5.0 scale by scaling the 1-4 answers by 1.25
  * (backend/internal/model/scores.go); duplicated here so the pillar bars
  * don't have to import a constant from the parent file.
  */

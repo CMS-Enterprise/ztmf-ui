@@ -5,8 +5,8 @@ import { TIER_CHIP_STYLES } from '@/utils/tierStyles'
 
 /**
  * Highest possible zero trust score; the bar fills relative to this. The
- * authoritative scale is 1.0-5.0 (backend/internal/model/scores.go applies a
- * +1 shift at aggregation so 0..4 raw option scores become 1.0..5.0).
+ * authoritative scale is 1.0-5.0 (backend/internal/model/scores.go scales
+ * the 1-4 answers by 1.25, the HHS scorecard formula).
  */
 const MAX_SCORE = 5
 
