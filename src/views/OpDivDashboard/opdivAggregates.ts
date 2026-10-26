@@ -399,7 +399,7 @@ export type TargetGap = {
   below: number
   /** Systems with no asserted target - not a failure, an unanswered question. */
   noTarget: number
-  /** Systems with a target but no score to judge it against. */
+  /** Systems with a target but no score or answers to judge it against. */
   unscored: number
   /** Shortfalls, widest gap first. */
   shortfalls: TargetShortfall[]
@@ -428,7 +428,9 @@ export function summarizeTargetGap(rows: OpDivSystemRow[]): TargetGap {
       noTarget += 1
       continue
     }
-    if (!row.tier) {
+    // Not Assessed means nothing answered: no assessment to judge the
+    // target against, so it is unscored rather than a shortfall.
+    if (!row.tier || row.tier === 'Not Assessed') {
       unscored += 1
       continue
     }
