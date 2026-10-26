@@ -17,13 +17,12 @@ import Eyebrow from '@/components/ui/Eyebrow'
 import TierLabel from '@/components/ui/TierLabel'
 import TrendLine from '@/components/ui/TrendLine'
 import { colors, fonts } from '@/theme/tokens'
-import { tierForScore } from '@/utils/tierStyles'
+import { SCORING_FORMULA, tierForScore } from '@/utils/tierStyles'
 import ScoreMeter from './ScoreMeter'
 import type { PairedDelta } from '@/views/OpDivDashboard/opdivTrend'
 
 /** Explains the headline figure and the scale behind it. */
-const HERO_INFO =
-  "The average score of this scope's scored systems, on the 1.0-5.0 HHS maturity scale: Optimal from 4.10, Advanced from 3.10, Initial from 2.10, Traditional from 1.01. Systems with no score are left out of the average rather than counted as zero. The comparison below is paired system-by-system against the prior call, so a changed system mix cannot read as movement."
+const HERO_INFO = `The average score of this scope's scored systems, on the 1.0-5.0 HHS maturity scale: Optimal from 4.10, Advanced from 3.10, Initial from 2.10, Traditional from 1.01. ${SCORING_FORMULA} Systems with no score are left out of the average rather than counted as zero. The comparison below is paired system-by-system against the prior call, so a changed system mix cannot read as movement.`
 
 /** Props for {@link ScoreHero}. */
 export type ScoreHeroProps = {
@@ -81,7 +80,12 @@ export default function ScoreHero({
           <IconButton
             size="small"
             aria-label="About the overall ZT score"
-            sx={{ p: 0.25, color: colors.neutral500 }}
+            sx={{
+              p: 0.25,
+              minWidth: 24,
+              minHeight: 24,
+              color: colors.neutral500,
+            }}
           >
             <InfoOutlinedIcon sx={{ fontSize: 14 }} />
           </IconButton>

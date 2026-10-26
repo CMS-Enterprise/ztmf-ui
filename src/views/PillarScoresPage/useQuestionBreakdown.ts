@@ -28,10 +28,10 @@ export interface QuestionScoreRow {
  * Joined view-model for a single row of the question-level breakdown.
  *
  * `displayScore` is on the user-facing 1-5 scale: per-option raw scores from
- * the backend live on a 0-4 scale, and the aggregation applies a +1 shift to
- * land on 1-5. The breakdown table displays a per-question (per-option)
- * score, so we apply the same shift here so the row tiers visually agree
- * with the pillar grid above (also on 1-5 from the aggregate endpoint).
+ * the backend live on a 1-4 scale, and the aggregation scales them by 1.25
+ * (the HHS scorecard formula) to land on 1.25-5. The breakdown table displays
+ * a per-question (per-option) score, so we apply the same factor here so the
+ * row tiers visually agree with the pillar grid above.
  */
 export interface QuestionBreakdownRow {
   scoreid: number
@@ -56,11 +56,12 @@ export interface QuestionBreakdownRow {
  *   1. /fismasystems/{id}/questions  - question text + pillar + function
  *      name, keyed by functionid (each question has exactly one function).
  *   2. /scores?datacallid=...&fismasystemid=...&include=functionoption - the
- *      picked option per question, carrying functionid + the raw 0-4 score.
+ *      picked option per question, carrying functionid + the raw 1-4 score.
  *
- * Rows are joined on functionid, the score is shifted (+1) onto the 1-5
- * scale the rest of the page uses, the tier is derived from that shifted
- * value via {@link tierForScore}, and the result is sorted into the
+ * Rows are joined on functionid, the score is scaled (x1.25, the HHS
+ * scorecard formula) onto the 1-5 scale the rest of the page uses, the tier
+ * is derived from that scaled value via {@link tierForScore}, and the result
+ * is sorted into the
  * questionnaire's order. The list endpoint may return a stale
  * score for a function that has since been removed; those rows are dropped
  * defensively.
@@ -149,7 +150,7 @@ export function useQuestionBreakdown(
       const q = questionByFunctionId.get(fid)
       if (!q) continue
       const rawScore = s.functionoption?.score ?? 0
-      const displayScore = rawScore + 1
+      const displayScore = rawScore * 1.25
       out.push({
         scoreid: s.scoreid,
         questionid: q.questionid,

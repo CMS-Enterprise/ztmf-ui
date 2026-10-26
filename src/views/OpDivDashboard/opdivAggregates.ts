@@ -31,9 +31,9 @@ import type { DashboardMaps } from '@/views/Home/aggregateScores'
  *
  * `score` is undefined when the system has no aggregate row at all - it was
  * never enrolled in any active call. That is a different state from a system
- * that is enrolled but unanswered, which comes back scored at the floor with
- * tier "Not Assessed". Collapsing the two would report never-enrolled systems
- * as assessed-and-failing.
+ * that is enrolled but unanswered, which comes back scored at the 1.25 floor
+ * (every unanswered question counts as a 1). Collapsing the two would report
+ * never-enrolled systems as assessed-and-failing.
  */
 export type OpDivSystemRow = {
   system: FismaSystemType
@@ -107,7 +107,7 @@ export function buildOpDivRows(
       maps.scoreMap[system.fismasystemid]
     return {
       system,
-      // Truthiness, not presence: backend scores are floored at 1.0, so a 0
+      // Truthiness, not presence: backend scores are floored at 1.25, so a 0
       // only comes from an absent or null score coalesced upstream and must
       // not count as scored.
       score: entry?.score ? entry.score : undefined,
@@ -141,7 +141,7 @@ export type RangeExtreme = { score: number; acronym: string; tier?: ScoreTier }
  * Headline figures for one OpDiv.
  *
  * The average divides by scored systems, not by all of them: a never-enrolled
- * system has no score to average, and counting it as 0 (or as the 1.0 floor)
+ * system has no score to average, and counting it as 0 (or as the 1.25 floor)
  * would drag the OpDiv's headline number toward a value no system holds.
  * @param {OpDivSystemRow[]} rows - The OpDiv's rows.
  * @returns {OpDivSummary} The summary.
@@ -399,7 +399,7 @@ export type TargetGap = {
   below: number
   /** Systems with no asserted target - not a failure, an unanswered question. */
   noTarget: number
-  /** Systems with a target but no score to judge it against. */
+  /** Systems with a target but no score or answers to judge it against. */
   unscored: number
   /** Shortfalls, widest gap first. */
   shortfalls: TargetShortfall[]
@@ -428,7 +428,9 @@ export function summarizeTargetGap(rows: OpDivSystemRow[]): TargetGap {
       noTarget += 1
       continue
     }
-    if (!row.tier) {
+    // Not Assessed means nothing answered: no assessment to judge the
+    // target against, so it is unscored rather than a shortfall.
+    if (!row.tier || row.tier === 'Not Assessed') {
       unscored += 1
       continue
     }
@@ -529,6 +531,9 @@ export function summarizeRisk(rows: OpDivSystemRow[]): RiskSummary {
 
   // Weakest first, and a Not Assessed system (rank 0) sorts above a scored
   // Traditional one - it is the bigger unknown, not the smaller problem.
+  // Unlike summarizeTargetGap, which leaves Not Assessed out because there is
+  // nothing to judge a target against, an unanswered high-impact system is a
+  // risk in its own right, so it stays in this list.
   belowFloor.sort(
     (a, b) =>
       TIER_RANK[a.tier as ScoreTier] - TIER_RANK[b.tier as ScoreTier] ||
@@ -580,7 +585,7 @@ export type ScoreSpread = { min: number; median: number; max: number }
  * The spread of a scored set.
  *
  * The median earns its place next to the headline average: a long tail of
- * systems sitting at the 1.00 floor drags a mean somewhere no real system is,
+ * systems sitting at the 1.25 floor drags a mean somewhere no real system is,
  * and the two numbers diverging is exactly the signal that the OpDiv is split
  * rather than uniformly mid-range.
  * @param {SystemScoreBar[]} bars - Scored systems, in any order.

@@ -312,7 +312,7 @@ describe('OpDivDashboard', () => {
   })
 
   it('states the median and range beside the score-by-system bars', () => {
-    // A tail of systems at the 1.00 floor drags the mean somewhere no real
+    // A tail of systems at the 1.25 floor drags the mean somewhere no real
     // system sits, so the median is what tells you the set is split.
     renderWithProviders(<OpDivDashboard />)
 

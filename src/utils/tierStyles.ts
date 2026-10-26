@@ -4,7 +4,7 @@ import type { ScoreTier } from '@/types'
 // chips; AAA contrast at chip text size) and cell (high-contrast pastels
 // that pass 508/WCAG color-distinguishability on table score cells;
 // black-on-pastel is >10:1 for every entry).
-// Not Assessed cell is transparent so a score-0 table row reads as
+// Not Assessed cell is transparent so an unanswered row reads as
 // "no signal" rather than a false tier color.
 export const TIERS: Record<
   ScoreTier,
@@ -79,3 +79,10 @@ export function tierForScore(score: number): ScoreTier {
   if (hundredths >= 101) return 'Traditional'
   return 'Not Assessed'
 }
+
+/**
+ * How a ZTMF score is built, for help text beside an overall score. Mirrors
+ * the HHS scorecard formula in backend/internal/model/scores.go.
+ */
+export const SCORING_FORMULA =
+  'Each answer scores 1 (Traditional) to 4 (Optimal), and an unanswered question counts as a 1. A pillar score is the average of its answers times 1.25, so it runs from 1.25 to 5.0. A system score is the average of its pillar scores.'

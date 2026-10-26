@@ -123,7 +123,7 @@ export function buildTrendSeries(
   const byCall = new Map<number, { sum: number; n: number }>()
   for (const row of history) {
     if (!systemIds.has(row.fismasystemid)) continue
-    // Floored at 1.0 upstream, so a falsy score is an absent one.
+    // Floored at 1.25 upstream, so a falsy score is an absent one.
     if (!row.systemscore) continue
     const entry = byCall.get(row.datacallid)
     if (entry) {

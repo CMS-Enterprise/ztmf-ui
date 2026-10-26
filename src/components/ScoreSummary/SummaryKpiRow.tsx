@@ -181,7 +181,7 @@ export default function SummaryKpiRow({
           }
           hint={range.hint}
           valueColor={range.low ? undefined : colors.neutral500}
-          info="The spread of scored systems, lowest to highest. Read beside the overall score: the same average can come from systems clustered together or from a strong system carrying a weak one, and only the second is a problem to chase. A 1.00 floor is usually a system enrolled in the call with nothing answered rather than one assessed as failing."
+          info="The spread of scored systems, lowest to highest. Read beside the overall score: the same average can come from systems clustered together or from a strong system carrying a weak one, and only the second is a problem to chase. A score at the 1.25 floor is often a system enrolled in the call with little or nothing answered, since an unanswered question counts as a 1, rather than one assessed as failing."
         />
         <KpiTile
           label="Not started"
@@ -272,7 +272,7 @@ export default function SummaryKpiRow({
           // not a bad result, so it is amber rather than red.
           hint={unscored > 0 ? 'no score in this call' : 'every system scored'}
           tone={unscored > 0 ? 'warning' : 'good'}
-          info="Systems with no score row in this data call - they were never enrolled in it. That is a different state from being assessed and scoring badly: a system sitting at the 1.00 floor was enrolled and left unanswered, and it counts as scored."
+          info="Systems with no score row in this data call - they were never enrolled in it. That is a different state from being assessed and scoring badly: a system sitting at the 1.25 floor was enrolled and may have been left unanswered, and it counts as scored."
         />
         <KpiTile
           label="Declining scores"
