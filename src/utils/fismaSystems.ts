@@ -1,4 +1,9 @@
-import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import type { QueryHookOptions } from '@/queryClient'
@@ -48,10 +53,15 @@ export function useFismaSystems(
   fismaSystemsError: boolean
   fismaSystemsFetchedDecommissioned: boolean
 } {
-  const { data, isPending, isError } = useQuery({
+  const { data, isPending, isError, isPlaceholderData } = useQuery({
     queryKey: queryKeys.fismaSystems.list(decommissioned),
     queryFn: ({ signal }) => fetchFismaSystems(decommissioned, signal),
     enabled: options.enabled,
+    // Hold the other variant's rows while this one loads. Without it the
+    // first toggle empties the list: the header reads 0 systems and the
+    // table's environment options vanish, which trips its own effect into
+    // resetting the environment filter.
+    placeholderData: keepPreviousData,
     // Reported through fismaSystemsError instead, which the OpDiv dashboard
     // renders as its own panel. A toast beside that panel says the same
     // thing twice, and the dashboard's wording is the useful one.
@@ -61,9 +71,12 @@ export function useFismaSystems(
     fismaSystems: data ?? EMPTY_LIST,
     fismaSystemsLoaded: !isPending,
     fismaSystemsError: isError,
-    // The flag is part of the cache key, so whatever rows are being served
-    // were fetched with it. Without data there is nothing to describe.
-    fismaSystemsFetchedDecommissioned: data !== undefined && decommissioned,
+    // Describes the rows actually on screen, which during the hold are the
+    // other variant's. There are only two, so placeholder rows are always
+    // the ones fetched with the opposite flag.
+    fismaSystemsFetchedDecommissioned:
+      data !== undefined &&
+      (isPlaceholderData ? !decommissioned : decommissioned),
   }
 }
 

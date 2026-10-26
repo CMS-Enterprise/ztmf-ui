@@ -111,14 +111,17 @@ export default function Title() {
     setLatestDataCallId(latest.datacallid)
     setLatestDatacall(latest.datacall)
     setLatestDeadline(latest.deadline)
-    setActiveDatacallIds((current) => {
-      if (current.length > 0) return current
-      const [firstGroup] = groupDatacallsByYear(datacalls)
-      if (!firstGroup) return current
-      setActiveYear(firstGroup.year)
-      return firstGroup.calls.map((c) => c.datacallid)
-    })
-  }, [datacalls])
+    // Only seed a default while nothing is selected, so a refetch after a
+    // create cannot clobber what the user picked. The check reads the current
+    // selection rather than running inside an updater: an updater has to be
+    // pure, and React calls it twice under StrictMode, so scheduling the year
+    // from in there is both a warning and a double set.
+    if (activeDatacallIds.length > 0) return
+    const [firstGroup] = groupDatacallsByYear(datacalls)
+    if (!firstGroup) return
+    setActiveYear(firstGroup.year)
+    setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+  }, [datacalls, activeDatacallIds])
 
   const datacallsByYear = useMemo(
     () => groupDatacallsByYear(datacalls),

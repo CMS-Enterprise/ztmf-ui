@@ -121,3 +121,48 @@ describe('useFismaSystems on a failed load', () => {
     expect(mockedNotify).not.toHaveBeenCalled()
   })
 })
+
+describe('useFismaSystems across a decommissioned toggle', () => {
+  const ACTIVE = { fismasystemid: 1 } as unknown as FismaSystemType
+  const WITH_DECOMM = { fismasystemid: 2 } as unknown as FismaSystemType
+
+  // Emptying the list mid-toggle reads as "no systems" to everything
+  // downstream: the header count drops to 0 and the table's environment
+  // options vanish, which trips its own effect into clearing that filter.
+  it('keeps the previous rows on screen while the other list loads', async () => {
+    mock.onGet('/fismasystems').reply(200, { data: [ACTIVE] })
+    let release: (
+      value: [number, { data: FismaSystemType[] }]
+    ) => void = () => {}
+    mock.onGet('/fismasystems?decommissioned=true').reply(
+      () =>
+        new Promise<[number, { data: FismaSystemType[] }]>((resolve) => {
+          release = resolve
+        })
+    )
+
+    const { result, rerender } = renderHook(
+      ({ d }) => useFismaSystems(d, { enabled: true }),
+      {
+        wrapper: queryWrapper(createTestQueryClient()),
+        initialProps: { d: false },
+      }
+    )
+    await waitFor(() => expect(result.current.fismaSystems).toHaveLength(1))
+
+    rerender({ d: true })
+
+    expect(result.current.fismaSystems).toEqual([ACTIVE])
+    // The rows on screen are still the active-only ones, so this has to say
+    // so even though the flag being asked for is now true.
+    expect(result.current.fismaSystemsFetchedDecommissioned).toBe(false)
+
+    await act(async () => {
+      release([200, { data: [ACTIVE, WITH_DECOMM] }])
+    })
+    await waitFor(() =>
+      expect(result.current.fismaSystemsFetchedDecommissioned).toBe(true)
+    )
+    expect(result.current.fismaSystems).toHaveLength(2)
+  })
+})

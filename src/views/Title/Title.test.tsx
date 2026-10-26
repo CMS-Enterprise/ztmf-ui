@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { userData, UserRole } from '@/types'
@@ -318,6 +319,39 @@ describe('Title logout affordance', () => {
 })
 
 describe('Title data call selection', () => {
+  // Covers that the seed lands under StrictMode's double invoke. It does not
+  // catch the impure updater this replaced: that form scheduled setActiveYear
+  // from inside a setActiveDatacallIds updater, which is against the rules but
+  // reaches the same end state here, so no assertion separates the two.
+  it('seeds the default selection under StrictMode', async () => {
+    const calls = [
+      {
+        datacallid: 7,
+        datacall: 'FY26 ZTM',
+        datecreated: '2025-10-01',
+        deadline: '2026-09-11',
+      },
+    ]
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url === '/datacalls' ? calls : [] } })
+    )
+    mockedUseLoaderData.mockReturnValue({
+      status: 200,
+      response: makeUser('OWNER'),
+    })
+    mockedUseLocation.mockReturnValue({ pathname: '/' })
+
+    renderWithQueryClient(
+      <StrictMode>
+        <Title />
+      </StrictMode>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[7]')
+    )
+  })
+
   it('selects the first data call once it is created', async () => {
     const created = {
       datacallid: 1,
