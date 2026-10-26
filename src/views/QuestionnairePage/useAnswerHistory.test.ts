@@ -1,5 +1,5 @@
 import MockAdapter from 'axios-mock-adapter'
-import { apiPaths } from '@/api/keys'
+import { apiPaths, queryKeys } from '@/api/keys'
 
 jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
@@ -121,6 +121,28 @@ test('undo refetches the page scores imperatively and invalidates the history', 
   // The page's score state is useState, not query cache, so invalidation
   // alone would leave the reverted answer on screen unchanged.
   expect(refetchScores).toHaveBeenCalledTimes(1)
+})
+
+// An undo changes the answer, so the dashboard aggregates and the OpDiv
+// dashboard are stale too. Without this they serve the pre-undo score until
+// the entry expires, which is the same gap a plain save had.
+test('undo marks every cached score read stale, not just the history', async () => {
+  mock.onGet(apiPaths.scores.revisions(SCORE_ID)).reply(200, { data: HISTORY })
+  mock.onPost(apiPaths.scores.undo(SCORE_ID)).reply(200, {
+    data: { score: {}, revision: {}, head: {} },
+  })
+
+  const { result, queryClient } = renderAnswerHistory()
+  await waitFor(() => expect(result.current.head).not.toBeNull())
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+  await act(async () => {
+    await result.current.undo.mutateAsync(91)
+  })
+
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.all,
+  })
 })
 
 test('surfaces a stale-token conflict by code so the caller can refresh rather than retry', async () => {

@@ -34,8 +34,6 @@ export async function fetchFismaSystems(
  * @param decommissioned - Pass true to include decommissioned systems.
  * @param options - `enabled`, for a layout that must not fetch before the
  *   session loader has authenticated.
- * @param decommissioned - Pass true to include decommissioned systems.
- * @param options - See QueryHookOptions.
  * @returns The rows, whether the first load has settled, whether it failed,
  *   and which variant the served rows belong to. The OpDiv dashboard needs
  *   the last two: it renders its own load-failure state, and it has to know
@@ -54,6 +52,10 @@ export function useFismaSystems(
     queryKey: queryKeys.fismaSystems.list(decommissioned),
     queryFn: ({ signal }) => fetchFismaSystems(decommissioned, signal),
     enabled: options.enabled,
+    // Reported through fismaSystemsError instead, which the OpDiv dashboard
+    // renders as its own panel. A toast beside that panel says the same
+    // thing twice, and the dashboard's wording is the useful one.
+    meta: { suppressErrorNotification: true },
   })
   return {
     fismaSystems: data ?? EMPTY_LIST,

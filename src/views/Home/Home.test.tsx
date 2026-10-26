@@ -38,6 +38,7 @@ jest.mock('../EditSystemModal/EditSystemModal', () => (props: object) => {
 })
 
 import { act, screen, waitFor } from '@testing-library/react'
+import { queryKeys } from '@/api/keys'
 import userEvent from '@testing-library/user-event'
 import Home from './Home'
 import { actionableBandData } from '../MySystems/testFixtures'
@@ -128,6 +129,27 @@ test('waits for the data calls instead of rendering an unscored table', async ()
   expect(
     screen.queryByRole('button', { name: 'Add system' })
   ).not.toBeInTheDocument()
+})
+
+// The modal returns the record it posted, but the server derives fields on
+// write, so the row the dashboard shows has to come from a refetch rather
+// than from the modal's copy.
+test('creating a system refreshes the list instead of splicing in the record', async () => {
+  const { queryClient } = renderWithProviders(<Home />)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+  await screen.findByRole('button', { name: 'Add system' })
+
+  act(() => {
+    ;(modalProps.onClose as (s: unknown) => void)({
+      fismasystemid: 99,
+      fismaname: 'Death Star',
+      fismaacronym: 'DS',
+    })
+  })
+
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: queryKeys.fismaSystems.lists(),
+  })
 })
 
 describe('the summary band tiles', () => {

@@ -2,6 +2,11 @@ import MockAdapter from 'axios-mock-adapter'
 
 // Replace the app's axios instance with a bare one so the real interceptor's
 // router graph stays out of this suite.
+jest.mock('@/utils/notify', () => {
+  const actual = jest.requireActual('@/utils/notify')
+  return { ...actual, notify: jest.fn() }
+})
+
 jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
@@ -12,14 +17,18 @@ import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import { queryKeys } from '@/api/keys'
 import axiosInstance from '@/axiosConfig'
+import { notify } from '@/utils/notify'
 import {
   setTargetMaturity,
   useFismaSystem,
+  useFismaSystems,
   useSetTargetMaturity,
 } from './fismaSystems'
 import type { FismaSystemType } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
+const mockedNotify = notify as jest.Mock
+beforeEach(() => mockedNotify.mockClear())
 afterEach(() => mock.reset())
 
 const SYSTEM_ID = 1002
@@ -91,5 +100,24 @@ describe('useSetTargetMaturity', () => {
     expect(
       client.getQueryState(queryKeys.fismaSystems.detail(2003))?.isInvalidated
     ).toBe(false)
+  })
+})
+
+describe('useFismaSystems on a failed load', () => {
+  // The OpDiv dashboard renders this failure itself, through fismaSystemsError. A
+  // snackbar beside its panel reports the same thing twice, and the code this
+  // replaced only logged.
+  it('reports the error without raising a snackbar', async () => {
+    mock.onGet(new RegExp('^/fismasystems')).reply(500)
+
+    const { result } = renderHook(
+      () => useFismaSystems(false, { enabled: true }),
+      {
+        wrapper: queryWrapper(createTestQueryClient()),
+      }
+    )
+
+    await waitFor(() => expect(result.current.fismaSystemsError).toBe(true))
+    expect(mockedNotify).not.toHaveBeenCalled()
   })
 })

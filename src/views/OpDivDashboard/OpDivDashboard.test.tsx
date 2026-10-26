@@ -6,10 +6,11 @@
  * placeholders, and offers each header action only to the tier the backend
  * would accept it from.
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
+import { queryKeys } from '@/api/keys'
 import type { FismaSystemType, OpDiv, UserRole, userData } from '@/types'
 import { EXTREMES_PER_END } from './opdivAggregates'
 
@@ -120,9 +121,13 @@ jest.mock('@/components/DatacallContextCard/DatacallContextCard', () => ({
   __esModule: true,
   default: () => null,
 }))
+let mockSystemModalProps: Record<string, unknown> = {}
 jest.mock('@/views/EditSystemModal/EditSystemModal', () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: object) => {
+    mockSystemModalProps = props as Record<string, unknown>
+    return null
+  },
 }))
 
 jest.mock('@/utils/scores', () => ({
@@ -295,6 +300,29 @@ beforeEach(() => {
 const Landed = () => <p>landed on {useLocation().pathname}</p>
 
 describe('OpDivDashboard', () => {
+  // The header's Add system modal hands back the record it posted, but the
+  // server derives fields on write, so the list is refetched rather than
+  // having that copy spliced into shared state.
+  it('refreshes the system list after a system is created', async () => {
+    const { queryClient } = renderWithProviders(<OpDivDashboard />)
+    await waitFor(() =>
+      expect(mockSystemModalProps.onClose).toBeInstanceOf(Function)
+    )
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    act(() => {
+      ;(mockSystemModalProps.onClose as (s: unknown) => void)({
+        fismasystemid: 99,
+        fismaname: 'Death Star',
+        fismaacronym: 'DS',
+      })
+    })
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+  })
+
   it('names the OpDiv and renders its computed score', () => {
     renderWithProviders(<OpDivDashboard />)
 

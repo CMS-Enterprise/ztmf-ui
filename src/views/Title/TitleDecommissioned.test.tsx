@@ -1,9 +1,9 @@
 import { screen, fireEvent, waitFor } from '@testing-library/react'
 import type { userData } from '@/types'
 
-// Title-level integration test for #572 (follow-up to #569 / #566).
+// Title-level integration test for the decommissioned filter.
 //
-// #569's QuickSearchToolbar unit tests lock in that "Clear filters" calls
+// QuickSearchToolbar's own unit tests lock in that "Clear filters" calls
 // setShowDecommissioned(false). But the behavior that actually drops the
 // decommissioned rows lives in Title, where showDecommissioned is part of the
 // systems query key. Toggling it swaps between two cached lists, so enabling
@@ -166,7 +166,7 @@ afterEach(() => {
   })
 })
 
-describe('Title - Clear filters drops decommissioned rows (#572)', () => {
+describe('Title - Clear filters drops decommissioned rows', () => {
   it('swaps back to the cached active-only list on clear, with no refetch', async () => {
     renderWithQueryClient(<Title />)
 
@@ -185,7 +185,7 @@ describe('Title - Clear filters drops decommissioned rows (#572)', () => {
     expect(fismaSystemsCalls()).toContain('/fismasystems?decommissioned=true')
 
     // 3. Clear filters (setShowDecommissioned(false)): the decommissioned row
-    //    leaves the grid, which is what #572 is about.
+    //    leaves the grid.
     const before = fismaSystemsCalls().length
     fireEvent.click(screen.getByRole('button', { name: 'clear-filters' }))
     await waitFor(() =>
@@ -193,8 +193,8 @@ describe('Title - Clear filters drops decommissioned rows (#572)', () => {
     )
     expect(screen.getByText('Active Alpha')).toBeInTheDocument()
     // The flag is part of the cache key, so clearing swaps back to the list
-    // already fetched at mount rather than asking for it again. #572 used to
-    // be fixed by that refetch; it is now fixed without one.
+    // already fetched at mount rather than asking for it again. The row used
+    // to leave the grid because of that refetch; it now leaves without one.
     expect(fismaSystemsCalls()).toHaveLength(before)
   })
 })

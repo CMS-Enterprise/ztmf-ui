@@ -44,6 +44,9 @@ export function useDatacalls(options: QueryHookOptions = {}): {
     queryFn: ({ signal }) => fetchDatacalls(signal),
     select: sortDatacallsByDeadline,
     enabled: options.enabled,
+    // Same reason as the systems list: the OpDiv dashboard renders this
+    // failure itself, through datacallsError.
+    meta: { suppressErrorNotification: true },
   })
   return {
     datacalls: data ?? EMPTY_LIST,

@@ -76,9 +76,13 @@ jest.mock('@/components/EmailModal/EmailModal', () => ({
   __esModule: true,
   default: () => null,
 }))
+let mockSystemModalProps: Record<string, unknown> = {}
 jest.mock('@/views/EditSystemModal/EditSystemModal', () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: object) => {
+    mockSystemModalProps = props as Record<string, unknown>
+    return null
+  },
 }))
 jest.mock('@/views/DatacallModal/DataCallModal', () => ({
   __esModule: true,
@@ -379,5 +383,30 @@ describe('Title systems fetch', () => {
     // The late rows land under their own key, so the active view still shows
     // the active list rather than being overwritten by them.
     expect(screen.getByTestId('system-ids')).toHaveTextContent('[1]')
+  })
+})
+
+describe('Title add-system flow', () => {
+  // The modal hands back the record it posted, but the server derives fields
+  // on write, so the list is refetched rather than having that copy spliced
+  // into shared state.
+  it('refreshes the system list instead of splicing in the record', async () => {
+    const { queryClient } = renderTitleFor('OWNER')
+    await waitFor(() =>
+      expect(mockSystemModalProps.onClose).toBeInstanceOf(Function)
+    )
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    act(() => {
+      ;(mockSystemModalProps.onClose as (s: unknown) => void)({
+        fismasystemid: 99,
+        fismaname: 'Death Star',
+        fismaacronym: 'DS',
+      })
+    })
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
   })
 })
