@@ -531,6 +531,9 @@ export function summarizeRisk(rows: OpDivSystemRow[]): RiskSummary {
 
   // Weakest first, and a Not Assessed system (rank 0) sorts above a scored
   // Traditional one - it is the bigger unknown, not the smaller problem.
+  // Unlike summarizeTargetGap, which leaves Not Assessed out because there is
+  // nothing to judge a target against, an unanswered high-impact system is a
+  // risk in its own right, so it stays in this list.
   belowFloor.sort(
     (a, b) =>
       TIER_RANK[a.tier as ScoreTier] - TIER_RANK[b.tier as ScoreTier] ||

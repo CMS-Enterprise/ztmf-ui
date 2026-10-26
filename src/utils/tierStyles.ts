@@ -4,7 +4,7 @@ import type { ScoreTier } from '@/types'
 // chips; AAA contrast at chip text size) and cell (high-contrast pastels
 // that pass 508/WCAG color-distinguishability on table score cells;
 // black-on-pastel is >10:1 for every entry).
-// Not Assessed cell is transparent so a score-0 table row reads as
+// Not Assessed cell is transparent so an unanswered row reads as
 // "no signal" rather than a false tier color.
 export const TIERS: Record<
   ScoreTier,

@@ -262,7 +262,7 @@ export function SystemScorePanel({
             borderTop: `1px solid ${colors.neutral200}`,
           }}
         >
-          {/* Median beside the headline average: a tail of systems at the 1.00
+          {/* Median beside the headline average: a tail of systems at the 1.25
               floor drags a mean somewhere no real system sits, and the two
               diverging is the signal that the OpDiv is split, not mid-range. */}
           Median{' '}
