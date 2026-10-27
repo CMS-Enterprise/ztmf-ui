@@ -85,4 +85,4 @@ export function tierForScore(score: number): ScoreTier {
  * the HHS scorecard formula in backend/internal/model/scores.go.
  */
 export const SCORING_FORMULA =
-  'Each answer scores 1 (Traditional) to 4 (Optimal), and an unanswered question counts as a 1. A pillar score is the average of its answers times 1.25, so it runs from 1.25 to 5.0. A system score is the average of its pillar scores.'
+  'Each answer scores 1 (Traditional) to 4 (Optimal), and an unanswered question counts as a 1. A pillar score is the average of its answers times 1.25, so it runs from 1.25 to 5.0. A system score is the average of its pillar scores. A pillar or system with nothing answered shows as Not Assessed.'

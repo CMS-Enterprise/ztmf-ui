@@ -1,7 +1,8 @@
 import { screen } from '@testing-library/react'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import RiskPanel from './RiskPanel'
-import type { RiskSummary, TargetGap } from '../opdivAggregates'
+import type { RiskRow, RiskSummary, TargetGap } from '../opdivAggregates'
+import { makeSystem } from '../testFixtures'
 
 const risk: RiskSummary = {
   highImpact: 0,
@@ -45,5 +46,38 @@ describe('RiskPanel targets footer', () => {
   it('keeps "none asserted" when no system has a target', () => {
     renderWithProviders(<RiskPanel risk={risk} gap={gap({ noTarget: 4 })} />)
     expect(screen.getByText(/Targets: none asserted yet/)).toBeInTheDocument()
+  })
+})
+
+describe('RiskPanel rows', () => {
+  const withRows = (rows: RiskRow[]): RiskSummary => ({
+    ...risk,
+    highImpact: rows.length,
+    belowFloor: rows,
+  })
+
+  it('hides the score behind "-" on a Not Assessed row', () => {
+    const row: RiskRow = {
+      system: makeSystem({ fismaacronym: 'DSTAR' }),
+      reasons: ['HVA'],
+      score: 1.25,
+      tier: 'Not Assessed',
+    }
+    renderWithProviders(<RiskPanel risk={withRows([row])} gap={gap({})} />)
+    expect(screen.getByText('Not Assessed')).toBeInTheDocument()
+    expect(screen.getByText('-')).toBeInTheDocument()
+    expect(screen.queryByText('1.25')).not.toBeInTheDocument()
+  })
+
+  it('shows the score on an assessed row', () => {
+    const row: RiskRow = {
+      system: makeSystem({ fismaacronym: 'EXEC' }),
+      reasons: ['High FIPS'],
+      score: 2.5,
+      tier: 'Initial',
+    }
+    renderWithProviders(<RiskPanel risk={withRows([row])} gap={gap({})} />)
+    expect(screen.getByText('2.50')).toBeInTheDocument()
+    expect(screen.queryByText('-')).not.toBeInTheDocument()
   })
 })

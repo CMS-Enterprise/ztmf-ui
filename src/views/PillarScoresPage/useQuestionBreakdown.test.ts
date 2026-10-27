@@ -195,6 +195,34 @@ describe('useQuestionBreakdown', () => {
     expect(result.current.rows.find((r) => r.scoreid === 99)).toBeUndefined()
   })
 
+  test('scores an option with no score value as a 1, like the backend', async () => {
+    mock.onGet('/fismasystems/7/questions').reply(200, { data: questions })
+    mock
+      .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
+      .reply(200, {
+        data: [
+          {
+            scoreid: 60,
+            functionoptionid: 60,
+            // The join came back without a score: blank counts as 1 -> 1.25.
+            functionoption: {
+              functionoptionid: 60,
+              functionid: 100,
+              optionname: '',
+              description: '',
+            },
+          },
+        ],
+      })
+
+    const { result } = renderHook(() => useQuestionBreakdown(7, 4))
+    await waitFor(() => expect(result.current.loading).toBe(false))
+
+    expect(result.current.rows).toHaveLength(1)
+    expect(result.current.rows[0].displayScore).toBe(1.25)
+    expect(result.current.rows[0].tier).toBe('Traditional')
+  })
+
   test('drops score rows missing the functionoption join (functionid null)', async () => {
     mock.onGet('/fismasystems/7/questions').reply(200, { data: questions })
     mock
