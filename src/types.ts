@@ -445,6 +445,9 @@ export type FismaTableProps = {
   // The single call chosen for each system's dashboard row (most-recently-updated),
   // used so Pillar Scores opens on the same call the table is displaying.
   chosenCallMap?: Record<number, number>
+  /** Controls the "Not updated only" filter when set; uncontrolled otherwise. */
+  notUpdatedOnly?: boolean
+  onNotUpdatedOnlyChange?: (value: boolean) => void
 }
 
 export type ThemeColor =

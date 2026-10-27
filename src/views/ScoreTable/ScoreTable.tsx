@@ -7,11 +7,13 @@ import { TIERS } from '@/utils/tierStyles'
 // progression so a reader scans left (lowest) to right (highest). Ranges
 // are expressed as the floor of each tier to match the backend Tier()
 // predicate, which compares the score against >= 1.01 / 2.1 / 3.1 / 4.1.
+// Not Assessed is set by answer count, not score: a pillar or system with
+// nothing answered still carries the 1.25 floor (ztmf-misc#433).
 // Closed intervals would mislead at the boundary (e.g. a score of 2.05
 // is Traditional on the backend but a "1.01 - 2.0" cell suggests it is
 // already Initial).
 const TIER_LEGEND: Array<{ tier: ScoreTier; range: string }> = [
-  { tier: 'Not Assessed', range: '< 1.01' },
+  { tier: 'Not Assessed', range: 'Nothing answered' },
   { tier: 'Traditional', range: '≥ 1.01' },
   { tier: 'Initial', range: '≥ 2.1' },
   { tier: 'Advanced', range: '≥ 3.1' },

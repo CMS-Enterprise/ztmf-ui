@@ -10,6 +10,7 @@
 import { useMemo, useState } from 'react'
 import { parseDatacallName } from '@/utils/datacallGrouping'
 import { daysUntil } from '@/utils/dates'
+import { isOpenCallInView } from '@/views/FismaTable/dashboardFilters'
 import {
   useDatacallAggregates,
   useDatacallProgress,
@@ -117,15 +118,43 @@ export type OpDivDashboardData = {
   noDatacalls: boolean
 }
 
+/** Optional adjustments for callers other than the OpDiv dashboard itself. */
+export type OpDivDashboardOptions = {
+  /**
+   * Overrides the cadence the trend follows. The unfiltered scope normally
+   * means "the aggregate", which runs the annual cycle - but it also covers a
+   * system-scoped caller whose systems all sit in one OpDiv, and that caller
+   * should follow that OpDiv's cadence. Omit to derive it from `opdivId`.
+   */
+  trendOpDivCode?: string | null
+  /** Whether to fetch the anchor and prior pillar aggregates, default true. */
+  includePillars?: boolean
+  /** Whether to fetch the full score history behind the trend, default true. */
+  includeHistory?: boolean
+  /**
+   * While the open call is in view, summarize completion over its rows only, so
+   * the figures match the systems table's "Not updated only" filter. Default false.
+   */
+  completionOpenCallOnly?: boolean
+}
+
 /**
  * Assembles the dashboard's data for one OpDiv, or for all of them.
  * @param {number | null} opdivId - The OpDiv being viewed, or null to
  *   aggregate every OpDiv the caller can see.
+ * @param {OpDivDashboardOptions} [options] - Cadence override and query gates.
  * @returns {OpDivDashboardData} Rows, summaries, breakdowns and load state.
  */
 export function useOpDivDashboardData(
-  opdivId: number | null
+  opdivId: number | null,
+  options: OpDivDashboardOptions = {}
 ): OpDivDashboardData {
+  const {
+    trendOpDivCode,
+    includePillars = true,
+    includeHistory = true,
+    completionOpenCallOnly = false,
+  } = options
   const {
     fismaSystems,
     fismaSystemsLoaded,
@@ -182,10 +211,12 @@ export function useOpDivDashboardData(
   // what made the line oscillate. See selectTrendCalls.
   const opdivCode = useMemo(
     () =>
-      opdivId === null
-        ? null
-        : opdivs.find((od) => od.opdiv_id === opdivId)?.code ?? null,
-    [opdivs, opdivId]
+      trendOpDivCode !== undefined
+        ? trendOpDivCode
+        : opdivId === null
+          ? null
+          : opdivs.find((od) => od.opdiv_id === opdivId)?.code ?? null,
+    [opdivs, opdivId, trendOpDivCode]
   )
   const trendCalls = useMemo(
     () => selectTrendCalls(datacalls, opdivCode),
@@ -215,7 +246,9 @@ export function useOpDivDashboardData(
     () => datacalls.find((dc) => dc.datacallid === anchorCallId) ?? null,
     [datacalls, anchorCallId]
   )
-  const pillarQuery = usePillarAggregates(anchorCallId)
+  const pillarQuery = usePillarAggregates(anchorCallId, {
+    enabled: includePillars,
+  })
 
   // The prior call in the scope's own cadence: the next call by deadline can
   // belong to the other cadence and carry none of this OpDiv's systems.
@@ -238,7 +271,9 @@ export function useOpDivDashboardData(
   // Pillars for the baseline call, so each bar can carry its own movement.
   // One extra request, cached and off the blocking path - the bars render from
   // the anchor call and gain their deltas when this settles.
-  const priorPillarQuery = usePillarAggregates(priorCall?.datacallid)
+  const priorPillarQuery = usePillarAggregates(priorCall?.datacallid, {
+    enabled: includePillars,
+  })
   const pillarAverages = useMemo(
     () =>
       averageByPillar(
@@ -284,7 +319,7 @@ export function useOpDivDashboardData(
   // ~730KB against the current dataset, which is worth paying up front for a
   // panel people actually read. It is still its own query, so the rest of the
   // page renders while it lands - it was never on the blocking path.
-  const historyQuery = useScoreHistory()
+  const historyQuery = useScoreHistory({ enabled: includeHistory })
   const trendPoints = useMemo(
     () => buildTrendSeries(historyQuery.data ?? [], systemIds, trendCalls),
     [historyQuery.data, systemIds, trendCalls]
@@ -328,9 +363,18 @@ export function useOpDivDashboardData(
   )
 
   const summary = useMemo(() => summarizeOpDiv(rows), [rows])
+  const openCallOnly =
+    completionOpenCallOnly &&
+    isOpenCallInView(latestDataCallId, latestDeadlinePassed, activeDatacallIds)
   const completion = useMemo(
-    () => summarizeCompletion(rows, latestDataCallId, latestDeadlinePassed),
-    [rows, latestDataCallId, latestDeadlinePassed]
+    () =>
+      summarizeCompletion(
+        rows,
+        latestDataCallId,
+        latestDeadlinePassed,
+        openCallOnly
+      ),
+    [rows, latestDataCallId, latestDeadlinePassed, openCallOnly]
   )
   const targetGap = useMemo(() => summarizeTargetGap(rows), [rows])
   const risk = useMemo(() => summarizeRisk(rows), [rows])

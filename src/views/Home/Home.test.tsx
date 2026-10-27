@@ -13,14 +13,23 @@ jest.mock('../Title/Context', () => ({
   useContextProp: () => mockCtx,
 }))
 
-// The dashboard body is out of scope here; stub it so the test only renders
-// the header and the Add modal wiring.
-jest.mock('../FismaTable/FismaTable', () => () => null)
-jest.mock('../StatisticBlocks/StatisticsBlocks', () => () => null)
+// The table is out of scope here; the stub records the filter Home hands it.
+let tableProps: Record<string, unknown> = {}
+jest.mock('../FismaTable/FismaTable', () => (props: object) => {
+  tableProps = props as Record<string, unknown>
+  return null
+})
 jest.mock(
   '@/components/DatacallContextCard/DatacallContextCard',
   () => () => null
 )
+
+// The real band over stubbed data, so its tiles drive Home's table filter.
+let mockBandData: Record<string, unknown>
+jest.mock('../MySystems/useMySystemsData', () => ({
+  useMySystemsData: () => mockBandData,
+}))
+jest.mock('@/components/ScoreSummary/ScoreHero', () => () => null)
 
 let modalProps: Record<string, unknown> = {}
 jest.mock('../EditSystemModal/EditSystemModal', () => (props: object) => {
@@ -28,9 +37,10 @@ jest.mock('../EditSystemModal/EditSystemModal', () => (props: object) => {
   return null
 })
 
-import { screen } from '@testing-library/react'
+import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import Home from './Home'
+import { actionableBandData } from '../MySystems/testFixtures'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import axiosInstance from '@/axiosConfig'
 import type { OpDiv, userData } from '@/types'
@@ -59,6 +69,10 @@ beforeEach(() => {
   // its loading state and render the header.
   ;(axiosInstance.get as jest.Mock).mockResolvedValue({ data: { data: [] } })
   modalProps = {}
+  tableProps = {}
+  mockBandData = actionableBandData()
+  window.localStorage.clear()
+  Element.prototype.scrollIntoView = jest.fn()
   mockCtx = {
     // One active call: the dashboard holds its spinner until the scores for
     // the active calls have loaded.
@@ -96,4 +110,89 @@ test('the Add system modal receives the shared OpDiv list', async () => {
   expect(modalProps.mode).toBe('create')
   // The full list, inactive included: the modal filters to active itself.
   expect(modalProps.opdivs).toEqual(OPDIVS)
+})
+
+describe('the summary band tiles', () => {
+  const table = () =>
+    document.getElementById('dashboard-systems-table') as HTMLElement
+
+  it.each(['Not started', 'Answers to confirm'])(
+    '%s filters the table to not-updated systems and lands on it',
+    async (label) => {
+      const user = userEvent.setup()
+      renderWithProviders(<Home />)
+      expect(await screen.findByText('At a glance')).toBeVisible()
+      expect(tableProps.notUpdatedOnly).toBe(false)
+
+      await user.click(
+        screen.getByRole('button', { name: new RegExp(`^${label}`) })
+      )
+
+      expect(tableProps.notUpdatedOnly).toBe(true)
+      expect(table().scrollIntoView).toHaveBeenCalled()
+      expect(table()).toHaveFocus()
+      expect(table().style.boxShadow).not.toBe('')
+    }
+  )
+
+  it("follows the table's own changes to the filter", async () => {
+    // Clear filters and the historical-year reset both go through this callback.
+    const user = userEvent.setup()
+    renderWithProviders(<Home />)
+    await user.click(
+      await screen.findByRole('button', { name: /^Not started/ })
+    )
+    expect(tableProps.notUpdatedOnly).toBe(true)
+
+    act(() => {
+      ;(tableProps.onNotUpdatedOnlyChange as (v: boolean) => void)(false)
+    })
+
+    expect(tableProps.notUpdatedOnly).toBe(false)
+  })
+
+  it('keeps the filter on across a year switch that keeps the open call in view', async () => {
+    const user = userEvent.setup()
+    const { rerender } = renderWithProviders(<Home />)
+    await user.click(
+      await screen.findByRole('button', { name: /^Not started/ })
+    )
+    expect(tableProps.notUpdatedOnly).toBe(true)
+
+    // Adding a closed call means new score queries, so the table unmounts
+    // behind the spinner and remounts once they settle.
+    mockCtx = {
+      ...mockCtx,
+      activeDatacallIds: [5, 4],
+      datacalls: [
+        ...(mockCtx.datacalls as object[]),
+        {
+          datacallid: 4,
+          datacall: 'FY25 ZTM',
+          datecreated: '2024-10-01T00:00:00Z',
+          deadline: '2025-06-30T23:59:59Z',
+        },
+      ],
+    }
+    tableProps = {}
+    rerender(<Home />)
+    expect(screen.getByRole('progressbar')).toBeInTheDocument()
+
+    await waitFor(() => expect(tableProps.notUpdatedOnly).toBe(true))
+  })
+
+  it('leaves the tiles plain when the open call is not in view', async () => {
+    // A historical year is selected while call 5 is open: the table's
+    // "Not updated only" switch is disabled there, so the tiles cannot use it.
+    mockCtx.activeDatacallIds = [4]
+    renderWithProviders(<Home />)
+
+    expect(await screen.findByText('Not started')).toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^Not started/ })
+    ).not.toBeInTheDocument()
+    expect(
+      screen.queryByRole('button', { name: /^Answers to confirm/ })
+    ).not.toBeInTheDocument()
+  })
 })

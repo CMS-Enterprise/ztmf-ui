@@ -14,7 +14,7 @@
  * carries that, and on the default selection the two were the same six numbers.
  * Spread and movers are the questions a point on a line actually raises.
  *
- * @module views/OpDivDashboard/components/TrendPanel
+ * @module components/ScoreSummary/TrendPanel
  */
 import { useState } from 'react'
 import Box from '@mui/material/Box'
@@ -51,7 +51,7 @@ import {
   type ScoreMover,
   type TierCount,
   type TrendPoint,
-} from '../opdivTrend'
+} from '@/views/OpDivDashboard/opdivTrend'
 
 /** The user-facing score scale. */
 const MIN_SCORE = 1
@@ -77,6 +77,13 @@ export type TrendPanelProps = {
   tiers: TierCount[]
   /** The systems behind the step into the selected call. */
   movers: Movers
+  /**
+   * What the series covers, for the empty state and the chart's description.
+   * Reused by the system-scoped dashboard, where "this OpDiv" is wrong.
+   */
+  scopeNoun?: string
+  /** Heading level for the eyebrow, h3 when nested under a section heading. */
+  headingLevel?: 'h2' | 'h3'
 }
 
 /**
@@ -152,6 +159,8 @@ export default function TrendPanel({
   onSelectCall,
   tiers,
   movers,
+  scopeNoun = 'this OpDiv',
+  headingLevel = 'h2',
 }: TrendPanelProps) {
   // Stated, not hidden: systems are attributed to an OpDiv from the active
   // systems list, so a system decommissioned mid-history leaves every earlier
@@ -171,7 +180,12 @@ export default function TrendPanel({
 
   if (isPending) {
     return (
-      <ChartCard eyebrow="Score trend" subtitle={subtitle} info={TREND_INFO}>
+      <ChartCard
+        eyebrow="Score trend"
+        subtitle={subtitle}
+        info={TREND_INFO}
+        headingLevel={headingLevel}
+      >
         <Box sx={{ display: 'flex', justifyContent: 'center', py: 6 }}>
           <CircularProgress size={24} aria-label="Loading score trend" />
         </Box>
@@ -181,7 +195,12 @@ export default function TrendPanel({
 
   if (isError) {
     return (
-      <ChartCard eyebrow="Score trend" subtitle={subtitle} info={TREND_INFO}>
+      <ChartCard
+        eyebrow="Score trend"
+        subtitle={subtitle}
+        info={TREND_INFO}
+        headingLevel={headingLevel}
+      >
         <Typography sx={{ fontSize: 13, color: colors.neutral500, py: 2 }}>
           The score history could not be loaded. Every other figure on this page
           is unaffected.
@@ -192,10 +211,15 @@ export default function TrendPanel({
 
   if (points.length < 2) {
     return (
-      <ChartCard eyebrow="Score trend" subtitle={subtitle} info={TREND_INFO}>
+      <ChartCard
+        eyebrow="Score trend"
+        subtitle={subtitle}
+        info={TREND_INFO}
+        headingLevel={headingLevel}
+      >
         <Typography sx={{ fontSize: 13, color: colors.neutral500, py: 2 }}>
           {points.length === 0
-            ? 'No scored data calls yet for this OpDiv.'
+            ? `No scored data calls yet for ${scopeNoun}.`
             : 'Only one scored data call so far, so there is no trend to plot yet.'}
         </Typography>
       </ChartCard>
@@ -225,11 +249,16 @@ export default function TrendPanel({
   }
 
   return (
-    <ChartCard eyebrow="Score trend" subtitle={subtitle} info={TREND_INFO}>
+    <ChartCard
+      eyebrow="Score trend"
+      subtitle={subtitle}
+      info={TREND_INFO}
+      headingLevel={headingLevel}
+    >
       {/* Every plotted point as text; the chart stays its own recharts keyboard widget. */}
       <Box component="table" sx={visuallyHidden}>
         <caption>
-          {`Average Zero Trust score across ${points.length} data calls, from ${points[0].label} to ${points[points.length - 1].label}`}
+          {`Average Zero Trust score for ${scopeNoun} across ${points.length} data calls, from ${points[0].label} to ${points[points.length - 1].label}`}
         </caption>
         <thead>
           <tr>

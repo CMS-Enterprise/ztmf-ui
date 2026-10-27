@@ -11,12 +11,12 @@ import Box from '@mui/material/Box'
 import Typography from '@mui/material/Typography'
 import { colors, fonts } from '@/theme/tokens'
 import type { datacall } from '@/types'
-import BarList, { type BarListItem } from './BarList'
-import ChartCard from './ChartCard'
+import BarList, { type BarListItem } from '@/components/ScoreSummary/BarList'
+import ChartCard from '@/components/ScoreSummary/ChartCard'
 import ShowAllToggle from './ShowAllToggle'
 import { useExpandableRows } from './useExpandableRows'
 import StagePie from './StagePie'
-import { stageColor } from './stageColor'
+import { stageColor } from '@/components/ScoreSummary/stageColor'
 import {
   scoreSpread,
   splitExtremes,
@@ -262,7 +262,7 @@ export function SystemScorePanel({
             borderTop: `1px solid ${colors.neutral200}`,
           }}
         >
-          {/* Median beside the headline average: a tail of systems at the 1.00
+          {/* Median beside the headline average: a tail of systems at the 1.25
               floor drags a mean somewhere no real system sits, and the two
               diverging is the signal that the OpDiv is split, not mid-range. */}
           Median{' '}

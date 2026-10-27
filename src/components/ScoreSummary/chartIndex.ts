@@ -3,7 +3,7 @@
  *
  * recharts 3 hands `activeTooltipIndex` over as a string ("2"), not a number.
  *
- * @module views/OpDivDashboard/components/chartIndex
+ * @module components/ScoreSummary/chartIndex
  */
 
 /**

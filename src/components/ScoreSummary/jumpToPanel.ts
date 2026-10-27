@@ -12,7 +12,7 @@
  * Moving focus makes the jump real for everyone rather than only for people
  * watching the viewport.
  *
- * @module views/OpDivDashboard/components/jumpToPanel
+ * @module components/ScoreSummary/jumpToPanel
  */
 import { colors } from '@/theme/tokens'
 

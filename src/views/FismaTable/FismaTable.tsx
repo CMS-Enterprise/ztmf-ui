@@ -464,6 +464,8 @@ export default function FismaTable({
   progress,
   systemCallMap = {},
   chosenCallMap = {},
+  notUpdatedOnly: notUpdatedOnlyProp,
+  onNotUpdatedOnlyChange,
 }: FismaTableProps) {
   // Selection mode is opt-in: the parent enables it by passing handlers. This
   // keeps the table usable on pages that don't surface an Export CSV action.
@@ -489,7 +491,16 @@ export default function FismaTable({
   const navigate = useNavigate()
   const [opdivFilter, setOpDivFilter] = useState<number | 'all'>('all')
   const [envFilter, setEnvFilter] = useState<string | 'all'>('all')
-  const [notUpdatedOnly, setNotUpdatedOnly] = useState(false)
+  const [notUpdatedOnlyState, setNotUpdatedOnlyState] = useState(false)
+  // Controlled when the parent passes notUpdatedOnly (Home's summary tiles set it).
+  const notUpdatedOnly = notUpdatedOnlyProp ?? notUpdatedOnlyState
+  const setNotUpdatedOnly = useCallback(
+    (value: boolean) => {
+      if (notUpdatedOnlyProp === undefined) setNotUpdatedOnlyState(value)
+      onNotUpdatedOnlyChange?.(value)
+    },
+    [notUpdatedOnlyProp, onNotUpdatedOnlyChange]
+  )
   const [openCallOnly, setOpenCallOnly] = useState(false)
 
   // "Latest by deadline" is not the same as "still open". Once the newest
@@ -544,7 +555,7 @@ export default function FismaTable({
     if (openCallInView) return
     setNotUpdatedOnly(false)
     setOpenCallOnly(false)
-  }, [openCallInView])
+  }, [openCallInView, setNotUpdatedOnly])
 
   // When a system has scores in more than one active call, the questionnaire
   // button opens a small picker (#467) instead of guessing which call to open.
