@@ -86,6 +86,7 @@ function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
   mockCtx = {
     fismaSystems: [system],
     setFismaSystems: jest.fn(),
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
