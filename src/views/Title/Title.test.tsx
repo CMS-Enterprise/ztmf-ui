@@ -1,3 +1,4 @@
+import { StrictMode } from 'react'
 import { act, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import type { userData, UserRole } from '@/types'
@@ -76,17 +77,17 @@ jest.mock('@/components/EmailModal/EmailModal', () => ({
   __esModule: true,
   default: () => null,
 }))
+let mockSystemModalProps: Record<string, unknown> = {}
 jest.mock('@/views/EditSystemModal/EditSystemModal', () => ({
   __esModule: true,
-  default: () => null,
-}))
-let mockOnDatacallCreated: (() => void) | undefined
-jest.mock('@/views/DatacallModal/DataCallModal', () => ({
-  __esModule: true,
-  default: ({ onCreated }: { onCreated: () => void }) => {
-    mockOnDatacallCreated = onCreated
+  default: (props: object) => {
+    mockSystemModalProps = props as Record<string, unknown>
     return null
   },
+}))
+jest.mock('@/views/DatacallModal/DataCallModal', () => ({
+  __esModule: true,
+  default: () => null,
 }))
 jest.mock('@/components/Footer/Footer', () => ({
   __esModule: true,
@@ -118,6 +119,7 @@ import { clearOtherUserDrafts } from '@/views/QuestionnairePage/draftStore'
 import { notify } from '@/utils/notify'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
+import { queryKeys } from '@/api/keys'
 import Title from './Title'
 
 const mockedUseLoaderData = useLoaderData as jest.Mock
@@ -141,7 +143,7 @@ function makeUser(role: UserRole): userData {
 function renderTitleFor(role: UserRole) {
   mockedUseLoaderData.mockReturnValue({ status: 200, response: makeUser(role) })
   mockedUseLocation.mockReturnValue({ pathname: '/' })
-  renderWithQueryClient(<Title />)
+  return renderWithQueryClient(<Title />)
 }
 
 const originalLocation = window.location
@@ -317,6 +319,39 @@ describe('Title logout affordance', () => {
 })
 
 describe('Title data call selection', () => {
+  // Covers that the seed lands under StrictMode's double invoke. It does not
+  // catch the impure updater this replaced: that form scheduled setActiveYear
+  // from inside a setActiveDatacallIds updater, which is against the rules but
+  // reaches the same end state here, so no assertion separates the two.
+  it('seeds the default selection under StrictMode', async () => {
+    const calls = [
+      {
+        datacallid: 7,
+        datacall: 'FY26 ZTM',
+        datecreated: '2025-10-01',
+        deadline: '2026-09-11',
+      },
+    ]
+    mockedGet.mockImplementation((url: string) =>
+      Promise.resolve({ data: { data: url === '/datacalls' ? calls : [] } })
+    )
+    mockedUseLoaderData.mockReturnValue({
+      status: 200,
+      response: makeUser('OWNER'),
+    })
+    mockedUseLocation.mockReturnValue({ pathname: '/' })
+
+    renderWithQueryClient(
+      <StrictMode>
+        <Title />
+      </StrictMode>
+    )
+
+    await waitFor(() =>
+      expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[7]')
+    )
+  })
+
   it('selects the first data call once it is created', async () => {
     const created = {
       datacallid: 1,
@@ -328,14 +363,19 @@ describe('Title data call selection', () => {
     mockedGet.mockImplementation((url: string) =>
       Promise.resolve({ data: { data: url === '/datacalls' ? datacalls : [] } })
     )
-    renderTitleFor('OWNER')
+    const { queryClient } = renderTitleFor('OWNER')
     await waitFor(() =>
       expect(mockedGet).toHaveBeenCalledWith('/datacalls', expect.anything())
     )
     expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[]')
 
     datacalls = [created]
-    mockOnDatacallCreated?.()
+    await act(async () => {
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.datacalls.all,
+      })
+    })
+
     await waitFor(() =>
       expect(screen.getByTestId('active-datacall-ids')).toHaveTextContent('[1]')
     )
@@ -343,7 +383,7 @@ describe('Title data call selection', () => {
 })
 
 describe('Title systems fetch', () => {
-  it('ignores a slower response to a request that was superseded', async () => {
+  it('keeps the active list when a slow decommissioned read lands late', async () => {
     let resolveDecommissioned: (value: unknown) => void = () => {}
     mockedGet.mockImplementation((url: string) => {
       if (url === '/fismasystems?decommissioned=true') {
@@ -362,15 +402,45 @@ describe('Title systems fetch', () => {
     )
 
     act(() => mockOutletContext?.setShowDecommissioned?.(true))
-    act(() => mockOutletContext?.setShowDecommissioned?.(false))
     await waitFor(() =>
       expect(mockedGet).toHaveBeenCalledWith(
-        '/fismasystems?decommissioned=true'
+        '/fismasystems?decommissioned=true',
+        expect.anything()
       )
     )
+    act(() => mockOutletContext?.setShowDecommissioned?.(false))
+
     await act(async () => {
       resolveDecommissioned({ data: { data: [{ fismasystemid: 99 }] } })
     })
+
+    // The late rows land under their own key, so the active view still shows
+    // the active list rather than being overwritten by them.
     expect(screen.getByTestId('system-ids')).toHaveTextContent('[1]')
+  })
+})
+
+describe('Title add-system flow', () => {
+  // The modal hands back the record it posted, but the server derives fields
+  // on write, so the list is refetched rather than having that copy spliced
+  // into shared state.
+  it('refreshes the system list instead of splicing in the record', async () => {
+    const { queryClient } = renderTitleFor('OWNER')
+    await waitFor(() =>
+      expect(mockSystemModalProps.onClose).toBeInstanceOf(Function)
+    )
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    act(() => {
+      ;(mockSystemModalProps.onClose as (s: unknown) => void)({
+        fismasystemid: 99,
+        fismaname: 'Death Star',
+        fismaacronym: 'DS',
+      })
+    })
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
   })
 })

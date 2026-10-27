@@ -15,6 +15,8 @@ import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import Tooltip from '@mui/material/Tooltip'
 import AddIcon from '@mui/icons-material/Add'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/api/keys'
 import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import ContentCopyIcon from '@mui/icons-material/ContentCopy'
 import FileDownloadOutlinedIcon from '@mui/icons-material/FileDownloadOutlined'
@@ -73,8 +75,8 @@ export default function OpDivHeaderActions({
     datacenterEnvironments,
     opdivs,
     fismaSystems,
-    setFismaSystems,
   } = useContextProp()
+  const queryClient = useQueryClient()
 
   const [exporting, setExporting] = useState(false)
   const [exportAnchor, setExportAnchor] = useState<null | HTMLElement>(null)
@@ -164,8 +166,12 @@ export default function OpDivHeaderActions({
   }
 
   const handleCloseAdd = (created: FismaSystemType) => {
+    // Refetch rather than splice in the modal's record, so the row shown is
+    // the one the server stored.
     if (created && created.fismasystemid) {
-      setFismaSystems((prev) => [...prev, created])
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
+      })
     }
     setAddOpen(false)
   }

@@ -15,7 +15,7 @@ import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
-import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
+import { useState, useEffect, useCallback, useMemo } from 'react'
 import { groupDatacallsByYear } from '@/utils/datacallGrouping'
 import { FismaSystemType } from '@/types'
 import { Routes } from '@/router/constants'
@@ -23,11 +23,14 @@ import type { AuthLoaderData } from '@/router/authLoader'
 import EmailModal from '@/components/EmailModal/EmailModal'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
-import { notify, isAuthHandled } from '@/utils/notify'
+import { notify } from '@/utils/notify'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/api/keys'
 import { useOpDivs } from '@/utils/opdivs'
+import { useDatacalls } from '@/utils/datacalls'
+import { useFismaSystems } from '@/utils/fismaSystems'
 import { broadcastLogout } from '@/utils/sessionSync'
 import { useDataCenterEnvironments } from '@/utils/dataCenterEnvironments'
-import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import LoginPage from '../LoginPage/LoginPage'
 import ServerErrorPage from '../ServerErrorPage/ServerErrorPage'
 import EditSystemModal from '../EditSystemModal/EditSystemModal'
@@ -44,11 +47,6 @@ import { clearOtherUserDrafts } from '../QuestionnairePage/draftStore'
  * @returns {JSX.Element} Component that renders the dashboard contents.
  */
 
-// Fixed text, not parseApiError: this fires from the shell on any page, so a
-// generic "something went wrong" would give the user nothing to act on.
-const OPDIVS_LOAD_ERROR =
-  'Failed to load the OpDiv list. OpDiv names and pickers may be incomplete - please reload.'
-
 export default function Title() {
   const location = useLocation()
   const loaderData = useLoaderData() as AuthLoaderData
@@ -59,14 +57,12 @@ export default function Title() {
   const normalizedPath = location.pathname.toLowerCase().replace(/\/$/, '')
   const isSignInRoute = normalizedPath === Routes.SIGNIN.toLowerCase()
   const [anchorEl, setAnchorEl] = useState<null | HTMLElement>(null)
-  const [fismaSystems, setFismaSystems] = useState<FismaSystemType[]>([])
-  const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [latestDataCallId, setLatestDataCallId] = useState<number>(0)
   // The dashboard aggregates the active year's data calls. activeYear is the
   // selected fiscal year; activeDatacallIds are the toggled-on calls within it
   // (all on by default). See groupDatacallsByYear / #467.
   // Only the setter is needed now that the year is implied by the selected
-  // call; kept as state so fetchDatacalls' initial-load reset still works.
+  // call; kept as state so the default-selection effect below can set it.
   const [activeYear, setActiveYear] = useState<number | null>(null)
   const [activeDatacallIds, setActiveDatacallIds] = useState<number[]>([])
   const [latestDeadline, setLatestDeadline] = useState<string>('')
@@ -76,6 +72,16 @@ export default function Title() {
   const [showDecommissioned, setShowDecommissioned] = useState<boolean>(false)
   const [dashboardSearch, setDashboardSearch] = useState<string>('')
   const authenticated = loaderData.status === 200
+  const queryClient = useQueryClient()
+  const {
+    fismaSystems,
+    fismaSystemsLoaded,
+    fismaSystemsError,
+    fismaSystemsFetchedDecommissioned,
+  } = useFismaSystems(showDecommissioned, { enabled: authenticated })
+  const { datacalls, datacallsLoaded, datacallsError } = useDatacalls({
+    enabled: authenticated,
+  })
   // Datacenter-environment vocabulary is reference data shared by the system
   // form (dropdown) and the questionnaire pillar filter, so it is fetched
   // once here and passed down via context. Failure is non-fatal: consumers
@@ -88,146 +94,34 @@ export default function Title() {
   // deactivated OpDiv still resolves its name. opdivsLoaded distinguishes
   // "not fetched yet" from "fetched, and there are none" - both are an empty
   // list, and the questionnaire's insights gate needs the difference.
-  const {
-    opdivs,
-    opdivsLoaded,
-    error: opdivsError,
-  } = useOpDivs(true, { enabled: authenticated })
-  const [fismaSystemsLoaded, setFismaSystemsLoaded] = useState(false)
-  const [fismaSystemsError, setFismaSystemsError] = useState(false)
-  // Which list the latest settled systems request asked for; superseded
-  // requests never write.
-  const [
-    fismaSystemsFetchedDecommissioned,
-    setFismaSystemsFetchedDecommissioned,
-  ] = useState(false)
-  const systemsRequestRef = useRef(0)
-  const [datacallsError, setDatacallsError] = useState(false)
-  const [datacallsLoaded, setDatacallsLoaded] = useState(false)
-
-  const fetchFismaSystems = useCallback(
-    async (decommissioned: boolean = false) => {
-      const request = ++systemsRequestRef.current
-      const isLatest = () => request === systemsRequestRef.current
-      try {
-        const res = await axiosInstance.get(
-          apiPaths.fismaSystems.list(decommissioned)
-        )
-        if (!isLatest()) return
-        setFismaSystems(res.data.data)
-        setFismaSystemsError(false)
-      } catch (error) {
-        if (!isLatest()) return
-        setFismaSystemsError(true)
-        console.error(
-          'Fetch systems error:',
-          (error as { response?: { status?: number; data?: unknown } }).response
-            ?.status,
-          (error as { response?: { status?: number; data?: unknown } }).response
-            ?.data
-        )
-      } finally {
-        if (isLatest()) {
-          setFismaSystemsLoaded(true)
-          setFismaSystemsFetchedDecommissioned(decommissioned)
-        }
-      }
-    },
-    []
-  )
-
-  // Both of the effects below gate on loaderData.status === 200 (an active
-  // app session) rather than only on serverError. When the user is not
-  // logged in or has no app account, the loader returns { ok: false } with
-  // no status field, and these calls would 401. Those 401s do not use
-  // skipAuthHandling, so the centralized interceptor catches them and
-  // redirects to /signin with the "session expired" message - misleading
-  // for the never-logged-in case and noisy on every cold load.
-  useEffect(() => {
-    if (loaderData.status === 200) fetchFismaSystems(showDecommissioned)
-  }, [showDecommissioned, fetchFismaSystems, loaderData.status])
+  const { opdivs, opdivsLoaded, opdivsError } = useOpDivs(true, {
+    enabled: authenticated,
+  })
 
   useEffect(() => {
     if (loaderData.status === 200) void clearOtherUserDrafts(userInfo.userid)
   }, [loaderData.status, userInfo.userid])
 
-  // Hoisted out of the mount effect so it can be re-invoked on demand -
-  // specifically, right after DataCallModal creates a new datacall so the
-  // picker updates without a manual page reload. Accepts an optional
-  // signal for the mount-effect's abort cleanup; user-triggered refetches
-  // (e.g. post-create) invoke it without a signal.
-  //
-  // `resetSelection` defaults to true for the initial mount load, which snaps
-  // the active year/toggles to the latest year with data. A post-create
-  // refetch passes false so refreshing the list does not clobber whatever
-  // year/selection the user is currently viewing - that selection flows through
-  // the Outlet context to the dashboard and questionnaire.
-  const fetchDatacalls = useCallback(
-    async (signal?: AbortSignal, resetSelection: boolean = true) => {
-      try {
-        const res = await axiosInstance.get(
-          apiPaths.datacalls.root,
-          signal ? { signal } : {}
-        )
-        if (signal?.aborted) return
-        // "Latest"/"current" is the call with the furthest-out deadline, not
-        // the highest datacallid: historical loads can carry a higher id than
-        // the real current call. datacallid is only a tiebreak.
-        const sorted: datacall[] = sortDatacallsByDeadline(
-          res.data.data as datacall[]
-        )
-        setDatacalls(sorted)
-        setDatacallsError(false)
-        if (sorted.length > 0) {
-          setLatestDataCallId(sorted[0].datacallid)
-          setLatestDatacall(sorted[0].datacall)
-          setLatestDeadline(sorted[0].deadline)
-          // Default to the latest year with data, all of its calls toggled on.
-          // A post-create refetch keeps the user's selection, unless there was
-          // none because this is the first call.
-          const [firstGroup] = groupDatacallsByYear(sorted)
-          if (firstGroup) {
-            const ids = firstGroup.calls.map((c) => c.datacallid)
-            if (resetSelection) {
-              setActiveYear(firstGroup.year)
-              setActiveDatacallIds(ids)
-            } else {
-              setActiveYear((prev) => prev ?? firstGroup.year)
-              setActiveDatacallIds((prev) => (prev.length > 0 ? prev : ids))
-            }
-          }
-        }
-      } catch (error) {
-        if (signal?.aborted) return
-        setDatacallsError(true)
-        console.error('Fetch latest datacall error:', error)
-      } finally {
-        if (!signal?.aborted) setDatacallsLoaded(true)
-      }
-    },
-    []
-  )
-
+  // Derived from the data calls rather than assigned inside the fetch. The
+  // default selection is only applied while nothing is selected, so a refetch
+  // after a create cannot clobber what the user picked.
   useEffect(() => {
-    if (loaderData.status !== 200) return
-    const controller = new AbortController()
-    fetchDatacalls(controller.signal)
-    return () => {
-      controller.abort()
-    }
-  }, [loaderData.status, fetchDatacalls])
-
-  // Notifies rather than logs, unlike the environments fetch: this is the only
-  // OpDiv fetch site, so an empty list persists for the session and leaves the
-  // system form's Save stuck. Keyed so a re-render cannot stack the toast.
-  useEffect(() => {
-    if (opdivsError && !isAuthHandled(opdivsError)) {
-      notify(OPDIVS_LOAD_ERROR, 'error', {
-        key: 'opdivs-load-error',
-        preventDuplicate: true,
-      })
-    }
-  }, [opdivsError])
+    if (datacalls.length === 0) return
+    const [latest] = datacalls
+    setLatestDataCallId(latest.datacallid)
+    setLatestDatacall(latest.datacall)
+    setLatestDeadline(latest.deadline)
+    // Only seed a default while nothing is selected, so a refetch after a
+    // create cannot clobber what the user picked. The check reads the current
+    // selection rather than running inside an updater: an updater has to be
+    // pure, and React calls it twice under StrictMode, so scheduling the year
+    // from in there is both a warning and a double set.
+    if (activeDatacallIds.length > 0) return
+    const [firstGroup] = groupDatacallsByYear(datacalls)
+    if (!firstGroup) return
+    setActiveYear(firstGroup.year)
+    setActiveDatacallIds(firstGroup.calls.map((c) => c.datacallid))
+  }, [datacalls, activeDatacallIds])
 
   const datacallsByYear = useMemo(
     () => groupDatacallsByYear(datacalls),
@@ -350,7 +244,11 @@ export default function Title() {
         : ''
   const handleCloseModal = (newRowData: FismaSystemType) => {
     if (!_.isEqual(EMPTY_SYSTEM, newRowData)) {
-      setFismaSystems((prevFismSystems) => [...prevFismSystems, newRowData])
+      // Refetch rather than splice in the modal's record, so the row shown is
+      // the one the server stored.
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
+      })
     }
     setOpenModal(false)
     handleClose()
@@ -713,30 +611,28 @@ export default function Title() {
           <Outlet
             context={{
               fismaSystems,
-              setFismaSystems,
               userInfo,
               latestDataCallId,
               latestDatacall,
               latestDeadline,
               datacalls,
+              datacallsLoaded,
               activeDatacallIds,
               selectedDatacall,
               setSelectedDatacall,
               toggleActiveDatacall,
               showDecommissioned,
               setShowDecommissioned,
-              fetchFismaSystems,
               fismaSystemsLoaded,
               fismaSystemsError,
               fismaSystemsFetchedDecommissioned,
               datacallsError,
-              datacallsLoaded,
               dashboardSearch,
               setDashboardSearch,
               datacenterEnvironments,
               opdivs,
               opdivsLoaded,
-              opdivsError: opdivsError != null,
+              opdivsError,
             }}
           />
         </Box>
@@ -755,11 +651,7 @@ export default function Title() {
         openModal={openEmailModal}
         closeModal={handleCloseEmailModal}
       />
-      <DataCallModal
-        open={openDataCallModal}
-        onClose={handleDataCallClose}
-        onCreated={() => fetchDatacalls(undefined, false)}
-      />
+      <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
       <Footer />
     </>
   )

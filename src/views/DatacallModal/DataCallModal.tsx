@@ -20,16 +20,10 @@ const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
  * label-above-input fields that resist the global CMS Design System
  * resets. The native date input constrains the deadline to real calendar
  * dates, so no impossible-date rollover check is needed here.
- * @param {datacallModalProps} props - Open state, close handler, and the
- *   optional onCreated callback fired after a successful create so the
- *   caller can refresh its data-call list.
+ * @param {datacallModalProps} props - Open state and close handler.
  * @returns {JSX.Element} The create-datacall modal.
  */
-export default function DataCallModal({
-  open,
-  onClose,
-  onCreated,
-}: datacallModalProps) {
+export default function DataCallModal({ open, onClose }: datacallModalProps) {
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
@@ -113,12 +107,8 @@ export default function DataCallModal({
       notify('Datacall has successfully been created', 'success', {
         autoHideDuration: 2500,
       })
-      // Refresh the caller's data-call list so the newly created call appears
-      // in the picker without a manual page reload, then close. The mutation
-      // also invalidates the data-call key, which reaches nothing while the
-      // layout holds this list in state; drop this callback when that read
-      // becomes a query.
-      onCreated?.()
+      // The mutation invalidates the data-call key, so the picker picks the
+      // new call up on its own.
       onClose()
     } catch (error) {
       if (isAuthHandled(error)) return

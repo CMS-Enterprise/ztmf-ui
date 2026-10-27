@@ -27,6 +27,7 @@ jest.mock('@/axiosConfig', () => {
 import MockAdapter from 'axios-mock-adapter'
 import axiosInstance from '@/axiosConfig'
 import TargetMaturityCard from './TargetMaturityCard'
+import { queryKeys } from '@/api/keys'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import type { FismaSystemType } from '@/types'
 
@@ -46,13 +47,9 @@ function renderCard(
   const props = {
     system: BASE_SYSTEM,
     canEdit: true,
-    onSaved: jest.fn(),
     ...overrides,
   }
-  return {
-    ...renderWithProviders(<TargetMaturityCard {...props} />),
-    onSaved: props.onSaved,
-  }
+  return renderWithProviders(<TargetMaturityCard {...props} />)
 }
 
 beforeEach(() => {
@@ -171,7 +168,7 @@ test('Save is disabled when the draft is dirty but the justification is empty', 
   expect(screen.getByRole('button', { name: /^save$/i })).toBeDisabled()
 })
 
-test('successful save PUTs to /target-maturity, calls onSaved, exits edit mode', async () => {
+test('successful save PUTs to /target-maturity, invalidates both reads, exits edit mode', async () => {
   const user = userEvent.setup()
   const saved: FismaSystemType = {
     ...BASE_SYSTEM,
@@ -182,7 +179,8 @@ test('successful save PUTs to /target-maturity, calls onSaved, exits edit mode',
     .onPut(`/fismasystems/${BASE_SYSTEM.fismasystemid}/target-maturity`)
     .reply(200, { data: saved })
 
-  const { onSaved } = renderCard()
+  const { queryClient } = renderCard()
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
   await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
@@ -198,7 +196,16 @@ test('successful save PUTs to /target-maturity, calls onSaved, exits edit mode',
     target_maturity_tier: 'Optimal',
     target_maturity_justification: 'Internet-facing HVA.',
   })
-  await waitFor(() => expect(onSaved).toHaveBeenCalledWith(saved))
+  // The detail page renders this system from the shared list when it is there
+  // and from the per-system read when it is not, so a save has to reach both.
+  await waitFor(() => {
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.detail(BASE_SYSTEM.fismasystemid),
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+  })
   // Back in view mode
   await waitFor(() =>
     expect(screen.queryByLabelText('Justification')).not.toBeInTheDocument()
@@ -297,7 +304,7 @@ test('200 with no body surfaces an error and keeps the user in edit mode', async
     .onPut(`/fismasystems/${BASE_SYSTEM.fismasystemid}/target-maturity`)
     .reply(200, {})
 
-  const { onSaved } = renderCard()
+  renderCard()
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
   await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
@@ -305,18 +312,17 @@ test('200 with no body surfaces an error and keeps the user in edit mode', async
   await user.click(screen.getByRole('button', { name: /^save$/i }))
 
   await waitFor(() => expect(mock.history.put).toHaveLength(1))
-  expect(onSaved).not.toHaveBeenCalled()
   // Still in edit mode - the missing body was flagged, not swallowed
   expect(screen.getByLabelText('Justification')).toBeInTheDocument()
 })
 
-test('server error keeps the user in edit mode and does not call onSaved', async () => {
+test('server error keeps the user in edit mode', async () => {
   const user = userEvent.setup()
   mock
     .onPut(`/fismasystems/${BASE_SYSTEM.fismasystemid}/target-maturity`)
     .reply(500)
 
-  const { onSaved } = renderCard()
+  renderCard()
   await user.click(screen.getByRole('button', { name: /^edit$/i }))
   await user.click(screen.getByLabelText('Target level'))
   await user.click(await screen.findByRole('option', { name: '4 - Optimal' }))
@@ -324,7 +330,6 @@ test('server error keeps the user in edit mode and does not call onSaved', async
   await user.click(screen.getByRole('button', { name: /^save$/i }))
 
   await waitFor(() => expect(mock.history.put).toHaveLength(1))
-  expect(onSaved).not.toHaveBeenCalled()
   // Still in edit mode
   expect(screen.getByLabelText('Justification')).toBeInTheDocument()
 })

@@ -172,6 +172,11 @@ export function useAnswerHistory({
     onSuccess: () => {
       // Imperative, for the reason on refetchScores above.
       refetchScores()
+      // An undo changes the answer, so everything derived from it is stale:
+      // the dashboard aggregates and the OpDiv dashboard read through the
+      // cache and would otherwise show the pre-undo score until it expires.
+      // This is the same gap a plain save has, handled the same way.
+      void queryClient.invalidateQueries({ queryKey: queryKeys.scores.all })
       // Returned, not voided: the drawer stays open over the result, so its
       // rows must be the post-undo ones before the pending state clears.
       return queryClient.invalidateQueries({

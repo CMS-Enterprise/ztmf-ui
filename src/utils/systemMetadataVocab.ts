@@ -42,10 +42,10 @@ export async function fetchSystemAttributes(
  * fetch resolves (selects render their current value in the meantime), then
  * the served rows. Kept as a hook so each consumer gets it without threading.
  *
- * Cached for the session under `vocabularyQueryOptions`, which also keeps a
- * failed load silent. The hook resolves that failure to an empty list: no
- * vocabulary means no dropdown options, which every select already renders
- * around by showing its current value.
+ * Cached for the session under `vocabularyQueryOptions`. A failed load stays
+ * silent and resolves to an empty list: no vocabulary means no dropdown
+ * options, which every select already renders around by showing its current
+ * value.
  *
  * Both consumers want the selectable set, which is what `fetchSystemAttributes`
  * asks for by default. The hook takes no parameter: a second value would be a
@@ -58,6 +58,7 @@ export function useSystemAttributes(): SystemAttribute[] {
   const { data } = useQuery({
     queryKey: queryKeys.systemAttributes(),
     queryFn: ({ signal }) => fetchSystemAttributes(signal),
+    meta: { suppressErrorNotification: true },
     ...vocabularyQueryOptions,
   })
   return data ?? EMPTY_LIST

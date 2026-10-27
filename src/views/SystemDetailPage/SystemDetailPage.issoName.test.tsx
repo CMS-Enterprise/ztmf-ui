@@ -30,6 +30,7 @@ import MockAdapter from 'axios-mock-adapter'
 import SystemDetailPage from './SystemDetailPage'
 import axiosInstance from '@/axiosConfig'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
+import { queryKeys } from '@/api/keys'
 import type { FismaSystemType, UserRole, userData } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
@@ -85,7 +86,9 @@ beforeEach(() => {
 function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
   mockCtx = {
     fismaSystems: [system],
-    setFismaSystems: jest.fn(),
+    // The page waits on this rather than on a non-empty list, since a scoped
+    // user with no active systems has an empty one all session.
+    fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
       email: 'grand.moff@deathstar.empire',
@@ -106,9 +109,6 @@ function renderPage(role: UserRole, system: FismaSystemType = SYSTEM) {
         system_delegate_enabled: false,
       },
     ],
-    // The page refetches after a save instead of echoing its draft, so both of
-    // these have to be present or the save path throws.
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
   }
   return renderWithProviders(
@@ -229,7 +229,8 @@ test('clearing ISSO Name sends the empty-string clear signal', async () => {
 test('clearing ISSO Name refetches instead of echoing the draft', async () => {
   const captured = captureSave()
   const user = userEvent.setup()
-  renderPage('OPDIV_ADMIN')
+  const { queryClient } = renderPage('OPDIV_ADMIN')
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await user.click(pageEditButtons()[0])
@@ -237,19 +238,27 @@ test('clearing ISSO Name refetches instead of echoing the draft', async () => {
   await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
-  await waitFor(() =>
-    expect(mockCtx.fetchFismaSystems).toHaveBeenCalledWith(false)
-  )
-  expect(mockCtx.setFismaSystems).not.toHaveBeenCalled()
+  await waitFor(() => {
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.detail(42),
+    })
+  })
 })
 
-// A save must not silently change which systems the dashboard lists, so the
-// refetch carries the caller's current decommissioned view mode.
-test('the post-save refetch preserves the decommissioned view mode', async () => {
+// A save must not silently change which systems the dashboard lists. The page
+// used to pass its current view mode to the refetch, which meant it could pass
+// the wrong one. The view mode is part of the cache key now, so invalidating
+// the list prefix refreshes both variants and whichever one is mounted
+// refetches under its own flag.
+test('a save refreshes both the active and decommissioned lists', async () => {
   const captured = captureSave()
   const user = userEvent.setup()
-  renderPage('OPDIV_ADMIN')
-  mockCtx.showDecommissioned = true
+  const { queryClient } = renderPage('OPDIV_ADMIN')
+  queryClient.setQueryData(queryKeys.fismaSystems.list(false), [SYSTEM])
+  queryClient.setQueryData(queryKeys.fismaSystems.list(true), [])
 
   await screen.findByText('System identity')
   await user.click(pageEditButtons()[0])
@@ -259,9 +268,16 @@ test('the post-save refetch preserves the decommissioned view mode', async () =>
   await user.click(screen.getByRole('button', { name: 'Save changes' }))
 
   await waitFor(() => expect(captured.body).toBeDefined())
-  await waitFor(() =>
-    expect(mockCtx.fetchFismaSystems).toHaveBeenCalledWith(true)
-  )
+  await waitFor(() => {
+    expect(
+      queryClient.getQueryState(queryKeys.fismaSystems.list(false))
+        ?.isInvalidated
+    ).toBe(true)
+    expect(
+      queryClient.getQueryState(queryKeys.fismaSystems.list(true))
+        ?.isInvalidated
+    ).toBe(true)
+  })
 })
 
 test('an untouched ISSO Name is omitted from the save payload', async () => {

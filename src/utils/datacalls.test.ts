@@ -2,19 +2,27 @@ import MockAdapter from 'axios-mock-adapter'
 
 // Replace the app's axios instance with a bare one so the real interceptor's
 // router graph stays out of this suite.
+jest.mock('@/utils/notify', () => {
+  const actual = jest.requireActual('@/utils/notify')
+  return { ...actual, notify: jest.fn() }
+})
+
 jest.mock('@/axiosConfig', () => {
   const axios = require('axios').default
   return { __esModule: true, default: axios.create({ baseURL: '/api/v1/' }) }
 })
 
-import { act, renderHook } from '@testing-library/react'
+import { act, renderHook, waitFor } from '@testing-library/react'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import { queryWrapper } from '@/test-utils/queryWrapper'
 import { queryKeys } from '@/api/keys'
 import axiosInstance from '@/axiosConfig'
-import { createDatacall, useCreateDatacall } from './datacalls'
+import { notify } from '@/utils/notify'
+import { createDatacall, useCreateDatacall, useDatacalls } from './datacalls'
 
 const mock = new MockAdapter(axiosInstance)
+const mockedNotify = notify as jest.Mock
+beforeEach(() => mockedNotify.mockClear())
 afterEach(() => mock.reset())
 
 const INPUT = { datacall: 'FY2027 ZTM', deadline: '2027-09-30T23:59:59.000Z' }
@@ -71,5 +79,21 @@ describe('useCreateDatacall', () => {
     expect(
       client.getQueryState(queryKeys.datacalls.list())?.isInvalidated
     ).toBe(false)
+  })
+})
+
+describe('useDatacalls on a failed load', () => {
+  // The OpDiv dashboard renders this failure itself, through datacallsError. A
+  // snackbar beside its panel reports the same thing twice, and the code this
+  // replaced only logged.
+  it('reports the error without raising a snackbar', async () => {
+    mock.onGet(new RegExp('^/datacalls')).reply(500)
+
+    const { result } = renderHook(() => useDatacalls(), {
+      wrapper: queryWrapper(createTestQueryClient()),
+    })
+
+    await waitFor(() => expect(result.current.datacallsError).toBe(true))
+    expect(mockedNotify).not.toHaveBeenCalled()
   })
 })

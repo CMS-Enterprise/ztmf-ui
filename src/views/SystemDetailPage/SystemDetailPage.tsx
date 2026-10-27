@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react'
+import { useState, useEffect, useMemo } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
 import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
@@ -11,6 +11,9 @@ import {
   ScoreAggregate,
 } from '@/types'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/api/keys'
+import { useFismaSystem } from '@/utils/fismaSystems'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
@@ -51,14 +54,12 @@ export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
   const {
     fismaSystems,
-    setFismaSystems,
+    fismaSystemsLoaded,
     userInfo,
     selectedDatacall,
     latestDataCallId,
     datacalls,
     datacenterEnvironments,
-    fetchFismaSystems,
-    showDecommissioned,
     opdivs,
   } = useContextProp()
 
@@ -72,46 +73,39 @@ export default function SystemDetailPage() {
   // backend re-checks assignment/OpDiv scope on the target-maturity PUT.
   const canEditTarget = isAdmin || isSystemScoped(userInfo)
 
-  const system = useMemo(
+  const queryClient = useQueryClient()
+  const listSystem = useMemo(
     () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
     [fismaSystems, systemId]
   )
 
-  // If system not in context (e.g. decommissioned and not in active-only fetch),
-  // try fetching it individually so the page works on refresh
-  const triedFetch = useRef(false)
-  const [retryingFetch, setRetryingFetch] = useState(false)
+  // The shared list is filtered, so a decommissioned system, or one created
+  // since the list loaded, is not in it. Fall back to reading the system on
+  // its own. Writes invalidate this same key, so the page repaints without
+  // pushing a replacement into the shared list.
+  const detailQuery = useFismaSystem(systemId, {
+    enabled: fismaSystemsLoaded && listSystem === null,
+  })
+  const system = listSystem ?? detailQuery.data ?? null
 
+  // Seed the per-system key from the list while the system is still in it. A
+  // save can move the system out of the current view, and then the list comes
+  // back without it and the by-id read starts from nothing, so the page would
+  // blank until that read answers. With the seed the read has the last known
+  // row to serve while it refreshes underneath.
   useEffect(() => {
-    const controller = new AbortController()
-    if (fismaSystems.length > 0 && !system && !triedFetch.current) {
-      triedFetch.current = true
-      setRetryingFetch(true)
-      async function load() {
-        try {
-          const res = await axiosInstance.get(
-            apiPaths.fismaSystems.detail(systemId),
-            {
-              signal: controller.signal,
-            }
-          )
-          const data = res.data?.data
-          if (data) {
-            setFismaSystems((prev) => [...prev, data])
-          }
-        } catch {
-          if (controller.signal.aborted) return
-          // System truly doesn't exist
-        } finally {
-          if (!controller.signal.aborted) setRetryingFetch(false)
-        }
-      }
-      load()
-    }
-    return () => {
-      controller.abort()
-    }
-  }, [fismaSystems, system, systemId, setFismaSystems])
+    if (!listSystem) return
+    queryClient.setQueryData(
+      queryKeys.fismaSystems.detail(systemId),
+      listSystem
+    )
+  }, [listSystem, systemId, queryClient])
+
+  // Only a lookup with nothing to show waits. isFetching alone is true for
+  // background refetches too, which would swap a rendered page for a spinner
+  // on every save and every staleness refresh, losing card edit state and
+  // scroll position with it.
+  const retryingFetch = !system && detailQuery.isFetching
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
@@ -333,25 +327,6 @@ export default function SystemDetailPage() {
     }
   }
 
-  // Called by TargetMaturityCard after its own save succeeds. Overlays the
-  // two target fields onto the system in fismaSystems so the read view
-  // reflects the change without a refetch. Target maturity lives on its own
-  // endpoint, so the page-level Save below never touches these fields.
-  const handleTargetMaturitySaved = (saved: FismaSystemType) => {
-    setFismaSystems((prev) =>
-      prev.map((s) =>
-        s.fismasystemid !== saved.fismasystemid
-          ? s
-          : {
-              ...s,
-              target_maturity_tier: saved.target_maturity_tier,
-              target_maturity_justification:
-                saved.target_maturity_justification,
-            }
-      )
-    )
-  }
-
   const handleSave = async () => {
     if (!editedSystem) return
     // The extended-metadata payload is a diff against the loaded system, and
@@ -401,12 +376,14 @@ export default function SystemDetailPage() {
       // then resolves the name from the ISSO's user record. Echoing the draft
       // would show the cleared field as empty until the next fetch.
       //
-      // The caller's decommissioned view mode is preserved so saving does not
-      // change which systems the dashboard lists. That mode can exclude the
-      // system just saved, so clearing triedFetch lets the single-system
-      // fallback re-add it.
-      triedFetch.current = false
-      await fetchFismaSystems(showDecommissioned)
+      // The save can move the system out of the view the dashboard is
+      // showing, so the lists and this system's own read are both stale.
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
+      })
+      await queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.detail(systemId),
+      })
     } catch (error) {
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
@@ -463,18 +440,14 @@ export default function SystemDetailPage() {
         notify(STATUS_MESSAGES.systemDecommissioned, 'success', {
           autoHideDuration: 2000,
         })
-        const updatedSystem: FismaSystemType = res.data?.data || {
-          ...editedSystem,
-          decommissioned: true,
-          decommissioned_date: isoDate,
-          decommissioned_by: userInfo.userid,
-          decommissioned_notes: trimmedNotes || null,
-        }
-        setFismaSystems((prev) =>
-          prev.map((s) =>
-            s.fismasystemid === updatedSystem.fismasystemid ? updatedSystem : s
-          )
-        )
+        // The write moved this system between the active and decommissioned
+        // lists, and this page is rendering it, so both reads are stale.
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.fismaSystems.lists(),
+        })
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.fismaSystems.detail(systemId),
+        })
         setDecommissionedByName(userInfo.fullname || userInfo.userid)
         setIsEditing(false)
         setEditedSystem(null)
@@ -515,18 +488,14 @@ export default function SystemDetailPage() {
         notify(STATUS_MESSAGES.systemReactivated, 'success', {
           autoHideDuration: 2000,
         })
-        const updatedSystem: FismaSystemType = res.data?.data || {
-          ...editedSystem,
-          decommissioned: false,
-          reactivated_by: userInfo.userid,
-          reactivated_date: new Date().toISOString(),
-          reactivation_notes: trimmedNotes || null,
-        }
-        setFismaSystems((prev) =>
-          prev.map((s) =>
-            s.fismasystemid === updatedSystem.fismasystemid ? updatedSystem : s
-          )
-        )
+        // The write moved this system between the active and decommissioned
+        // lists, and this page is rendering it, so both reads are stale.
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.fismaSystems.lists(),
+        })
+        await queryClient.invalidateQueries({
+          queryKey: queryKeys.fismaSystems.detail(systemId),
+        })
         setReactivatedByName(userInfo.fullname || userInfo.userid)
         setIsEditing(false)
         setEditedSystem(null)
@@ -593,8 +562,10 @@ export default function SystemDetailPage() {
     )
   }
 
-  // Loading state: context hasn't populated yet, or retrying fetch for individual system
-  if (fismaSystems.length === 0 || retryingFetch) {
+  // Loading state: the shared list has not settled yet, or the by-id read is
+  // running with nothing to show. An empty list is not a loading state: a
+  // scoped user with no active systems has one for the whole session.
+  if (!fismaSystemsLoaded || retryingFetch) {
     return (
       <Box
         sx={{
@@ -673,11 +644,7 @@ export default function SystemDetailPage() {
   // mid-page-edit would fire the isEditing/system useEffect and reset
   // editedSystem, wiping any in-progress page-form edits.
   const targetMaturityCard = (
-    <TargetMaturityCard
-      system={system}
-      canEdit={canEditTarget && !isEditing}
-      onSaved={handleTargetMaturitySaved}
-    />
+    <TargetMaturityCard system={system} canEdit={canEditTarget && !isEditing} />
   )
 
   // Header actions vary by mode: peer navigation + Edit system in read,
@@ -850,9 +817,13 @@ export default function SystemDetailPage() {
           isAdmin={isAdmin}
           onIssoUpdated={async () => {
             // The read is the source of truth for resolved fields like
-            // isso_name, so refetch rather than echo the adopted value.
-            triedFetch.current = false
-            await fetchFismaSystems(showDecommissioned)
+            // isso_name, so invalidate rather than echo the adopted value.
+            await queryClient.invalidateQueries({
+              queryKey: queryKeys.fismaSystems.lists(),
+            })
+            await queryClient.invalidateQueries({
+              queryKey: queryKeys.fismaSystems.detail(systemId),
+            })
           }}
         />
       )}

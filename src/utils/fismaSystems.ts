@@ -1,7 +1,136 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import {
+  keepPreviousData,
+  useMutation,
+  useQuery,
+  useQueryClient,
+} from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
+import type { QueryHookOptions } from '@/queryClient'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import type { FismaSystemType } from '@/types'
+
+/**
+ * Reads the FISMA system list.
+ *
+ * @param decommissioned - Include decommissioned systems. Part of the cache
+ *   key, so toggling swaps between two cached lists rather than refetching one.
+ * @param signal - Optional AbortSignal to cancel the request.
+ * @returns The system rows (empty array when none).
+ */
+export async function fetchFismaSystems(
+  decommissioned: boolean,
+  signal?: AbortSignal
+): Promise<FismaSystemType[]> {
+  const res = await axiosInstance.get<{ data: FismaSystemType[] | null }>(
+    apiPaths.fismaSystems.list(decommissioned),
+    { signal }
+  )
+  return res.data.data ?? []
+}
+
+/**
+ * Reads the shared FISMA system list for a component.
+ *
+ * The decommissioned flag is part of the key rather than a refetch trigger, so
+ * flipping the dashboard toggle swaps to the other cached list and flipping
+ * back is free.
+ *
+ * @param decommissioned - Pass true to include decommissioned systems.
+ * @param options - `enabled`, for a layout that must not fetch before the
+ *   session loader has authenticated.
+ * @returns The rows, whether the first load has settled, whether it failed,
+ *   and which variant the served rows belong to. The OpDiv dashboard needs
+ *   the last two: it renders its own load-failure state, and it has to know
+ *   whether the rows it has include decommissioned systems.
+ */
+export function useFismaSystems(
+  decommissioned: boolean,
+  options: QueryHookOptions = {}
+): {
+  fismaSystems: FismaSystemType[]
+  fismaSystemsLoaded: boolean
+  fismaSystemsError: boolean
+  fismaSystemsFetchedDecommissioned: boolean
+} {
+  const { data, isPending, isError, isPlaceholderData } = useQuery({
+    queryKey: queryKeys.fismaSystems.list(decommissioned),
+    queryFn: ({ signal }) => fetchFismaSystems(decommissioned, signal),
+    enabled: options.enabled,
+    // Hold the other variant's rows while this one loads. Without it the
+    // first toggle empties the list: the header reads 0 systems and the
+    // table's environment options vanish, which trips its own effect into
+    // resetting the environment filter.
+    placeholderData: keepPreviousData,
+    // Reported through fismaSystemsError instead, which the OpDiv dashboard
+    // renders as its own panel. A toast beside that panel says the same
+    // thing twice, and the dashboard's wording is the useful one.
+    meta: { suppressErrorNotification: true },
+  })
+  return {
+    fismaSystems: data ?? EMPTY_LIST,
+    fismaSystemsLoaded: !isPending,
+    fismaSystemsError: isError,
+    // Describes the rows actually on screen, which during the hold are the
+    // other variant's. There are only two, so placeholder rows are always
+    // the ones fetched with the opposite flag.
+    fismaSystemsFetchedDecommissioned:
+      data !== undefined &&
+      (isPlaceholderData ? !decommissioned : decommissioned),
+  }
+}
+
+/**
+ * Reads one FISMA system.
+ *
+ * Null, not undefined, when the server has none: a query whose function
+ * resolves undefined is rejected by TanStack Query, which would turn a
+ * served "no such system" into a failed query and a retry.
+ *
+ * @param systemId - The fismasystemid to read.
+ * @param signal - Optional AbortSignal to cancel the request.
+ * @returns The system, or null when the server has none.
+ */
+export async function fetchFismaSystem(
+  systemId: number,
+  signal?: AbortSignal
+): Promise<FismaSystemType | null> {
+  const res = await axiosInstance.get<{ data: FismaSystemType | null }>(
+    apiPaths.fismaSystems.detail(systemId),
+    { signal }
+  )
+  return res.data?.data ?? null
+}
+
+/**
+ * Reads one FISMA system for a component.
+ *
+ * The shared list is filtered, so a decommissioned system, or one created
+ * since the list loaded, is missing from it. Pages that can be opened by id
+ * read this as a fallback. A system that genuinely does not exist resolves to
+ * null rather than erroring, because the caller renders a placeholder for
+ * that case either way.
+ *
+ * Writes to this system invalidate the same key, so the detail repaints
+ * without the caller pushing a replacement into shared state.
+ *
+ * @param systemId - The fismasystemid to read.
+ * @param options - `enabled`, for a caller that only needs this when the
+ *   shared list came up short.
+ * @returns The query result; `data` is the system, or null when there is
+ *   none and undefined until the read settles.
+ */
+export function useFismaSystem(
+  systemId: number,
+  options: QueryHookOptions = {}
+) {
+  return useQuery({
+    queryKey: queryKeys.fismaSystems.detail(systemId),
+    queryFn: ({ signal }) => fetchFismaSystem(systemId, signal),
+    enabled: options.enabled,
+    meta: { suppressErrorNotification: true },
+  })
+}
 
 /** Request body for PUT /fismasystems/{id}/target-maturity. */
 export type TargetMaturityInput = {
@@ -38,11 +167,11 @@ export async function setTargetMaturity(
 /**
  * Mutation that sets a system's target maturity.
  *
- * On success that system's detail key is invalidated. Nothing reads it yet:
- * the detail page still resolves the system out of the shared list in Outlet
- * context and repaints from the record this mutation returns. The
- * invalidation is here so the repaint works on its own once the system
- * becomes a query, and the callback goes away at the same time.
+ * On success both the system's detail key and the system lists are
+ * invalidated. Both are needed: the detail page renders the system from the
+ * shared list when it is there and from the per-system read when it is not,
+ * so invalidating only one leaves the card showing the old tier on whichever
+ * path it did not cover.
  *
  * Not awaited, so the card leaves edit mode on the write. Error handling
  * stays with the caller.
@@ -59,6 +188,9 @@ export function useSetTargetMaturity(systemId: number) {
     onSuccess: () => {
       void queryClient.invalidateQueries({
         queryKey: queryKeys.fismaSystems.detail(systemId),
+      })
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
       })
     },
   })
