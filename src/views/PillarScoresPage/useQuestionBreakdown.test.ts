@@ -46,7 +46,7 @@ const questions = [
 ]
 
 const scores = [
-  // Data: rawScore 2 -> displayScore 3
+  // Data: rawScore 2 -> displayScore 2.5
   {
     scoreid: 11,
     functionoptionid: 22,
@@ -58,7 +58,7 @@ const scores = [
       description: '',
     },
   },
-  // Identity: rawScore 3 -> displayScore 4
+  // Identity: rawScore 3 -> displayScore 3.75
   {
     scoreid: 12,
     functionoptionid: 23,
@@ -70,14 +70,14 @@ const scores = [
       description: '',
     },
   },
-  // Devices: rawScore 0 -> displayScore 1
+  // Devices: rawScore 1 -> displayScore 1.25
   {
     scoreid: 13,
     functionoptionid: 24,
     functionoption: {
       functionoptionid: 24,
       functionid: 300,
-      score: 0,
+      score: 1,
       optionname: '',
       description: '',
     },
@@ -89,7 +89,7 @@ beforeEach(() => {
 })
 
 describe('useQuestionBreakdown', () => {
-  test('joins questions x scores by functionid, applies +1 shift, keeps questionnaire order', async () => {
+  test('joins questions x scores by functionid, applies the x1.25 factor, keeps questionnaire order', async () => {
     mock
       .onGet('/fismasystems/7/questions')
       .reply(200, { data: questions })
@@ -107,8 +107,10 @@ describe('useQuestionBreakdown', () => {
       'Devices',
       'Data',
     ])
-    // +1 shift: raw 3 -> 4, raw 0 -> 1, raw 2 -> 3 (in pillar-sorted order)
-    expect(result.current.rows.map((r) => r.displayScore)).toEqual([4, 1, 3])
+    // x1.25: raw 3 -> 3.75, raw 1 -> 1.25, raw 2 -> 2.5 (in pillar-sorted order)
+    expect(result.current.rows.map((r) => r.displayScore)).toEqual([
+      3.75, 1.25, 2.5,
+    ])
     expect(result.current.pillarOptions).toEqual([
       'Identity',
       'Devices',

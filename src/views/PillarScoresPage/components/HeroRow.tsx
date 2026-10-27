@@ -1,4 +1,7 @@
 import Box from '@mui/material/Box'
+import IconButton from '@mui/material/IconButton'
+import Tooltip from '@mui/material/Tooltip'
+import InfoOutlinedIcon from '@mui/icons-material/InfoOutlined'
 import Typography from '@mui/material/Typography'
 import { colors, fonts } from '@/theme/tokens'
 import type { ScoreAggregate } from '@/types'
@@ -10,6 +13,7 @@ import TrendLine from '@/components/ui/TrendLine'
 import TrendingPill from '@/components/ui/TrendingPill'
 import TrendRadar from './TrendRadar'
 import { trendDirection } from './helpers'
+import { SCORING_FORMULA } from '@/utils/tierStyles'
 
 /** Props for {@link HeroRow}. */
 export type HeroRowProps = {
@@ -63,6 +67,20 @@ export default function HeroRow({
       <Card>
         <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
           <Eyebrow>Overall ZT score</Eyebrow>
+          <Tooltip title={<span>{SCORING_FORMULA}</span>} describeChild>
+            <IconButton
+              size="small"
+              aria-label="How the overall ZT score is calculated"
+              sx={{
+                p: 0.25,
+                minWidth: 24,
+                minHeight: 24,
+                color: colors.neutral500,
+              }}
+            >
+              <InfoOutlinedIcon sx={{ fontSize: 14 }} />
+            </IconButton>
+          </Tooltip>
           {trending && <TrendingPill direction={trending} />}
         </Box>
         <Box

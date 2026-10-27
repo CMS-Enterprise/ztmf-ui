@@ -395,6 +395,12 @@ describe('summarizeTargetGap', () => {
     })
   })
 
+  it('counts a Not Assessed system as unscored, not below', () => {
+    expect(
+      summarizeTargetGap([row(1, 'Traditional', 'Not Assessed')])
+    ).toMatchObject({ unscored: 1, below: 0, shortfalls: [] })
+  })
+
   it('compares tiers by rank', () => {
     const gap = summarizeTargetGap([
       row(1, 'Advanced', 'Initial'),
