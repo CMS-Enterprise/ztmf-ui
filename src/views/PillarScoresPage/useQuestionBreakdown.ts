@@ -149,7 +149,7 @@ export function useQuestionBreakdown(
       if (fid == null) continue
       const q = questionByFunctionId.get(fid)
       if (!q) continue
-      const rawScore = s.functionoption?.score ?? 0
+      const rawScore = s.functionoption?.score ?? 1
       const displayScore = rawScore * 1.25
       out.push({
         scoreid: s.scoreid,
