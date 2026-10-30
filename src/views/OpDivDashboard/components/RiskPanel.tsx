@@ -168,10 +168,15 @@ export default function RiskPanel({ risk, gap, id }: RiskPanelProps) {
             fontSize: 34,
             fontWeight: 800,
             lineHeight: 1,
-            color: risk.belowFloor.length > 0 ? colors.down : colors.up,
+            color:
+              risk.belowFloor.length > 0
+                ? colors.down
+                : risk.highImpact > 0
+                  ? colors.up
+                  : colors.neutral500,
           }}
         >
-          {risk.highImpact > 0 ? risk.belowFloor.length : '-'}
+          {risk.highImpact > 0 ? risk.belowFloor.length : '—'}
         </Typography>
         <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
           {risk.highImpact > 0

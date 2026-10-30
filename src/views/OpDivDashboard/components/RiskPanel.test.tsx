@@ -81,3 +81,14 @@ describe('RiskPanel rows', () => {
     expect(screen.queryByText('-')).not.toBeInTheDocument()
   })
 })
+
+describe('RiskPanel header count', () => {
+  it('shows the KPI em dash when no system is high impact', () => {
+    renderWithProviders(<RiskPanel risk={risk} gap={gap({})} />)
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText('-')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('no system is flagged HVA or High FIPS')
+    ).toBeInTheDocument()
+  })
+})
