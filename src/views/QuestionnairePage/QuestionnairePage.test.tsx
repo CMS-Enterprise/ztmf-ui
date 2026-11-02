@@ -1793,6 +1793,48 @@ describe('carried-forward confirmation', () => {
     expect(document.activeElement).toHaveAttribute('id', 'view-answer-history')
   })
 
+  it('does not warn about an undo conflict once the user has moved to another question', async () => {
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    let reject: (reason: unknown) => void = () => {}
+    serveHistory(edited.scoreid, {
+      undo: () => new Promise((_resolve, rej) => (reject = rej)),
+    })
+
+    const { queryClient } = renderAt(DEEP_LINK)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Undo last change' })
+    )
+    await waitFor(() =>
+      expect(
+        axios.post.mock.calls.some(
+          ([url]: [string]) => url === apiPaths.scores.undo(edited.scoreid)
+        )
+      ).toBe(true)
+    )
+    fireEvent.click(screen.getByText(/^Next question/i))
+    await act(async () => {
+      reject({
+        isAxiosError: true,
+        response: { status: 409, data: { code: 'REVISION_CONFLICT' } },
+      })
+    })
+
+    // Its stale head is dropped, to be refetched on return.
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(queryKeys.scores.revisions(edited.scoreid))
+          ?.isInvalidated
+      ).toBe(true)
+    )
+    expect(
+      notifyMock.mock.calls.some(([message]) =>
+        String(message).startsWith('Someone else changed this answer')
+      )
+    ).toBe(false)
+  })
+
   it('keeps focus inside the drawer after an undo from it', async () => {
     const edited = { ...carried7006('done'), notes: 'edited this cycle' }
     installScoreMocks([edited])

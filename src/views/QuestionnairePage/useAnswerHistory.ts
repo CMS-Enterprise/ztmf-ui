@@ -181,9 +181,15 @@ export function useAnswerHistory({
         queryKey: queryKeys.scores.revisions(pinned.scoreid),
       })
     },
-    // No onError here. docs/data-fetching.md keeps mutation error handling at
-    // the call site so a caller can route a conflict to the drawer instead of
-    // a toast; a hook-level handler would double-notify.
+    // Notifying stays at the call site (docs/data-fetching.md); this only
+    // drops the undone row's stale head, which the caller can no longer name
+    // once the user has moved on.
+    onError: (_error, _revisionid, pinned) => {
+      if (!pinned) return
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.scores.revisions(pinned.scoreid),
+      })
+    },
   })
 
   return {

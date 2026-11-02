@@ -235,6 +235,42 @@ test('invalidates the undone question, not the one navigated to mid-request', as
   })
 })
 
+test('a failed undo still refetches the undone question after navigation', async () => {
+  const OTHER_ID = 4213
+  mock.onGet(apiPaths.scores.revisions(SCORE_ID)).reply(200, { data: HISTORY })
+  mock.onGet(apiPaths.scores.revisions(OTHER_ID)).reply(200, { data: HISTORY })
+  let respond: (value: [number, unknown]) => void = () => {}
+  mock
+    .onPost(apiPaths.scores.undo(SCORE_ID))
+    .reply(() => new Promise((resolve) => (respond = resolve)))
+  const queryClient = createTestQueryClient()
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+  const { result, rerender } = renderHook(
+    ({ scoreid }: { scoreid: number }) =>
+      useAnswerHistory({ scoreid, refetchScores: jest.fn() }),
+    { wrapper: queryWrapper(queryClient), initialProps: { scoreid: SCORE_ID } }
+  )
+  await waitFor(() => expect(result.current.head).not.toBeNull())
+
+  let pending: Promise<unknown> = Promise.resolve()
+  act(() => {
+    pending = result.current.undo.mutateAsync(91).catch(() => {})
+  })
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  rerender({ scoreid: OTHER_ID })
+  await act(async () => {
+    respond([409, { error: 'conflict', code: REVISION_CONFLICT }])
+    await pending
+  })
+
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(SCORE_ID),
+  })
+  expect(invalidate).not.toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(OTHER_ID),
+  })
+})
+
 describe('classifyUndoError', () => {
   const rejectUndo = async (status: number, body: unknown) => {
     mock.onPost(apiPaths.scores.undo(SCORE_ID)).reply(status, body)

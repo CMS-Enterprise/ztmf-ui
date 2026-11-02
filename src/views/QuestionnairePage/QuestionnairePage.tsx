@@ -793,7 +793,9 @@ export default function QuestionnarePage() {
   const undoInFlight = React.useRef(false)
   // questionId, not scoreid: scoreid only moves once the next question loads.
   const undoContextRef = React.useRef('')
-  undoContextRef.current = `${system}:${questionId}`
+  React.useLayoutEffect(() => {
+    undoContextRef.current = `${system}:${questionId}`
+  }, [system, questionId])
   const handleUndoClick = async (revisionid: number) => {
     // isPending lags the click by a render; a double-click would otherwise
     // send the same token twice and report its own undo as a conflict.
@@ -802,14 +804,14 @@ export default function QuestionnarePage() {
     const undoContext = undoContextRef.current
     const movedOn = () => undoContextRef.current !== undoContext
     // The Undo button can unmount when history refetches; keep focus off
-    // <body>. Skipped if the user has since moved to another question.
+    // <body>. Skipped if the user has since moved to another question. The
+    // drawer is read from the DOM, since it may have opened or closed since.
     const refocus = () => {
       if (movedOn()) return
-      document
-        .getElementById(
-          answerHistory.open ? ANSWER_HISTORY_PANEL_ID : 'view-answer-history'
-        )
-        ?.focus()
+      ;(
+        document.getElementById(ANSWER_HISTORY_PANEL_ID) ??
+        document.getElementById('view-answer-history')
+      )?.focus()
     }
     try {
       await answerHistory.undo.mutateAsync(revisionid)
@@ -820,26 +822,24 @@ export default function QuestionnarePage() {
       refocus()
     } catch (error) {
       const outcome = classifyUndoError(error)
+      // The hook has already refetched the undone row's history, which drops
+      // a stale button. A warning about it is skipped once the user has moved
+      // on, since it would read as being about the question on screen.
       if (outcome.kind === 'handled') {
-        // A past-deadline 403 lands here; the refetch drops the stale button.
-        answerHistory.history.refetch()
+        // A past-deadline 403 lands here.
         refocus()
         return
       }
-      if (outcome.kind === 'conflict') {
-        // Someone else wrote the answer, so the one on screen is stale too.
-        answerHistory.history.refetch()
+      if (outcome.kind === 'conflict' || outcome.kind === 'refused') {
+        // Someone else wrote the answer, or it drifted, so the one on screen
+        // may be stale too.
         fetchQuestionScores(system, setQuestionScores)
-        notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
-        refocus()
-        return
-      }
-      if (outcome.kind === 'refused') {
-        // Refetch both: the button must go, and a drifted answer means the
-        // one on screen may be stale.
-        answerHistory.history.refetch()
-        fetchQuestionScores(system, setQuestionScores)
-        notify(outcome.message, 'warning', { autoHideDuration: 6000 })
+        if (movedOn()) return
+        if (outcome.kind === 'conflict') {
+          notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
+        } else {
+          notify(outcome.message, 'warning', { autoHideDuration: 6000 })
+        }
         refocus()
         return
       }
