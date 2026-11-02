@@ -121,6 +121,7 @@ export const apiPaths = {
     systemDelegateEnabled: (opdivId: ApiId) =>
       `/opdivs/${opdivId}/system-delegate-enabled`,
   },
+  questionnaireVersions: '/questionnaire-versions',
   scores: {
     root: '/scores',
     detail: (scoreId: ApiId) => `/scores/${scoreId}`,
@@ -286,6 +287,10 @@ export const queryKeys = {
     all: ['opdivs'] as const,
     list: (includeInactive = false) =>
       ['opdivs', 'list', { includeInactive }] as const,
+  },
+  questionnaireVersions: {
+    all: ['questionnaire-versions'] as const,
+    list: () => ['questionnaire-versions', 'list'] as const,
   },
   scores: {
     all: ['scores'] as const,

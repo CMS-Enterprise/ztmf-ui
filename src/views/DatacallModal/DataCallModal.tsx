@@ -1,9 +1,14 @@
 import React from 'react'
-import { Box, Button, OutlinedInput } from '@mui/material'
+import { Alert, Box, Button, OutlinedInput, Typography } from '@mui/material'
 import Modal from '@/components/ui/Modal'
 import Field, { fieldInputSx } from '@/components/ui/Field'
 import { datacallModalProps } from '@/types'
 import { useCreateDatacall } from '@/utils/datacalls'
+import {
+  newestPublishedVersion,
+  previousDatacall,
+  useQuestionnaireVersions,
+} from '@/utils/questionnaireVersions'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { radius } from '@/theme/tokens'
@@ -29,11 +34,25 @@ export default function DataCallModal({
   open,
   onClose,
   onCreated,
+  datacalls = [],
 }: datacallModalProps) {
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
   const [deadline, setDeadline] = React.useState<string>('')
   const [deadlineError, setDeadlineError] = React.useState<string>('')
+
+  // The API pins the newest published version; this only shows it (ztmf-misc#432).
+  const versions = useQuestionnaireVersions({ enabled: open })
+  const pinned = newestPublishedVersion(versions)
+  const previous = previousDatacall(datacalls, deadline)
+  const previousVersion = versions.find(
+    (v) => v.versionid === previous?.questionnaire_versionid
+  )
+  const versionChanges =
+    pinned != null &&
+    previous?.questionnaire_versionid != null &&
+    previous.questionnaire_versionid !== pinned.versionid
+
   // Guards against a double-submit (fast double-click or double-Enter) that
   // would otherwise fire two POSTs before the modal auto-closes and creates
   // duplicate datacalls server-side.
@@ -212,6 +231,20 @@ export default function DataCallModal({
             sx={fieldInputSx}
           />
         </Field>
+
+        {pinned && (
+          <Typography variant="body2" color="text.secondary">
+            Questionnaire version: <strong>{pinned.label}</strong>
+          </Typography>
+        )}
+        {versionChanges && previous && pinned && (
+          <Alert severity="warning">
+            {previous.datacall} used{' '}
+            {previousVersion?.label ?? 'an earlier questionnaire version'}.
+            Answers carried forward from it will move to {pinned.label}, and
+            answers to questions that version removed will not carry forward.
+          </Alert>
+        )}
       </Box>
     </Modal>
   )

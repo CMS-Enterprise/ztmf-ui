@@ -759,6 +759,7 @@ export default function Title() {
         open={openDataCallModal}
         onClose={handleDataCallClose}
         onCreated={() => fetchDatacalls(undefined, false)}
+        datacalls={datacalls}
       />
       <Footer />
     </>

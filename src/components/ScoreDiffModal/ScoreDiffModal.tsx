@@ -24,12 +24,7 @@ import { apiPaths } from '@/api/keys'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import AnswerSideCell from '@/components/AnswerSideCell/AnswerSideCell'
-import type {
-  datacall,
-  ScoreDiffEntry,
-  FismaQuestion,
-  questionPillar,
-} from '@/types'
+import type { datacall, ScoreDiffEntry } from '@/types'
 import { formatDate, formatDateTime } from '@/utils/dates'
 
 const datacallsCache: { data: datacall[] | null; timestamp: number | null } = {
@@ -37,10 +32,6 @@ const datacallsCache: { data: datacall[] | null; timestamp: number | null } = {
   timestamp: null,
 }
 
-const questionsCache = new Map<
-  number,
-  { data: FismaQuestion[]; timestamp: number }
->()
 const CACHE_DURATION = 10 * 60 * 1000
 
 interface ScoreDiffModalProps {
@@ -64,9 +55,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   const [fromDatacall, setFromDatacall] = useState<datacall | null>(null)
   const [toDatacall, setToDatacall] = useState<datacall | null>(null)
   const [diffResults, setDiffResults] = useState<ScoreDiffEntry[]>([])
-  const [functionPillarMap, setFunctionPillarMap] = useState<
-    Map<number, questionPillar>
-  >(new Map())
   const [diffKey, setDiffKey] = useState(0)
   const [loading, setLoading] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -89,7 +77,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
       setDiffKey((k) => k + 1)
     } else {
       setDiffResults([])
-      setFunctionPillarMap(new Map())
       setError(null)
     }
   }, [open])
@@ -135,74 +122,39 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     fetchDatacalls()
   }, [open, selectedDataCallId])
 
-  // Fetch function→pillar map for the current system (used to group diff rows)
-  useEffect(() => {
-    if (!open || !fismasystemid) return
-    const fetchQuestions = async () => {
-      try {
-        const now = Date.now()
-        const cached = questionsCache.get(fismasystemid)
-        let questions: FismaQuestion[]
-        if (cached && now - cached.timestamp < CACHE_DURATION) {
-          questions = cached.data
-        } else {
-          const res = await axiosInstance.get(
-            apiPaths.fismaSystems.questions(fismasystemid)
-          )
-          questions = res.data?.data ?? []
-          questionsCache.set(fismasystemid, { data: questions, timestamp: now })
-        }
-        const map = new Map<number, questionPillar>()
-        questions.forEach((q: FismaQuestion) => {
-          if (!map.has(q.function.functionid)) {
-            map.set(q.function.functionid, q.pillar)
-          }
-        })
-        setFunctionPillarMap(map)
-      } catch (err) {
-        if (isAuthHandled(err)) return
-        console.error('Error fetching questions for pillar grouping:', err)
-      }
-    }
-    fetchQuestions()
-  }, [open, fismasystemid])
-
-  // Group diff results by pillar, ranked by the API's pillars.ordr.
-  // Rows already arrive in questionnaire order (scorediff.go sorts by
-  // pillars.ordr, questions.ordr, functions.ordr, functionid) and grouping
-  // preserves it, so entries need no sort of their own (ztmf-misc#393).
-  // Falls back to a flat list under a single group when pillar info
-  // is not yet available (e.g. questions fetch still in-flight).
+  // Group diff results by pillar. Rows arrive in questionnaire order
+  // (scorediff.go sorts by pillars.ordr, questions.ordr, functions.ordr,
+  // functionid) and carry their own pillar (ztmf-misc#395), so first
+  // appearance is pillar order and the two cycles may pin different versions.
   const groupedResults = useMemo(() => {
-    if (diffResults.length === 0) return []
-    type PillarGroup = { pillar: questionPillar; entries: ScoreDiffEntry[] }
+    type PillarGroup = {
+      pillar: { pillarid: number; pillar: string }
+      entries: ScoreDiffEntry[]
+    }
     const groups = new Map<number, PillarGroup>()
     const uncategorized: ScoreDiffEntry[] = []
     diffResults.forEach((entry) => {
-      const pillar = functionPillarMap.get(entry.functionid)
-      if (!pillar) {
+      if (entry.pillarid == null || entry.pillar == null) {
         uncategorized.push(entry)
         return
       }
-      if (!groups.has(pillar.pillarid)) {
-        groups.set(pillar.pillarid, { pillar, entries: [] })
+      if (!groups.has(entry.pillarid)) {
+        groups.set(entry.pillarid, {
+          pillar: { pillarid: entry.pillarid, pillar: entry.pillar },
+          entries: [],
+        })
       }
-      groups.get(pillar.pillarid)!.entries.push(entry)
+      groups.get(entry.pillarid)!.entries.push(entry)
     })
-    // pillarid breaks ties so two pillars sharing an order still render
-    // deterministically rather than in Map insertion order.
-    const sorted = Array.from(groups.values()).sort(
-      (a, b) =>
-        a.pillar.order - b.pillar.order || a.pillar.pillarid - b.pillar.pillarid
-    )
+    const sorted = Array.from(groups.values())
     if (uncategorized.length > 0) {
       sorted.push({
-        pillar: { pillar: 'Other', pillarid: -1, order: 999 },
+        pillar: { pillar: 'Other', pillarid: -1 },
         entries: uncategorized,
       })
     }
     return sorted
-  }, [diffResults, functionPillarMap])
+  }, [diffResults])
 
   // Fetch diff whenever both pickers are set and different.
   // AbortController cancels any in-flight request when pickers change or the

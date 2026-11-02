@@ -323,6 +323,8 @@ export type datacallModalProps = {
   // Fired after a successful POST /datacalls so the parent can re-fetch
   // its data-call list and the new call appears without a manual reload.
   onCreated?: () => void
+  // Existing calls, to name the one the new call carries answers from.
+  datacalls?: datacall[]
 }
 
 export type ScoreData = {
@@ -415,6 +417,17 @@ export type datacall = {
   datacall: string
   datecreated: string
   deadline: string
+  // Absent until the API pins calls to a version (ztmf-misc#397).
+  questionnaire_versionid?: number
+}
+
+export type QuestionnaireVersion = {
+  versionid: number
+  label: string
+  state: 'draft' | 'published' | 'archived'
+  parent_versionid: number | null
+  createdat: string
+  publishedat: string | null
 }
 
 export type FormValidType = {
@@ -507,6 +520,10 @@ export type ScoreDiffSide = {
 export type ScoreDiffEntry = {
   fismasystemid: number
   functionid: number
+  // The question's identity across questionnaire versions (ztmf-misc#395).
+  root_functionid: number
+  pillarid: number | null
+  pillar: string | null
   function: string
   question: string
   from: ScoreDiffSide | null
