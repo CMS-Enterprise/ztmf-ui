@@ -115,6 +115,29 @@ test('a 400 field map lands under the Name field instead of a toast', async () =
   expect(onClose).not.toHaveBeenCalled()
 })
 
+test('a 400 on a field the form has no input for is toasted, not swallowed', async () => {
+  const user = userEvent.setup()
+  mock.onPost('/datacalls').reply(400, {
+    data: { questionnaire_versionid: 'no questionnaire version is published' },
+  })
+  const onClose = jest.fn()
+  renderWithQueryClient(
+    <DataCallModal open onClose={onClose} onCreated={jest.fn()} />
+  )
+
+  await fillValidForm(user)
+  await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+  await waitFor(() =>
+    expect(notify).toHaveBeenCalledWith(
+      'no questionnaire version is published',
+      'error',
+      expect.anything()
+    )
+  )
+  expect(onClose).not.toHaveBeenCalled()
+})
+
 test('a create started before the modal closes still lands and still reports', async () => {
   const user = userEvent.setup()
   let release!: () => void

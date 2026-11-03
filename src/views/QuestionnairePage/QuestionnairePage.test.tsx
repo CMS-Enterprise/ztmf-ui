@@ -1860,6 +1860,42 @@ describe('carried-forward confirmation', () => {
     await waitFor(() => expect(document.activeElement).toBe(drawer))
   })
 
+  it('returns focus to View history when the drawer closes while an undo from it is in flight', async () => {
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    let resolve: (value: unknown) => void = () => {}
+    serveHistory(edited.scoreid, {
+      after: { kind: 'undo', undoable: false },
+      undo: () => new Promise((res) => (resolve = res)),
+    })
+
+    renderAt(DEEP_LINK)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View history' }))
+    const drawer = await screen.findByRole('dialog', { name: 'Answer history' })
+    fireEvent.click(
+      await within(drawer).findByRole('button', { name: 'Undo last change' })
+    )
+    await waitFor(() =>
+      expect(
+        axios.post.mock.calls.some(
+          ([url]: [string]) => url === apiPaths.scores.undo(edited.scoreid)
+        )
+      ).toBe(true)
+    )
+    fireEvent.keyDown(drawer, { key: 'Escape' })
+    await act(async () => {
+      resolve({ data: { data: {} } })
+    })
+
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAttribute(
+        'id',
+        'view-answer-history'
+      )
+    )
+  })
+
   it('offers an admin Undo in the drawer on a closed call, but not in the strip', async () => {
     // OWNER keeps write access past the deadline, and the server's admin
     // bypass marks the head undoable.

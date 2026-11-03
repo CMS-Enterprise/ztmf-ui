@@ -112,7 +112,7 @@ test('undo refetches the page scores imperatively and invalidates the history', 
   await waitFor(() => expect(result.current.head).not.toBeNull())
 
   await act(async () => {
-    await result.current.undo.mutateAsync(91)
+    await result.current.undo.mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
   })
 
   expect(JSON.parse(mock.history.post[0].data)).toEqual({
@@ -138,7 +138,9 @@ test('surfaces a stale-token conflict by code so the caller can refresh rather t
   // flush and fails only when the suite runs alongside others.
   let rejection: unknown
   await act(async () => {
-    rejection = await result.current.undo.mutateAsync(91).catch((e) => e)
+    rejection = await result.current.undo
+      .mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
+      .catch((e) => e)
   })
 
   // The code is carried at the envelope's top level, so parseApiError reaches
@@ -163,7 +165,9 @@ test('surfaces a missing-token rejection as a field error, not a conflict', asyn
 
   let rejection: unknown
   await act(async () => {
-    rejection = await result.current.undo.mutateAsync(91).catch((e) => e)
+    rejection = await result.current.undo
+      .mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
+      .catch((e) => e)
   })
 
   const parsed = parseApiError(rejection)
@@ -218,7 +222,10 @@ test('invalidates the undone question, not the one navigated to mid-request', as
 
   let pending: Promise<unknown> = Promise.resolve()
   act(() => {
-    pending = result.current.undo.mutateAsync(91)
+    pending = result.current.undo.mutateAsync({
+      scoreid: SCORE_ID,
+      revisionid: 91,
+    })
   })
   await waitFor(() => expect(mock.history.post).toHaveLength(1))
   rerender({ scoreid: OTHER_ID })
@@ -254,7 +261,9 @@ test('a failed undo still refetches the undone question after navigation', async
 
   let pending: Promise<unknown> = Promise.resolve()
   act(() => {
-    pending = result.current.undo.mutateAsync(91).catch(() => {})
+    pending = result.current.undo
+      .mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
+      .catch(() => {})
   })
   await waitFor(() => expect(mock.history.post).toHaveLength(1))
   rerender({ scoreid: OTHER_ID })

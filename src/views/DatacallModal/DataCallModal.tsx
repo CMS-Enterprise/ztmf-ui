@@ -143,13 +143,18 @@ export default function DataCallModal({
       if (isAuthHandled(error)) return
       const parsed = parseApiError(error)
       // Backend 400 with a field map: route each reason to the matching
-      // field's error setter. No toast on this branch, the inline errors
-      // are the user feedback.
+      // field's error setter. A reason with no field here (such as
+      // questionnaire_versionid) is toasted rather than lost.
       if (parsed.fieldErrors) {
+        const unplaced: string[] = []
         Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
           if (key === 'datacall') setDatacallError(message)
           else if (key === 'deadline') setDeadlineError(message)
+          else unplaced.push(message)
         })
+        if (unplaced.length > 0) {
+          notify(unplaced.join(' '), 'error', { autoHideDuration: 4000 })
+        }
         return
       }
       notify(parsed.message, 'error', { autoHideDuration: 2500 })

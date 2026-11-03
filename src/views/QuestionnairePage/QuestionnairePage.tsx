@@ -792,29 +792,43 @@ export default function QuestionnarePage() {
   // refuses rather than silently reverting a change this session never saw.
   const undoInFlight = React.useRef(false)
   // questionId, not scoreid: scoreid only moves once the next question loads.
-  const undoContextRef = React.useRef('')
+  // The cycle is kept apart so a reload of its scores can tell whether it is
+  // still the one on screen.
+  const undoContextRef = React.useRef({ cycle: '', question: '' })
   React.useLayoutEffect(() => {
-    undoContextRef.current = `${system}:${questionId}`
-  }, [system, questionId])
+    undoContextRef.current = {
+      cycle: `${system}:${datacallID}`,
+      question: String(questionId),
+    }
+  }, [system, datacallID, questionId])
+  const historyOpenRef = React.useRef(false)
+  React.useLayoutEffect(() => {
+    historyOpenRef.current = answerHistory.open
+  }, [answerHistory.open])
   const handleUndoClick = async (revisionid: number) => {
     // isPending lags the click by a render; a double-click would otherwise
     // send the same token twice and report its own undo as a conflict.
     if (undoInFlight.current) return
     undoInFlight.current = true
-    const undoContext = undoContextRef.current
-    const movedOn = () => undoContextRef.current !== undoContext
+    const { cycle, question } = undoContextRef.current
+    const sameCycle = () => undoContextRef.current.cycle === cycle
+    const movedOn = () =>
+      !sameCycle() || undoContextRef.current.question !== question
     // The Undo button can unmount when history refetches; keep focus off
     // <body>. Skipped if the user has since moved to another question. The
-    // drawer is read from the DOM, since it may have opened or closed since.
+    // drawer's state is read now, since it may have opened or closed since.
     const refocus = () => {
       if (movedOn()) return
-      ;(
-        document.getElementById(ANSWER_HISTORY_PANEL_ID) ??
-        document.getElementById('view-answer-history')
-      )?.focus()
+      document
+        .getElementById(
+          historyOpenRef.current
+            ? ANSWER_HISTORY_PANEL_ID
+            : 'view-answer-history'
+        )
+        ?.focus()
     }
     try {
-      await answerHistory.undo.mutateAsync(revisionid)
+      await answerHistory.undo.mutateAsync({ scoreid, revisionid })
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       // The draft state now belongs to whichever question is on screen.
       if (movedOn()) return
@@ -833,7 +847,7 @@ export default function QuestionnarePage() {
       if (outcome.kind === 'conflict' || outcome.kind === 'refused') {
         // Someone else wrote the answer, or it drifted, so the one on screen
         // may be stale too.
-        fetchQuestionScores(system, setQuestionScores)
+        if (sameCycle()) fetchQuestionScores(system, setQuestionScores)
         if (movedOn()) return
         if (outcome.kind === 'conflict') {
           notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
@@ -844,6 +858,7 @@ export default function QuestionnarePage() {
         return
       }
       notify(outcome.message, 'error', { autoHideDuration: 2500 })
+      refocus()
     } finally {
       undoInFlight.current = false
     }

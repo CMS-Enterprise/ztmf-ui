@@ -53,7 +53,10 @@ A single function whose answer changed between two data calls:
 ```ts
 export type ScoreDiffEntry = {
   fismasystemid: number
-  functionid: number
+  functionid: number // the "to" side's when both cycles answered it
+  root_functionid: number // the question's identity across versions
+  pillarid: number | null
+  pillar: string | null
   function: string // e.g. "Authentication-Users"
   question: string // full question text
   from: ScoreDiffSide | null // null = newly answered in "to" cycle
@@ -76,42 +79,39 @@ export type ScoreDiffEntry = {
 
 ### 4.1 Props
 
-| Prop                 | Type         | Description                                      |
-| -------------------- | ------------ | ------------------------------------------------ |
-| `open`               | `boolean`    | Controls dialog visibility                       |
-| `onClose`            | `() => void` | Fired when user closes the dialog                |
-| `fismasystemid`      | `number`     | Used as diff query param and questions cache key |
-| `systemName`         | `string`     | Shown in dialog title                            |
-| `systemAcronym`      | `string`     | Shown in dialog title alongside `systemName`     |
-| `selectedDataCallId` | `number?`    | Pre-seeds the "To" picker default                |
+| Prop                 | Type         | Description                                  |
+| -------------------- | ------------ | -------------------------------------------- |
+| `open`               | `boolean`    | Controls dialog visibility                   |
+| `onClose`            | `() => void` | Fired when user closes the dialog            |
+| `fismasystemid`      | `number`     | Used as diff query param                     |
+| `systemName`         | `string`     | Shown in dialog title                        |
+| `systemAcronym`      | `string`     | Shown in dialog title alongside `systemName` |
+| `selectedDataCallId` | `number?`    | Pre-seeds the "To" picker default            |
 
 ### 4.2 Module-Level Caches
 
-Two caches live at module scope (outside the component) so they survive close/open cycles:
+One cache lives at module scope (outside the component) so it survives close/open cycles:
 
 ```ts
 const datacallsCache: { data: datacall[] | null; timestamp: number | null }
-const questionsCache: Map<number, { data: FismaQuestion[]; timestamp: number }>
 const CACHE_DURATION = 10 * 60 * 1000 // 10 minutes
 ```
 
 - `datacallsCache` — full sorted list of all data calls; one copy per page load
-- `questionsCache` — keyed by `fismasystemid`; each system's questions cached separately
 - The **diff response is never cached** — re-fetches on every open and picker change
 - Clearing requires a full page refresh
 
 ### 4.3 State
 
-| Variable            | Type                  | Purpose                                            |
-| ------------------- | --------------------- | -------------------------------------------------- |
-| `datacalls`         | `datacall[]`          | Sorted list for the two pickers                    |
-| `fromDatacall`      | `datacall \| null`    | "From" picker selection                            |
-| `toDatacall`        | `datacall \| null`    | "To" picker selection                              |
-| `diffResults`       | `ScoreDiffEntry[]`    | Raw entries from the API                           |
-| `functionPillarMap` | `Map<number, pillar>` | Maps `functionid` → pillar for grouping            |
-| `diffKey`           | `number`              | Counter incremented on each open to force re-fetch |
-| `loading`           | `boolean`             | True while diff API call is in-flight              |
-| `error`             | `string \| null`      | Rendered in an Alert on fetch failure              |
+| Variable       | Type               | Purpose                                            |
+| -------------- | ------------------ | -------------------------------------------------- |
+| `datacalls`    | `datacall[]`       | Sorted list for the two pickers                    |
+| `fromDatacall` | `datacall \| null` | "From" picker selection                            |
+| `toDatacall`   | `datacall \| null` | "To" picker selection                              |
+| `diffResults`  | `ScoreDiffEntry[]` | Raw entries from the API                           |
+| `diffKey`      | `number`           | Counter incremented on each open to force re-fetch |
+| `loading`      | `boolean`          | True while diff API call is in-flight              |
+| `error`        | `string \| null`   | Rendered in an Alert on fetch failure              |
 
 ### 4.4 useEffect Lifecycle
 
@@ -119,20 +119,17 @@ const CACHE_DURATION = 10 * 60 * 1000 // 10 minutes
 Focuses the close button 100 ms after open. Cleanup cancels the timer if the modal closes before it fires.
 
 **Effect 2 — Open/close reset** (`deps: [open]`)  
-On open: increments `diffKey`. On close: clears `diffResults`, `functionPillarMap`, and `error`.
+On open: increments `diffKey`. On close: clears `diffResults` and `error`.
 
 `diffKey` is the mechanism for forcing a fresh diff fetch on every reopen. When datacall objects are served from the module cache, the same object references return, so `fromDatacall`/`toDatacall` don't change between opens — React would skip the diff effect without this counter.
 
 **Effect 3 — Datacalls fetch** (`deps: [open, selectedDataCallId]`)  
-Fetches `GET /datacalls`, sorts descending by `datacallid`, writes to cache. Sets picker defaults:
+Fetches `GET /datacalls`, sorts by deadline (furthest-out first, `datacallid` as tiebreak), writes to cache. Sets picker defaults:
 
 - **To** = data call matching `selectedDataCallId`, or newest if not found
-- **From** = first data call with an ID numerically less than "To"
+- **From** = the next-older call by deadline
 
-**Effect 4 — Questions fetch for pillar mapping** (`deps: [open, fismasystemid]`)  
-Fetches `GET /fismasystems/:id/questions`, builds `functionPillarMap`. Used by `groupedResults` to assign each diff row to its pillar. Results cached by `fismasystemid`.
-
-**Effect 5 — Diff fetch** (`deps: [fromDatacall, toDatacall, fismasystemid, diffKey]`)  
+**Effect 4 — Diff fetch** (`deps: [fromDatacall, toDatacall, fismasystemid, diffKey]`)  
 Skips if either picker is null or both reference the same data call. Otherwise calls:
 
 ```
@@ -145,13 +142,12 @@ An `AbortController` is created per run; `signal` is passed to axios. The `.catc
 
 ### 4.5 groupedResults (useMemo)
 
-Transforms raw `diffResults` into `{ pillar, entries[] }[]` ordered to match the questionnaire's canonical layout:
+Transforms raw `diffResults` into `{ pillar, entries[] }[]` in the questionnaire's canonical layout:
 
-1. Build a `Map<pillarid, { pillar, entries[] }>` via `functionPillarMap.get(entry.functionid)`
-2. Entries with no matching pillar go into `uncategorized[]` (race: questions fetch still in flight)
-3. Sort groups by `pillar.order` (the API's `pillars.ordr`), `pillarid` as tiebreak
-4. Entries are not sorted — see §8
-5. Append `uncategorized` as a final "Other" group if any exist
+1. Build a `Map<pillarid, { pillar, entries[] }>` from each row's own `pillarid` / `pillar` (ztmf-misc#395). The two cycles may pin different questionnaire versions, so no single questions list could map both sides' `functionid`s
+2. Rows without a pillar go into `uncategorized[]`
+3. Groups keep their first-appearance order, which is pillar order because the API sorts by it — see §8
+4. Append `uncategorized` as a final "Other" group if any exist
 
 ### 4.6 Table Structure
 
@@ -230,50 +226,45 @@ Response: `{ data: ScoreDiffEntry[] }` — only changed functions; unchanged fun
 
 ### `GET /datacalls`
 
-Full list of all data calls. Frontend sorts descending by `datacallid`.  
+Full list of all data calls. Frontend sorts by deadline, furthest-out first.  
 Response: `{ data: datacall[] }`
-
-### `GET /fismasystems/:id/questions`
-
-Questions for the system with pillar and function metadata. Used only to build `functionPillarMap` — question text in the diff table comes from the diff endpoint itself.  
-Response: `{ data: FismaQuestion[] }`
 
 ---
 
 ## 7. Test Coverage
 
-13 tests in `ScoreDiffModal.test.tsx`. Module-level caches are busted before each test by advancing a mocked `Date.now()` past the 10-minute TTL.
+16 tests in `ScoreDiffModal.test.tsx`. The module-level cache is busted before each test by advancing a mocked `Date.now()` past the 10-minute TTL.
 
-| #   | Test                            | What it validates                                       |
-| --- | ------------------------------- | ------------------------------------------------------- |
-| 1   | `open=false` → no dialog        | Modal absent from DOM when closed                       |
-| 2   | System name/acronym in title    | Title string interpolation                              |
-| 3   | Spinner while datacalls loading | Loading indicator visible before fetch resolves         |
-| 4   | To/From defaults                | To = `selectedDataCallId`; From = prior datacall by ID  |
-| 5   | Correct diff query params       | URL includes `?from=N&to=M&fismasystemid=K`             |
-| 6   | Empty state message             | "No changes between these two datacalls."               |
-| 7   | Error alert on failure          | Alert renders on network error                          |
-| 8   | Full row render                 | All 6 columns populated                                 |
-| 9   | Notes shown/hidden              | Notes rendered when present; absent when null           |
-| 10  | Null side → "No answer"         | One-sided rows render correctly                         |
-| 11  | Pillar group ordering           | Identity before Devices even when Devices arrives first |
-| 12  | Both close controls             | X and Close button each fire `onClose`                  |
-| 13  | Re-fetch on reopen              | New `/scores/diff` call fires after close → reopen      |
-
-**Known lint warnings:** Tests 6, 7, and 9 trigger `jest/expect-expect` — they use `screen.findByText` as an implicit assertion without an explicit `expect()`. Warnings only; all 13 pass. Should be refactored to explicit assertions in a follow-up.
+| #   | Test                            | What it validates                                                 |
+| --- | ------------------------------- | ----------------------------------------------------------------- |
+| 1   | `open=false` → no dialog        | Modal absent from DOM when closed                                 |
+| 2   | System name/acronym in title    | Title string interpolation                                        |
+| 3   | Extra-wide dialog               | Dialog uses the comparison-table size                             |
+| 4   | Spinner while datacalls loading | Loading indicator visible before fetch resolves                   |
+| 5   | To/From defaults                | To = `selectedDataCallId`; From = the next-older call by deadline |
+| 6   | Latest by deadline              | Furthest-out deadline is "latest", not the highest `datacallid`   |
+| 7   | Correct diff query params       | URL includes `?from=N&to=M&fismasystemid=K`                       |
+| 8   | Empty state message             | "No changes between these two datacalls."                         |
+| 9   | Error alert on failure          | Alert renders on network error                                    |
+| 10  | Full row render                 | All 6 columns populated                                           |
+| 11  | Notes shown/hidden              | Notes rendered when present; absent when null                     |
+| 12  | Null side → "No answer"         | One-sided rows render correctly                                   |
+| 13  | Pillar grouping                 | Groups by each row's pillar in API order, no `/questions` request |
+| 14  | Row without a pillar            | Lands under "Other"                                               |
+| 15  | Both close controls             | X and Close button each fire `onClose`                            |
+| 16  | Re-fetch on reopen              | New `/scores/diff` call fires after close → reopen                |
 
 ---
 
 ## 8. Pillar and Function Ordering
 
-Source: the API. `/fismasystems/:id/questions` returns rows ordered by
-`pillars.ordr, questions.ordr, functions.ordr, questionid`, and `/scores/diff`
-sorts by the same ranks, so a diff arrives in questionnaire order.
+Source: the API. `/scores/diff` sorts by `pillars.ordr, questions.ordr,
+functions.ordr, functionid`, so a diff arrives in questionnaire order.
 
-The modal only re-derives the **group** order, because it builds groups from a
-`Map` keyed on `pillarid` and a Map's iteration order is insertion order, not
-pillar order. It sorts those groups by `pillar.order`, with `pillarid` as the
-tiebreak. Entries inside a group keep the order they arrived in.
+The modal builds groups from a `Map` keyed on `pillarid`, whose iteration order
+is insertion order. Since rows arrive in pillar order, first appearance is
+pillar order and no re-sort is needed. Entries inside a group keep the order
+they arrived in.
 
 Until ztmf-misc#393 this was done with `PILLAR_ORDER` and `PILLAR_FUNCTION_MAP`
 in `src/constants.ts`, hardcoded lists keyed on pillar and function _names_.
@@ -285,7 +276,7 @@ an ESLint `no-restricted-imports` rule refuses to let them back.
 
 ## 9. Design Decisions
 
-**Pillar grouping on the frontend** — the diff endpoint returns no pillar metadata to keep the backend join lean. A separate `/questions` call is cached at module level so only the first open per system incurs the extra request.
+**Pillar from the diff row** — the diff endpoint carries each row's `pillarid` / `pillar` (ztmf-misc#395). The modal used to map `functionid` to a pillar through `/fismasystems/:id/questions`, but that list is one questionnaire version, and two cycles can pin different ones.
 
 **Module-level caches vs React state** — module scope survives component unmount/remount across close/open cycles, matching the pattern used by `PillarScoresModal`. Tradeoff: clearing requires a full page refresh.
 
@@ -293,7 +284,7 @@ an ESLint `no-restricted-imports` rule refuses to let them back.
 
 **Same-call prevention** — `getOptionDisabled` disables whichever data call is already selected in the opposite picker, preventing a always-empty self-diff.
 
-**"Other" fallback group** — if pillar data hasn't loaded yet when diff results arrive, entries go into "Other" at the bottom rather than being dropped. Prevents a blank table during the brief race window.
+**"Other" fallback group** — a row without a pillar (a function with no question) goes into "Other" at the bottom rather than being dropped.
 
 ---
 
