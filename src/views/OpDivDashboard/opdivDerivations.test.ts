@@ -129,7 +129,7 @@ describe('cadence', () => {
     ])
   })
 
-  it('gives the quarterly cadence its quarterlies plus the newest annual call', () => {
+  it('gives the quarterly cadence its quarterlies plus the annual calls from later fiscal years', () => {
     expect(names('quarterly')).toEqual(['FY2023 Q4', 'FY2025 Q3', 'FY26 ZTM'])
   })
 
@@ -186,36 +186,43 @@ describe('cadence', () => {
   })
 
   /**
-   * Regression for the move off name parsing. The calls carry prod's names
-   * with the fiscal year and cadence the backfill derives from them. CMS
-   * systems sit in the quarterly calls and in both annual calls; another
-   * OpDiv's systems sit in the annual calls only. The expected lists are what
-   * the name-parsing selection on main returned for these calls, recorded
-   * before it was removed: the CMS code got the quarterly series, every other
-   * code the annual one.
+   * Regression for the move off name parsing, on prod's data calls. Names and
+   * the FY2025 Q3 / FY25 ZTM deadlines come from the FY2026 rollover fix
+   * (ztmf!501), checked against a prod snapshot; the other ZTM calls close at
+   * fiscal year end. FY2023 Q4's and FY26 ZTM's deadlines are assumed. CMS
+   * systems sit in every call, including the annual ones (HHS imported a view
+   * of them); another OpDiv's systems sit in the annual calls only.
+   *
+   * The expected lists are what main's name-parsing selection returned for
+   * these exact calls, computed from main's code before it was removed: the
+   * CMS code got the quarterly series, every other code the annual one.
    */
   describe('on prod-shaped data', () => {
     const CMS_SYSTEMS = new Set([101, 102, 103])
     const OTHER_SYSTEMS = new Set([201, 202])
     const PROD: datacall[] = [
-      call(11, 'FY2025 Q1', '2024-12-31T00:00:00Z', 2025, 'quarterly'),
-      call(12, 'FY2025 Q2', '2025-03-31T00:00:00Z', 2025, 'quarterly'),
-      call(13, 'FY2025 Q3', '2025-06-30T00:00:00Z', 2025, 'quarterly'),
-      call(14, 'FY2025 Q4', '2025-09-15T00:00:00Z', 2025, 'quarterly'),
-      call(20, 'FY25 ZTM', '2025-09-30T00:00:00Z', 2025, 'annual'),
-      call(15, 'FY2026 Q1', '2025-12-31T00:00:00Z', 2026, 'quarterly'),
-      call(21, 'FY26 ZTM', '2026-09-11T00:00:00Z', 2026, 'annual'),
+      call(36, 'FY23 ZTM', '2023-09-30T00:00:00Z', 2023, 'annual'),
+      call(30, 'FY2023 Q4', '2023-09-15T00:00:00Z', 2023, 'quarterly'),
+      call(37, 'FY24 ZTM', '2024-09-30T00:00:00Z', 2024, 'annual'),
+      call(31, 'FY2025 Q3', '2025-05-07T00:00:00Z', 2025, 'quarterly'),
+      call(38, 'FY25 ZTM', '2025-09-30T00:00:00Z', 2025, 'annual'),
+      call(69, 'FY26 ZTM', '2026-09-11T00:00:00Z', 2026, 'annual'),
     ]
-    const prodByName = (name: string) =>
-      PROD.find((c) => c.datacall === name) as datacall
-    // Score rows: CMS in every quarterly call and both annual calls, the other
-    // OpDiv in the annual calls only.
+    const FY27 = call(
+      80,
+      'FY27 data call',
+      '2027-09-10T00:00:00Z',
+      2027,
+      'annual'
+    )
+    const byTitle = (calls: datacall[], title: string) =>
+      calls.find((c) => c.datacall === title) as datacall
     const HISTORY: ScoreAggregate[] = [
-      ...[11, 12, 13, 14, 15, 20, 21].flatMap((id) =>
-        [...CMS_SYSTEMS].map((sys) => agg(id, sys, 2.5))
+      ...PROD.flatMap((dc) =>
+        [...CMS_SYSTEMS].map((sys) => agg(dc.datacallid, sys, 2.5))
       ),
-      ...[20, 21].flatMap((id) =>
-        [...OTHER_SYSTEMS].map((sys) => agg(id, sys, 2))
+      ...PROD.filter((dc) => dc.cadence === 'annual').flatMap((dc) =>
+        [...OTHER_SYSTEMS].map((sys) => agg(dc.datacallid, sys, 2))
       ),
     ]
     const newestQuarterly = newestQuarterlyCall(PROD) as datacall
@@ -224,42 +231,43 @@ describe('cadence', () => {
     )
     const cmsCadence = trendCadenceFor(CMS_SYSTEMS, quarterlyScores)
     const otherCadence = trendCadenceFor(OTHER_SYSTEMS, quarterlyScores)
+    const prior = (
+      calls: datacall[],
+      cadence: DatacallCadence,
+      title: string
+    ) =>
+      selectPriorCall(calls, cadence, byTitle(calls, title))?.datacall ?? null
 
-    it('picks FY2026 Q1 as the call that decides the cadence', () => {
-      expect(newestQuarterly.datacall).toBe('FY2026 Q1')
-    })
-
-    it('puts the CMS OpDiv on the quarterly cadence and the other on annual', () => {
+    it('decides the cadence on FY2025 Q3: CMS quarterly, the other OpDiv annual', () => {
+      expect(newestQuarterly.datacall).toBe('FY2025 Q3')
       expect(cmsCadence).toBe('quarterly')
       expect(otherCadence).toBe('annual')
     })
 
-    it('selects the same CMS series as name parsing did', () => {
+    it('selects the same CMS series and prior calls as name parsing did', () => {
       expect(names(cmsCadence, PROD)).toEqual([
-        'FY2025 Q1',
-        'FY2025 Q2',
+        'FY2023 Q4',
         'FY2025 Q3',
-        'FY2025 Q4',
-        'FY2026 Q1',
         'FY26 ZTM',
       ])
+      expect(prior(PROD, cmsCadence, 'FY23 ZTM')).toBe('FY2023 Q4')
+      expect(prior(PROD, cmsCadence, 'FY2023 Q4')).toBeNull()
+      expect(prior(PROD, cmsCadence, 'FY24 ZTM')).toBe('FY2023 Q4')
+      expect(prior(PROD, cmsCadence, 'FY2025 Q3')).toBe('FY2023 Q4')
+      expect(prior(PROD, cmsCadence, 'FY25 ZTM')).toBe('FY2025 Q3')
+      expect(prior(PROD, cmsCadence, 'FY26 ZTM')).toBe('FY2025 Q3')
     })
 
-    it('selects the same series for the other OpDiv and the aggregate as name parsing did', () => {
-      expect(names(otherCadence, PROD)).toEqual(['FY25 ZTM', 'FY26 ZTM'])
-      expect(names('annual', PROD)).toEqual(['FY25 ZTM', 'FY26 ZTM'])
-    })
-
-    it('compares against the same prior calls as name parsing did', () => {
-      const prior = (cadence: DatacallCadence, name: string) =>
-        selectPriorCall(PROD, cadence, prodByName(name))?.datacall ?? null
-      expect(prior(cmsCadence, 'FY26 ZTM')).toBe('FY2026 Q1')
-      expect(prior(cmsCadence, 'FY2026 Q1')).toBe('FY2025 Q4')
-      expect(prior(cmsCadence, 'FY25 ZTM')).toBe('FY2025 Q4')
-      expect(prior(cmsCadence, 'FY2025 Q1')).toBeNull()
-      expect(prior(otherCadence, 'FY26 ZTM')).toBe('FY25 ZTM')
-      expect(prior(otherCadence, 'FY2026 Q1')).toBe('FY25 ZTM')
-      expect(prior(otherCadence, 'FY25 ZTM')).toBeNull()
+    it('selects the same series and prior calls for the other OpDiv and the aggregate as name parsing did', () => {
+      const annual = ['FY23 ZTM', 'FY24 ZTM', 'FY25 ZTM', 'FY26 ZTM']
+      expect(names(otherCadence, PROD)).toEqual(annual)
+      expect(names('annual', PROD)).toEqual(annual)
+      expect(prior(PROD, otherCadence, 'FY23 ZTM')).toBeNull()
+      expect(prior(PROD, otherCadence, 'FY2023 Q4')).toBeNull()
+      expect(prior(PROD, otherCadence, 'FY24 ZTM')).toBe('FY23 ZTM')
+      expect(prior(PROD, otherCadence, 'FY2025 Q3')).toBe('FY24 ZTM')
+      expect(prior(PROD, otherCadence, 'FY25 ZTM')).toBe('FY24 ZTM')
+      expect(prior(PROD, otherCadence, 'FY26 ZTM')).toBe('FY25 ZTM')
     })
 
     it('draws the same points for each OpDiv', () => {
@@ -268,17 +276,35 @@ describe('cadence', () => {
           (p) => p.label
         )
       expect(labels(CMS_SYSTEMS, cmsCadence)).toEqual([
-        'FY2025 Q1',
-        'FY2025 Q2',
+        'FY2023 Q4',
         'FY2025 Q3',
-        'FY2025 Q4',
-        'FY2026 Q1',
         'FY26 ZTM',
       ])
       expect(labels(OTHER_SYSTEMS, otherCadence)).toEqual([
+        'FY23 ZTM',
+        'FY24 ZTM',
         'FY25 ZTM',
         'FY26 ZTM',
       ])
+    })
+
+    it('keeps FY26 ZTM in the quarterly series once FY27 exists', () => {
+      const withFy27 = [...PROD, FY27]
+      expect(names('quarterly', withFy27)).toEqual([
+        'FY2023 Q4',
+        'FY2025 Q3',
+        'FY26 ZTM',
+        'FY27 data call',
+      ])
+      expect(prior(withFy27, 'quarterly', 'FY27 data call')).toBe('FY26 ZTM')
+    })
+
+    it('leaves out an annual call from the last quarterly call fiscal year', () => {
+      // FY25 ZTM is due after FY2025 Q3 but shares fiscal year 2025 with it,
+      // so it is the other population's view of a year CMS already covered.
+      const withFy27 = [...PROD, FY27]
+      expect(names('quarterly', PROD)).not.toContain('FY25 ZTM')
+      expect(names('quarterly', withFy27)).not.toContain('FY25 ZTM')
     })
   })
 })

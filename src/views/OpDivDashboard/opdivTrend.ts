@@ -75,11 +75,15 @@ export function trendCadenceFor(
  * reads as an OpDiv repeatedly gaining and losing a point of maturity when it
  * is really two different populations taking turns.
  *
- * So each series keeps to its own cadence, with one exception: the newest
- * annual call is the first cycle everyone ran together, so it joins the
- * quarterly series as its most recent point. Cadence comes from the stored
- * field, never from the title. Anything not stored as quarterly is annual,
- * which is the backend's default.
+ * So each series keeps to its own cadence, with one exception: once the
+ * quarterly calls stop, the OpDiv that ran them moves onto the shared annual
+ * cycle. The quarterly series is every quarterly call, plus every annual call
+ * from a fiscal year later than the last quarterly call's, plus the newest
+ * annual call (which covers a shared cycle in the same fiscal year as the
+ * last quarterly call). An annual call from a year the quarterly calls
+ * already cover stays out: it is the other population's view of that year.
+ * Cadence and year come from the stored fields, never from the title.
+ * Anything not stored as quarterly is annual, which is the backend's default.
  * @param {datacall[]} datacalls - All known data calls.
  * @param {DatacallCadence} cadence - The cadence the scope follows.
  * @returns {datacall[]} The calls to plot, deadline-ascending.
@@ -99,10 +103,16 @@ export function selectTrendCalls(
     return sortDatacallsByDeadline(annual).reverse()
   }
 
-  // sortDatacallsByDeadline is newest-first, so the shared cycle is its head.
+  // sortDatacallsByDeadline is newest-first, so each head is the newest call.
+  const lastQuarterly = sortDatacallsByDeadline(quarterly)[0]
   const newestAnnual = sortDatacallsByDeadline(annual)[0]
-  const series = newestAnnual ? [...quarterly, newestAnnual] : quarterly
-  return sortDatacallsByDeadline(series).reverse()
+  const shared = annual.filter(
+    (dc) =>
+      dc === newestAnnual ||
+      (lastQuarterly !== undefined &&
+        dc.fiscal_year > lastQuarterly.fiscal_year)
+  )
+  return sortDatacallsByDeadline([...quarterly, ...shared]).reverse()
 }
 
 /**
