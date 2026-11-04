@@ -33,18 +33,24 @@ const DATACALLS: datacall[] = [
     datacall: 'FY2025',
     datecreated: '2025-01-01T00:00:00Z',
     deadline: '2099-12-31T00:00:00Z',
+    fiscal_year: 2025,
+    cadence: 'annual',
   },
   {
     datacallid: 4,
     datacall: 'FY2024',
     datecreated: '2024-01-01T00:00:00Z',
     deadline: '2020-12-31T00:00:00Z',
+    fiscal_year: 2024,
+    cadence: 'annual',
   },
   {
     datacallid: 3,
     datacall: 'FY2023',
     datecreated: '2023-01-01T00:00:00Z',
     deadline: '2020-12-31T00:00:00Z',
+    fiscal_year: 2023,
+    cadence: 'annual',
   },
 ]
 
@@ -181,6 +187,8 @@ describe('ScoreDiffModal', () => {
         datacall: 'FY23 ZTM',
         datecreated: '2026-01-01T00:00:00Z',
         deadline: '2023-06-30T00:00:00Z',
+        fiscal_year: 2023,
+        cadence: 'annual',
       },
       // lower id but the furthest-out deadline (the real current call)
       {
@@ -188,12 +196,16 @@ describe('ScoreDiffModal', () => {
         datacall: 'FY2025 Q3',
         datecreated: '2025-01-01T00:00:00Z',
         deadline: '2099-09-30T00:00:00Z',
+        fiscal_year: 2025,
+        cadence: 'quarterly',
       },
       {
         datacallid: 2,
         datacall: 'FY2022',
         datecreated: '2022-01-01T00:00:00Z',
         deadline: '2022-12-31T00:00:00Z',
+        fiscal_year: 2022,
+        cadence: 'annual',
       },
     ]
     mockGet.mockImplementation((url: string) => {

@@ -32,7 +32,6 @@ import { FismaTableProps } from '@/types'
 import type { OpDiv, datacall } from '@/types'
 import { hasSystemAccess } from '@/utils/userRoles'
 import { toCategoryMap } from '@/utils/dataCenterEnvironments'
-import { parseDatacallName } from '@/utils/datacallGrouping'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { ProgressCell } from './progressColumn'
 import { progressSortValue } from './progressHelpers'
@@ -1106,7 +1105,7 @@ export default function FismaTable({
               }}
             >
               <ListItemText
-                primary={`${call.datacall} - ${parseDatacallName(call.datacall).tenant}`}
+                primary={call.datacall}
                 secondary={`${isClosed ? 'Closed' : 'Active'} - deadline ${deadlineLabel}`}
               />
             </MenuItem>

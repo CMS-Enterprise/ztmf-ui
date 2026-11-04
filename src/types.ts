@@ -412,11 +412,18 @@ export type users = {
   access_expires_at?: string | null
 }
 
+/** How often a data call's series runs. Picks the trend series it joins. */
+export type DatacallCadence = 'annual' | 'quarterly'
+
 export type datacall = {
   datacallid: number
+  // Free-text title. Display only: nothing reads a year or cadence out of it.
   datacall: string
   datecreated: string
   deadline: string
+  // Four-digit fiscal year the call belongs to, e.g. 2026.
+  fiscal_year: number
+  cadence: DatacallCadence
   // Absent until the API pins calls to a version (ztmf-misc#397).
   questionnaire_versionid?: number
 }

@@ -202,6 +202,8 @@ describe('FismaTable', () => {
           datacall: 'FY26 ZTM',
           datecreated: '2025-10-01',
           deadline: '2099-12-31',
+          fiscal_year: 2026,
+          cadence: 'annual',
         },
       ]
     }
