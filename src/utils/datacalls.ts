@@ -1,11 +1,16 @@
 import { useMutation, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
+import type { DatacallCadence } from '@/types'
 
 /** Request body for POST /datacalls. */
 export type DatacallInput = {
-  /** Display name, upper-cased by the caller before it is sent. */
+  /** Free-text title. */
   datacall: string
+  /** Four-digit fiscal year, e.g. 2027. Required by the backend. */
+  fiscal_year: number
+  /** Optional; the backend defaults to annual. */
+  cadence?: DatacallCadence
   /** Deadline as an ISO 8601 timestamp. */
   deadline: string
 }
@@ -13,7 +18,7 @@ export type DatacallInput = {
 /**
  * Creates a data call.
  *
- * @param input - The name and deadline for the new call.
+ * @param input - The title, fiscal year, cadence and deadline for the new call.
  */
 export async function createDatacall(input: DatacallInput): Promise<void> {
   await axiosInstance.post(apiPaths.datacalls.root, input)

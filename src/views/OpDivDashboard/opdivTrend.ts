@@ -10,17 +10,14 @@
  *
  * @module views/OpDivDashboard/opdivTrend
  */
-import { parseDatacallName } from '@/utils/datacallGrouping'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import type {
+  DatacallCadence,
   FismaSystemType,
   ScoreAggregate,
   ScoreTier,
   datacall,
 } from '@/types'
-
-/** The OpDiv that runs quarterly calls rather than the annual ZTM cycle. */
-const QUARTERLY_OPDIV_CODE = 'CMS'
 
 /**
  * Smallest score change worth calling a change.
@@ -31,38 +28,74 @@ const QUARTERLY_OPDIV_CODE = 'CMS'
 const MIN_VISIBLE_SCORE_CHANGE = 0.005
 
 /**
- * The data calls a given OpDiv's trend should plot.
+ * The newest quarterly call by deadline, or null when none exists.
+ *
+ * Its participants decide who follows the quarterly series (see
+ * {@link trendCadenceFor}). One call is enough to tell, and it is usually
+ * already loaded: while its fiscal year is in view it is one of the active
+ * calls the dashboard fetches anyway.
+ * @param {datacall[]} datacalls - All known data calls.
+ * @returns {datacall | null} The newest quarterly call.
+ */
+export function newestQuarterlyCall(datacalls: datacall[]): datacall | null {
+  return (
+    sortDatacallsByDeadline(
+      datacalls.filter((dc) => dc.cadence === 'quarterly')
+    )[0] ?? null
+  )
+}
+
+/**
+ * Which cadence a set of systems follows on the trend.
+ *
+ * Quarterly when any of them was scored in the newest quarterly call, annual
+ * otherwise. Taking part in an annual call proves nothing: the OpDiv that ran
+ * the quarterly series also sits in the annual calls. A score is the
+ * participation signal because the datacalls_fismasystems junction only gets
+ * a row when an ISSO marks a call complete.
+ * @param {Set<number>} systemIds - The scope's system ids.
+ * @param {ScoreAggregate[]} quarterlyScores - Aggregate rows for the newest
+ *   quarterly call.
+ * @returns {DatacallCadence} The cadence the scope's trend follows.
+ */
+export function trendCadenceFor(
+  systemIds: Set<number>,
+  quarterlyScores: ScoreAggregate[]
+): DatacallCadence {
+  return quarterlyScores.some((row) => systemIds.has(row.fismasystemid))
+    ? 'quarterly'
+    : 'annual'
+}
+
+/**
+ * The data calls a trend in the given cadence should plot.
  *
  * The two cadences are not comparable and plotting them on one axis is what
- * made the line oscillate: CMS runs quarterly calls (`FY2025 Q3`) while every
- * other OpDiv runs the annual ZTM cycle (`FY25 ZTM`), so alternating between
- * them reads as an OpDiv repeatedly gaining and losing a point of maturity
- * when it is really two different populations taking turns.
+ * made the line oscillate: alternating between a quarterly and an annual call
+ * reads as an OpDiv repeatedly gaining and losing a point of maturity when it
+ * is really two different populations taking turns.
  *
- * So each OpDiv follows its own cadence, with one exception: the newest annual
- * call is the first cycle everyone ran together, so it joins the CMS series as
- * its most recent point. The aggregate follows the annual cadence, being the
- * only one every OpDiv participates in.
+ * So each series keeps to its own cadence, with one exception: the newest
+ * annual call is the first cycle everyone ran together, so it joins the
+ * quarterly series as its most recent point. Cadence comes from the stored
+ * field, never from the title. Anything not stored as quarterly is annual,
+ * which is the backend's default.
  * @param {datacall[]} datacalls - All known data calls.
- * @param {string | null} opdivCode - The OpDiv's code, or null to aggregate.
+ * @param {DatacallCadence} cadence - The cadence the scope follows.
  * @returns {datacall[]} The calls to plot, deadline-ascending.
  */
 export function selectTrendCalls(
   datacalls: datacall[],
-  opdivCode: string | null
+  cadence: DatacallCadence
 ): datacall[] {
   const annual: datacall[] = []
   const quarterly: datacall[] = []
   for (const dc of datacalls) {
-    // 'HHS' is the annual ZTM cadence, 'CMS' the quarterly one. Names outside
-    // the grammar ('Other') are dropped rather than guessed at - an
-    // unclassifiable call has no series to belong to.
-    const { tenant } = parseDatacallName(dc.datacall)
-    if (tenant === 'HHS') annual.push(dc)
-    else if (tenant === 'CMS') quarterly.push(dc)
+    if (dc.cadence === 'quarterly') quarterly.push(dc)
+    else annual.push(dc)
   }
 
-  if (opdivCode !== QUARTERLY_OPDIV_CODE) {
+  if (cadence === 'annual') {
     return sortDatacallsByDeadline(annual).reverse()
   }
 
@@ -76,18 +109,18 @@ export function selectTrendCalls(
  * The baseline call for a paired comparison: the latest call in the scope's
  * cadence (see {@link selectTrendCalls}) due strictly before the anchor.
  * @param {datacall[]} datacalls - All known data calls.
- * @param {string | null} opdivCode - The OpDiv's code, or null to aggregate.
+ * @param {DatacallCadence} cadence - The cadence the scope follows.
  * @param {datacall | null} anchor - The call being reported.
  * @returns {datacall | null} The prior call, or null when none precedes it.
  */
 export function selectPriorCall(
   datacalls: datacall[],
-  opdivCode: string | null,
+  cadence: DatacallCadence,
   anchor: datacall | null
 ): datacall | null {
   if (!anchor) return null
   const cutoff = new Date(anchor.deadline).getTime()
-  const earlier = selectTrendCalls(datacalls, opdivCode).filter(
+  const earlier = selectTrendCalls(datacalls, cadence).filter(
     (dc) => new Date(dc.deadline).getTime() < cutoff
   )
   return earlier[earlier.length - 1] ?? null
