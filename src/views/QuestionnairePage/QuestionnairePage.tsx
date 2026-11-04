@@ -63,7 +63,8 @@ import {
   type ConfirmSummaryEntry,
 } from './confirmState'
 import ConfirmSummaryDialog from './ConfirmSummaryDialog'
-import InsightsPanel from './InsightsPanel/InsightsPanel'
+import InsightsPanel, { FipsBaselineStrip } from './InsightsPanel/InsightsPanel'
+import { resolveFipsBaseline } from './fipsBaseline'
 import QuestionRadioGroup from './QuestionRadioGroup'
 import JustificationField, {
   type PriorReviewState,
@@ -317,14 +318,9 @@ export default function QuestionnarePage() {
     // (per-option warn styling, divider, above-baseline badge/notice) that a flat
     // ChoiceList can't express.
     //
-    // Systems whose OpDiv has insights disabled do not surface the internal
-    // ZTMF Insights layer. Always pass insight so the FIPS baseline markers (a
-    // federal-wide concept) render for every system regardless of OpDiv.
-    // showInsightBadges suppresses the insights option chips (suggested +
-    // prior-answer) for disabled OpDivs while leaving the baseline treatment
-    // intact. The Insights panel, suggestion, and per-option insight badges are
-    // each separately gated (showInsights / showInsightSuggestion /
-    // showInsightBadges) - all derive from showCmsInsights.
+    // The FIPS baseline (a federal-wide concept) comes from the system record via
+    // fipsBaseline, so it renders for every OpDiv. showInsightBadges suppresses
+    // only the Insights option chips for OpDivs without Insights.
     return (
       <QuestionRadioGroup
         options={options}
@@ -333,6 +329,7 @@ export default function QuestionnarePage() {
         onChange={handleChoiceChange}
         disabled={isReadOnly}
         insight={currentInsight}
+        baseline={fipsBaseline}
         showInsightBadges={showCmsInsights}
         viewedDatacall={datacall}
       />
@@ -619,6 +616,7 @@ export default function QuestionnarePage() {
   const showCmsInsights =
     systemOpdivId != null && insightsOpdivIds.has(systemOpdivId)
   const showInsights = Boolean(currentInsight) && showCmsInsights
+  const fipsBaseline = resolveFipsBaseline(systemInfo, currentInsight)
   const currentSuggestion = showCmsInsights
     ? buildInsightJustification(currentInsight)
     : undefined
@@ -1976,11 +1974,17 @@ export default function QuestionnarePage() {
               Checking for prior responses...
             </Typography>
           )}
-          {showInsights && currentInsight && (
+          {showInsights && currentInsight ? (
             <InsightsPanel
               payload={currentInsight}
               questionId={currentDatabaseQuestionId}
+              baseline={fipsBaseline}
             />
+          ) : (
+            // Held while insights load so the strip doesn't render here and
+            // then jump into the panel.
+            fipsBaseline &&
+            !insightsPending && <FipsBaselineStrip {...fipsBaseline} />
           )}
           {loadingQuestion ? (
             <Box

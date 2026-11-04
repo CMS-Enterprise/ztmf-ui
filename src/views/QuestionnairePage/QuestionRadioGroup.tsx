@@ -4,9 +4,8 @@ import Tooltip from '@mui/material/Tooltip'
 import { QuestionChoice, InsightPayload } from '@/types'
 import { OptionInsightBadges } from './InsightsPanel/InsightsPanel'
 import {
-  baselineCeiling,
   isAboveBaseline,
-  asImpactLevel,
+  type FipsBaseline,
   FIPS_GOLD as GOLD,
   FIPS_BASELINE as BASELINE,
 } from './fipsBaseline'
@@ -43,8 +42,11 @@ type Props = {
   onChange: (event: React.ChangeEvent<HTMLInputElement>) => void
   disabled?: boolean
   insight?: InsightPayload
+  // FIPS baseline resolved by the page (resolveFipsBaseline), the same value the
+  // strip reads; null or absent means no baseline markers.
+  baseline?: FipsBaseline | null
   // When false, suppresses the CMS-specific OptionInsightBadges (suggested +
-  // prior-answer chips) while leaving the FIPS baseline treatment intact.
+  // prior-answer chips); the FIPS baseline comes from `baseline`.
   showInsightBadges?: boolean
   viewedDatacall?: string
 }
@@ -56,15 +58,13 @@ export default function QuestionRadioGroup({
   onChange,
   disabled,
   insight,
+  baseline,
   showInsightBadges = true,
   viewedDatacall,
 }: Props) {
-  const ceiling = baselineCeiling(insight?.fips_ceiling)
-  const level = asImpactLevel(insight?.fips_impact_level)
-  // Same gate as the panel strip (showFipsStrip): a real impact level plus
-  // headroom above the baseline. A High/ceiling-4 or null-FIPS system has no
-  // baseline treatment, so strip and per-option markers appear/vanish together.
-  const hasBaseline = level != null && ceiling < 4
+  const ceiling = baseline?.ceiling ?? 4
+  const level = baseline?.level ?? null
+  const hasBaseline = baseline != null
 
   // Effective selection: the page state once the user has chosen, otherwise the
   // option flagged defaultChecked (the saved answer) so a pre-loaded above-

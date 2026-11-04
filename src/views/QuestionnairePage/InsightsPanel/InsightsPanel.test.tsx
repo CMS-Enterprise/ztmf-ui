@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import InsightsPanel, {
+  FipsBaselineStrip,
   OptionInsightBadges,
   ISSO_DETERMINATION_DISCLAIMER,
 } from './InsightsPanel'
@@ -1609,14 +1610,11 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
 })
 
 describe('FIPS baseline strip', () => {
-  it('shows the FIPS badge + baseline sentence for a system with headroom (Low → Initial)', () => {
+  it('shows the FIPS badge + baseline sentence from the baseline prop (Low → Initial)', () => {
     render(
       <InsightsPanel
-        payload={{
-          suggested_score: 2,
-          fips_impact_level: 'Low',
-          fips_ceiling: 2,
-        }}
+        payload={{ suggested_score: 2 }}
+        baseline={{ level: 'Low', ceiling: 2 }}
       />
     )
     expect(screen.getByText('FIPS LOW')).toBeInTheDocument()
@@ -1624,36 +1622,26 @@ describe('FIPS baseline strip', () => {
     expect(screen.getByText('Initial')).toBeInTheDocument()
   })
 
-  it('hides the strip when there is no headroom (High / ceiling 4)', () => {
+  it('hides the strip with no baseline, even when the payload carries FIPS', () => {
     render(
       <InsightsPanel
         payload={{
-          suggested_score: 4,
-          fips_impact_level: 'High',
-          fips_ceiling: 4,
+          suggested_score: 2,
+          fips_impact_level: 'Low',
+          fips_ceiling: 2,
         }}
+        baseline={null}
       />
     )
-    expect(screen.queryByText(/FIPS/)).not.toBeInTheDocument()
+    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
     expect(
       screen.queryByText(/Baseline for this system is/)
     ).not.toBeInTheDocument()
   })
 
-  it('does not throw or render the strip for a malformed (non-string) impact level', () => {
-    render(
-      <InsightsPanel
-        payload={{
-          suggested_score: 2,
-          fips_impact_level: 3 as unknown as 'Low',
-          fips_ceiling: 2,
-        }}
-      />
-    )
-    // Panel still renders; strip is suppressed rather than crashing.
-    expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
-    expect(
-      screen.queryByText(/Baseline for this system is/)
-    ).not.toBeInTheDocument()
+  it('renders standalone for systems without Insights', () => {
+    render(<FipsBaselineStrip level="Moderate" ceiling={3} />)
+    expect(screen.getByText('FIPS MODERATE')).toBeInTheDocument()
+    expect(screen.getByText('Advanced')).toBeInTheDocument()
   })
 })

@@ -85,6 +85,8 @@ jest.mock('./InsightsPanel/InsightsPanel', () => {
   return {
     __esModule: true,
     default: () => react.createElement('div', null, 'ZTMF Insights panel'),
+    FipsBaselineStrip: ({ level }: { level: string }) =>
+      react.createElement('div', null, `FIPS baseline strip: ${level}`),
     OptionInsightBadges: ({ insight }: { insight?: unknown }) =>
       insight
         ? react.createElement('span', null, 'ZTMF Insights option badge')
@@ -986,9 +988,11 @@ describe('QuestionnairePage justification integration', () => {
   function installMocks({
     insightRows = [INSIGHT_ROW] as unknown[],
     insightsResponse,
+    options = JUSTIFICATION_OPTIONS,
   }: {
     insightRows?: unknown[]
     insightsResponse?: Promise<InsightsResponse>
+    options?: unknown[]
   } = {}) {
     axios.get.mockImplementation((url: string) => {
       if (url === apiPaths.insights) {
@@ -1001,7 +1005,7 @@ describe('QuestionnairePage justification integration', () => {
       if (url.startsWith(apiPaths.scores.root))
         return Promise.resolve({ data: { data: [CARRY_FORWARD_SCORE] } })
       if (url.includes('/options'))
-        return Promise.resolve({ data: { data: JUSTIFICATION_OPTIONS } })
+        return Promise.resolve({ data: { data: options } })
       return Promise.resolve({ data: { data: [] } })
     })
     axios.post.mockResolvedValue({ data: {} })
@@ -1169,6 +1173,79 @@ describe('QuestionnairePage justification integration', () => {
     ).not.toBeInTheDocument()
     // Still blocked: the carried-forward response now requires review.
     expect(complete).toBeDisabled()
+  })
+
+  describe('FIPS baseline from the system record (#764)', () => {
+    // A system in the insights-disabled OpDiv (ACF), which the API never sends
+    // Insights rows for, so the baseline can only come from the record.
+    const FOUR_OPTIONS = [
+      { functionoptionid: 100, description: 'Traditional', score: 1 },
+      { functionoptionid: 101, description: 'Initial', score: 2 },
+      { functionoptionid: 102, description: 'Advanced', score: 3 },
+      { functionoptionid: 103, description: 'Optimal', score: 4 },
+    ]
+    const renderSystem = (record: { fips: string | null; hva: boolean }) => {
+      installMocks({ insightRows: [], options: FOUR_OPTIONS })
+      setMockCtx(
+        insightsCtx({ fismaSystems: [{ ...SSD_EX, opdiv_id: 2, ...record }] })
+      )
+      renderAt(DEEP_LINK)
+    }
+
+    it.each([
+      ['Low', 2],
+      ['Moderate', 1],
+    ])(
+      'shows the strip and markers for a %s system with no Insights payload',
+      async (fips, aboveCount) => {
+        renderSystem({ fips, hva: false })
+        expect(
+          await screen.findByText(`FIPS baseline strip: ${fips}`)
+        ).toBeInTheDocument()
+        expect(await screen.findByText(`${fips} baseline`)).toBeInTheDocument()
+        expect(
+          screen.getAllByText(`(above the ${fips} baseline)`, { exact: false })
+        ).toHaveLength(aboveCount)
+        expect(
+          screen.queryByText('ZTMF Insights panel')
+        ).not.toBeInTheDocument()
+      }
+    )
+
+    it('holds the standalone strip while insights load, so it never jumps into the panel', async () => {
+      let resolveInsights: ((value: InsightsResponse) => void) | null = null
+      const insightsResponse = new Promise<InsightsResponse>((resolve) => {
+        resolveInsights = resolve
+      })
+      installMocks({ insightsResponse })
+      setMockCtx(
+        insightsCtx({ fismaSystems: [{ ...SSD_EX, fips: 'Low', hva: false }] })
+      )
+      renderAt(DEEP_LINK)
+
+      expect(
+        await screen.findByText('Checking for prior responses...')
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/FIPS baseline strip/)).not.toBeInTheDocument()
+
+      await act(async () => {
+        resolveInsights?.({ data: { data: [INSIGHT_ROW] } })
+      })
+
+      // The strip now renders inside the (mocked) panel, not standalone.
+      expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
+      expect(screen.queryByText(/FIPS baseline strip/)).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['High', { fips: 'High', hva: false }],
+      ['an HVA', { fips: 'Low', hva: true }],
+      ['no FIPS', { fips: null, hva: false }],
+    ])('shows no baseline for %s', async (_label, record) => {
+      renderSystem(record)
+      expect(await screen.findByText('Traditional')).toBeInTheDocument()
+      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
+    })
   })
 
   it('keeps the plain four-row notes field when the question has no justification context', async () => {
