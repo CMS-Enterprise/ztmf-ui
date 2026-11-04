@@ -3,17 +3,28 @@ import { parseDatacallName, groupDatacallsByYear } from './datacallGrouping'
 type Row = { datacallid: number; datacall: string; deadline: string }
 
 describe('parseDatacallName', () => {
-  it('parses a 4-digit CMS quarterly call', () => {
+  it('parses a 4-digit quarterly call', () => {
     expect(parseDatacallName('FY2025 Q3')).toEqual({
       fiscalYear: 2025,
-      tenant: 'CMS',
+      cadence: 'quarterly',
     })
   })
 
-  it('parses a 2-digit HHS ZTM call', () => {
+  it('parses a 2-digit ZTM call as annual', () => {
     expect(parseDatacallName('FY25 ZTM')).toEqual({
       fiscalYear: 2025,
-      tenant: 'HHS',
+      cadence: 'annual',
+    })
+  })
+
+  it('parses a 4-digit ZTM call and a 2-digit quarterly call', () => {
+    expect(parseDatacallName('FY2026 ZTM')).toEqual({
+      fiscalYear: 2026,
+      cadence: 'annual',
+    })
+    expect(parseDatacallName('FY26 Q1')).toEqual({
+      fiscalYear: 2026,
+      cadence: 'quarterly',
     })
   })
 
@@ -21,15 +32,54 @@ describe('parseDatacallName', () => {
     expect(parseDatacallName('FY23 Q1').fiscalYear).toBe(2023)
   })
 
-  it('returns Other/null for an unrecognized name', () => {
-    expect(parseDatacallName('Special one-off')).toEqual({
-      fiscalYear: null,
-      tenant: 'Other',
+  it('reads the year from a descriptive FY-prefixed name as annual', () => {
+    expect(parseDatacallName('FY2027 Zero Trust Data Call')).toEqual({
+      fiscalYear: 2027,
+      cadence: 'annual',
     })
+    expect(parseDatacallName('FY27 Annual Assessment')).toEqual({
+      fiscalYear: 2027,
+      cadence: 'annual',
+    })
+    expect(parseDatacallName('FY2027')).toEqual({
+      fiscalYear: 2027,
+      cadence: 'annual',
+    })
+  })
+
+  it('treats a quarter as the first word after the year as quarterly', () => {
+    expect(parseDatacallName('FY2027 Q2 Zero Trust Data Call')).toEqual({
+      fiscalYear: 2027,
+      cadence: 'quarterly',
+    })
+    // A word that only starts with Q is not a quarter.
+    expect(parseDatacallName('FY2027 Quarterly Review').cadence).toBe('annual')
+    expect(parseDatacallName('FY2027 Q5').cadence).toBe('annual')
+  })
+
+  it('returns null year and cadence for a name with no FY prefix', () => {
+    for (const name of [
+      'Special one-off',
+      'Audit Fields Smoke Cycle',
+      '2027 Zero Trust Data Call',
+      'Data Call FY2027',
+    ]) {
+      expect(parseDatacallName(name)).toEqual({
+        fiscalYear: null,
+        cadence: null,
+      })
+    }
+  })
+
+  it('rejects a year that is not 2 or 4 digits', () => {
+    expect(parseDatacallName('FY202 ZTM').fiscalYear).toBeNull()
+    expect(parseDatacallName('FY20255 Q1').fiscalYear).toBeNull()
+    expect(parseDatacallName('FY5 ZTM').fiscalYear).toBeNull()
   })
 
   it('tolerates surrounding whitespace', () => {
     expect(parseDatacallName('  FY24 ZTM  ').fiscalYear).toBe(2024)
+    expect(parseDatacallName('  FY2024 Q4  ').cadence).toBe('quarterly')
   })
 })
 
@@ -47,7 +97,7 @@ describe('groupDatacallsByYear', () => {
     expect(groups.map((g) => g.year)).toEqual([2025, 2024, 2023])
   })
 
-  it('pairs the CMS and HHS calls under the same year', () => {
+  it('pairs the quarterly and annual calls under the same year', () => {
     const y2025 = groupDatacallsByYear(calls).find((g) => g.year === 2025)
     expect(y2025?.calls.map((c) => c.datacall)).toEqual([
       'FY25 ZTM', // deadline 2025-09-30, furthest out first
@@ -60,7 +110,33 @@ describe('groupDatacallsByYear', () => {
     ])
   })
 
-  it('sinks an unparseable call to the bottom in its own null-year bucket', () => {
+  it('groups a descriptive FY-prefixed name with the other calls of its year', () => {
+    const withDescriptive: Row[] = [
+      ...calls,
+      {
+        datacallid: 6,
+        datacall: 'FY2025 Zero Trust Data Call',
+        deadline: '2025-08-01',
+      },
+      {
+        datacallid: 7,
+        datacall: 'FY2027 Zero Trust Data Call',
+        deadline: '2027-09-30',
+      },
+    ]
+    const groups = groupDatacallsByYear(withDescriptive)
+    expect(groups.map((g) => g.year)).toEqual([2027, 2025, 2024, 2023])
+    expect(groups[0].calls.map((c) => c.datacall)).toEqual([
+      'FY2027 Zero Trust Data Call',
+    ])
+    expect(groups[1].calls.map((c) => c.datacall)).toEqual([
+      'FY25 ZTM',
+      'FY2025 Zero Trust Data Call',
+      'FY2025 Q3',
+    ])
+  })
+
+  it('sinks a call with no FY prefix to the bottom in its own null-year bucket', () => {
     const withOther: Row[] = [
       ...calls,
       { datacallid: 9, datacall: 'Legacy import', deadline: '2022-01-01' },

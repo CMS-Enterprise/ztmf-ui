@@ -19,7 +19,7 @@ import type {
   datacall,
 } from '@/types'
 
-/** The OpDiv that runs quarterly calls rather than the annual ZTM cycle. */
+/** The OpDiv that runs quarterly calls rather than the annual cycle. */
 const QUARTERLY_OPDIV_CODE = 'CMS'
 
 /**
@@ -35,7 +35,8 @@ const MIN_VISIBLE_SCORE_CHANGE = 0.005
  *
  * The two cadences are not comparable and plotting them on one axis is what
  * made the line oscillate: CMS runs quarterly calls (`FY2025 Q3`) while every
- * other OpDiv runs the annual ZTM cycle (`FY25 ZTM`), so alternating between
+ * other OpDiv runs the annual cycle (`FY25 ZTM`, or any other FY-prefixed
+ * name such as `FY2027 Zero Trust Data Call`), so alternating between
  * them reads as an OpDiv repeatedly gaining and losing a point of maturity
  * when it is really two different populations taking turns.
  *
@@ -54,12 +55,12 @@ export function selectTrendCalls(
   const annual: datacall[] = []
   const quarterly: datacall[] = []
   for (const dc of datacalls) {
-    // 'HHS' is the annual ZTM cadence, 'CMS' the quarterly one. Names outside
-    // the grammar ('Other') are dropped rather than guessed at - an
-    // unclassifiable call has no series to belong to.
-    const { tenant } = parseDatacallName(dc.datacall)
-    if (tenant === 'HHS') annual.push(dc)
-    else if (tenant === 'CMS') quarterly.push(dc)
+    // A `Q#` name is quarterly; any other FY-prefixed name is annual. Names
+    // without an FY prefix are dropped rather than guessed at - a call with
+    // no fiscal year has no series to belong to.
+    const { cadence } = parseDatacallName(dc.datacall)
+    if (cadence === 'annual') annual.push(dc)
+    else if (cadence === 'quarterly') quarterly.push(dc)
   }
 
   if (opdivCode !== QUARTERLY_OPDIV_CODE) {

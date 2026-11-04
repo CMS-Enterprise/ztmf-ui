@@ -1,46 +1,53 @@
 import { sortDatacallsByDeadline } from './sortDatacallsByDeadline'
 
 /**
- * Tenant that a data call belongs to. CMS runs quarterly calls (`FY## Q#`);
- * HHS OpDivs run an annual ZTM call (`FY## ZTM`). Names that do not match the
- * known grammar resolve to 'Other' so the selector can still display them
- * without guessing.
+ * How often a data call runs. A name whose next word after the fiscal year is
+ * a quarter (`FY2025 Q3`) is quarterly; every other FY-prefixed name
+ * (`FY25 ZTM`, `FY2027 Zero Trust Data Call`) is annual.
  */
-export type DatacallTenant = 'CMS' | 'HHS' | 'Other'
+export type DatacallCadence = 'annual' | 'quarterly'
 
 /**
- * Grammar for a data-call name, mirroring the validator in DataCallModal.
- * `FY` + a 2- or 4-digit fiscal year + either a CMS quarter or the HHS `ZTM`
- * marker, e.g. `FY25 ZTM`, `FY2025 Q3`.
+ * Fiscal-year prefix of a data-call name: `FY` + a 2- or 4-digit year that is
+ * not followed by another digit, e.g. `FY25 ZTM`, `FY2025 Q3`,
+ * `FY2027 Zero Trust Data Call`.
  */
-const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q[1-4]|ZTM)$/
+const FISCAL_YEAR_PREFIX = /^FY(\d{4}|\d{2})(?!\d)/
+
+/** A quarter as the first word after the fiscal year. */
+const QUARTER_WORD = /^Q[1-4]\b/
 
 /**
- * Parse the fiscal year and tenant out of a data-call name. Year and tenant
- * are not stored fields, so they are derived from the name. A 2-digit year is
- * expanded to 20##; an unrecognized name yields `{ fiscalYear: null, tenant:
- * 'Other' }` rather than throwing.
+ * Parse the fiscal year and cadence out of a data-call name. Neither is a
+ * stored field yet, so both are derived from the name. A 2-digit year is
+ * expanded to 20##; a name without an FY prefix yields `{ fiscalYear: null,
+ * cadence: null }` rather than throwing.
  * @param {string} name - The data-call name (the `datacall` field).
- * @returns {{ fiscalYear: number | null; tenant: DatacallTenant }} Parsed parts.
+ * @returns {{ fiscalYear: number | null; cadence: DatacallCadence | null }}
+ *   Parsed parts.
  */
 export function parseDatacallName(name: string): {
   fiscalYear: number | null
-  tenant: DatacallTenant
+  cadence: DatacallCadence | null
 } {
-  const match = DATACALL_NAME_PATTERN.exec(name.trim())
+  const trimmed = name.trim()
+  const match = FISCAL_YEAR_PREFIX.exec(trimmed)
   if (!match) {
-    return { fiscalYear: null, tenant: 'Other' }
+    return { fiscalYear: null, cadence: null }
   }
-  const [, yearToken, cadence] = match
+  const yearToken = match[1]
   const fiscalYear =
     yearToken.length === 2 ? 2000 + Number(yearToken) : Number(yearToken)
-  const tenant: DatacallTenant = cadence === 'ZTM' ? 'HHS' : 'CMS'
-  return { fiscalYear, tenant }
+  const rest = trimmed.slice(match[0].length).trim()
+  const cadence: DatacallCadence = QUARTER_WORD.test(rest)
+    ? 'quarterly'
+    : 'annual'
+  return { fiscalYear, cadence }
 }
 
 /** A fiscal year and the data calls that belong to it. */
 export type DatacallYearGroup<T> = {
-  /** Fiscal year, or null for names that do not match the known grammar. */
+  /** Fiscal year, or null for names without an FY prefix. */
   year: number | null
   calls: T[]
 }
@@ -48,7 +55,8 @@ export type DatacallYearGroup<T> = {
 /**
  * Group data calls by fiscal year for the year-grouped selector. Years are
  * ordered most-recent first; calls within a year follow the deadline-based
- * order; the unparseable ('Other', year null) bucket sinks to the bottom.
+ * order; the bucket of names without an FY prefix (year null) sinks to the
+ * bottom.
  * @param {T[]} calls - The data calls to group.
  * @returns {DatacallYearGroup<T>[]} Groups, newest year first.
  */
@@ -72,7 +80,7 @@ export function groupDatacallsByYear<
       calls: sortDatacallsByDeadline(groupCalls),
     }))
     .sort((a, b) => {
-      // Unparseable years (null) sink below every real year.
+      // Names without a year (null) sink below every real year.
       if (a.year === null) return 1
       if (b.year === null) return -1
       return b.year - a.year

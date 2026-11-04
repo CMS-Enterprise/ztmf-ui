@@ -79,9 +79,9 @@ export type DatacallContextCardViewProps = {
  * Title-context coupling along with it.
  *
  * The picker is a pill button (primary50 fill, primary text, 30px height)
- * opening a menu of calls grouped by fiscal year (newest first) and labeled
- * with their tenant (CMS quarterly / HHS ZTM). With {@link onToggle} the
- * rows carry checkboxes and support the year-grouped multi-select (#467);
+ * opening a menu of calls grouped by fiscal year (newest first), each listed
+ * by its name alone. With {@link onToggle} the rows carry checkboxes and
+ * support the year-grouped multi-select (#467);
  * without it a click picks that one call. While more than one call is
  * aggregated the pill shows a summary ("FY2026 - 3 calls") and the right
  * side shows the opens/closes span across those calls; the clear X returns
@@ -267,7 +267,6 @@ export default function DatacallContextCardView({
                 const isCurrent = option.datacallid === latestDataCallId
                 const checked = activeDatacallIds.includes(option.datacallid)
                 const closed = new Date() > new Date(option.deadline)
-                const { tenant } = parseDatacallName(option.datacall)
                 const deadlineLabel = formatDate(option.deadline)
                 return (
                   <MenuItem
@@ -306,18 +305,6 @@ export default function DatacallContextCardView({
                         >
                           <Box component="span" sx={{ fontWeight: 500 }}>
                             {option.datacall}
-                            {tenant !== 'Other' && (
-                              <Box
-                                component="span"
-                                sx={{
-                                  color: colors.neutral500,
-                                  fontWeight: 400,
-                                }}
-                              >
-                                {' '}
-                                - {tenant}
-                              </Box>
-                            )}
                           </Box>
                           {isCurrent && (
                             <Chip

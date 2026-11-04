@@ -120,7 +120,7 @@ describe('cadence', () => {
     expect(names('CMS')).toEqual(['FY2023 Q4', 'FY2025 Q3', 'FY26 ZTM'])
   })
 
-  it('drops call names outside the known grammar', () => {
+  it('drops call names with no FY prefix', () => {
     for (const code of ['CMS', 'CDC', null]) {
       expect(names(code)).not.toContain('Audit Fields Smoke Cycle')
     }
@@ -136,6 +136,86 @@ describe('cadence', () => {
     )
     expect(selectPriorCall(CALLS, 'CDC', byName('FY23 ZTM'))).toBeNull()
     expect(selectPriorCall(CALLS, 'CDC', null)).toBeNull()
+  })
+
+  it('puts a descriptive FY-prefixed name on the annual series', () => {
+    const withDescriptive = [
+      ...CALLS,
+      call(8, 'FY2027 Zero Trust Data Call', '2027-06-30T00:00:00Z'),
+    ]
+    const annual = [
+      'FY23 ZTM',
+      'FY24 ZTM',
+      'FY25 ZTM',
+      'FY26 ZTM',
+      'FY2027 Zero Trust Data Call',
+    ]
+    const trend = (code: string | null) =>
+      selectTrendCalls(withDescriptive, code).map((c) => c.datacall)
+    expect(trend('CDC')).toEqual(annual)
+    expect(trend(null)).toEqual(annual)
+    // As the newest annual call it is the shared cycle CMS joins.
+    expect(trend('CMS')).toEqual([
+      'FY2023 Q4',
+      'FY2025 Q3',
+      'FY2027 Zero Trust Data Call',
+    ])
+    expect(
+      selectPriorCall(
+        withDescriptive,
+        'CDC',
+        withDescriptive[withDescriptive.length - 1]
+      )?.datacall
+    ).toBe('FY26 ZTM')
+  })
+
+  // Prod's data call names as of FY26. Expected values were recorded from the
+  // name parser before descriptive FY-prefixed names joined the annual
+  // cadence; these trend lines must not move.
+  describe('prod-shaped calls', () => {
+    const PROD: datacall[] = [
+      call(11, 'FY2025 Q1', '2024-12-31T00:00:00Z'),
+      call(12, 'FY2025 Q2', '2025-03-31T00:00:00Z'),
+      call(13, 'FY2025 Q3', '2025-06-30T00:00:00Z'),
+      call(14, 'FY2025 Q4', '2025-09-15T00:00:00Z'),
+      call(15, 'FY25 ZTM', '2025-09-30T00:00:00Z'),
+      call(16, 'FY2026 Q1', '2025-12-31T00:00:00Z'),
+      call(17, 'FY26 ZTM', '2026-09-30T00:00:00Z'),
+    ]
+    const prodNames = (code: string | null) =>
+      selectTrendCalls(PROD, code).map((c) => c.datacall)
+    const prior = (code: string | null, name: string) =>
+      selectPriorCall(
+        PROD,
+        code,
+        PROD.find((c) => c.datacall === name) as datacall
+      )?.datacall ?? null
+
+    it('keeps the annual series for other OpDivs and the aggregate', () => {
+      for (const code of ['CDC', null]) {
+        expect(prodNames(code)).toEqual(['FY25 ZTM', 'FY26 ZTM'])
+      }
+    })
+
+    it('keeps the CMS quarterly series plus the newest annual call', () => {
+      expect(prodNames('CMS')).toEqual([
+        'FY2025 Q1',
+        'FY2025 Q2',
+        'FY2025 Q3',
+        'FY2025 Q4',
+        'FY2026 Q1',
+        'FY26 ZTM',
+      ])
+    })
+
+    it('keeps every prior-call pairing', () => {
+      expect(prior('CDC', 'FY26 ZTM')).toBe('FY25 ZTM')
+      expect(prior(null, 'FY26 ZTM')).toBe('FY25 ZTM')
+      expect(prior('CDC', 'FY25 ZTM')).toBeNull()
+      expect(prior('CMS', 'FY26 ZTM')).toBe('FY2026 Q1')
+      expect(prior('CMS', 'FY2026 Q1')).toBe('FY2025 Q4')
+      expect(prior('CMS', 'FY2025 Q1')).toBeNull()
+    })
   })
 
   it('orders trend points by deadline, not by id', () => {

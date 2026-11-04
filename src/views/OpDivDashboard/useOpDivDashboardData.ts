@@ -234,7 +234,7 @@ export function useOpDivDashboardData(
     const inCadence = new Set(trendCalls.map((dc) => dc.datacallid))
     const unclassified = new Set(
       datacalls
-        .filter((dc) => parseDatacallName(dc.datacall).tenant === 'Other')
+        .filter((dc) => parseDatacallName(dc.datacall).cadence === null)
         .map((dc) => dc.datacallid)
     )
     return (
