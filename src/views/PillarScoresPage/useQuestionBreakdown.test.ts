@@ -91,7 +91,7 @@ beforeEach(() => {
 describe('useQuestionBreakdown', () => {
   test('joins questions x scores by functionid, applies the x1.25 factor, keeps questionnaire order', async () => {
     mock
-      .onGet('/fismasystems/7/questions')
+      .onGet('/fismasystems/7/questions?datacallid=4')
       .reply(200, { data: questions })
       .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
       .reply(200, { data: scores })
@@ -122,7 +122,7 @@ describe('useQuestionBreakdown', () => {
     // functions.ordr ranks within one question, so it can disagree with the
     // questionnaire - here a function created without an order reads 0.
     const identity = { pillar: 'Identity', pillarid: 6, order: 1 }
-    mock.onGet('/fismasystems/7/questions').reply(200, {
+    mock.onGet('/fismasystems/7/questions?datacallid=4').reply(200, {
       data: [
         {
           questionid: 1,
@@ -167,7 +167,9 @@ describe('useQuestionBreakdown', () => {
   })
 
   test('drops score rows whose functionid has no matching question (stale row guard)', async () => {
-    mock.onGet('/fismasystems/7/questions').reply(200, { data: questions })
+    mock
+      .onGet('/fismasystems/7/questions?datacallid=4')
+      .reply(200, { data: questions })
     mock
       .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
       .reply(200, {
@@ -196,7 +198,9 @@ describe('useQuestionBreakdown', () => {
   })
 
   test('drops score rows missing the functionoption join (functionid null)', async () => {
-    mock.onGet('/fismasystems/7/questions').reply(200, { data: questions })
+    mock
+      .onGet('/fismasystems/7/questions?datacallid=4')
+      .reply(200, { data: questions })
     mock
       .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
       .reply(200, {
@@ -213,7 +217,9 @@ describe('useQuestionBreakdown', () => {
   })
 
   test('returns empty rows and stays loading until both fetches resolve', async () => {
-    mock.onGet('/fismasystems/7/questions').reply(200, { data: [] })
+    mock
+      .onGet('/fismasystems/7/questions?datacallid=4')
+      .reply(200, { data: [] })
     mock
       .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
       .reply(200, { data: [] })
@@ -240,7 +246,9 @@ describe('useQuestionBreakdown', () => {
     expect(result.current.rows).toEqual([])
 
     // Once both ids are real, the fetch fires.
-    mock.onGet('/fismasystems/1/questions').reply(200, { data: [] })
+    mock
+      .onGet('/fismasystems/1/questions?datacallid=1')
+      .reply(200, { data: [] })
     mock
       .onGet('scores?datacallid=1&fismasystemid=1&include=functionoption')
       .reply(200, { data: [] })
@@ -251,7 +259,7 @@ describe('useQuestionBreakdown', () => {
 
   test('swallows network errors and stops loading (logs to console)', async () => {
     const spy = jest.spyOn(console, 'error').mockImplementation(() => {})
-    mock.onGet('/fismasystems/7/questions').networkError()
+    mock.onGet('/fismasystems/7/questions?datacallid=4').networkError()
     mock
       .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
       .networkError()
@@ -273,7 +281,7 @@ describe('useQuestionBreakdown', () => {
     // the hook's finally block must skip setLoading(false) when aborted.
     let resolveQ: (value: [number, unknown]) => void = () => {}
     mock
-      .onGet('/fismasystems/7/questions')
+      .onGet('/fismasystems/7/questions?datacallid=4')
       .reply(() => new Promise<[number, unknown]>((res) => (resolveQ = res)))
     mock
       .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')

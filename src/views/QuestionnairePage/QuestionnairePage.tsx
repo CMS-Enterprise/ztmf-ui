@@ -46,7 +46,10 @@ import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
-import AnswerHistoryPanel, { UndoAnswerButton } from './AnswerHistoryPanel'
+import AnswerHistoryPanel, {
+  ANSWER_HISTORY_PANEL_ID,
+  UndoAnswerButton,
+} from './AnswerHistoryPanel'
 import { canUndoAnswer, undoPreview } from './undoState'
 import {
   useAnswerHistory,
@@ -795,41 +798,74 @@ export default function QuestionnarePage() {
   // value the head revision replaced, sending that revision's id so the server
   // refuses rather than silently reverting a change this session never saw.
   const undoInFlight = React.useRef(false)
+  // questionId, not scoreid: scoreid only moves once the next question loads.
+  // The cycle is kept apart so a reload of its scores can tell whether it is
+  // still the one on screen.
+  const undoContextRef = React.useRef({ cycle: '', question: '' })
+  React.useLayoutEffect(() => {
+    undoContextRef.current = {
+      cycle: `${system}:${datacallID}`,
+      question: String(questionId),
+    }
+  }, [system, datacallID, questionId])
+  const historyOpenRef = React.useRef(false)
+  React.useLayoutEffect(() => {
+    historyOpenRef.current = answerHistory.open
+  }, [answerHistory.open])
   const handleUndoClick = async (revisionid: number) => {
     // isPending lags the click by a render; a double-click would otherwise
     // send the same token twice and report its own undo as a conflict.
     if (undoInFlight.current) return
     undoInFlight.current = true
+    const { cycle, question } = undoContextRef.current
+    const sameCycle = () => undoContextRef.current.cycle === cycle
+    const movedOn = () =>
+      !sameCycle() || undoContextRef.current.question !== question
+    // The Undo button can unmount when history refetches; keep focus off
+    // <body>. Skipped if the user has since moved to another question. The
+    // drawer's state is read now, since it may have opened or closed since.
+    const refocus = () => {
+      if (movedOn()) return
+      document
+        .getElementById(
+          historyOpenRef.current
+            ? ANSWER_HISTORY_PANEL_ID
+            : 'view-answer-history'
+        )
+        ?.focus()
+    }
     try {
-      await answerHistory.undo.mutateAsync(revisionid)
+      await answerHistory.undo.mutateAsync({ scoreid, revisionid })
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
+      // The draft state now belongs to whichever question is on screen.
+      if (movedOn()) return
       clearCurrentDraft()
-      // The strip's button unmounts on success; keep focus off <body>.
-      if (!answerHistory.open)
-        document.getElementById('view-answer-history')?.focus()
+      refocus()
     } catch (error) {
       const outcome = classifyUndoError(error)
+      // The hook has already refetched the undone row's history, which drops
+      // a stale button. A warning about it is skipped once the user has moved
+      // on, since it would read as being about the question on screen.
       if (outcome.kind === 'handled') {
-        // A past-deadline 403 lands here; the refetch drops the stale button.
-        answerHistory.history.refetch()
+        // A past-deadline 403 lands here.
+        refocus()
         return
       }
-      if (outcome.kind === 'conflict') {
-        // Someone else wrote the answer, so the one on screen is stale too.
-        answerHistory.history.refetch()
-        fetchQuestionScores(system, setQuestionScores)
-        notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
-        return
-      }
-      if (outcome.kind === 'refused') {
-        // Refetch both: the button must go, and a drifted answer means the
-        // one on screen may be stale.
-        answerHistory.history.refetch()
-        fetchQuestionScores(system, setQuestionScores)
-        notify(outcome.message, 'warning', { autoHideDuration: 6000 })
+      if (outcome.kind === 'conflict' || outcome.kind === 'refused') {
+        // Someone else wrote the answer, or it drifted, so the one on screen
+        // may be stale too.
+        if (sameCycle()) fetchQuestionScores(system, setQuestionScores)
+        if (movedOn()) return
+        if (outcome.kind === 'conflict') {
+          notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
+        } else {
+          notify(outcome.message, 'warning', { autoHideDuration: 6000 })
+        }
+        refocus()
         return
       }
       notify(outcome.message, 'error', { autoHideDuration: 2500 })
+      refocus()
     } finally {
       undoInFlight.current = false
     }

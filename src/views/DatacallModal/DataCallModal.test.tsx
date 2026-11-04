@@ -16,6 +16,7 @@ import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axiosInstance from '@/axiosConfig'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
+import type { datacall } from '@/types'
 import { notify } from '@/utils/notify'
 import DataCallModal from './DataCallModal'
 
@@ -118,6 +119,29 @@ test('a 400 field map lands under the Title field instead of a toast', async () 
     await screen.findByText(/a data call with this name exists/i)
   ).toBeInTheDocument()
   expect(notify).not.toHaveBeenCalled()
+  expect(onClose).not.toHaveBeenCalled()
+})
+
+test('a 400 on a field the form has no input for is toasted, not swallowed', async () => {
+  const user = userEvent.setup()
+  mock.onPost('/datacalls').reply(400, {
+    data: { questionnaire_versionid: 'no questionnaire version is published' },
+  })
+  const onClose = jest.fn()
+  renderWithQueryClient(
+    <DataCallModal open onClose={onClose} onCreated={jest.fn()} />
+  )
+
+  await fillValidForm(user)
+  await user.click(screen.getByRole('button', { name: /^create$/i }))
+
+  await waitFor(() =>
+    expect(notify).toHaveBeenCalledWith(
+      'no questionnaire version is published',
+      'error',
+      expect.anything()
+    )
+  )
   expect(onClose).not.toHaveBeenCalled()
 })
 
@@ -277,4 +301,97 @@ test('rejects title characters that would break the questionnaire link', async (
   await user.clear(title)
   await user.type(title, 'Q1 and Q2 check-in')
   expect(screen.queryByText(/title cannot contain/i)).not.toBeInTheDocument()
+})
+
+describe('questionnaire version (ztmf-misc#432)', () => {
+  const VERSIONS = [
+    { versionid: 3, label: 'FY27 draft', state: 'draft' },
+    { versionid: 2, label: 'FY27', state: 'published' },
+    { versionid: 1, label: 'Baseline', state: 'published' },
+  ]
+  const call = (
+    datacallid: number,
+    deadline: string,
+    version?: number
+  ): datacall => ({
+    datacallid,
+    datacall: `FY${datacallid} ZTM`,
+    datecreated: '2020-01-01T00:00:00Z',
+    deadline: `${deadline}T00:00:00Z`,
+    fiscal_year: 2000 + datacallid,
+    cadence: 'annual',
+    questionnaire_versionid: version,
+  })
+
+  test('names the newest published version and warns nothing when the previous call has it', async () => {
+    mock.onGet('/questionnaire-versions').reply(200, { data: VERSIONS })
+    renderWithQueryClient(
+      <DataCallModal
+        open
+        onClose={jest.fn()}
+        datacalls={[call(26, '2026-09-30', 2)]}
+      />
+    )
+    expect(await screen.findByText('FY27')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
+
+  test('warns when the previous call pinned a different version, and still sends no version', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/questionnaire-versions').reply(200, { data: VERSIONS })
+    mock.onPost('/datacalls').reply(201)
+    renderWithQueryClient(
+      <DataCallModal
+        open
+        onClose={jest.fn()}
+        datacalls={[call(26, '2026-09-30', 1)]}
+      />
+    )
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      /FY26 ZTM used Baseline.*move to FY27/
+    )
+
+    await fillValidForm(user)
+    await user.click(screen.getByRole('button', { name: /^create$/i }))
+    await waitFor(() => expect(mock.history.post).toHaveLength(1))
+    expect(JSON.parse(mock.history.post[0].data)).not.toHaveProperty(
+      'questionnaire_versionid'
+    )
+  })
+
+  test('compares against the call the deadline rolls forward from, as the API does', async () => {
+    const user = userEvent.setup()
+    mock.onGet('/questionnaire-versions').reply(200, { data: VERSIONS })
+    renderWithQueryClient(
+      <DataCallModal
+        open
+        onClose={jest.fn()}
+        datacalls={[call(28, '2028-09-30', 2), call(26, '2026-09-30', 1)]}
+      />
+    )
+    expect(await screen.findByText('FY27')).toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+
+    // A backfill between the two carries from FY26, which is on Baseline.
+    await fillValidForm(user)
+    expect(await screen.findByRole('alert')).toHaveTextContent(/FY26 ZTM/)
+  })
+
+  test('shows nothing before the API serves versions or pins calls', async () => {
+    mock.onGet('/questionnaire-versions').reply(404)
+    renderWithQueryClient(
+      <DataCallModal
+        open
+        onClose={jest.fn()}
+        datacalls={[call(26, '2026-09-30')]}
+      />
+    )
+    await waitFor(() =>
+      expect(mock.history.get.map((r) => r.url)).toContain(
+        '/questionnaire-versions'
+      )
+    )
+    expect(screen.queryByText(/questionnaire version/i)).not.toBeInTheDocument()
+    expect(screen.queryByRole('alert')).not.toBeInTheDocument()
+  })
 })
