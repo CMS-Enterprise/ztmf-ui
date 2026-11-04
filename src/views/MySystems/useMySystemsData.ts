@@ -26,13 +26,13 @@ export type MySystemsData = OpDivDashboardData
  *   fetched, since the band renders no pillar figures.
  */
 export function useMySystemsData(includeHistory = true): MySystemsData {
-  const { fismaSystems, opdivs } = useContextProp()
+  const { fismaSystems } = useContextProp()
 
   // Trend cadence follows the caller's OpDiv when they have exactly one, since
-  // CMS runs quarterly calls and everyone else the annual cycle. Systems spread
+  // an OpDiv runs either the quarterly or the annual series. Systems spread
   // across OpDivs have no single cadence, so they fall back to the annual one -
   // the same reasoning the aggregate view uses.
-  const trendCode = useMemo(() => {
+  const trendOpDivId = useMemo(() => {
     const ids = new Set(
       fismaSystems
         .filter((s) => !s.decommissioned)
@@ -41,11 +41,11 @@ export function useMySystemsData(includeHistory = true): MySystemsData {
     )
     if (ids.size !== 1) return null
     const [only] = [...ids]
-    return opdivs.find((od) => od.opdiv_id === only)?.code ?? null
-  }, [fismaSystems, opdivs])
+    return only
+  }, [fismaSystems])
 
   return useOpDivDashboardData(null, {
-    trendOpDivCode: trendCode,
+    trendOpDivId,
     includePillars: false,
     includeHistory,
     completionOpenCallOnly: true,

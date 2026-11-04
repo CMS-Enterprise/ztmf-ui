@@ -1,19 +1,21 @@
 import React from 'react'
-import { Box, Button, OutlinedInput } from '@mui/material'
+import { Box, Button, OutlinedInput, Select } from '@mui/material'
 import Modal from '@/components/ui/Modal'
 import Field, { fieldInputSx } from '@/components/ui/Field'
-import { datacallModalProps } from '@/types'
+import { DatacallCadence, datacallModalProps } from '@/types'
 import { useCreateDatacall } from '@/utils/datacalls'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { radius } from '@/theme/tokens'
 
-// Accepts both the CMS quarterly cadence (FYYYYY QN) and the HHS annual
-// ZTM cadence (FYYY ZTM). Widened when the HHS onboarding mock addon
-// introduced FY23/FY24/FY25 ZTM datacall names.
-const DATACALL_NAME_PATTERN = /^FY(\d{2}|\d{4}) (Q[1-4]|ZTM)$/
-const DATACALL_MAX_LENGTH = 10 // "FY2025 ZTM" = 10 chars; longest valid form
-const DATACALL_MIN_LENGTH = 7 // "FY23 Q1" / "FY23 ZTM" share the floor
+// The title is free text. The fiscal year and cadence are their own fields,
+// so nothing has to be encoded in the title. 100 matches the column.
+const DATACALL_MAX_LENGTH = 100
+const FISCAL_YEAR_PATTERN = /^\d{4}$/
+// The title becomes a questionnaire URL segment (encodeDatacallSlug), where
+// these characters would split or cut off the path.
+const TITLE_URL_UNSAFE = /[/?#%\\]/
+const TITLE_URL_UNSAFE_ERROR = 'Title cannot contain / ? # % or \\'
 
 /**
  * Create-datacall modal. Renders through the shared Modal shell and uses
@@ -32,6 +34,9 @@ export default function DataCallModal({
 }: datacallModalProps) {
   const [datacall, setDatacall] = React.useState<string>('')
   const [datacallError, setDatacallError] = React.useState<string>('')
+  const [fiscalYear, setFiscalYear] = React.useState<string>('')
+  const [fiscalYearError, setFiscalYearError] = React.useState<string>('')
+  const [cadence, setCadence] = React.useState<DatacallCadence>('annual')
   const [deadline, setDeadline] = React.useState<string>('')
   const [deadlineError, setDeadlineError] = React.useState<string>('')
   // Guards against a double-submit (fast double-click or double-Enter) that
@@ -53,6 +58,9 @@ export default function DataCallModal({
     if (!open) {
       setDatacall('')
       setDatacallError('')
+      setFiscalYear('')
+      setFiscalYearError('')
+      setCadence('annual')
       setDeadline('')
       setDeadlineError('')
       // The modal stays mounted between opens, so the mutation's in-flight
@@ -63,29 +71,34 @@ export default function DataCallModal({
     }
   }, [open, resetCreateDatacall])
 
-  function isValidFormat(input: string) {
-    // Below the shortest valid form, stay quiet: the user is mid-typing.
-    if (input.length < DATACALL_MIN_LENGTH) {
-      setDatacallError('')
-      return
-    }
-    setDatacallError(
-      DATACALL_NAME_PATTERN.test(input) ? '' : 'Invalid datacall format'
-    )
-  }
-
   const handleDatacallChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const value = e.target.value
     setDatacall(value)
-    isValidFormat(value.toUpperCase())
+    if (TITLE_URL_UNSAFE.test(value)) setDatacallError(TITLE_URL_UNSAFE_ERROR)
+    else if (value.trim().length > 0) setDatacallError('')
   }
 
   // Fires "required" only on blur - an untouched field stays quiet on mount
   // and only complains once the user has engaged with it and left it empty.
-  // The on-change path (above) still reports format errors as-you-type.
   const handleDatacallBlur = () => {
-    if (datacall.length === 0) {
-      setDatacallError('Datacall name is required')
+    if (datacall.trim().length === 0) {
+      setDatacallError('Title is required')
+    }
+  }
+
+  const handleFiscalYearChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const value = e.target.value.trim()
+    setFiscalYear(value)
+    if (FISCAL_YEAR_PATTERN.test(value)) setFiscalYearError('')
+  }
+
+  // Same quiet-until-blur rule as the title, so a half-typed year is not an
+  // error yet.
+  const handleFiscalYearBlur = () => {
+    if (fiscalYear.length === 0) {
+      setFiscalYearError('Fiscal year is required')
+    } else if (!FISCAL_YEAR_PATTERN.test(fiscalYear)) {
+      setFiscalYearError('Use a four-digit year, such as 2027')
     }
   }
 
@@ -107,7 +120,9 @@ export default function DataCallModal({
     if (submitting) return
     try {
       await createDatacallMutation.mutateAsync({
-        datacall: datacall.toUpperCase(),
+        datacall: datacall.trim(),
+        fiscal_year: Number(fiscalYear),
+        cadence,
         deadline: new Date(deadline).toISOString(),
       })
       notify('Datacall has successfully been created', 'success', {
@@ -129,6 +144,7 @@ export default function DataCallModal({
       if (parsed.fieldErrors) {
         Object.entries(parsed.fieldErrors).forEach(([key, message]) => {
           if (key === 'datacall') setDatacallError(message)
+          else if (key === 'fiscal_year') setFiscalYearError(message)
           else if (key === 'deadline') setDeadlineError(message)
         })
         return
@@ -138,9 +154,11 @@ export default function DataCallModal({
   }
 
   const canSubmit =
-    DATACALL_NAME_PATTERN.test(datacall.toUpperCase()) &&
+    datacall.trim().length > 0 &&
+    FISCAL_YEAR_PATTERN.test(fiscalYear) &&
     deadline.length === 10 &&
     datacallError.length === 0 &&
+    fiscalYearError.length === 0 &&
     deadlineError.length === 0 &&
     !submitting
 
@@ -172,10 +190,10 @@ export default function DataCallModal({
       <Box sx={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
         <Field
           id="datacall-name"
-          label="Name"
+          label="Title"
           required
           error={datacallError}
-          helperText="Use the format FYXXXX QX (FY2024 Q1) or FYXX ZTM (FY25 ZTM)."
+          helperText="Shown in the data call picker."
         >
           <OutlinedInput
             id="datacall-name"
@@ -184,13 +202,58 @@ export default function DataCallModal({
             value={datacall}
             inputProps={{
               maxLength: DATACALL_MAX_LENGTH,
-              'aria-label': 'Datacall name',
+              'aria-label': 'Datacall title',
             }}
             onChange={handleDatacallChange}
             onBlur={handleDatacallBlur}
             error={!!datacallError}
             sx={fieldInputSx}
           />
+        </Field>
+
+        <Field
+          id="datacall-fiscal-year"
+          label="Fiscal year"
+          required
+          error={fiscalYearError}
+        >
+          <OutlinedInput
+            id="datacall-fiscal-year"
+            name="fiscal_year"
+            fullWidth
+            value={fiscalYear}
+            placeholder="2027"
+            inputProps={{
+              inputMode: 'numeric',
+              maxLength: 4,
+              'aria-label': 'Datacall fiscal year',
+            }}
+            onChange={handleFiscalYearChange}
+            onBlur={handleFiscalYearBlur}
+            error={!!fiscalYearError}
+            sx={fieldInputSx}
+          />
+        </Field>
+
+        <Field
+          id="datacall-cadence"
+          label="Cadence"
+          helperText="Quarterly calls get their own trend series."
+        >
+          <Select
+            native
+            fullWidth
+            value={cadence}
+            inputProps={{
+              id: 'datacall-cadence',
+              'aria-label': 'Datacall cadence',
+            }}
+            onChange={(e) => setCadence(e.target.value as DatacallCadence)}
+            sx={fieldInputSx}
+          >
+            <option value="annual">Annual</option>
+            <option value="quarterly">Quarterly</option>
+          </Select>
         </Field>
 
         <Field
