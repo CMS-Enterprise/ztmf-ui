@@ -85,8 +85,6 @@ jest.mock('./InsightsPanel/InsightsPanel', () => {
   return {
     __esModule: true,
     default: () => react.createElement('div', null, 'ZTMF Insights panel'),
-    FipsBaselineStrip: ({ level }: { level: string }) =>
-      react.createElement('div', null, `FIPS baseline strip: ${level}`),
     OptionInsightBadges: ({ insight }: { insight?: unknown }) =>
       insight
         ? react.createElement('span', null, 'ZTMF Insights option badge')
@@ -1102,6 +1100,7 @@ describe('QuestionnairePage justification integration', () => {
     setMockCtx(
       insightsCtx({
         opdivs: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
+        fismaSystems: [{ ...SSD_EX, fips: 'Low', hva: false }],
       })
     )
 
@@ -1109,7 +1108,7 @@ describe('QuestionnairePage justification integration', () => {
 
     // The justification review context still renders...
     expect(await screen.findByText('Review required')).toBeInTheDocument()
-    // ...and the federal-wide FIPS baseline treatment stays.
+    // ...and the federal-wide FIPS baseline stays, from the system record.
     expect(await screen.findByText('Low baseline')).toBeInTheDocument()
     // ...but every insights surface is suppressed, regardless of call name.
     expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
@@ -1184,7 +1183,10 @@ describe('QuestionnairePage justification integration', () => {
       { functionoptionid: 102, description: 'Advanced', score: 3 },
       { functionoptionid: 103, description: 'Optimal', score: 4 },
     ]
-    const renderSystem = (record: { fips: string | null; hva: boolean }) => {
+    const renderSystem = (record: {
+      fips: string | null
+      hva: boolean | null
+    }) => {
       installMocks({ insightRows: [], options: FOUR_OPTIONS })
       setMockCtx(
         insightsCtx({ fismaSystems: [{ ...SSD_EX, opdiv_id: 2, ...record }] })
@@ -1200,7 +1202,7 @@ describe('QuestionnairePage justification integration', () => {
       async (fips, aboveCount) => {
         renderSystem({ fips, hva: false })
         expect(
-          await screen.findByText(`FIPS baseline strip: ${fips}`)
+          await screen.findByText(`FIPS ${fips.toUpperCase()}`)
         ).toBeInTheDocument()
         expect(await screen.findByText(`${fips} baseline`)).toBeInTheDocument()
         expect(
@@ -1212,7 +1214,7 @@ describe('QuestionnairePage justification integration', () => {
       }
     )
 
-    it('holds the standalone strip while insights load, so it never jumps into the panel', async () => {
+    it('holds the strip and the markers until insights load, then shows both', async () => {
       let resolveInsights: ((value: InsightsResponse) => void) | null = null
       const insightsResponse = new Promise<InsightsResponse>((resolve) => {
         resolveInsights = resolve
@@ -1226,21 +1228,30 @@ describe('QuestionnairePage justification integration', () => {
       expect(
         await screen.findByText('Checking for prior responses...')
       ).toBeInTheDocument()
-      expect(screen.queryByText(/FIPS baseline strip/)).not.toBeInTheDocument()
+      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
 
       await act(async () => {
         resolveInsights?.({ data: { data: [INSIGHT_ROW] } })
       })
 
-      // The strip now renders inside the (mocked) panel, not standalone.
       expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
-      expect(screen.queryByText(/FIPS baseline strip/)).not.toBeInTheDocument()
+      expect(screen.getByText('FIPS LOW')).toBeInTheDocument()
+      expect(screen.getByText('Low baseline')).toBeInTheDocument()
+    })
+
+    it('ignores a payload FIPS for an OpDiv with Insights turned off', async () => {
+      installMocks({ options: FOUR_OPTIONS })
+      setMockCtx(insightsCtx({ fismaSystems: [{ ...SSD_EX, opdiv_id: 2 }] }))
+      renderAt(DEEP_LINK)
+      expect(await screen.findByText('Traditional')).toBeInTheDocument()
+      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
     })
 
     it.each([
       ['High', { fips: 'High', hva: false }],
       ['an HVA', { fips: 'Low', hva: true }],
       ['no FIPS', { fips: null, hva: false }],
+      ['an unknown HVA', { fips: 'Low', hva: null }],
     ])('shows no baseline for %s', async (_label, record) => {
       renderSystem(record)
       expect(await screen.findByText('Traditional')).toBeInTheDocument()

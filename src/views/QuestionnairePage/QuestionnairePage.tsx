@@ -63,7 +63,8 @@ import {
   type ConfirmSummaryEntry,
 } from './confirmState'
 import ConfirmSummaryDialog from './ConfirmSummaryDialog'
-import InsightsPanel, { FipsBaselineStrip } from './InsightsPanel/InsightsPanel'
+import InsightsPanel from './InsightsPanel/InsightsPanel'
+import FipsBaselineStrip from './FipsBaselineStrip'
 import { resolveFipsBaseline } from './fipsBaseline'
 import QuestionRadioGroup from './QuestionRadioGroup'
 import JustificationField, {
@@ -616,7 +617,15 @@ export default function QuestionnarePage() {
   const showCmsInsights =
     systemOpdivId != null && insightsOpdivIds.has(systemOpdivId)
   const showInsights = Boolean(currentInsight) && showCmsInsights
-  const fipsBaseline = resolveFipsBaseline(systemInfo, currentInsight)
+  // Held while insights load so the strip and the per-option markers appear
+  // together; the payload fallback follows the same per-OpDiv gate as the rest
+  // of the Insights layer.
+  const fipsBaseline = insightsPending
+    ? null
+    : resolveFipsBaseline(
+        systemInfo,
+        showCmsInsights ? currentInsight : undefined
+      )
   const currentSuggestion = showCmsInsights
     ? buildInsightJustification(currentInsight)
     : undefined
@@ -1974,17 +1983,12 @@ export default function QuestionnarePage() {
               Checking for prior responses...
             </Typography>
           )}
-          {showInsights && currentInsight ? (
+          {fipsBaseline && <FipsBaselineStrip {...fipsBaseline} />}
+          {showInsights && currentInsight && (
             <InsightsPanel
               payload={currentInsight}
               questionId={currentDatabaseQuestionId}
-              baseline={fipsBaseline}
             />
-          ) : (
-            // Held while insights load so the strip doesn't render here and
-            // then jump into the panel.
-            fipsBaseline &&
-            !insightsPending && <FipsBaselineStrip {...fipsBaseline} />
           )}
           {loadingQuestion ? (
             <Box

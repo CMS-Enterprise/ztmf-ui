@@ -1,6 +1,5 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import InsightsPanel, {
-  FipsBaselineStrip,
   OptionInsightBadges,
   ISSO_DETERMINATION_DISCLAIMER,
 } from './InsightsPanel'
@@ -1610,19 +1609,7 @@ describe('FeedCheckBlock (feed pass/fail checks)', () => {
 })
 
 describe('FIPS baseline strip', () => {
-  it('shows the FIPS badge + baseline sentence from the baseline prop (Low → Initial)', () => {
-    render(
-      <InsightsPanel
-        payload={{ suggested_score: 2 }}
-        baseline={{ level: 'Low', ceiling: 2 }}
-      />
-    )
-    expect(screen.getByText('FIPS LOW')).toBeInTheDocument()
-    expect(screen.getByText(/Baseline for this system is/)).toBeInTheDocument()
-    expect(screen.getByText('Initial')).toBeInTheDocument()
-  })
-
-  it('hides the strip with no baseline, even when the payload carries FIPS', () => {
+  it('is not rendered by the panel, even when the payload carries FIPS', () => {
     render(
       <InsightsPanel
         payload={{
@@ -1630,18 +1617,11 @@ describe('FIPS baseline strip', () => {
           fips_impact_level: 'Low',
           fips_ceiling: 2,
         }}
-        baseline={null}
       />
     )
     expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
     expect(
       screen.queryByText(/Baseline for this system is/)
     ).not.toBeInTheDocument()
-  })
-
-  it('renders standalone for systems without Insights', () => {
-    render(<FipsBaselineStrip level="Moderate" ceiling={3} />)
-    expect(screen.getByText('FIPS MODERATE')).toBeInTheDocument()
-    expect(screen.getByText('Advanced')).toBeInTheDocument()
   })
 })

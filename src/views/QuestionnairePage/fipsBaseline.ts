@@ -45,8 +45,7 @@ export const FIPS_BASELINE = {
 
 export type FipsBaseline = { level: FipsImpactLevel; ceiling: number }
 
-// FIPS 199 impact level -> highest expected maturity (misc#137). An HVA is held
-// to Optimal regardless of its FIPS level.
+// FIPS 199 impact level -> highest expected maturity (misc#137).
 const CEILING_BY_LEVEL: Record<FipsImpactLevel, number> = {
   Low: 2,
   Moderate: 3,
@@ -54,10 +53,10 @@ const CEILING_BY_LEVEL: Record<FipsImpactLevel, number> = {
 }
 
 // The one source for both the strip and the per-option markers (ztmf-ui#764).
-// The system record's own fips/hva wins; the Insights payload is only a fallback
-// for a record with no FIPS, since only Insights-enabled OpDivs get a payload.
-// Null when there is no level or no headroom above the baseline (ceiling 4): a
-// High/HVA system is already at the top, so there is nothing to mark.
+// The system record's own fips wins: it sets the ceiling only for a confirmed
+// non-HVA, since hva is tri-state and an unrecorded flag is unknown, never "not
+// an HVA". A record with no FIPS falls back to the Insights payload, the
+// pipeline's own ceiling. Null when there is no level or no headroom (High).
 export function resolveFipsBaseline(
   system: { fips?: string | null; hva?: boolean | null } | null | undefined,
   insight:
@@ -70,6 +69,7 @@ export function resolveFipsBaseline(
   let level: FipsImpactLevel | null
   let ceiling: number
   if (systemLevel) {
+    if (system?.hva !== false) return null
     level = systemLevel
     ceiling = CEILING_BY_LEVEL[systemLevel]
   } else {

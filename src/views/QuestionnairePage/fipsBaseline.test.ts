@@ -76,10 +76,23 @@ describe('fipsBaseline', () => {
       expect(
         resolveFipsBaseline({ fips: 'Low', hva: false }, undefined)
       ).toEqual({ level: 'Low', ceiling: 2 })
-      expect(resolveFipsBaseline({ fips: 'Moderate' }, undefined)).toEqual({
-        level: 'Moderate',
-        ceiling: 3,
-      })
+      expect(
+        resolveFipsBaseline({ fips: 'Moderate', hva: false }, undefined)
+      ).toEqual({ level: 'Moderate', ceiling: 3 })
+    })
+
+    it('is null when the record has a FIPS level but HVA is unknown', () => {
+      expect(
+        resolveFipsBaseline({ fips: 'Low', hva: null }, undefined)
+      ).toBeNull()
+      expect(resolveFipsBaseline({ fips: 'Moderate' }, undefined)).toBeNull()
+      // The record's level still wins, so the payload can't supply one instead.
+      expect(
+        resolveFipsBaseline(
+          { fips: 'Low', hva: null },
+          { fips_impact_level: 'Low', fips_ceiling: 2 }
+        )
+      ).toBeNull()
     })
 
     it('is null for High, for an HVA, and with no FIPS anywhere', () => {
@@ -103,7 +116,7 @@ describe('fipsBaseline', () => {
     it('prefers the system record over the insight payload', () => {
       expect(
         resolveFipsBaseline(
-          { fips: 'Moderate' },
+          { fips: 'Moderate', hva: false },
           { fips_impact_level: 'Low', fips_ceiling: 2 }
         )
       ).toEqual({ level: 'Moderate', ceiling: 3 })
@@ -121,7 +134,8 @@ describe('fipsBaseline', () => {
         level: 'Low',
         ceiling: 2,
       })
-      expect(resolveFipsBaseline({ fips: 'low' }, insight)).toEqual({
+      // An unknown HVA doesn't block the payload: it is the pipeline's own call.
+      expect(resolveFipsBaseline({ fips: 'low', hva: null }, insight)).toEqual({
         level: 'Low',
         ceiling: 2,
       })

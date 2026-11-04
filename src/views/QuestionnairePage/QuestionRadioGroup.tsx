@@ -62,9 +62,9 @@ export default function QuestionRadioGroup({
   showInsightBadges = true,
   viewedDatacall,
 }: Props) {
-  const ceiling = baseline?.ceiling ?? 4
-  const level = baseline?.level ?? null
   const hasBaseline = baseline != null
+  const level = baseline?.level
+  const ceiling = baseline?.ceiling
 
   // Effective selection: the page state once the user has chosen, otherwise the
   // option flagged defaultChecked (the saved answer) so a pre-loaded above-
