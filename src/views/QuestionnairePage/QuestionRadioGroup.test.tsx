@@ -1,6 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import QuestionRadioGroup from './QuestionRadioGroup'
 import type { QuestionChoice, InsightPayload } from '@/types'
+import type { FipsBaseline } from './fipsBaseline'
 
 // QuestionRadioGroup pulls in OptionInsightBadges → InsightsPanel → @/utils/config,
 // which reads import.meta.env; stub it so Jest can parse the module graph.
@@ -17,16 +18,14 @@ const OPTIONS: QuestionChoice[] = [
 ]
 
 // Low FIPS → ceiling 2 (Initial): options scoring 3 and 4 are above baseline.
-const LOW_FIPS: InsightPayload = { fips_impact_level: 'Low', fips_ceiling: 2 }
+const LOW_FIPS: FipsBaseline = { level: 'Low', ceiling: 2 }
 
-// Low FIPS with CMS-specific badge data (suggested + prior answer).
-// suggested_score: 3 (Advanced) is intentionally distinct from fips_ceiling: 2
+// CMS-specific badge data (suggested + prior answer), paired with LOW_FIPS.
+// suggested_score: 3 (Advanced) is intentionally distinct from the ceiling 2
 // (Initial) so the "ZTMF Insights" badge and "Low baseline" chip land on
 // separate option rows - a bug that suppressed badges only on the baseline
 // option would be visible.
-const LOW_FIPS_WITH_BADGES: InsightPayload = {
-  fips_impact_level: 'Low',
-  fips_ceiling: 2,
+const BADGES: InsightPayload = {
   suggested_score: 3, // Advanced (score 3) - above the ceiling, not at it
   last_score: 1,
   last_datacall: 'FY2025 Q1',
@@ -83,7 +82,7 @@ describe('QuestionRadioGroup', () => {
 
   describe('with a FIPS baseline (Low → ceiling 2)', () => {
     it('marks the ceiling option as the baseline and flags options above it', () => {
-      renderGroup({ insight: LOW_FIPS })
+      renderGroup({ baseline: LOW_FIPS })
       // The Initial option (score 2 == ceiling) gets the "Low baseline" chip.
       expect(screen.getByText('Low baseline')).toBeInTheDocument()
       // Advanced + Optimal (scores 3, 4) each carry the sr-only above-baseline cue.
@@ -91,7 +90,7 @@ describe('QuestionRadioGroup', () => {
     })
 
     it('escalates when an above-baseline option is selected: divider, badge, and notice', () => {
-      renderGroup({ insight: LOW_FIPS, selectedValue: 13 }) // Advanced (score 3)
+      renderGroup({ baseline: LOW_FIPS, selectedValue: 13 }) // Advanced (score 3)
       expect(screen.getByText('Above-baseline selection')).toBeInTheDocument()
       // The visible "above Low baseline" appears (divider label + per-option badges).
       expect(screen.getAllByText(/above Low baseline/i).length).toBeGreaterThan(
@@ -100,7 +99,7 @@ describe('QuestionRadioGroup', () => {
     })
 
     it('shows no escalation notice when an at/below-baseline option is selected', () => {
-      renderGroup({ insight: LOW_FIPS, selectedValue: 12 }) // Initial (at ceiling)
+      renderGroup({ baseline: LOW_FIPS, selectedValue: 12 }) // Initial (at ceiling)
       expect(
         screen.queryByText('Above-baseline selection')
       ).not.toBeInTheDocument()
@@ -116,7 +115,7 @@ describe('QuestionRadioGroup', () => {
           name="q"
           selectedValue={-1}
           onChange={noop}
-          insight={LOW_FIPS}
+          baseline={LOW_FIPS}
         />
       )
       expect(screen.getByText('Above-baseline selection')).toBeInTheDocument()
@@ -125,7 +124,11 @@ describe('QuestionRadioGroup', () => {
 
   describe('showInsightBadges=false (HHS-like rendering)', () => {
     it('shows FIPS baseline but suppresses CMS insight chips', () => {
-      renderGroup({ insight: LOW_FIPS_WITH_BADGES, showInsightBadges: false })
+      renderGroup({
+        insight: BADGES,
+        baseline: LOW_FIPS,
+        showInsightBadges: false,
+      })
       // FIPS baseline marker still renders - it is a federal-wide concept.
       expect(screen.getByText('Low baseline')).toBeInTheDocument()
       // CMS-internal insight chips are absent.
@@ -133,33 +136,20 @@ describe('QuestionRadioGroup', () => {
     })
 
     it('shows both baseline and insight chips when showInsightBadges is true', () => {
-      renderGroup({ insight: LOW_FIPS_WITH_BADGES, showInsightBadges: true })
+      renderGroup({
+        insight: BADGES,
+        baseline: LOW_FIPS,
+        showInsightBadges: true,
+      })
       expect(screen.getByText('Low baseline')).toBeInTheDocument()
       expect(screen.getByText('ZTMF Insights')).toBeInTheDocument()
     })
   })
 
-  describe('fallbacks (feature stays invisible)', () => {
-    it('High / ceiling 4 (no headroom) shows no baseline treatment', () => {
+  describe('baseline source', () => {
+    it('ignores FIPS on the insight payload; only the baseline prop draws markers', () => {
       renderGroup({
-        insight: { fips_impact_level: 'High', fips_ceiling: 4 },
-      })
-      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
-    })
-
-    it('null FIPS (no impact level) shows no baseline treatment', () => {
-      renderGroup({
-        insight: { fips_impact_level: null, fips_ceiling: null },
-      })
-      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
-    })
-
-    it('malformed level (a number on the opaque payload) is ignored - no throw, no treatment', () => {
-      renderGroup({
-        insight: {
-          fips_impact_level: 3 as unknown as null,
-          fips_ceiling: 2,
-        },
+        insight: { fips_impact_level: 'Low', fips_ceiling: 2 },
       })
       expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
     })

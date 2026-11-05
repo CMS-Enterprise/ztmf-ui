@@ -12,10 +12,7 @@ import ArrowDropDownIcon from '@mui/icons-material/ArrowDropDown'
 import CloseIcon from '@mui/icons-material/Close'
 import StatusChip from '@/components/ui/StatusChip'
 import { colors, radius } from '@/theme/tokens'
-import {
-  groupDatacallsByYear,
-  parseDatacallName,
-} from '@/utils/datacallGrouping'
+import { groupDatacallsByYear } from '@/utils/datacallGrouping'
 import { formatDate } from '@/utils/dates'
 import type { datacall } from '@/types'
 
@@ -79,8 +76,8 @@ export type DatacallContextCardViewProps = {
  * Title-context coupling along with it.
  *
  * The picker is a pill button (primary50 fill, primary text, 30px height)
- * opening a menu of calls grouped by fiscal year (newest first) and labeled
- * with their tenant (CMS quarterly / HHS ZTM). With {@link onToggle} the
+ * opening a menu of calls grouped by their stored fiscal year (newest first)
+ * and labeled with their own titles. With {@link onToggle} the
  * rows carry checkboxes and support the year-grouped multi-select (#467);
  * without it a click picks that one call. While more than one call is
  * aggregated the pill shows a summary ("FY2026 - 3 calls") and the right
@@ -115,9 +112,7 @@ export default function DatacallContextCardView({
   // call is selected.
   const aggregating = !selectedDatacall && activeCalls.length > 1
   const aggregateYear =
-    aggregating && activeCalls[0]
-      ? parseDatacallName(activeCalls[0].datacall).fiscalYear
-      : null
+    aggregating && activeCalls[0] ? activeCalls[0].fiscal_year : null
   const aggregateSummary = aggregating
     ? `${aggregateYear ? `FY${aggregateYear}` : 'All'} - ${activeCalls.length} calls`
     : ''
@@ -251,7 +246,7 @@ export default function DatacallContextCardView({
           >
             {groups.flatMap((group) => [
               <ListSubheader
-                key={`year-${group.year ?? 'other'}`}
+                key={`year-${group.year}`}
                 sx={{
                   fontSize: 11,
                   fontWeight: 600,
@@ -261,13 +256,12 @@ export default function DatacallContextCardView({
                   lineHeight: '28px',
                 }}
               >
-                {group.year != null ? `FY${group.year}` : 'Other'}
+                {`FY${group.year}`}
               </ListSubheader>,
               ...group.calls.map((option) => {
                 const isCurrent = option.datacallid === latestDataCallId
                 const checked = activeDatacallIds.includes(option.datacallid)
                 const closed = new Date() > new Date(option.deadline)
-                const { tenant } = parseDatacallName(option.datacall)
                 const deadlineLabel = formatDate(option.deadline)
                 return (
                   <MenuItem
@@ -306,18 +300,6 @@ export default function DatacallContextCardView({
                         >
                           <Box component="span" sx={{ fontWeight: 500 }}>
                             {option.datacall}
-                            {tenant !== 'Other' && (
-                              <Box
-                                component="span"
-                                sx={{
-                                  color: colors.neutral500,
-                                  fontWeight: 400,
-                                }}
-                              >
-                                {' '}
-                                - {tenant}
-                              </Box>
-                            )}
                           </Box>
                           {isCurrent && (
                             <Chip

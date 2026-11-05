@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import ScoreDiffModal from './ScoreDiffModal'
 import axiosInstance from '@/axiosConfig'
-import type { ScoreDiffEntry, FismaQuestion, datacall } from '@/types'
+import type { ScoreDiffEntry, datacall } from '@/types'
 
 jest.mock('@/axiosConfig', () => ({
   __esModule: true,
@@ -33,53 +33,33 @@ const DATACALLS: datacall[] = [
     datacall: 'FY2025',
     datecreated: '2025-01-01T00:00:00Z',
     deadline: '2099-12-31T00:00:00Z',
+    fiscal_year: 2025,
+    cadence: 'annual',
   },
   {
     datacallid: 4,
     datacall: 'FY2024',
     datecreated: '2024-01-01T00:00:00Z',
     deadline: '2020-12-31T00:00:00Z',
+    fiscal_year: 2024,
+    cadence: 'annual',
   },
   {
     datacallid: 3,
     datacall: 'FY2023',
     datecreated: '2023-01-01T00:00:00Z',
     deadline: '2020-12-31T00:00:00Z',
-  },
-]
-
-const QUESTIONS: FismaQuestion[] = [
-  {
-    questionid: 1,
-    question: 'Does your org use MFA?',
-    notesprompt: '',
-    pillar: { pillar: 'Identity', pillarid: 1, order: 1 },
-    function: {
-      functionid: 10,
-      function: 'Authentication-Users',
-      description: '',
-      datacenterenvironment: '',
-      order: 101,
-    },
-  },
-  {
-    questionid: 2,
-    question: 'How do you manage devices?',
-    notesprompt: '',
-    pillar: { pillar: 'Devices', pillarid: 2, order: 2 },
-    function: {
-      functionid: 20,
-      function: 'PolicyEnforcement',
-      description: '',
-      datacenterenvironment: '',
-      order: 201,
-    },
+    fiscal_year: 2023,
+    cadence: 'annual',
   },
 ]
 
 const DIFF_ENTRY: ScoreDiffEntry = {
   fismasystemid: 1001,
   functionid: 10,
+  root_functionid: 10,
+  pillarid: 1,
+  pillar: 'Identity',
   function: 'Authentication-Users',
   question: 'Does your org use MFA?',
   from: {
@@ -108,6 +88,9 @@ const DIFF_ENTRY: ScoreDiffEntry = {
 const DEVICES_ENTRY: ScoreDiffEntry = {
   fismasystemid: 1001,
   functionid: 20,
+  root_functionid: 20,
+  pillarid: 2,
+  pillar: 'Devices',
   function: 'PolicyEnforcement',
   question: 'How do you manage devices?',
   from: {
@@ -139,8 +122,6 @@ function setupMocks(diffEntries: ScoreDiffEntry[] = [DIFF_ENTRY]) {
   mockGet.mockImplementation((url: string) => {
     if (url === '/datacalls')
       return Promise.resolve({ data: { data: DATACALLS } })
-    if (url.includes('/questions'))
-      return Promise.resolve({ data: { data: QUESTIONS } })
     if (url.includes('/scores/diff'))
       return Promise.resolve({ data: { data: diffEntries } })
     return Promise.reject(new Error(`Unexpected URL: ${url}`))
@@ -206,6 +187,8 @@ describe('ScoreDiffModal', () => {
         datacall: 'FY23 ZTM',
         datecreated: '2026-01-01T00:00:00Z',
         deadline: '2023-06-30T00:00:00Z',
+        fiscal_year: 2023,
+        cadence: 'annual',
       },
       // lower id but the furthest-out deadline (the real current call)
       {
@@ -213,19 +196,21 @@ describe('ScoreDiffModal', () => {
         datacall: 'FY2025 Q3',
         datecreated: '2025-01-01T00:00:00Z',
         deadline: '2099-09-30T00:00:00Z',
+        fiscal_year: 2025,
+        cadence: 'quarterly',
       },
       {
         datacallid: 2,
         datacall: 'FY2022',
         datecreated: '2022-01-01T00:00:00Z',
         deadline: '2022-12-31T00:00:00Z',
+        fiscal_year: 2022,
+        cadence: 'annual',
       },
     ]
     mockGet.mockImplementation((url: string) => {
       if (url === '/datacalls')
         return Promise.resolve({ data: { data: OUT_OF_ORDER } })
-      if (url.includes('/questions'))
-        return Promise.resolve({ data: { data: QUESTIONS } })
       if (url.includes('/scores/diff'))
         return Promise.resolve({ data: { data: [] } })
       return Promise.reject(new Error(`Unexpected URL: ${url}`))
@@ -260,8 +245,6 @@ describe('ScoreDiffModal', () => {
     mockGet.mockImplementation((url: string) => {
       if (url === '/datacalls')
         return Promise.resolve({ data: { data: DATACALLS } })
-      if (url.includes('/questions'))
-        return Promise.resolve({ data: { data: QUESTIONS } })
       return Promise.reject(new Error('Network error'))
     })
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
@@ -296,17 +279,25 @@ describe('ScoreDiffModal', () => {
     expect(await screen.findAllByText('No answer')).toHaveLength(1)
   })
 
-  it('renders pillar group headers ordered by pillar.order', async () => {
-    // Devices entry arrives first; Identity should still render before Devices
-    setupMocks([DEVICES_ENTRY, DIFF_ENTRY])
+  it('groups rows by their own pillar in the order the API serves them', async () => {
+    setupMocks([DIFF_ENTRY, DEVICES_ENTRY])
     render(<ScoreDiffModal {...DEFAULT_PROPS} />)
-    await screen.findByText('Identity')
-    const identityEl = screen.getByText('Identity')
+    const identityEl = await screen.findByText('Identity')
     const devicesEl = screen.getByText('Devices')
     expect(
       identityEl.compareDocumentPosition(devicesEl) &
         Node.DOCUMENT_POSITION_FOLLOWING
     ).toBeTruthy()
+    // Grouping needs no questions list, which would be the newest version's.
+    expect(
+      mockGet.mock.calls.some(([u]: [string]) => u.includes('/questions'))
+    ).toBe(false)
+  })
+
+  it('puts a row without a pillar under Other', async () => {
+    setupMocks([{ ...DIFF_ENTRY, pillarid: null, pillar: null }])
+    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    expect(await screen.findByText('Other')).toBeInTheDocument()
   })
 
   it('calls onClose when either close control is clicked', () => {

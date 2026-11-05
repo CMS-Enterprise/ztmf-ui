@@ -2,7 +2,7 @@ import {
   isAboveBaseline,
   baselineCeiling,
   fipsBadgeText,
-  showFipsStrip,
+  resolveFipsBaseline,
   asImpactLevel,
 } from './fipsBaseline'
 
@@ -69,13 +69,91 @@ describe('fipsBaseline', () => {
       expect(fipsBadgeText(3 as unknown as null)).toBeNull()
       expect(fipsBadgeText({} as unknown as null)).toBeNull()
     })
+  })
 
-    it('showFipsStrip only when a level is set and there is headroom (ceiling < 4)', () => {
-      expect(showFipsStrip('Low', 2)).toBe(true)
-      expect(showFipsStrip('Moderate', 3)).toBe(true)
-      expect(showFipsStrip('High', 4)).toBe(false) // already at the top
-      expect(showFipsStrip(null, 2)).toBe(false) // no impact level
-      expect(showFipsStrip(null, null)).toBe(false) // no FIPS on file
+  describe('resolveFipsBaseline (ztmf-ui#764)', () => {
+    it('reads the system record: Low → 2, Moderate → 3', () => {
+      expect(
+        resolveFipsBaseline({ fips: 'Low', hva: false }, undefined)
+      ).toEqual({ level: 'Low', ceiling: 2 })
+      expect(
+        resolveFipsBaseline({ fips: 'Moderate', hva: false }, undefined)
+      ).toEqual({ level: 'Moderate', ceiling: 3 })
+    })
+
+    it('is null when the record has a FIPS level but HVA is unknown', () => {
+      expect(
+        resolveFipsBaseline({ fips: 'Low', hva: null }, undefined)
+      ).toBeNull()
+      expect(resolveFipsBaseline({ fips: 'Moderate' }, undefined)).toBeNull()
+      // The record's level still wins, so the payload can't supply one instead.
+      expect(
+        resolveFipsBaseline(
+          { fips: 'Low', hva: null },
+          { fips_impact_level: 'Low', fips_ceiling: 2 }
+        )
+      ).toBeNull()
+    })
+
+    it('is null for High, for an HVA, and with no FIPS anywhere', () => {
+      expect(resolveFipsBaseline({ fips: 'High' }, undefined)).toBeNull()
+      expect(
+        resolveFipsBaseline({ fips: 'Low', hva: true }, undefined)
+      ).toBeNull()
+      // HVA wins even when the record has no FIPS and the payload has one.
+      expect(
+        resolveFipsBaseline(
+          { fips: null, hva: true },
+          { fips_impact_level: 'Low', fips_ceiling: 2 }
+        )
+      ).toBeNull()
+      expect(
+        resolveFipsBaseline({ fips: null, hva: null }, undefined)
+      ).toBeNull()
+      expect(resolveFipsBaseline(undefined, undefined)).toBeNull()
+    })
+
+    it('prefers the system record over the insight payload', () => {
+      expect(
+        resolveFipsBaseline(
+          { fips: 'Moderate', hva: false },
+          { fips_impact_level: 'Low', fips_ceiling: 2 }
+        )
+      ).toEqual({ level: 'Moderate', ceiling: 3 })
+      expect(
+        resolveFipsBaseline(
+          { fips: 'High' },
+          { fips_impact_level: 'Low', fips_ceiling: 2 }
+        )
+      ).toBeNull()
+    })
+
+    it('falls back to the insight payload when the record has no (or a malformed) FIPS', () => {
+      const insight = { fips_impact_level: 'Low', fips_ceiling: 2 }
+      expect(resolveFipsBaseline({ fips: null }, insight)).toEqual({
+        level: 'Low',
+        ceiling: 2,
+      })
+      // An unknown HVA doesn't block the payload: it is the pipeline's own call.
+      expect(resolveFipsBaseline({ fips: 'low', hva: null }, insight)).toEqual({
+        level: 'Low',
+        ceiling: 2,
+      })
+    })
+
+    it('ignores a malformed insight payload', () => {
+      expect(
+        resolveFipsBaseline(undefined, {
+          fips_impact_level: 3,
+          fips_ceiling: 2,
+        })
+      ).toBeNull()
+      expect(
+        resolveFipsBaseline(undefined, {
+          fips_impact_level: 'Low',
+          fips_ceiling: 0,
+        })
+      ).toBeNull()
     })
   })
 })

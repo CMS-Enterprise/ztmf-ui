@@ -61,14 +61,14 @@ const BRUSH_THRESHOLD = 6
 
 /** Explains the figure in the card header. */
 const TREND_INFO =
-  'Average score across data calls, over systems active today. CMS runs quarterly calls while other OpDivs run an annual ZTM cycle; the two are not comparable, so each series follows its own cadence and they meet only at the shared FY26 cycle. Click a point to see how that call was spread across the tiers and which systems moved into it.'
+  'Average score across data calls, over systems active today. Quarterly and annual calls are not comparable, so each series follows one cadence. An OpDiv whose systems took part in the newest quarterly call follows the quarterly calls plus the newest annual call; every other OpDiv follows the annual calls. Click a point to see how that call was spread across the tiers and which systems moved into it.'
 
 /** Props for {@link TrendPanel}. */
 export type TrendPanelProps = {
   points: TrendPoint[]
   isPending: boolean
   isError: boolean
-  /** Names the cadence this series follows, e.g. "Annual ZTM calls". */
+  /** Names the cadence this series follows, e.g. "Annual calls". */
   cadenceNote?: string
   /** The call the detail below the chart describes. */
   selectedCallId: number | null

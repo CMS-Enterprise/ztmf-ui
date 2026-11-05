@@ -107,6 +107,9 @@ type Params = {
   writeStamp?: string | null
 }
 
+/** An undo names its row and the head revision it expects to replace. */
+export type UndoRequest = { scoreid: number; revisionid: number }
+
 /**
  * Owns every piece of state the undo UI needs, so QuestionnairePage adds none
  * of its own (ztmf-misc#392). Returns the drawer's open/close controls, the
@@ -166,21 +169,28 @@ export function useAnswerHistory({
     })
   }, [writeStamp, scoreid, queryClient])
 
+  // The row travels with the request: a pending mutation runs the latest
+  // options, so after navigation `scoreid` here would name the new question.
   const undo = useMutation({
-    mutationFn: (expectedHeadRevisionId: number) =>
-      undoScoreRevision(scoreid, expectedHeadRevisionId),
-    onSuccess: () => {
+    mutationFn: (pinned: UndoRequest) =>
+      undoScoreRevision(pinned.scoreid, pinned.revisionid),
+    onSuccess: (_data, pinned) => {
       // Imperative, for the reason on refetchScores above.
       refetchScores()
       // Returned, not voided: the drawer stays open over the result, so its
       // rows must be the post-undo ones before the pending state clears.
       return queryClient.invalidateQueries({
-        queryKey: queryKeys.scores.revisions(scoreid),
+        queryKey: queryKeys.scores.revisions(pinned.scoreid),
       })
     },
-    // No onError here. docs/data-fetching.md keeps mutation error handling at
-    // the call site so a caller can route a conflict to the drawer instead of
-    // a toast; a hook-level handler would double-notify.
+    // Notifying stays at the call site (docs/data-fetching.md); this only
+    // drops the undone row's stale head, which the caller can no longer name
+    // once the user has moved on.
+    onError: (_error, pinned) => {
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.scores.revisions(pinned.scoreid),
+      })
+    },
   })
 
   return {

@@ -8,7 +8,6 @@
  * @module views/OpDivDashboard/useOpDivDashboardData
  */
 import { useMemo, useState } from 'react'
-import { parseDatacallName } from '@/utils/datacallGrouping'
 import { daysUntil } from '@/utils/dates'
 import { isOpenCallInView } from '@/views/FismaTable/dashboardFilters'
 import {
@@ -48,13 +47,15 @@ import { averageByPillar, pillarExtremeCounts } from './opdivPillars'
 import {
   biggestMovers,
   buildTrendSeries,
+  newestQuarterlyCall,
   pairedDelta,
   pairedTierMovement,
   selectPriorCall,
   selectTrendCalls,
   tierDistribution,
+  trendCadenceFor,
 } from './opdivTrend'
-import type { datacall } from '@/types'
+import type { DatacallCadence, datacall } from '@/types'
 
 /** Everything the dashboard renders. */
 export type OpDivDashboardData = {
@@ -121,12 +122,13 @@ export type OpDivDashboardData = {
 /** Optional adjustments for callers other than the OpDiv dashboard itself. */
 export type OpDivDashboardOptions = {
   /**
-   * Overrides the cadence the trend follows. The unfiltered scope normally
+   * Overrides whose cadence the trend follows. The unfiltered scope normally
    * means "the aggregate", which runs the annual cycle - but it also covers a
    * system-scoped caller whose systems all sit in one OpDiv, and that caller
-   * should follow that OpDiv's cadence. Omit to derive it from `opdivId`.
+   * should follow that OpDiv's cadence. Null means the annual cycle. Omit to
+   * use `opdivId`.
    */
-  trendOpDivCode?: string | null
+  trendOpDivId?: number | null
   /** Whether to fetch the anchor and prior pillar aggregates, default true. */
   includePillars?: boolean
   /** Whether to fetch the full score history behind the trend, default true. */
@@ -150,7 +152,7 @@ export function useOpDivDashboardData(
   options: OpDivDashboardOptions = {}
 ): OpDivDashboardData {
   const {
-    trendOpDivCode,
+    trendOpDivId,
     includePillars = true,
     includeHistory = true,
     completionOpenCallOnly = false,
@@ -208,40 +210,53 @@ export function useOpDivDashboardData(
   }, [datacalls, latestDataCallId])
 
   // Each OpDiv's trend follows its own data-call cadence; mixing the two is
-  // what made the line oscillate. See selectTrendCalls.
-  const opdivCode = useMemo(
+  // what made the line oscillate. See selectTrendCalls. An OpDiv follows the
+  // quarterly series when its systems took part in the newest quarterly call
+  // (trendCadenceFor); the aggregate always follows the annual cycle.
+  const cadenceOpDivId = trendOpDivId !== undefined ? trendOpDivId : opdivId
+  const cadenceSystemIds = useMemo(
     () =>
-      trendOpDivCode !== undefined
-        ? trendOpDivCode
-        : opdivId === null
-          ? null
-          : opdivs.find((od) => od.opdiv_id === opdivId)?.code ?? null,
-    [opdivs, opdivId, trendOpDivCode]
+      cadenceOpDivId === null
+        ? null
+        : systemIdSet(scopeSystemsToOpDiv(fismaSystems, cadenceOpDivId)),
+    [fismaSystems, cadenceOpDivId]
   )
+  const quarterlyCall = useMemo(
+    () => newestQuarterlyCall(datacalls),
+    [datacalls]
+  )
+  // Same query key as the per-call aggregate the dashboard already loads, so
+  // while that call's year is in view this is a cache hit, not a request.
+  const quarterlyCallIds = useMemo(
+    () => (cadenceSystemIds && quarterlyCall ? [quarterlyCall.datacallid] : []),
+    [cadenceSystemIds, quarterlyCall]
+  )
+  const { scoresPerCall: quarterlyScores, isPending: cadencePending } =
+    useDatacallAggregates(quarterlyCallIds)
+  // Null until the quarterly call's scores land, so the anchor and prior call
+  // never settle on the annual series first and then jump. A failed request
+  // falls back to annual: the trend still draws, over the shared cycle.
+  const cadence = useMemo((): DatacallCadence | null => {
+    if (!cadenceSystemIds || !quarterlyCall) return 'annual'
+    if (cadencePending) return null
+    return trendCadenceFor(cadenceSystemIds, quarterlyScores.flat())
+  }, [cadenceSystemIds, quarterlyCall, cadencePending, quarterlyScores])
   const trendCalls = useMemo(
-    () => selectTrendCalls(datacalls, opdivCode),
-    [datacalls, opdivCode]
+    () => (cadence ? selectTrendCalls(datacalls, cadence) : []),
+    [datacalls, cadence]
   )
 
   // The pillar chart describes ONE call. Requesting pillars for every active
   // call would multiply the payload by the pillar count for a chart that can
   // only show one profile. Without an explicit pick it is the newest active
-  // call in this OpDiv's cadence (activeDatacallIds is newest-first), else the
-  // newest one outside both cadences, so a year with CMS quarterlies never
-  // anchors another OpDiv to one of them. None of either leaves no anchor.
+  // call in this OpDiv's cadence (activeDatacallIds is newest-first), so a
+  // year with quarterly calls never anchors an annual OpDiv to one of them.
+  // None in cadence, or a cadence still loading, leaves no anchor.
   const anchorCallId = useMemo(() => {
     if (selectedDatacall) return selectedDatacall.datacallid
     const inCadence = new Set(trendCalls.map((dc) => dc.datacallid))
-    const unclassified = new Set(
-      datacalls
-        .filter((dc) => parseDatacallName(dc.datacall).tenant === 'Other')
-        .map((dc) => dc.datacallid)
-    )
-    return (
-      activeDatacallIds.find((id) => inCadence.has(id)) ??
-      activeDatacallIds.find((id) => unclassified.has(id))
-    )
-  }, [selectedDatacall, trendCalls, datacalls, activeDatacallIds])
+    return activeDatacallIds.find((id) => inCadence.has(id))
+  }, [selectedDatacall, trendCalls, activeDatacallIds])
   const anchorCall = useMemo(
     () => datacalls.find((dc) => dc.datacallid === anchorCallId) ?? null,
     [datacalls, anchorCallId]
@@ -253,8 +268,8 @@ export function useOpDivDashboardData(
   // The prior call in the scope's own cadence: the next call by deadline can
   // belong to the other cadence and carry none of this OpDiv's systems.
   const priorCall = useMemo(
-    () => selectPriorCall(datacalls, opdivCode, anchorCall),
-    [datacalls, opdivCode, anchorCall]
+    () => (cadence ? selectPriorCall(datacalls, cadence, anchorCall) : null),
+    [datacalls, cadence, anchorCall]
   )
 
   // Anchor + prior together. The anchor is already in activeDatacallIds, so it
@@ -432,12 +447,12 @@ export function useOpDivDashboardData(
     daysRemaining: daysUntil(anchorCall?.deadline),
     trend: {
       points: trendPoints,
-      isPending: historyQuery.isPending,
+      isPending: historyQuery.isPending || cadence === null,
       isError: historyQuery.isError,
       cadenceNote:
-        opdivCode === 'CMS'
-          ? 'Quarterly CMS calls, plus the shared annual cycle'
-          : 'Annual ZTM calls',
+        cadence === 'quarterly'
+          ? 'Quarterly calls, plus the newest annual call'
+          : 'Annual calls',
       selectedCallId: selectedTrendCall?.datacallid ?? null,
       selectCall: setSelectedTrendCallId,
       tiers: trendTiers,
@@ -446,6 +461,7 @@ export function useOpDivDashboardData(
     isPending:
       !fismaSystemsLoaded ||
       !datacallsLoaded ||
+      cadence === null ||
       (activeDatacallIds.length > 0 && (scoresPending || progressPending)),
     isError: scoresError || progressError,
     noDatacalls: datacallsLoaded && activeDatacallIds.length === 0,

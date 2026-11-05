@@ -45,3 +45,23 @@ it('makes the scrolling body a focusable region named by the title', () => {
   expect(region).toHaveAttribute('tabindex', '0')
   expect(region).toHaveTextContent('body')
 })
+
+it('names the scrolling body separately when given a body label', () => {
+  renderWithProviders(
+    <SideDrawer
+      open
+      onClose={jest.fn()}
+      title="Answer history"
+      bodyLabel="Revisions"
+    >
+      body
+    </SideDrawer>
+  )
+
+  expect(screen.getByRole('region', { name: 'Revisions' })).toHaveTextContent(
+    'body'
+  )
+  expect(
+    screen.queryByRole('region', { name: 'Answer history' })
+  ).not.toBeInTheDocument()
+})
