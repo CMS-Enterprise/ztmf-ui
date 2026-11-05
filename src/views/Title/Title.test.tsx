@@ -358,6 +358,8 @@ describe('Title data call selection', () => {
       datacall: 'FY26 ZTM',
       datecreated: '2025-10-01',
       deadline: '2026-09-11',
+      fiscal_year: 2026,
+      cadence: 'annual',
     }
     let datacalls: (typeof created)[] = []
     mockedGet.mockImplementation((url: string) =>

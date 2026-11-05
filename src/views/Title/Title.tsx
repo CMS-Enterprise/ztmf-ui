@@ -651,7 +651,11 @@ export default function Title() {
         openModal={openEmailModal}
         closeModal={handleCloseEmailModal}
       />
-      <DataCallModal open={openDataCallModal} onClose={handleDataCallClose} />
+      <DataCallModal
+        open={openDataCallModal}
+        onClose={handleDataCallClose}
+        datacalls={datacalls}
+      />
       <Footer />
     </>
   )

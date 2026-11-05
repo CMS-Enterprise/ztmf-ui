@@ -112,7 +112,7 @@ test('undo refetches the page scores imperatively and invalidates the history', 
   await waitFor(() => expect(result.current.head).not.toBeNull())
 
   await act(async () => {
-    await result.current.undo.mutateAsync(91)
+    await result.current.undo.mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
   })
 
   expect(JSON.parse(mock.history.post[0].data)).toEqual({
@@ -137,7 +137,7 @@ test('undo marks every cached score read stale, not just the history', async () 
   const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await act(async () => {
-    await result.current.undo.mutateAsync(91)
+    await result.current.undo.mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
   })
 
   expect(invalidate).toHaveBeenCalledWith({
@@ -160,7 +160,9 @@ test('surfaces a stale-token conflict by code so the caller can refresh rather t
   // flush and fails only when the suite runs alongside others.
   let rejection: unknown
   await act(async () => {
-    rejection = await result.current.undo.mutateAsync(91).catch((e) => e)
+    rejection = await result.current.undo
+      .mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
+      .catch((e) => e)
   })
 
   // The code is carried at the envelope's top level, so parseApiError reaches
@@ -185,7 +187,9 @@ test('surfaces a missing-token rejection as a field error, not a conflict', asyn
 
   let rejection: unknown
   await act(async () => {
-    rejection = await result.current.undo.mutateAsync(91).catch((e) => e)
+    rejection = await result.current.undo
+      .mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
+      .catch((e) => e)
   })
 
   const parsed = parseApiError(rejection)
@@ -219,6 +223,83 @@ test('refreshes history when the edit stamp moves, but not when navigation clear
   rerender({ writeStamp: 't3|done' })
   await new Promise((resolve) => setTimeout(resolve, 50))
   expect(mock.history.get).toHaveLength(2)
+})
+
+test('invalidates the undone question, not the one navigated to mid-request', async () => {
+  const OTHER_ID = 4213
+  mock.onGet(apiPaths.scores.revisions(SCORE_ID)).reply(200, { data: HISTORY })
+  mock.onGet(apiPaths.scores.revisions(OTHER_ID)).reply(200, { data: HISTORY })
+  let respond: (value: [number, unknown]) => void = () => {}
+  mock
+    .onPost(apiPaths.scores.undo(SCORE_ID))
+    .reply(() => new Promise((resolve) => (respond = resolve)))
+  const queryClient = createTestQueryClient()
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+  const { result, rerender } = renderHook(
+    ({ scoreid }: { scoreid: number }) =>
+      useAnswerHistory({ scoreid, refetchScores: jest.fn() }),
+    { wrapper: queryWrapper(queryClient), initialProps: { scoreid: SCORE_ID } }
+  )
+  await waitFor(() => expect(result.current.head).not.toBeNull())
+
+  let pending: Promise<unknown> = Promise.resolve()
+  act(() => {
+    pending = result.current.undo.mutateAsync({
+      scoreid: SCORE_ID,
+      revisionid: 91,
+    })
+  })
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  rerender({ scoreid: OTHER_ID })
+  await act(async () => {
+    respond([200, { data: { score: {}, revision: {}, head: {} } }])
+    await pending
+  })
+
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(SCORE_ID),
+  })
+  expect(invalidate).not.toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(OTHER_ID),
+  })
+})
+
+test('a failed undo still refetches the undone question after navigation', async () => {
+  const OTHER_ID = 4213
+  mock.onGet(apiPaths.scores.revisions(SCORE_ID)).reply(200, { data: HISTORY })
+  mock.onGet(apiPaths.scores.revisions(OTHER_ID)).reply(200, { data: HISTORY })
+  let respond: (value: [number, unknown]) => void = () => {}
+  mock
+    .onPost(apiPaths.scores.undo(SCORE_ID))
+    .reply(() => new Promise((resolve) => (respond = resolve)))
+  const queryClient = createTestQueryClient()
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+  const { result, rerender } = renderHook(
+    ({ scoreid }: { scoreid: number }) =>
+      useAnswerHistory({ scoreid, refetchScores: jest.fn() }),
+    { wrapper: queryWrapper(queryClient), initialProps: { scoreid: SCORE_ID } }
+  )
+  await waitFor(() => expect(result.current.head).not.toBeNull())
+
+  let pending: Promise<unknown> = Promise.resolve()
+  act(() => {
+    pending = result.current.undo
+      .mutateAsync({ scoreid: SCORE_ID, revisionid: 91 })
+      .catch(() => {})
+  })
+  await waitFor(() => expect(mock.history.post).toHaveLength(1))
+  rerender({ scoreid: OTHER_ID })
+  await act(async () => {
+    respond([409, { error: 'conflict', code: REVISION_CONFLICT }])
+    await pending
+  })
+
+  expect(invalidate).toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(SCORE_ID),
+  })
+  expect(invalidate).not.toHaveBeenCalledWith({
+    queryKey: queryKeys.scores.revisions(OTHER_ID),
+  })
 })
 
 describe('classifyUndoError', () => {

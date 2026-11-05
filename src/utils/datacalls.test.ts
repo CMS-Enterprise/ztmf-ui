@@ -25,10 +25,15 @@ const mockedNotify = notify as jest.Mock
 beforeEach(() => mockedNotify.mockClear())
 afterEach(() => mock.reset())
 
-const INPUT = { datacall: 'FY2027 ZTM', deadline: '2027-09-30T23:59:59.000Z' }
+const INPUT = {
+  datacall: 'FY27 Zero Trust data call',
+  fiscal_year: 2027,
+  cadence: 'annual' as const,
+  deadline: '2027-09-30T23:59:59.000Z',
+}
 
 describe('createDatacall', () => {
-  it('posts the name and deadline as given', async () => {
+  it('posts the title, fiscal year, cadence and deadline as given', async () => {
     mock.onPost('/datacalls').reply(201)
 
     await expect(createDatacall(INPUT)).resolves.toBeUndefined()

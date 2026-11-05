@@ -10,6 +10,8 @@ const call = (datacallid: number, deadline: string): datacall => ({
   datacall: `call-${datacallid}`,
   datecreated: deadline,
   deadline,
+  fiscal_year: 2025,
+  cadence: 'annual',
 })
 
 // Deliberately not in deadline order: id 2 has the newest deadline, so any

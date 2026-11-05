@@ -8,13 +8,6 @@ import InfoOutlined from '@mui/icons-material/InfoOutlined'
 import type { InsightPayload, InsightFinding } from '@/types'
 import CONFIG from '@/utils/config'
 import {
-  fipsBadgeText,
-  showFipsStrip,
-  baselineCeiling,
-  asImpactLevel,
-  FIPS_GOLD,
-} from '../fipsBaseline'
-import {
   asText,
   severityStyle,
   rollupControls,
@@ -456,70 +449,6 @@ function InsightsPanelInner({ payload, questionId }: Props) {
         my: 2,
       }}
     >
-      {/* FIPS baseline strip - lives at the top of the insights panel so it's
-          gated on insight data like everything else here (no insight → no
-          panel → no strip). Only shown when there's headroom above the
-          baseline (ceiling < 4). */}
-      {showFipsStrip(
-        asImpactLevel(payload.fips_impact_level),
-        payload.fips_ceiling
-      ) && (
-        <Box
-          sx={{
-            display: 'flex',
-            alignItems: 'center',
-            gap: 1.25,
-            bgcolor: FIPS_GOLD.box,
-            border: `1px solid ${FIPS_GOLD.border}`,
-            borderRadius: '6px',
-            p: '8px 14px',
-            mb: 1.5,
-            fontSize: 12,
-          }}
-        >
-          <Tooltip
-            title={`FIPS impact level for this system: ${payload.fips_impact_level}`}
-            placement="top"
-            arrow
-          >
-            <Box
-              component="span"
-              tabIndex={0}
-              aria-label={`FIPS impact level: ${payload.fips_impact_level}`}
-              sx={{
-                fontSize: 11,
-                fontWeight: 700,
-                bgcolor: FIPS_GOLD.badgeBg,
-                color: FIPS_GOLD.badgeText,
-                px: 1,
-                py: 0.25,
-                borderRadius: '3px',
-                letterSpacing: '0.3px',
-                flexShrink: 0,
-                cursor: 'help',
-              }}
-            >
-              {fipsBadgeText(asImpactLevel(payload.fips_impact_level))}
-            </Box>
-          </Tooltip>
-          <Box
-            component="span"
-            sx={{ color: FIPS_GOLD.text, flex: 1, lineHeight: 1.5 }}
-          >
-            Baseline for this system is{' '}
-            <Box
-              component="span"
-              sx={{ fontWeight: 700, color: FIPS_GOLD.strong }}
-            >
-              {maturityLabel(baselineCeiling(payload.fips_ceiling))}
-            </Box>
-            . Higher maturity levels are available - teams that go above
-            baseline are encouraged to document what&rsquo;s driving that
-            maturity.
-          </Box>
-        </Box>
-      )}
-
       <Box
         sx={{
           display: 'flex',

@@ -84,6 +84,8 @@ export default function AnswerHistoryPanel({
       open={open}
       onClose={onClose}
       title="Answer history"
+      // Distinct from the dialog's name so the two aren't announced alike.
+      bodyLabel="Revisions"
       id={ANSWER_HISTORY_PANEL_ID}
     >
       {/* No role="status" here: the questionnaire already has two live regions

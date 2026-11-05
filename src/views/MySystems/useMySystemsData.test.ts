@@ -1,26 +1,42 @@
 // Which score queries the band lets through: the history only once expanded,
 // and the pillar aggregates never, since the band renders no pillar figures.
 
+const ANNUAL_CALLS = [
+  {
+    datacallid: 2,
+    datacall: 'FY26 ZTM',
+    datecreated: '2025-10-01',
+    deadline: '2099-12-31',
+    fiscal_year: 2026,
+    cadence: 'annual',
+  },
+  {
+    datacallid: 1,
+    datacall: 'FY25 ZTM',
+    datecreated: '2024-10-01',
+    deadline: '2025-06-30',
+    fiscal_year: 2025,
+    cadence: 'annual',
+  },
+]
+const QUARTERLY_CALL = {
+  datacallid: 3,
+  datacall: 'Q1 check-in',
+  datecreated: '2025-10-01',
+  deadline: '2025-12-31',
+  fiscal_year: 2026,
+  cadence: 'quarterly',
+}
+
 // Mutable so a test can seed systems; the factory reads it at call time.
 let mockSystems: unknown[] = []
+let mockDatacalls: unknown[] = ANNUAL_CALLS
 jest.mock('@/views/Title/Context', () => ({
   useContextProp: () => ({
     fismaSystems: mockSystems,
     fismaSystemsLoaded: true,
-    datacalls: [
-      {
-        datacallid: 2,
-        datacall: 'FY26 ZTM',
-        datecreated: '2025-10-01',
-        deadline: '2099-12-31',
-      },
-      {
-        datacallid: 1,
-        datacall: 'FY25 ZTM',
-        datecreated: '2024-10-01',
-        deadline: '2025-06-30',
-      },
-    ],
+    datacallsLoaded: true,
+    datacalls: mockDatacalls,
     activeDatacallIds: [2, 1],
     selectedDatacall: null,
     latestDataCallId: 2,
@@ -29,15 +45,25 @@ jest.mock('@/views/Title/Context', () => ({
 }))
 
 let mockProgressPerCall: unknown[][] = [[], []]
+// Rows and pending state for a single-call request, which is how the cadence
+// probe asks for the newest quarterly call.
+let mockAggregatesByCall: Record<number, unknown[]> = {}
+let mockPendingCall: number | null = null
 const mockPillarAggregates = jest.fn()
 const mockScoreHistory = jest.fn()
 jest.mock('@/utils/scores', () => ({
   __esModule: true,
-  useDatacallAggregates: () => ({
-    scoresPerCall: [],
-    isPending: false,
-    isError: false,
-  }),
+  useDatacallAggregates: (ids: number[]) => {
+    const single = ids.length === 1 ? ids[0] : null
+    return {
+      scoresPerCall:
+        single !== null && mockAggregatesByCall[single]
+          ? [mockAggregatesByCall[single]]
+          : [],
+      isPending: single !== null && single === mockPendingCall,
+      isError: false,
+    }
+  },
   useDatacallProgress: () => ({
     progressPerCall: mockProgressPerCall,
     isPending: false,
@@ -64,6 +90,9 @@ const enabledFlags = (mock: jest.Mock) =>
 
 beforeEach(() => {
   mockSystems = []
+  mockDatacalls = ANNUAL_CALLS
+  mockAggregatesByCall = {}
+  mockPendingCall = null
   mockProgressPerCall = [[], []]
   mockPillarAggregates.mockClear()
   mockScoreHistory.mockClear()
@@ -105,4 +134,68 @@ test('completion counts only what the table filter can show', () => {
 
   expect(band.completion).toMatchObject({ systemsInCall: 0, notStarted: 0 })
   expect(opdiv.completion).toMatchObject({ systemsInCall: 1, notStarted: 1 })
+})
+
+describe('trend cadence', () => {
+  const scored = (fismasystemid: number) => ({
+    datacallid: QUARTERLY_CALL.datacallid,
+    fismasystemid,
+    systemscore: 3,
+  })
+
+  beforeEach(() => {
+    mockDatacalls = [...ANNUAL_CALLS, QUARTERLY_CALL]
+  })
+
+  test('follows the quarterly series when the caller has one OpDiv and it took part in the newest quarterly call', () => {
+    mockSystems = [
+      makeSystem({ fismasystemid: 5, opdiv_id: 3 }),
+      makeSystem({ fismasystemid: 6, opdiv_id: 3 }),
+    ]
+    mockAggregatesByCall = { 3: [scored(5)] }
+
+    const band = renderHook(() => useMySystemsData(false)).result.current
+
+    expect(band.trend.cadenceNote).toBe(
+      'Quarterly calls, plus the newest annual call'
+    )
+  })
+
+  test('follows the annual series when that OpDiv sat out the quarterly call', () => {
+    mockSystems = [makeSystem({ fismasystemid: 5, opdiv_id: 3 })]
+    mockAggregatesByCall = { 3: [scored(99)] }
+
+    const band = renderHook(() => useMySystemsData(false)).result.current
+
+    expect(band.trend.cadenceNote).toBe('Annual calls')
+  })
+
+  test('falls back to the annual series when the systems span OpDivs', () => {
+    mockSystems = [
+      makeSystem({ fismasystemid: 5, opdiv_id: 3 }),
+      makeSystem({ fismasystemid: 6, opdiv_id: 4 }),
+    ]
+    mockAggregatesByCall = { 3: [scored(5), scored(6)] }
+
+    const band = renderHook(() => useMySystemsData(false)).result.current
+
+    expect(band.trend.cadenceNote).toBe('Annual calls')
+  })
+
+  test('holds the prior call until the cadence is known', () => {
+    mockSystems = [makeSystem({ fismasystemid: 5, opdiv_id: 3 })]
+    mockAggregatesByCall = { 3: [scored(5)] }
+    mockPendingCall = 3
+
+    const pending = renderHook(() => useMySystemsData(false)).result.current
+    expect(pending.isPending).toBe(true)
+    expect(pending.trend.isPending).toBe(true)
+    expect(pending.priorCall).toBeNull()
+
+    mockPendingCall = null
+    const settled = renderHook(() => useMySystemsData(false)).result.current
+    expect(settled.isPending).toBe(false)
+    // FY26 ZTM is the anchor; the quarterly call precedes it in this series.
+    expect(settled.priorCall?.datacallid).toBe(3)
+  })
 })

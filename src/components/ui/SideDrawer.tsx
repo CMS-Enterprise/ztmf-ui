@@ -24,6 +24,8 @@ export type SideDrawerProps = {
   width?: number
   /** Optional id for the drawer panel, for tests and scan scoping. */
   id?: string
+  /** Accessible name for the scrolling body. Defaults to the title. */
+  bodyLabel?: string
 }
 
 /**
@@ -44,6 +46,7 @@ export function SideDrawer({
   footer,
   width = 480,
   id,
+  bodyLabel,
 }: SideDrawerProps) {
   const titleId = useId()
   return (
@@ -118,7 +121,8 @@ export function SideDrawer({
         <Box
           tabIndex={0}
           role="region"
-          aria-labelledby={titleId}
+          aria-label={bodyLabel}
+          aria-labelledby={bodyLabel ? undefined : titleId}
           sx={{
             flex: 1,
             overflowY: 'auto',

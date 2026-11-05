@@ -1,6 +1,6 @@
 // FIPS maturity-baseline logic for the questionnaire (ztmf-ui#547). Pure and
-// styling-independent: given an insight payload's `fips_ceiling` / `fips_impact_level`
-// and a maturity answer option's score, decide whether the option is "above
+// styling-independent: given a system's FIPS ceiling and impact level and a
+// maturity answer option's score, decide whether the option is "above
 // baseline" (warned but still selectable), and produce the badge / strip /
 // divider copy. The rendering layer consumes these; the rule lives here so it's
 // unit-testable on its own.
@@ -21,8 +21,8 @@ export function asImpactLevel(x: unknown): FipsImpactLevel | null {
     : null
 }
 
-// Shared palette for the FIPS baseline treatment, used by both the strip (in the
-// insights panel) and the per-option markers (in the radio group). Gold =
+// Shared palette for the FIPS baseline treatment, used by both the strip and the
+// per-option markers (in the radio group). Gold =
 // "above your baseline" (attention, optional); the dotted blue baseline box =
 // "where you should be". All text/background pairs clear WCAG AA (>= 4.5:1).
 export const FIPS_GOLD = {
@@ -43,16 +43,40 @@ export const FIPS_BASELINE = {
   badgeText: '#3a4a8f',
 }
 
-// The strip only makes sense when a real impact level is set AND there is
-// headroom above the baseline (ceiling < 4) - a High/Optimal system is already
-// at the top, so "higher maturity levels are available" would be false.
-export function showFipsStrip(
-  level: FipsImpactLevel | null | undefined,
-  fipsCeiling: number | null | undefined
-): boolean {
-  // typeof-string (not just != null) so a malformed non-string level from the
-  // opaque payload suppresses the strip rather than rendering it badge-less.
-  return typeof level === 'string' && baselineCeiling(fipsCeiling) < 4
+export type FipsBaseline = { level: FipsImpactLevel; ceiling: number }
+
+// FIPS 199 impact level -> highest expected maturity (misc#137).
+const CEILING_BY_LEVEL: Record<FipsImpactLevel, number> = {
+  Low: 2,
+  Moderate: 3,
+  High: 4,
+}
+
+// The one source for both the strip and the per-option markers (ztmf-ui#764).
+// The system record's own fips wins: it sets the ceiling only for a confirmed
+// non-HVA, since hva is tri-state and an unrecorded flag is unknown, never "not
+// an HVA". A record with no FIPS falls back to the Insights payload, the
+// pipeline's own ceiling. Null when there is no level or no headroom (High).
+export function resolveFipsBaseline(
+  system: { fips?: string | null; hva?: boolean | null } | null | undefined,
+  insight:
+    | { fips_impact_level?: unknown; fips_ceiling?: number | null }
+    | null
+    | undefined
+): FipsBaseline | null {
+  if (system?.hva === true) return null
+  const systemLevel = asImpactLevel(system?.fips)
+  let level: FipsImpactLevel | null
+  let ceiling: number
+  if (systemLevel) {
+    if (system?.hva !== false) return null
+    level = systemLevel
+    ceiling = CEILING_BY_LEVEL[systemLevel]
+  } else {
+    level = asImpactLevel(insight?.fips_impact_level)
+    ceiling = baselineCeiling(insight?.fips_ceiling)
+  }
+  return level && ceiling < 4 ? { level, ceiling } : null
 }
 
 // A system with no FIPS on file arrives with ceiling null/undefined; treat it as

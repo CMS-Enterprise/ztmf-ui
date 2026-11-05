@@ -85,6 +85,8 @@ beforeEach(() => {
         datacall: 'FY26 ZTM',
         datecreated: '2025-10-01T00:00:00Z',
         deadline: '2099-12-31T23:59:59Z',
+        fiscal_year: 2026,
+        cadence: 'annual',
       },
     ],
     // An empty selection before the calls land is not an answer, so the
@@ -212,6 +214,8 @@ describe('the summary band tiles', () => {
           datacall: 'FY25 ZTM',
           datecreated: '2024-10-01T00:00:00Z',
           deadline: '2025-06-30T23:59:59Z',
+          fiscal_year: 2025,
+          cadence: 'annual',
         },
       ],
     }
