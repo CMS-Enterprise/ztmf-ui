@@ -28,6 +28,7 @@ import axiosInstance from '@/axiosConfig'
 import { STATUS_MESSAGES, ERROR_MESSAGES } from '@/constants'
 import { queryKeys } from '@/api/keys'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
+import { useFismaSystems } from '@/utils/fismaSystems'
 import type { FismaSystemType, UserRole, userData } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
@@ -260,6 +261,97 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
       queryKey: queryKeys.fismaSystems.detail(42),
     })
   })
+})
+
+// The tests above hand the page a fixed list. These feed it from the real list
+// query instead, so the list refetch a status change triggers actually drops
+// the system and the page has to fall back to its by-id entry. The by-id read
+// never answers, which leaves only what the write itself put in the cache.
+function LiveListPage({ decommissioned }: { decommissioned: boolean }) {
+  const { fismaSystems, fismaSystemsLoaded } = useFismaSystems(decommissioned)
+  mockCtx = { ...mockCtx, fismaSystems, fismaSystemsLoaded }
+  return <SystemDetailPage />
+}
+
+function renderWithLiveList(system: FismaSystemType, decommissioned: boolean) {
+  setPageContext('OWNER', [])
+  // The view lists the system until the write moves it out.
+  const listUrl = decommissioned
+    ? '/fismasystems?decommissioned=true'
+    : '/fismasystems'
+  let listed = true
+  mock.onGet(listUrl).reply(() => [200, { data: listed ? [system] : [] }])
+  mock.onGet(/fismasystems\/42$/).reply(() => new Promise(() => {}))
+  const moveOut = () => {
+    listed = false
+  }
+  return {
+    moveOut,
+    ...renderWithProviders(
+      <Routes>
+        <Route
+          path="/systems/:fismasystemid"
+          element={<LiveListPage decommissioned={decommissioned} />}
+        />
+      </Routes>,
+      { initialEntries: ['/systems/42'] }
+    ),
+  }
+}
+
+test('decommissioning from the active view shows the new status once the list drops the system', async () => {
+  const returned = {
+    ...BASE_SYSTEM,
+    decommissioned: true,
+    decommissioned_date: '2020-01-01T00:00:00.000Z',
+  }
+  const { moveOut } = renderWithLiveList(BASE_SYSTEM, false)
+  mock.onDelete(/fismasystems\/42$/).reply(() => {
+    moveOut()
+    return [200, { data: returned }]
+  })
+  const user = userEvent.setup()
+
+  expect(await screen.findByText('Active')).toBeInTheDocument()
+  await clickEdit(user)
+  await user.click(
+    await screen.findByRole('checkbox', { name: /Decommission System/i })
+  )
+  setDecommissionDate('2020-01-01')
+  await user.click(await screen.findByRole('button', { name: 'Decommission' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  // Without the returned record in the by-id entry, the page falls back to
+  // the row seeded from the list before the write and reads Active.
+  expect(await screen.findByText('Decommissioned')).toBeInTheDocument()
+  expect(screen.queryByText('Active')).not.toBeInTheDocument()
+})
+
+test('reactivating from the decommissioned view shows the new status once the list drops the system', async () => {
+  const decommissioned = {
+    ...BASE_SYSTEM,
+    decommissioned: true,
+    decommissioned_date: '2020-01-01T00:00:00.000Z',
+  } as unknown as FismaSystemType
+  const { moveOut } = renderWithLiveList(decommissioned, true)
+  mock.onPut(/fismasystems\/42\/reactivate$/).reply(() => {
+    moveOut()
+    return [200, { data: { ...BASE_SYSTEM } }]
+  })
+  const user = userEvent.setup()
+
+  expect(await screen.findByText('Decommissioned')).toBeInTheDocument()
+  await clickEdit(user)
+  await user.click(
+    await screen.findByRole('button', { name: 'Reactivate system' })
+  )
+  await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  expect(await screen.findByText('Active')).toBeInTheDocument()
+  expect(screen.queryByText('Decommissioned')).not.toBeInTheDocument()
 })
 
 // ---------------------------------------------------------------------------

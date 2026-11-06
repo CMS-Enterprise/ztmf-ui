@@ -388,6 +388,14 @@ export default function SystemDetailPage() {
     }
   }
 
+  // Puts a write's returned record into this system's by-id entry. Skipped
+  // when the response carried none (a 204), leaving the invalidation that
+  // follows to do the work.
+  const writeDetail = (updated: FismaSystemType | null | undefined) => {
+    if (!updated) return
+    queryClient.setQueryData(queryKeys.fismaSystems.detail(systemId), updated)
+  }
+
   const handleDecommission = async () => {
     if (!editedSystem) return
     setOpenDecommissionDialog(false)
@@ -415,6 +423,13 @@ export default function SystemDetailPage() {
         })
         // The write moved this system between the active and decommissioned
         // lists, and this page is rendering it, so both reads are stale.
+        // Write the returned record first. Once the list refetch drops the
+        // system, the page falls back to its by-id entry, which still holds
+        // the row seeded from the list before the write. The invalidation
+        // below runs while that query is disabled, so it only marks the
+        // entry stale, and the old status would paint until the read
+        // answered.
+        writeDetail(res.data?.data)
         await queryClient.invalidateQueries({
           queryKey: queryKeys.fismaSystems.lists(),
         })
@@ -463,6 +478,13 @@ export default function SystemDetailPage() {
         })
         // The write moved this system between the active and decommissioned
         // lists, and this page is rendering it, so both reads are stale.
+        // Write the returned record first. Once the list refetch drops the
+        // system, the page falls back to its by-id entry, which still holds
+        // the row seeded from the list before the write. The invalidation
+        // below runs while that query is disabled, so it only marks the
+        // entry stale, and the old status would paint until the read
+        // answered.
+        writeDetail(res.data?.data)
         await queryClient.invalidateQueries({
           queryKey: queryKeys.fismaSystems.lists(),
         })
