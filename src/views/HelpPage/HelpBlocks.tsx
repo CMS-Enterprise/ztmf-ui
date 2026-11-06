@@ -46,6 +46,7 @@ function InlineLink({ link }: { link: HelpInlineLink }) {
         rel="noopener noreferrer"
         aria-label={`${link.label} (opens in a new tab)`}
         sx={{
+          color: colors.primary,
           fontWeight: 600,
           whiteSpace: 'nowrap',
           display: 'inline-flex',

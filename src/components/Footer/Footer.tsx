@@ -2,6 +2,7 @@ import logo from '../../assets/icons/logo.svg'
 import { Link as RouterLink } from 'react-router-dom'
 import { Box, Container, Link, Typography } from '@mui/material'
 import { Routes } from '@/router/constants'
+import { colors } from '@/theme/tokens'
 
 type FooterProps = {
   /** Whether a session is active; the Help link renders only when it is. */
@@ -39,7 +40,13 @@ export default function Footer({ authenticated = false }: FooterProps) {
             </div>
             {authenticated && (
               <Box sx={{ ml: 'auto', mt: 4 }}>
-                <Link component={RouterLink} to={Routes.HELP}>
+                {/* Explicit token color: MUI's default link blue falls short
+                    of 4.5:1 contrast on the footer's gray. */}
+                <Link
+                  component={RouterLink}
+                  to={Routes.HELP}
+                  sx={{ color: colors.primary }}
+                >
                   Help &amp; support
                 </Link>
               </Box>

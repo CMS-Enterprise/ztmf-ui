@@ -249,6 +249,7 @@ export default function HelpPage() {
                       rel="noopener noreferrer"
                       aria-label={`${link.title} (opens in a new tab)`}
                       sx={{
+                        color: colors.primary,
                         fontWeight: 600,
                         fontSize: 14,
                         display: 'inline-flex',
