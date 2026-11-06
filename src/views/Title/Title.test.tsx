@@ -239,12 +239,14 @@ describe('Title logout affordance', () => {
     'ISSM',
     'SYSTEM_DELEGATE',
   ] as UserRole[])(
-    'shows the Help nav link to every role: %s',
+    'shows the Help link beside the account menu for every role: %s',
     async (role) => {
       renderTitleFor(role)
 
       const link = await screen.findByRole('link', { name: 'Help' })
       expect(link).toHaveAttribute('href', expect.stringContaining('/help'))
+      // A utility link, not one of the workflow tabs.
+      expect(link.closest('nav')).toBeNull()
     }
   )
 
