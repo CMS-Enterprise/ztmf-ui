@@ -468,6 +468,23 @@ const SHARED_LINKS: HelpLink[] = [
       'The federal Zero Trust strategy the data call reports against.',
     url: 'https://www.whitehouse.gov/wp-content/uploads/2022/01/M-22-09.pdf',
   },
+  {
+    title: 'NIST SP 800-207',
+    description:
+      'Zero Trust Architecture: the standard the federal strategy builds on.',
+    url: 'https://nvlpubs.nist.gov/nistpubs/SpecialPublications/NIST.SP.800-207.pdf',
+  },
+  {
+    title: 'Executive Order 14028',
+    description:
+      'Improving the Nation’s Cybersecurity: the order that set the federal move to zero trust.',
+    url: 'https://www.cisa.gov/topics/cybersecurity-best-practices/executive-order-improving-nations-cybersecurity',
+  },
+  {
+    title: 'CISA Cloud Security Technical Reference Architecture',
+    description: 'Guidance for applying zero trust in cloud environments.',
+    url: 'https://www.cisa.gov/sites/default/files/publications/Cloud%20Security%20Technical%20Reference%20Architecture.pdf',
+  },
 ]
 
 export const HELP_CONTENT: Record<HelpAudience, HelpContent> = {

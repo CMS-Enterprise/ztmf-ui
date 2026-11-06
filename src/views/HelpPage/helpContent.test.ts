@@ -74,3 +74,12 @@ describe('PUBLIC_SIGNIN_HELP', () => {
     expect(text).not.toMatch(/zerotrust@|ISPGZeroTrust/i)
   })
 })
+
+describe('reference links', () => {
+  it('gives both audiences the same https references', () => {
+    const urls = (a: 'cms' | 'hhs') => HELP_CONTENT[a].links.map((l) => l.url)
+    expect(urls('cms')).toEqual(urls('hhs'))
+    expect(urls('cms').length).toBeGreaterThan(0)
+    for (const url of urls('cms')) expect(url).toMatch(/^https:\/\//)
+  })
+})

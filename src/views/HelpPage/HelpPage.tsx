@@ -252,13 +252,15 @@ export default function HelpPage() {
                         color: colors.primary,
                         fontWeight: 600,
                         fontSize: 14,
-                        display: 'inline-flex',
-                        alignItems: 'center',
-                        gap: 0.5,
                       }}
                     >
                       {link.title}
-                      <OpenInNewIcon sx={{ fontSize: 14 }} aria-hidden />
+                      {/* Inline, not flex, so the icon follows the last word
+                          when a long title wraps. */}
+                      <OpenInNewIcon
+                        sx={{ fontSize: 14, ml: 0.5, verticalAlign: '-2px' }}
+                        aria-hidden
+                      />
                     </Link>
                     <Typography sx={{ fontSize: 13, color: colors.neutral500 }}>
                       {link.description}
