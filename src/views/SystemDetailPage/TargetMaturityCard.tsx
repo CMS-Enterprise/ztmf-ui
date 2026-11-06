@@ -39,11 +39,6 @@ interface TargetMaturityCardProps {
    * write. Gates only the "Edit" button - view mode is universal.
    */
   canEdit: boolean
-  /**
-   * Fired after a successful save so the parent can update its
-   * fismaSystems context with the new target_maturity_* values.
-   */
-  onSaved: (updated: FismaSystemType) => void
 }
 
 /**
@@ -60,7 +55,6 @@ interface TargetMaturityCardProps {
 export default function TargetMaturityCard({
   system,
   canEdit,
-  onSaved,
 }: TargetMaturityCardProps) {
   const [isEditing, setIsEditing] = useState(false)
   const [tier, setTier] = useState(
@@ -137,11 +131,6 @@ export default function TargetMaturityCard({
         notify(ERROR_MESSAGES.error, 'error', { autoHideDuration: 2000 })
         return
       }
-      // The mutation also invalidates this system's detail key, which reaches
-      // nothing while the detail page resolves the system out of the shared
-      // list in Outlet context. Drop this callback when that read becomes a
-      // query.
-      onSaved(saved)
       notify(STATUS_MESSAGES.saved, 'success', { autoHideDuration: 1500 })
       setIsEditing(false)
     } catch (error) {
