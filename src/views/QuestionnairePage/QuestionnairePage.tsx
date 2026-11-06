@@ -1642,6 +1642,12 @@ export default function QuestionnarePage() {
     systemParam && systemInfo
       ? { [systemParam]: systemInfo.fismaacronym }
       : undefined
+  // The system crumb opens that system's detail page, not the bare
+  // questionnaire URL its path segment belongs to.
+  const breadcrumbSegmentLinks =
+    systemParam && systemInfo
+      ? { [systemParam]: `/systems/${systemInfo.fismasystemid}` }
+      : undefined
   if (!system) {
     // Cold load (paste / refresh / bookmark): the systems list may still be in
     // flight, so the id can't be resolved yet - and if it missed the active
@@ -1659,7 +1665,10 @@ export default function QuestionnarePage() {
     ) {
       return (
         <>
-          <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+          <BreadCrumbs
+            segmentLabels={breadcrumbSegmentLabels}
+            segmentLinks={breadcrumbSegmentLinks}
+          />
           <Container maxWidth={false} disableGutters>
             <Box sx={{ display: 'flex', justifyContent: 'center', mt: 4 }}>
               <Spinner size="big" />
@@ -1670,7 +1679,10 @@ export default function QuestionnarePage() {
     }
     return (
       <>
-        <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+        <BreadCrumbs
+          segmentLabels={breadcrumbSegmentLabels}
+          segmentLinks={breadcrumbSegmentLinks}
+        />
         <Container maxWidth={false} disableGutters>
           <Alert severity="warning" sx={{ mt: 2 }}>
             Could not find a system matching “{systemParam}”. It may not exist,
@@ -1714,7 +1726,10 @@ export default function QuestionnarePage() {
             justifyContent: 'space-between',
           }}
         >
-          <BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />
+          <BreadCrumbs
+            segmentLabels={breadcrumbSegmentLabels}
+            segmentLinks={breadcrumbSegmentLinks}
+          />
           {/* Without this the flow System Info -> Questionnaire -> "no
               questionnaire available" is one-way, which the #609 button makes
               reachable for any out-of-scope or decommissioned system (#640
@@ -1888,7 +1903,12 @@ export default function QuestionnarePage() {
   return (
     <Box sx={{ py: 4 }}>
       <PageHeader
-        breadcrumbs={<BreadCrumbs segmentLabels={breadcrumbSegmentLabels} />}
+        breadcrumbs={
+          <BreadCrumbs
+            segmentLabels={breadcrumbSegmentLabels}
+            segmentLinks={breadcrumbSegmentLinks}
+          />
+        }
         title={
           <Box
             component="span"

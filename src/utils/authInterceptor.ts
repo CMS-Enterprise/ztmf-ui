@@ -23,7 +23,8 @@ import { AuthCodes, SignInReasons } from '@/utils/authCodes'
  * - 403 with code=FORBIDDEN_ORIGIN: CSRF guard tripped. Should not fire
  *   in the normal browser flow; log and show a generic toast so the
  *   failure is visible during development.
- * - 403 without a code: controller-level rejection (IsAdmin etc.).
+ * - 403 without a code: controller-level rejection (IsAdmin etc.). The
+ *   snackbar is skipped when the request set skipPermissionNotification.
  *   Existing behavior preserved - surfaces the backend message or the
  *   generic permission message via notify().
  * - skipAuthHandling on the request config bypasses everything.
@@ -125,7 +126,11 @@ export async function handleAuthError(
       notify(ERROR_MESSAGES.permission, 'error')
       throw markAuthHandled(error)
     }
-    notify(backendMessageOrPermission, 'error')
+    // A caller that renders the rejection itself opts out of the snackbar.
+    // The error is still tagged, so isAuthHandled stays true for it.
+    if (!error.config?.skipPermissionNotification) {
+      notify(backendMessageOrPermission, 'error')
+    }
     throw markAuthHandled(error)
   }
   throw error
