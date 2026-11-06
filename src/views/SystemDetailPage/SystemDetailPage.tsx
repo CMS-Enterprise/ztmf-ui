@@ -1,5 +1,6 @@
-import { useState, useEffect, useMemo } from 'react'
+import { useState, useEffect } from 'react'
 import { useParams, Link as RouterLink } from 'react-router-dom'
+import { useResolvedSystem } from '@/hooks/useResolvedSystem'
 import { questionnairePath } from '@/views/QuestionnairePage/deepLink'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
 import _ from 'lodash'
@@ -13,7 +14,6 @@ import {
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import { useQueryClient } from '@tanstack/react-query'
 import { queryKeys } from '@/api/keys'
-import { useFismaSystem } from '@/utils/fismaSystems'
 import { useContextProp } from '@/views/Title/Context'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths } from '@/api/keys'
@@ -27,6 +27,7 @@ import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import SystemLookupFailure from '@/components/SystemLookupFailure/SystemLookupFailure'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import { StatusChip, CodeBadge } from '@/components/ui/StatusChip'
@@ -53,8 +54,6 @@ import { formatDate } from '@/utils/dates'
 export default function SystemDetailPage() {
   const { fismasystemid } = useParams<{ fismasystemid: string }>()
   const {
-    fismaSystems,
-    fismaSystemsLoaded,
     userInfo,
     selectedDatacall,
     latestDataCallId,
@@ -74,38 +73,12 @@ export default function SystemDetailPage() {
   const canEditTarget = isAdmin || isSystemScoped(userInfo)
 
   const queryClient = useQueryClient()
-  const listSystem = useMemo(
-    () => fismaSystems.find((s) => s.fismasystemid === systemId) ?? null,
-    [fismaSystems, systemId]
-  )
 
-  // The shared list is filtered, so a decommissioned system, or one created
-  // since the list loaded, is not in it. Fall back to reading the system on
-  // its own. Writes invalidate this same key, so the page repaints without
-  // pushing a replacement into the shared list.
-  const detailQuery = useFismaSystem(systemId, {
-    enabled: fismaSystemsLoaded && listSystem === null,
-  })
-  const system = listSystem ?? detailQuery.data ?? null
-
-  // Seed the per-system key from the list while the system is still in it. A
-  // save can move the system out of the current view, and then the list comes
-  // back without it and the by-id read starts from nothing, so the page would
-  // blank until that read answers. With the seed the read has the last known
-  // row to serve while it refreshes underneath.
-  useEffect(() => {
-    if (!listSystem) return
-    queryClient.setQueryData(
-      queryKeys.fismaSystems.detail(systemId),
-      listSystem
-    )
-  }, [listSystem, systemId, queryClient])
-
-  // Only a lookup with nothing to show waits. isFetching alone is true for
-  // background refetches too, which would swap a rendered page for a spinner
-  // on every save and every staleness refresh, losing card edit state and
-  // scroll position with it.
-  const retryingFetch = !system && detailQuery.isFetching
+  // Resolves from the shared list, or fetches by id when the system is not in
+  // it (decommissioned, or outside the current view), so the page works on
+  // refresh and for a user with no accessible systems.
+  const resolution = useResolvedSystem(systemId)
+  const system = resolution.system ?? null
 
   const [isEditing, setIsEditing] = useState(false)
   const [editedSystem, setEditedSystem] = useState<FismaSystemType | null>(null)
@@ -562,10 +535,9 @@ export default function SystemDetailPage() {
     )
   }
 
-  // Loading state: the shared list has not settled yet, or the by-id read is
-  // running with nothing to show. An empty list is not a loading state: a
-  // scoped user with no active systems has one for the whole session.
-  if (!fismaSystemsLoaded || retryingFetch) {
+  // Still resolving: the systems list hasn't loaded, or the by-id fetch for a
+  // system missing from it hasn't answered yet.
+  if (resolution.status === 'resolving') {
     return (
       <Box
         sx={{
@@ -580,18 +552,18 @@ export default function SystemDetailPage() {
     )
   }
 
-  // System not found
+  if (resolution.status === 'error') {
+    return (
+      <SystemLookupFailure
+        status="error"
+        systemIdParam={fismasystemid}
+        onRetry={resolution.retry}
+      />
+    )
+  }
   if (!system) {
     return (
-      <Box sx={{ mt: 4 }}>
-        <BreadCrumbs segmentLabels={{ [fismasystemid!]: 'Not Found' }} />
-        <Typography variant="h5" color="error" sx={{ mt: 2 }}>
-          System not found
-        </Typography>
-        <Typography color="text.secondary" sx={{ mt: 1 }}>
-          No system with ID &ldquo;{fismasystemid}&rdquo; was found.
-        </Typography>
-      </Box>
+      <SystemLookupFailure status="not-found" systemIdParam={fismasystemid} />
     )
   }
 

@@ -4,11 +4,12 @@ import { Box, Button, CircularProgress } from '@mui/material'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
+import SystemLookupFailure from '@/components/SystemLookupFailure/SystemLookupFailure'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
 import PillarScoresContent from './PillarScoresContent'
 import axiosInstance from '@/axiosConfig'
-import { useFismaSystem } from '@/utils/fismaSystems'
 import { useContextProp } from '../Title/Context'
+import { useResolvedSystem } from '@/hooks/useResolvedSystem'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
 import {
@@ -28,32 +29,30 @@ import type { ScoreAggregate } from '@/types'
  */
 export default function PillarScoresPage() {
   const { fismasystemid } = useParams()
-  const {
-    fismaSystems,
-    fismaSystemsLoaded,
-    selectedDatacall,
-    latestDataCallId,
-    datacalls,
-    userInfo,
-  } = useContextProp()
+  const { selectedDatacall, latestDataCallId, datacalls, userInfo } =
+    useContextProp()
   const activeDataCallId = selectedDatacall?.datacallid ?? latestDataCallId
   const systemId = Number(fismasystemid)
-  const listSystem = fismaSystems.find((s) => s.fismasystemid === systemId)
+  // BreadCrumbs matches the raw URL segment, so the override has to be keyed
+  // on it rather than on the parsed number: /systems/05 renders system 5 but
+  // its segment reads "05".
+  const systemIdParam = fismasystemid ?? ''
+  // Resolves from the shared list, or fetches by id when the system is not in
+  // it (decommissioned, or a deep link), so a missing system reaches a
+  // not-found state instead of a placeholder or an endless spinner.
+  const resolution = useResolvedSystem(systemId)
+  const system = resolution.system
 
   const [scores, setScores] = useState<ScoreAggregate[]>([])
   const [loading, setLoading] = useState<boolean>(true)
   const [compareOpen, setCompareOpen] = useState<boolean>(false)
 
-  // A system reached by URL may be absent from the active-only context list
-  // (decommissioned, or a deep link). Read it by id as SystemDetailPage does,
-  // so nothing downstream renders the "System" placeholder.
-  const detailQuery = useFismaSystem(systemId, {
-    enabled: fismaSystemsLoaded && listSystem === undefined,
-  })
-  const system = listSystem ?? detailQuery.data
-
+  // Gated on the resolution, not just the id: a system outside the caller's
+  // scope answers 403 here too, and the snackbar that raises would contradict
+  // the not-found page underneath it.
+  const resolved = resolution.status === 'found'
   useEffect(() => {
-    if (!systemId) return
+    if (!systemId || !resolved) return
     const controller = new AbortController()
     async function fetchScores() {
       try {
@@ -74,9 +73,9 @@ export default function PillarScoresPage() {
     return () => {
       controller.abort()
     }
-  }, [systemId])
+  }, [systemId, resolved])
 
-  const systemName = system?.fismaname ?? 'System'
+  const systemName = system?.fismaname ?? ''
   const systemAcronym = system?.fismaacronym ?? ''
   // Subtitle stays system-name-only because the datacall card above carries
   // the current-datacall context. currentDatacallName is still threaded down
@@ -107,14 +106,28 @@ export default function PillarScoresPage() {
   )?.datacall
   const subtitle = systemName
 
-  // Wait for the lookup to settle so the header never flashes the placeholder.
-  const resolvingSystem =
-    !system && (!fismaSystemsLoaded || detailQuery.isFetching)
-  if (resolvingSystem) {
+  // Wait for the lookup to settle so the header never renders without a name.
+  if (resolution.status === 'resolving') {
     return (
       <Box sx={{ display: 'flex', justifyContent: 'center', py: 8 }}>
         <CircularProgress />
       </Box>
+    )
+  }
+
+  // Same not-found and error states as the System Detail page.
+  if (resolution.status === 'not-found') {
+    return (
+      <SystemLookupFailure status="not-found" systemIdParam={fismasystemid} />
+    )
+  }
+  if (resolution.status === 'error') {
+    return (
+      <SystemLookupFailure
+        status="error"
+        systemIdParam={fismasystemid}
+        onRetry={resolution.retry}
+      />
     )
   }
 
@@ -123,7 +136,12 @@ export default function PillarScoresPage() {
       <PageHeader
         title="Pillar scores"
         subtitle={subtitle}
-        breadcrumbs={<BreadCrumbs segmentLabels={{ [systemId]: systemName }} />}
+        breadcrumbs={
+          <BreadCrumbs
+            segmentLabels={{ [systemIdParam]: systemName }}
+            segmentLinks={{ [systemIdParam]: `/systems/${systemId}` }}
+          />
+        }
         actions={
           <>
             {hasSystemAccess(userInfo) && system && (

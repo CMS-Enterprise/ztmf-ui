@@ -76,7 +76,10 @@ function setRootLoaderStatus(status: number | undefined): void {
 function makeError(
   status: number | undefined,
   data?: unknown,
-  config: { skipAuthHandling?: boolean } = {}
+  config: {
+    skipAuthHandling?: boolean
+    skipPermissionNotification?: boolean
+  } = {}
 ): AxiosError<{ error?: string; code?: string }> {
   return {
     config,
@@ -202,6 +205,45 @@ test('skipAuthHandling on the request config bypasses every branch', async () =>
   await expect(handleAuthError(error)).rejects.toBe(error)
   expect(mockedNavigate).not.toHaveBeenCalled()
   expect(mockedNotify).not.toHaveBeenCalled()
+})
+
+test('skipPermissionNotification drops the 403 snackbar but keeps the tag', async () => {
+  // For a caller that renders the rejection itself. Unlike skipAuthHandling
+  // this is the only thing it turns off, and the error stays tagged so the
+  // caller's isAuthHandled check still recognizes it (that check reads the
+  // __authHandled marker this suite's notify mock stands in for).
+  const error = makeError(403, undefined, { skipPermissionNotification: true })
+
+  await expect(handleAuthError(error)).rejects.toBe(error)
+  expect(mockedNotify).not.toHaveBeenCalled()
+  expect(mockedNavigate).not.toHaveBeenCalled()
+  expect(error).toHaveProperty('__authHandled', true)
+})
+
+test('skipPermissionNotification does not suppress the 401 redirect', async () => {
+  // The whole point of the narrower flag: a caller opting out of the
+  // permission toast must not also lose the sign-in redirect.
+  const error = makeError(401, undefined, { skipPermissionNotification: true })
+
+  await expect(handleAuthError(error)).rejects.toBe(error)
+  expect(mockedNavigate).toHaveBeenCalledWith(
+    Routes.SIGNIN,
+    expect.objectContaining({ replace: true })
+  )
+})
+
+test('skipPermissionNotification does not suppress the not-provisioned redirect', async () => {
+  const error = makeError(
+    403,
+    { code: AuthCodes.ACCOUNT_NOT_PROVISIONED, error: 'no account' },
+    { skipPermissionNotification: true }
+  )
+
+  await expect(handleAuthError(error)).rejects.toBe(error)
+  expect(mockedNavigate).toHaveBeenCalledWith(
+    Routes.SIGNIN,
+    expect.objectContaining({ replace: true })
+  )
 })
 
 test('non-auth statuses pass through untouched', async () => {

@@ -80,6 +80,10 @@ export function useFismaSystems(
   }
 }
 
+// The API answers 403 for a system outside the caller's scope and 404 for one
+// that does not exist. Both read as "none" so a page never reveals which.
+const MISSING_STATUSES = new Set([403, 404])
+
 /**
  * Reads one FISMA system.
  *
@@ -87,19 +91,32 @@ export function useFismaSystems(
  * resolves undefined is rejected by TanStack Query, which would turn a
  * served "no such system" into a failed query and a retry.
  *
+ * A 403 and a 404 both resolve to null, and the request opts out of the
+ * interceptor's 403 snackbar. Otherwise the toast would reveal what the
+ * caller is careful not to: an id that exists raises it and a missing one
+ * does not. Every other failure still throws.
+ *
  * @param systemId - The fismasystemid to read.
  * @param signal - Optional AbortSignal to cancel the request.
- * @returns The system, or null when the server has none.
+ * @returns The system, or null when the server has none or the caller
+ *   cannot see it.
  */
 export async function fetchFismaSystem(
   systemId: number,
   signal?: AbortSignal
 ): Promise<FismaSystemType | null> {
-  const res = await axiosInstance.get<{ data: FismaSystemType | null }>(
-    apiPaths.fismaSystems.detail(systemId),
-    { signal }
-  )
-  return res.data?.data ?? null
+  try {
+    const res = await axiosInstance.get<{ data: FismaSystemType | null }>(
+      apiPaths.fismaSystems.detail(systemId),
+      { signal, skipPermissionNotification: true }
+    )
+    return res.data?.data ?? null
+  } catch (error) {
+    const status = (error as { response?: { status?: number } })?.response
+      ?.status
+    if (status !== undefined && MISSING_STATUSES.has(status)) return null
+    throw error
+  }
 }
 
 /**

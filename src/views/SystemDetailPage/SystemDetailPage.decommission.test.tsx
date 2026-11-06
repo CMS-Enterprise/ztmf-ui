@@ -76,12 +76,11 @@ beforeEach(() => {
   mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
-function renderPage(
-  system: FismaSystemType,
-  role: UserRole = 'OWNER',
+function setPageContext(
+  role: UserRole,
   // The list the page sees, which is not always the system it is showing: a
   // decommissioned system is absent from the active list.
-  systems: FismaSystemType[] = [system]
+  systems: FismaSystemType[]
 ) {
   mockCtx = {
     fismaSystems: systems,
@@ -110,6 +109,14 @@ function renderPage(
     selectedDatacall: null,
     latestDataCallId: 0,
   }
+}
+
+function renderPage(
+  system: FismaSystemType,
+  role: UserRole = 'OWNER',
+  systems: FismaSystemType[] = [system]
+) {
+  setPageContext(role, systems)
   return renderWithProviders(
     <Routes>
       <Route path="/systems/:fismasystemid" element={<SystemDetailPage />} />
@@ -523,4 +530,38 @@ test('toggling data-lake sync in edit mode updates the draft', async () => {
   await user.click(toggle)
   // BASE_SYSTEM starts with sync off, so the click flips the draft on.
   expect(toggle).toBeChecked()
+})
+
+test('shows not-found instead of spinning for a user with no accessible systems', async () => {
+  // A loaded, empty list: the page used to wait for a non-empty list before
+  // looking the system up, so it spun forever.
+  mock.onGet(/fismasystems\/42$/).reply(404, { error: 'not found' })
+  mockCtx = {
+    fismaSystems: [],
+    fismaSystemsLoaded: true,
+    userInfo: {
+      userid: '1',
+      email: 'grand.moff@deathstar.empire',
+      fullname: 'Grand Moff Tarkin',
+      role: 'OWNER',
+    } as userData,
+    datacenterEnvironments: [],
+    opdivs: [],
+    showDecommissioned: false,
+    datacalls: [],
+    selectedDatacall: null,
+    latestDataCallId: 0,
+  }
+  renderWithProviders(
+    <Routes>
+      <Route path="/systems/:fismasystemid" element={<SystemDetailPage />} />
+    </Routes>,
+    { initialEntries: ['/systems/42'] }
+  )
+
+  expect(await screen.findByText('System not found')).toBeInTheDocument()
+  // The empty list may just mean no access, so the copy must not claim the
+  // system does not exist; the crumb follows sentence case.
+  expect(screen.getByText(/you may not have access to it/)).toBeInTheDocument()
+  expect(screen.getByText('Not found')).toBeInTheDocument()
 })
