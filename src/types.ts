@@ -20,6 +20,8 @@ export type AppEnvironment = {
   DEV_BANNER_MESSAGE: string
   DEV_FEEDBACK_URL: string
   DEV_CONTACT_EMAIL: string
+  // Help page contact address; blank hides the email button.
+  HELP_EMAIL: string
 }
 
 export type FormField = {

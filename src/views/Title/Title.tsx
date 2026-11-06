@@ -15,6 +15,7 @@ import { Box, Tooltip } from '@mui/material'
 import Menu from '@mui/material/Menu'
 import MenuItem from '@mui/material/MenuItem'
 import MoreHorizIcon from '@mui/icons-material/MoreHoriz'
+import HelpOutlineIcon from '@mui/icons-material/HelpOutline'
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react'
 import { groupDatacallsByYear } from '@/utils/datacallGrouping'
 import { FismaSystemType } from '@/types'
@@ -405,6 +406,7 @@ export default function Title() {
       show: hasUnscopedRead(userInfo),
     },
   ].filter((item) => item.show)
+  const isHelpRoute = location.pathname.startsWith(Routes.HELP)
   // Every logged-in user gets the account menu (the logout affordance must
   // always be reachable); the admin-only action items inside are gated
   // individually, so a non-admin sees just Log out.
@@ -549,9 +551,40 @@ export default function Title() {
             </Box>
           </Box>
 
-          {/* right: account avatar. For admins it opens the actions menu. */}
+          {/* right: Help (a utility, kept apart from the workflow tabs) and
+              the account avatar. For admins the avatar opens the actions
+              menu. */}
           {loaderData.status == 200 && (
-            <Box sx={{ display: 'flex', alignItems: 'center' }}>
+            <Box sx={{ display: 'flex', alignItems: 'center', gap: 2 }}>
+              <Box
+                component={Link}
+                to={Routes.HELP}
+                aria-current={isHelpRoute ? 'page' : undefined}
+                sx={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: 0.5,
+                  px: 1,
+                  py: 0.5,
+                  borderRadius: 999,
+                  fontFamily: fonts.base,
+                  fontSize: 14,
+                  fontWeight: isHelpRoute ? 600 : 500,
+                  textDecoration: 'none',
+                  color: isHelpRoute ? colors.ink : colors.neutral500,
+                  backgroundColor: isHelpRoute
+                    ? colors.primary50
+                    : 'transparent',
+                  '&:hover': { color: colors.ink },
+                  '&:focus-visible': {
+                    outline: `2px solid ${colors.primary}`,
+                    outlineOffset: 2,
+                  },
+                }}
+              >
+                <HelpOutlineIcon sx={{ fontSize: 18 }} aria-hidden />
+                Help
+              </Box>
               <Tooltip
                 title={
                   userInfo.fullname
