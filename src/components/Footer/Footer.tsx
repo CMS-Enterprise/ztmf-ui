@@ -1,6 +1,14 @@
 import logo from '../../assets/icons/logo.svg'
-import { Box, Container, Typography } from '@mui/material'
-export default function Footer() {
+import { Link as RouterLink } from 'react-router-dom'
+import { Box, Container, Link, Typography } from '@mui/material'
+import { Routes } from '@/router/constants'
+
+type FooterProps = {
+  /** Whether a session is active; the Help link renders only when it is. */
+  authenticated?: boolean
+}
+
+export default function Footer({ authenticated = false }: FooterProps) {
   return (
     <Box
       sx={{
@@ -29,6 +37,13 @@ export default function Footer() {
                 Centers for Medicare &amp; Medicaid Services
               </Typography>
             </div>
+            {authenticated && (
+              <Box sx={{ ml: 'auto', mt: 4 }}>
+                <Link component={RouterLink} to={Routes.HELP}>
+                  Help &amp; support
+                </Link>
+              </Box>
+            )}
           </div>
         </Container>
       </Box>

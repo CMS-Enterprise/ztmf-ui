@@ -404,6 +404,12 @@ export default function Title() {
       // OpDiv-scoped admin, so scoped tiers do not get the tab.
       show: hasUnscopedRead(userInfo),
     },
+    {
+      label: 'Help',
+      to: Routes.HELP,
+      active: location.pathname.startsWith(Routes.HELP),
+      show: true,
+    },
   ].filter((item) => item.show)
   // Every logged-in user gets the account menu (the logout affordance must
   // always be reachable); the admin-only action items inside are gated
@@ -761,7 +767,7 @@ export default function Title() {
         onCreated={() => fetchDatacalls(undefined, false)}
         datacalls={datacalls}
       />
-      <Footer />
+      <Footer authenticated={authenticated} />
     </>
   )
 }

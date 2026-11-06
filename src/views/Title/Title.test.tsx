@@ -235,6 +235,25 @@ describe('Title logout affordance', () => {
     'HHS_READONLY_ADMIN',
     'OPDIV_ADMIN',
     'OPDIV_READONLY_ADMIN',
+    'ISSO',
+    'ISSM',
+    'SYSTEM_DELEGATE',
+  ] as UserRole[])(
+    'shows the Help nav link to every role: %s',
+    async (role) => {
+      renderTitleFor(role)
+
+      const link = await screen.findByRole('link', { name: 'Help' })
+      expect(link).toHaveAttribute('href', expect.stringContaining('/help'))
+    }
+  )
+
+  it.each([
+    'OWNER',
+    'HHS_ADMIN',
+    'HHS_READONLY_ADMIN',
+    'OPDIV_ADMIN',
+    'OPDIV_READONLY_ADMIN',
   ] as UserRole[])(
     'shows the OpDivs nav link for the admin tier %s',
     async (role) => {

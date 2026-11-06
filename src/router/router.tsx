@@ -18,6 +18,7 @@ import OpDivAdmin from '@/views/OpDivAdmin/OpDivAdmin'
 import OpDivDashboard from '@/views/OpDivDashboard/OpDivDashboard'
 import OpDivIndexRedirect from '@/views/OpDivDashboard/OpDivIndexRedirect'
 import EventsTable from '@/views/EventsTable/EventsTable'
+import HelpPage from '@/views/HelpPage/HelpPage'
 /**
  * The hash router for the application that defines routes
  *  and specifies the loaders for routes with dynamic data.
@@ -103,6 +104,12 @@ const router = createHashRouter([
         path: Routes.ADMIN_EVENTS,
         id: RouteIds.ADMIN_EVENTS,
         element: <EventsTable />,
+        errorElement: <ErrorBoundary />,
+      },
+      {
+        path: Routes.HELP,
+        id: RouteIds.HELP,
+        element: <HelpPage />,
         errorElement: <ErrorBoundary />,
       },
       {

@@ -5,12 +5,14 @@ import { colors } from '@/theme/tokens'
 import CONFIG from '@/utils/config'
 import { RouteIds, Routes } from '@/router/constants'
 import { lookupIdpForEmail } from '@/utils/authLookup'
-import { SignInReasons, type SignInReason } from '@/utils/authCodes'
+import {
+  SignInReasons,
+  UNKNOWN_EMAIL_MESSAGE,
+  type SignInReason,
+} from '@/utils/authCodes'
 import type { AuthLoaderData } from '@/router/authLoader'
 import ztmfLogo from '@/assets/ztmf-logo-login.png'
-
-const UNKNOWN_EMAIL_MESSAGE =
-  "We can't determine an identity provider for that email. Contact your ZTMF administrator."
+import SignInHelp from './SignInHelp'
 
 // Shown only when the lookup fails at the transport/server level (timeout,
 // network, 4xx/5xx, malformed response) - never for a genuine "no IdP"
@@ -344,6 +346,7 @@ function LoginShell({ children }: { children: React.ReactNode }) {
             style={{ width: 240, maxWidth: '100%', height: 'auto' }}
           />
           {children}
+          <SignInHelp />
         </Box>
       </Box>
     </Box>
