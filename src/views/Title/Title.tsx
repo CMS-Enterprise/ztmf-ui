@@ -794,7 +794,7 @@ export default function Title() {
         onCreated={() => fetchDatacalls(undefined, false)}
         datacalls={datacalls}
       />
-      <Footer authenticated={authenticated} />
+      <Footer />
     </>
   )
 }

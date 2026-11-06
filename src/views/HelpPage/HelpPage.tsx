@@ -26,7 +26,7 @@ import { Block, HelpAccordion } from './HelpBlocks'
 import { helpHeadingSx } from './helpStyles'
 
 /**
- * Signed-in Help page, reached from the header nav and the footer.
+ * Signed-in Help page, reached from the Help link beside the account menu.
  * @returns {JSX.Element} The page.
  */
 export default function HelpPage() {
