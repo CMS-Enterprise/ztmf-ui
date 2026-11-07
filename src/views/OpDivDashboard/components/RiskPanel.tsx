@@ -48,6 +48,12 @@ export type RiskPanelProps = {
  * @returns {JSX.Element} The row.
  */
 function RiskListRow({ row }: { row: RiskRow }) {
+  // Not Assessed still carries the API's 1.25 floor score; hide it the way
+  // ScoreCell and ScoreDisplay do so the row never reads as a measured 1.25.
+  const scoreText =
+    row.tier === 'Not Assessed' || row.score === undefined
+      ? '-'
+      : row.score.toFixed(2)
   return (
     <Box
       component="li"
@@ -128,7 +134,7 @@ function RiskListRow({ row }: { row: RiskRow }) {
             textAlign: 'right',
           }}
         >
-          {row.score !== undefined ? row.score.toFixed(2) : '—'}
+          {scoreText}
         </Typography>
       </Box>
     </Box>
@@ -162,7 +168,12 @@ export default function RiskPanel({ risk, gap, id }: RiskPanelProps) {
             fontSize: 34,
             fontWeight: 800,
             lineHeight: 1,
-            color: risk.belowFloor.length > 0 ? colors.down : colors.up,
+            color:
+              risk.belowFloor.length > 0
+                ? colors.down
+                : risk.highImpact > 0
+                  ? colors.up
+                  : colors.neutral500,
           }}
         >
           {risk.highImpact > 0 ? risk.belowFloor.length : '—'}

@@ -51,7 +51,7 @@ export function StagePanel({
     <ChartCard
       eyebrow="Maturity stage"
       subtitle="Share of systems by tier"
-      info="Where each system sits on the 1.0-5.0 maturity scale: Optimal from 4.10, Advanced from 3.10, Initial from 2.10, Traditional from 1.01. Not Assessed means the system is in the call but unanswered; No score means it has no score row at all."
+      info="Where each system sits on the HHS maturity scale: Optimal from 4.10, Advanced from 3.10, Initial from 2.10, Traditional from 1.01. Not Assessed means the system is in the call but unanswered; No score means it has no score row at all."
     >
       <StagePie stage={stage} movement={movement} priorLabel={priorLabel} />
     </ChartCard>
@@ -365,7 +365,7 @@ export function OpDivScorePanel({ rows }: { rows: OpDivAverage[] }) {
   return (
     <ChartCard
       eyebrow="Score by OpDiv"
-      info="Each OpDiv averaged over its own scored systems. Bars are measured against the 1.0-5.0 scale rather than against each other, so a leading OpDiv does not fill the bar unless it is genuinely near Optimal."
+      info="Each OpDiv averaged over its own scored systems. Bars are measured against the HHS maturity scale rather than against each other, so a leading OpDiv does not fill the bar unless it is genuinely near Optimal."
       subtitle={
         unscored > 0
           ? `${scored.length} scored · ${unscored} with no scored systems`
