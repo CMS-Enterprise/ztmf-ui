@@ -110,7 +110,6 @@ jest.mock('../Title/Context', () => ({
       fullname: 'Me',
     },
     fismaSystems: [],
-    setFismaSystems: jest.fn(),
     opdivs: [
       { opdiv_id: 1, code: 'CDC', name: 'CDC', is_parent: false, active: true },
       { opdiv_id: 2, code: 'NIH', name: 'NIH', is_parent: false, active: true },
@@ -123,7 +122,6 @@ jest.mock('../Title/Context', () => ({
     setSelectedDatacall: jest.fn(),
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
-    fetchFismaSystems: jest.fn(),
     dashboardSearch: '',
     setDashboardSearch: jest.fn(),
   }),
