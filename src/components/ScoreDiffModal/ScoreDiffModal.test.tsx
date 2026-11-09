@@ -1,4 +1,5 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { screen, waitFor, fireEvent } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import ScoreDiffModal from './ScoreDiffModal'
 import axiosInstance from '@/axiosConfig'
 import type { ScoreDiffEntry, datacall } from '@/types'
@@ -135,13 +136,13 @@ function setupMocks(diffEntries: ScoreDiffEntry[] = [DIFF_ENTRY]) {
 describe('ScoreDiffModal', () => {
   it('does not render when open is false', () => {
     setupMocks()
-    render(<ScoreDiffModal {...DEFAULT_PROPS} open={false} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} open={false} />)
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument()
   })
 
   it('shows system name and acronym in the title', () => {
     setupMocks()
-    render(
+    renderWithQueryClient(
       <ScoreDiffModal
         {...DEFAULT_PROPS}
         systemName="My System"
@@ -158,20 +159,22 @@ describe('ScoreDiffModal', () => {
 
   it('uses the extra-wide dialog size for the comparison table', () => {
     setupMocks()
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
 
     expect(screen.getByRole('dialog')).toHaveStyle({ width: '1200px' })
   })
 
   it('shows a spinner while datacalls are loading', () => {
     mockGet.mockReturnValue(new Promise(() => {}))
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     expect(screen.getByLabelText('Loading datacalls')).toBeInTheDocument()
   })
 
   it('sets To to selectedDataCallId and From to the prior datacall', async () => {
     setupMocks()
-    render(<ScoreDiffModal {...DEFAULT_PROPS} selectedDataCallId={5} />)
+    renderWithQueryClient(
+      <ScoreDiffModal {...DEFAULT_PROPS} selectedDataCallId={5} />
+    )
     expect(await screen.findByLabelText('To datacall')).toHaveValue('FY2025')
     expect(screen.getByLabelText('From datacall')).toHaveValue('FY2024')
   })
@@ -215,7 +218,9 @@ describe('ScoreDiffModal', () => {
         return Promise.resolve({ data: { data: [] } })
       return Promise.reject(new Error(`Unexpected URL: ${url}`))
     })
-    render(<ScoreDiffModal {...DEFAULT_PROPS} selectedDataCallId={undefined} />)
+    renderWithQueryClient(
+      <ScoreDiffModal {...DEFAULT_PROPS} selectedDataCallId={undefined} />
+    )
     // To defaults to the max-deadline call (FY2025 Q3), not the higher-id FY23 ZTM.
     expect(await screen.findByLabelText('To datacall')).toHaveValue('FY2025 Q3')
     // From is the next-older call by deadline (FY23 ZTM), not by id.
@@ -224,7 +229,7 @@ describe('ScoreDiffModal', () => {
 
   it('fetches the diff with the correct query params', async () => {
     setupMocks()
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     await waitFor(() =>
       expect(mockGet).toHaveBeenCalledWith(
         '/scores/diff?from=4&to=5&fismasystemid=1001',
@@ -235,7 +240,7 @@ describe('ScoreDiffModal', () => {
 
   it('shows empty-state message when diff returns no entries', async () => {
     setupMocks([])
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     expect(
       await screen.findByText('No changes between these two datacalls.')
     ).toBeInTheDocument()
@@ -247,7 +252,7 @@ describe('ScoreDiffModal', () => {
         return Promise.resolve({ data: { data: DATACALLS } })
       return Promise.reject(new Error('Network error'))
     })
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     expect(
       await screen.findByText('Failed to load diff. Please try again.')
     ).toBeInTheDocument()
@@ -255,7 +260,7 @@ describe('ScoreDiffModal', () => {
 
   it('renders function, question, both answer sides, and attribution', async () => {
     setupMocks()
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     await screen.findByText('Authentication-Users')
     expect(screen.getByText('Does your org use MFA?')).toBeInTheDocument()
     expect(screen.getByText('Traditional')).toBeInTheDocument()
@@ -268,20 +273,20 @@ describe('ScoreDiffModal', () => {
 
   it('shows notes when present and hides them when null', async () => {
     setupMocks()
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     // to.notes = 'Improved this cycle', from.notes = null → only one notes line
     expect(await screen.findByText('Improved this cycle')).toBeInTheDocument()
   })
 
   it('renders "No answer" for a null side', async () => {
     setupMocks([{ ...DIFF_ENTRY, from: null }])
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     expect(await screen.findAllByText('No answer')).toHaveLength(1)
   })
 
   it('groups rows by their own pillar in the order the API serves them', async () => {
     setupMocks([DIFF_ENTRY, DEVICES_ENTRY])
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     const identityEl = await screen.findByText('Identity')
     const devicesEl = screen.getByText('Devices')
     expect(
@@ -296,14 +301,16 @@ describe('ScoreDiffModal', () => {
 
   it('puts a row without a pillar under Other', async () => {
     setupMocks([{ ...DIFF_ENTRY, pillarid: null, pillar: null }])
-    render(<ScoreDiffModal {...DEFAULT_PROPS} />)
+    renderWithQueryClient(<ScoreDiffModal {...DEFAULT_PROPS} />)
     expect(await screen.findByText('Other')).toBeInTheDocument()
   })
 
   it('calls onClose when either close control is clicked', () => {
     setupMocks()
     const onClose = jest.fn()
-    render(<ScoreDiffModal {...DEFAULT_PROPS} onClose={onClose} />)
+    renderWithQueryClient(
+      <ScoreDiffModal {...DEFAULT_PROPS} onClose={onClose} />
+    )
     // ds/Modal renders two close affordances both named "Close":
     // the X icon button in the header and the footer button.
     const closeButtons = screen.getAllByRole('button', { name: 'Close' })
@@ -314,27 +321,50 @@ describe('ScoreDiffModal', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
-  it('re-fetches the diff when the modal is reopened', async () => {
+  // Reopening used to refetch because a counter forced the effect to re-run.
+  // A diff only changes when an answer does, and an answer write invalidates
+  // the whole scores prefix, so the cached rows are correct until then.
+  it('serves the cached diff when the modal is reopened', async () => {
     setupMocks()
-    const { rerender } = render(<ScoreDiffModal {...DEFAULT_PROPS} />)
-    await waitFor(() =>
-      expect(mockGet).toHaveBeenCalledWith(
-        expect.stringContaining('/scores/diff'),
-        expect.objectContaining({ signal: expect.anything() })
-      )
+    const { rerender } = renderWithQueryClient(
+      <ScoreDiffModal {...DEFAULT_PROPS} />
     )
-    const firstCount = mockGet.mock.calls.filter(([u]: [string]) =>
-      u.includes('/scores/diff')
-    ).length
+    const diffCalls = () =>
+      mockGet.mock.calls.filter(([u]: [string]) => u.includes('/scores/diff'))
+        .length
+    await waitFor(() => expect(diffCalls()).toBe(1))
 
     rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={false} />)
     rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={true} />)
 
-    await waitFor(() => {
-      const newCount = mockGet.mock.calls.filter(([u]: [string]) =>
-        u.includes('/scores/diff')
-      ).length
-      expect(newCount).toBeGreaterThan(firstCount)
+    await screen.findByText('Does your org use MFA?')
+    expect(diffCalls()).toBe(1)
+  })
+
+  // The modal offers no retry control, so if a failed diff survived a reopen
+  // a transient network blip would stick until the pickers changed.
+  it('retries a failed diff when the modal is reopened', async () => {
+    let fail = true
+    mockGet.mockImplementation((url: string) => {
+      if (url === '/datacalls')
+        return Promise.resolve({ data: { data: DATACALLS } })
+      if (url.includes('/scores/diff'))
+        return fail
+          ? Promise.reject(new Error('Network error'))
+          : Promise.resolve({ data: { data: [DIFF_ENTRY] } })
+      return Promise.reject(new Error(`Unexpected URL: ${url}`))
     })
+    const { rerender } = renderWithQueryClient(
+      <ScoreDiffModal {...DEFAULT_PROPS} />
+    )
+    await screen.findByText('Failed to load diff. Please try again.')
+
+    fail = false
+    rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={false} />)
+    rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={true} />)
+
+    expect(
+      await screen.findByText('Does your org use MFA?')
+    ).toBeInTheDocument()
   })
 })

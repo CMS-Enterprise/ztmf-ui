@@ -20,6 +20,8 @@ import {
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import Modal from '@/components/ui/Modal'
 import axiosInstance from '@/axiosConfig'
+import { useScoreDiff } from '@/utils/scores'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import { apiPaths } from '@/api/keys'
 import { isAuthHandled } from '@/utils/notify'
 import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
@@ -54,10 +56,16 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   const [datacalls, setDatacalls] = useState<datacall[]>([])
   const [fromDatacall, setFromDatacall] = useState<datacall | null>(null)
   const [toDatacall, setToDatacall] = useState<datacall | null>(null)
-  const [diffResults, setDiffResults] = useState<ScoreDiffEntry[]>([])
-  const [diffKey, setDiffKey] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const diffQuery = useScoreDiff(
+    fromDatacall?.datacallid,
+    toDatacall?.datacallid,
+    fismasystemid
+  )
+  const diffResults = diffQuery.data ?? EMPTY_LIST
+  const loading = diffQuery.isPending && diffQuery.isFetching
+  const error = diffQuery.isError
+    ? 'Failed to load diff. Please try again.'
+    : null
   const initialFocusRef = useRef<HTMLButtonElement>(null)
 
   // Focus close button on open for accessibility
@@ -70,16 +78,15 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     }
   }, [open])
 
-  // Reset transient state on close; bump diffKey on open so the diff
-  // re-fetches even when picker references haven't changed (cached datacalls).
+  // Reopening serves the cached diff, but a failed one is not worth keeping:
+  // the modal has no other retry, so without this a transient failure sticks
+  // until the pickers change or the page reloads.
+  const wasOpen = useRef(open)
   useEffect(() => {
-    if (open) {
-      setDiffKey((k) => k + 1)
-    } else {
-      setDiffResults([])
-      setError(null)
-    }
-  }, [open])
+    const reopened = open && !wasOpen.current
+    wasOpen.current = open
+    if (reopened && diffQuery.isError) void diffQuery.refetch()
+  }, [open, diffQuery])
 
   // Fetch datacalls with cache; set defaults on first open
   useEffect(() => {
@@ -157,45 +164,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   }, [diffResults])
 
   // Fetch diff whenever both pickers are set and different.
-  // AbortController cancels any in-flight request when pickers change or the
-  // modal closes, preventing a stale response from overwriting a newer one.
-  useEffect(() => {
-    if (!fromDatacall || !toDatacall) return
-    if (fromDatacall.datacallid === toDatacall.datacallid) return
-
-    const controller = new AbortController()
-
-    setLoading(true)
-    setError(null)
-    setDiffResults([])
-
-    axiosInstance
-      .get(
-        apiPaths.scores.diff(
-          fromDatacall.datacallid,
-          toDatacall.datacallid,
-          fismasystemid
-        ),
-        { signal: controller.signal }
-      )
-      .then((res) => {
-        setDiffResults(res.data.data ?? [])
-      })
-      .catch((err) => {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(err)) {
-          setError('Failed to load diff. Please try again.')
-          return
-        }
-        setError('Failed to load diff. Please try again.')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-
-    return () => controller.abort()
-  }, [fromDatacall, toDatacall, fismasystemid, diffKey])
-
   const renderOption = (
     props: React.HTMLAttributes<HTMLLIElement> & { key?: React.Key },
     option: datacall,
