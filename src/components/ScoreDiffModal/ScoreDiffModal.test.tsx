@@ -1,4 +1,8 @@
 import { screen, waitFor, fireEvent } from '@testing-library/react'
+import { render } from '@testing-library/react'
+import { QueryClientProvider } from '@tanstack/react-query'
+import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
+import { useDatacalls } from '@/utils/datacalls'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import ScoreDiffModal from './ScoreDiffModal'
 import axiosInstance from '@/axiosConfig'
@@ -15,14 +19,8 @@ jest.mock('@/utils/notify', () => ({
 
 const mockGet = axiosInstance.get as jest.Mock
 
-// Bump past the 10-min cache TTL before each test so module-level caches
-// never serve stale data from a prior test.
-const CACHE_DURATION = 10 * 60 * 1000
-let nowValue = 0
-beforeEach(() => {
-  nowValue += CACHE_DURATION + 1
-  jest.spyOn(Date, 'now').mockReturnValue(nowValue)
-})
+// Each render gets its own QueryClient, so nothing carries between tests and
+// the clock no longer needs winding past a module-level TTL.
 
 // ---------------------------------------------------------------------------
 // Fixtures
@@ -321,26 +319,6 @@ describe('ScoreDiffModal', () => {
     expect(onClose).toHaveBeenCalledTimes(2)
   })
 
-  // Reopening used to refetch because a counter forced the effect to re-run.
-  // A diff only changes when an answer does, and an answer write invalidates
-  // the whole scores prefix, so the cached rows are correct until then.
-  it('serves the cached diff when the modal is reopened', async () => {
-    setupMocks()
-    const { rerender } = renderWithQueryClient(
-      <ScoreDiffModal {...DEFAULT_PROPS} />
-    )
-    const diffCalls = () =>
-      mockGet.mock.calls.filter(([u]: [string]) => u.includes('/scores/diff'))
-        .length
-    await waitFor(() => expect(diffCalls()).toBe(1))
-
-    rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={false} />)
-    rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={true} />)
-
-    await screen.findByText('Does your org use MFA?')
-    expect(diffCalls()).toBe(1)
-  })
-
   // The modal offers no retry control, so if a failed diff survived a reopen
   // a transient network blip would stick until the pickers changed.
   it('retries a failed diff when the modal is reopened', async () => {
@@ -366,5 +344,59 @@ describe('ScoreDiffModal', () => {
     expect(
       await screen.findByText('Does your org use MFA?')
     ).toBeInTheDocument()
+  })
+
+  // The layout reads this same list for the whole session, so the modal's
+  // read is a cache hit and the entry never loses its observer. That is what
+  // makes deleting the module-level cache safe: it was standing in for a
+  // shared cache the app now has.
+  it('issues no datacalls request when the layout already holds the list', async () => {
+    setupMocks()
+    const client = createTestQueryClient()
+    const Layout = () => {
+      useDatacalls({ enabled: true })
+      return <ScoreDiffModal {...DEFAULT_PROPS} />
+    }
+    const { unmount } = render(
+      <QueryClientProvider client={client}>
+        <Layout />
+      </QueryClientProvider>
+    )
+    await screen.findByText('Does your org use MFA?')
+    const datacallCalls = () =>
+      mockGet.mock.calls.filter(([u]: [string]) => u === '/datacalls').length
+    expect(datacallCalls()).toBe(1)
+
+    // Close the modal by unmounting it, then bring it back under the same
+    // client, the way navigating away and back does.
+    unmount()
+    render(
+      <QueryClientProvider client={client}>
+        <Layout />
+      </QueryClientProvider>
+    )
+    await screen.findByText('Does your org use MFA?')
+
+    expect(datacallCalls()).toBe(1)
+  })
+
+  // Reopening used to refetch because a counter forced the effect to re-run.
+  // A diff only changes when an answer does, and an answer write invalidates
+  // the whole scores prefix, so the cached rows are correct until then.
+  it('serves the cached diff when the modal is reopened', async () => {
+    setupMocks()
+    const { rerender } = renderWithQueryClient(
+      <ScoreDiffModal {...DEFAULT_PROPS} />
+    )
+    const diffCalls = () =>
+      mockGet.mock.calls.filter(([u]: [string]) => u.includes('/scores/diff'))
+        .length
+    await waitFor(() => expect(diffCalls()).toBe(1))
+
+    rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={false} />)
+    rerender(<ScoreDiffModal {...DEFAULT_PROPS} open={true} />)
+
+    await screen.findByText('Does your org use MFA?')
+    expect(diffCalls()).toBe(1)
   })
 })
