@@ -268,3 +268,23 @@ describe('IdpLookupLogin submit: routing and error mapping', () => {
     expect(screen.queryByText(/temporarily unavailable/i)).toBeNull()
   })
 })
+
+describe('LoginPage sign-in help', () => {
+  it('opens CMS and HHS sign-in steps without the ZTMF mailbox', async () => {
+    mockedUseLocation.mockReturnValue({ state: null })
+    mockedUseRouteLoaderData.mockReturnValue(undefined)
+    render(<LoginPage />)
+
+    await userEvent.click(
+      screen.getByRole('button', { name: 'Trouble signing in?' })
+    )
+    const dialog = await screen.findByRole('dialog')
+    expect(
+      screen.getByRole('heading', { name: 'CMS staff and contractors' })
+    ).toBeInTheDocument()
+    expect(
+      screen.getByRole('heading', { name: 'HHS OpDivs' })
+    ).toBeInTheDocument()
+    expect(dialog).not.toHaveTextContent(/zerotrust@|ISPGZeroTrust/i)
+  })
+})
