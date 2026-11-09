@@ -19,14 +19,16 @@ jest.mock('../Title/Context', () => ({
   useContextProp: () => mockCtx,
 }))
 
-import { screen, waitFor, within, fireEvent } from '@testing-library/react'
+import { screen, waitFor, within, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes } from 'react-router-dom'
 import MockAdapter from 'axios-mock-adapter'
 import SystemDetailPage from './SystemDetailPage'
 import axiosInstance from '@/axiosConfig'
 import { STATUS_MESSAGES, ERROR_MESSAGES } from '@/constants'
+import { queryKeys } from '@/api/keys'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
+import { useFismaSystems } from '@/utils/fismaSystems'
 import type { FismaSystemType, UserRole, userData } from '@/types'
 
 const mock = new MockAdapter(axiosInstance)
@@ -75,10 +77,16 @@ beforeEach(() => {
   mock.onGet('/systemattributes').reply(200, { data: [] })
 })
 
-function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
+function setPageContext(
+  role: UserRole,
+  // The list the page sees, which is not always the system it is showing: a
+  // decommissioned system is absent from the active list.
+  systems: FismaSystemType[]
+) {
   mockCtx = {
-    fismaSystems: [system],
-    setFismaSystems: jest.fn(),
+    fismaSystems: systems,
+    // The page waits on this rather than on a non-empty list, since a scoped
+    // user with no active systems has an empty one all session.
     fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
@@ -97,12 +105,19 @@ function renderPage(system: FismaSystemType, role: UserRole = 'OWNER') {
         system_delegate_enabled: false,
       },
     ],
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
     datacalls: [],
     selectedDatacall: null,
     latestDataCallId: 0,
   }
+}
+
+function renderPage(
+  system: FismaSystemType,
+  role: UserRole = 'OWNER',
+  systems: FismaSystemType[] = [system]
+) {
+  setPageContext(role, systems)
   return renderWithProviders(
     <Routes>
       <Route path="/systems/:fismasystemid" element={<SystemDetailPage />} />
@@ -124,8 +139,8 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
   })
   const user = userEvent.setup()
   const system = BASE_SYSTEM
-  renderPage(system)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(system)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -153,13 +168,16 @@ test('decommissioning an active system DELETEs with the chosen date, notifies, a
       expect.anything()
     )
   )
-  expect(setFismaSystems).toHaveBeenCalled()
-  const updater = setFismaSystems.mock.calls.at(-1)![0] as (
-    prev: FismaSystemType[]
-  ) => FismaSystemType[]
-  expect(
-    updater([system]).find((s) => s.fismasystemid === 42)?.decommissioned
-  ).toBe(true)
+  // The write moves the system between the active and decommissioned lists
+  // and this page is showing it, so both reads are invalidated.
+  await waitFor(() => {
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.detail(42),
+    })
+  })
   // The page leaves edit mode, so the form's Save control is gone.
   await waitFor(() =>
     expect(
@@ -209,8 +227,8 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
     return [200, {}]
   })
   const user = userEvent.setup()
-  renderPage(decommissioned)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(decommissioned)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -233,13 +251,107 @@ test('reactivating a decommissioned system PUTs /reactivate and notifies', async
       expect.anything()
     )
   )
-  const updater = setFismaSystems.mock.calls.at(-1)![0] as (
-    prev: FismaSystemType[]
-  ) => FismaSystemType[]
-  expect(
-    updater([decommissioned]).find((s) => s.fismasystemid === 42)
-      ?.decommissioned
-  ).toBe(false)
+  // Same shape as the decommission path: the system moves back into the
+  // active list and this page is showing it, so both reads are invalidated.
+  await waitFor(() => {
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.detail(42),
+    })
+  })
+})
+
+// The tests above hand the page a fixed list. These feed it from the real list
+// query instead, so the list refetch a status change triggers actually drops
+// the system and the page has to fall back to its by-id entry. The by-id read
+// never answers, which leaves only what the write itself put in the cache.
+function LiveListPage({ decommissioned }: { decommissioned: boolean }) {
+  const { fismaSystems, fismaSystemsLoaded } = useFismaSystems(decommissioned)
+  mockCtx = { ...mockCtx, fismaSystems, fismaSystemsLoaded }
+  return <SystemDetailPage />
+}
+
+function renderWithLiveList(system: FismaSystemType, decommissioned: boolean) {
+  setPageContext('OWNER', [])
+  // The view lists the system until the write moves it out.
+  const listUrl = decommissioned
+    ? '/fismasystems?decommissioned=true'
+    : '/fismasystems'
+  let listed = true
+  mock.onGet(listUrl).reply(() => [200, { data: listed ? [system] : [] }])
+  mock.onGet(/fismasystems\/42$/).reply(() => new Promise(() => {}))
+  const moveOut = () => {
+    listed = false
+  }
+  return {
+    moveOut,
+    ...renderWithProviders(
+      <Routes>
+        <Route
+          path="/systems/:fismasystemid"
+          element={<LiveListPage decommissioned={decommissioned} />}
+        />
+      </Routes>,
+      { initialEntries: ['/systems/42'] }
+    ),
+  }
+}
+
+test('decommissioning from the active view shows the new status once the list drops the system', async () => {
+  const returned = {
+    ...BASE_SYSTEM,
+    decommissioned: true,
+    decommissioned_date: '2020-01-01T00:00:00.000Z',
+  }
+  const { moveOut } = renderWithLiveList(BASE_SYSTEM, false)
+  mock.onDelete(/fismasystems\/42$/).reply(() => {
+    moveOut()
+    return [200, { data: returned }]
+  })
+  const user = userEvent.setup()
+
+  expect(await screen.findByText('Active')).toBeInTheDocument()
+  await clickEdit(user)
+  await user.click(
+    await screen.findByRole('checkbox', { name: /Decommission System/i })
+  )
+  setDecommissionDate('2020-01-01')
+  await user.click(await screen.findByRole('button', { name: 'Decommission' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  // Without the returned record in the by-id entry, the page falls back to
+  // the row seeded from the list before the write and reads Active.
+  expect(await screen.findByText('Decommissioned')).toBeInTheDocument()
+  expect(screen.queryByText('Active')).not.toBeInTheDocument()
+})
+
+test('reactivating from the decommissioned view shows the new status once the list drops the system', async () => {
+  const decommissioned = {
+    ...BASE_SYSTEM,
+    decommissioned: true,
+    decommissioned_date: '2020-01-01T00:00:00.000Z',
+  } as unknown as FismaSystemType
+  const { moveOut } = renderWithLiveList(decommissioned, true)
+  mock.onPut(/fismasystems\/42\/reactivate$/).reply(() => {
+    moveOut()
+    return [200, { data: { ...BASE_SYSTEM } }]
+  })
+  const user = userEvent.setup()
+
+  expect(await screen.findByText('Decommissioned')).toBeInTheDocument()
+  await clickEdit(user)
+  await user.click(
+    await screen.findByRole('button', { name: 'Reactivate system' })
+  )
+  await user.click(await screen.findByRole('button', { name: 'Reactivate' }))
+  const dialog = await screen.findByRole('dialog')
+  await user.click(within(dialog).getByRole('button', { name: /confirm/i }))
+
+  expect(await screen.findByText('Active')).toBeInTheDocument()
+  expect(screen.queryByText('Decommissioned')).not.toBeInTheDocument()
 })
 
 // ---------------------------------------------------------------------------
@@ -291,7 +403,8 @@ test('falls back to a single-system fetch when the system is not in context', as
   } as unknown as FismaSystemType
   mockCtx = {
     fismaSystems: [other],
-    setFismaSystems: jest.fn(),
+    // The page waits on this rather than on a non-empty list, since a scoped
+    // user with no active systems has an empty one all session.
     fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
@@ -310,7 +423,6 @@ test('falls back to a single-system fetch when the system is not in context', as
         system_delegate_enabled: false,
       },
     ],
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
   }
   renderWithProviders(
@@ -321,6 +433,62 @@ test('falls back to a single-system fetch when the system is not in context', as
   )
 
   await waitFor(() => expect(fetchedId).toContain('fismasystems/42'))
+})
+
+// A scoped user with no active systems, or a failed list load, has an empty
+// list for the whole session. Waiting on the list being non-empty meant the
+// by-id read answered and the page spun anyway.
+test('resolves a deep link for a user whose active list is empty', async () => {
+  mock.onGet(/fismasystems\/42$/).reply(200, { data: { ...BASE_SYSTEM } })
+
+  renderPage(BASE_SYSTEM, 'OWNER', [])
+
+  expect(await screen.findByText('System identity')).toBeInTheDocument()
+})
+
+// isFetching is true for background refetches too, not only the first load.
+// A save, an ISSO adopt, or just crossing the stale window all refetch this
+// key, and gating the whole page on it swapped a rendered page for a spinner
+// each time, taking card edit state and scroll position with it.
+test('a background refetch does not blank an already resolved page', async () => {
+  mock.onGet(/fismasystems\/42$/).reply(200, { data: { ...BASE_SYSTEM } })
+  // Empty list, so the page resolves through the by-id read rather than the
+  // seeded entry, and a refetch of that key is observable here.
+  const { queryClient } = renderPage(BASE_SYSTEM, 'OWNER', [])
+  await screen.findByText('System identity')
+
+  // Hold the refetch open so it is genuinely in flight at the assertion.
+  mock.reset()
+  mock.onGet('/systemattributes').reply(200, { data: [] })
+  mock.onGet(/fismasystems\/42$/).reply(() => new Promise(() => {}))
+  act(() => {
+    void queryClient.invalidateQueries({
+      queryKey: queryKeys.fismaSystems.detail(42),
+    })
+  })
+  await waitFor(() => expect(queryClient.isFetching()).toBeGreaterThan(0))
+
+  expect(screen.getByText('System identity')).toBeInTheDocument()
+})
+
+// A save can move the system out of the view the page is showing. The list
+// then comes back without it and the by-id read takes over, which used to
+// blank the page and drop card edit state and scroll position with it.
+test('keeps rendering when a refetch drops the system from the current view', async () => {
+  mock.onGet(/fismasystems\/42$/).reply(200, { data: { ...BASE_SYSTEM } })
+  const { rerender } = renderPage(BASE_SYSTEM)
+  await screen.findByText('System identity')
+
+  // The refetched list no longer carries the system. Same render, so the
+  // seeded cache entry is still there for the by-id read to serve.
+  mockCtx = { ...mockCtx, fismaSystems: [] }
+  rerender(
+    <Routes>
+      <Route path="/systems/:fismasystemid" element={<SystemDetailPage />} />
+    </Routes>
+  )
+
+  expect(screen.getByText('System identity')).toBeInTheDocument()
 })
 
 test('a 400 on save routes the field error inline and keeps editing', async () => {
@@ -340,8 +508,8 @@ test('a 400 on save routes the field error inline and keeps editing', async () =
 test('a 404 on decommission surfaces the system-not-found error', async () => {
   mock.onDelete(/fismasystems\/42$/).reply(404, {})
   const user = userEvent.setup()
-  renderPage(BASE_SYSTEM)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(BASE_SYSTEM)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -367,7 +535,8 @@ test('a 404 on decommission surfaces the system-not-found error', async () => {
     'success',
     expect.anything()
   )
-  expect(setFismaSystems).not.toHaveBeenCalled()
+  // Nothing was written, so nothing is refreshed.
+  expect(invalidate).not.toHaveBeenCalled()
 })
 
 test('a failed reactivate does not exit the decommissioned state', async () => {
@@ -378,8 +547,8 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
   } as unknown as FismaSystemType
   mock.onPut(/fismasystems\/42\/reactivate$/).reply(500, {})
   const user = userEvent.setup()
-  renderPage(decommissioned)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(decommissioned)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -402,7 +571,8 @@ test('a failed reactivate does not exit the decommissioned state', async () => {
     'success',
     expect.anything()
   )
-  expect(setFismaSystems).not.toHaveBeenCalled()
+  // Nothing was written, so nothing is refreshed.
+  expect(invalidate).not.toHaveBeenCalled()
 })
 
 test('a reactivate refused for a taken acronym shows the backend reason, not "invalid input"', async () => {
@@ -421,8 +591,8 @@ test('a reactivate refused for a taken acronym shows the backend reason, not "in
     data: { fismaacronym: reason },
   })
   const user = userEvent.setup()
-  renderPage(decommissioned)
-  const setFismaSystems = mockCtx.setFismaSystems as jest.Mock
+  const { queryClient } = renderPage(decommissioned)
+  const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
 
   await screen.findByText('System identity')
   await clickEdit(user)
@@ -435,7 +605,8 @@ test('a reactivate refused for a taken acronym shows the backend reason, not "in
 
   await waitFor(() => expect(notify).toHaveBeenCalledWith(reason, 'error'))
   expect(notify).not.toHaveBeenCalledWith('invalid input', 'error')
-  expect(setFismaSystems).not.toHaveBeenCalled()
+  // Nothing was written, so nothing is refreshed.
+  expect(invalidate).not.toHaveBeenCalled()
 })
 
 test('toggling data-lake sync in edit mode updates the draft', async () => {
@@ -459,7 +630,6 @@ test('shows not-found instead of spinning for a user with no accessible systems'
   mock.onGet(/fismasystems\/42$/).reply(404, { error: 'not found' })
   mockCtx = {
     fismaSystems: [],
-    setFismaSystems: jest.fn(),
     fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
@@ -469,7 +639,6 @@ test('shows not-found instead of spinning for a user with no accessible systems'
     } as userData,
     datacenterEnvironments: [],
     opdivs: [],
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
     datacalls: [],
     selectedDatacall: null,

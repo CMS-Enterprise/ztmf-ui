@@ -1,4 +1,3 @@
-import React from 'react'
 import { useOutletContext } from 'react-router-dom'
 import {
   FismaSystemType,
@@ -10,13 +9,15 @@ import {
 
 type ContextType = {
   fismaSystems: FismaSystemType[] | []
-  setFismaSystems: React.Dispatch<React.SetStateAction<FismaSystemType[]>>
   userInfo: userData
   latestDataCallId: number
   latestDatacall: string
   latestDeadline: string
   // All data calls (deadline-sorted) for resolving a call id to its name.
   datacalls: datacall[]
+  // Whether that read has settled. An empty list is a real answer, so the
+  // dashboard cannot tell "no calls yet" from "none exist" without this.
+  datacallsLoaded: boolean
   // The data calls whose scores/progress the dashboard aggregates - the active
   // year's calls, toggleable. selectedDatacall is the single active call when
   // exactly one is on (drives the single-id flows), else null while aggregating.
@@ -30,7 +31,6 @@ type ContextType = {
   toggleActiveDatacall: (dc: datacall) => void
   showDecommissioned: boolean
   setShowDecommissioned: (show: boolean) => void
-  fetchFismaSystems: (decommissioned?: boolean) => Promise<void>
   // Search text driven from the header search box; the dashboard table reads
   // it as a controlled quick filter so both inputs stay in sync.
   dashboardSearch: string
@@ -47,7 +47,6 @@ type ContextType = {
   // True when the last /datacalls fetch failed.
   datacallsError?: boolean
   // False until the first /datacalls fetch settles, so "none exist" is not read as pending.
-  datacallsLoaded: boolean
   // Datacenter-environment vocabulary, fetched once at the layout level.
   // Empty until the fetch resolves; consumers fall back to raw values.
   datacenterEnvironments: DataCenterEnvironment[]

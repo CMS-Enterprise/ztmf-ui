@@ -102,12 +102,19 @@ request when the query becomes unused or is superseded.
 
 System attributes, datacenter environments, and OpDivs change a few times a
 year. Their hooks spread `vocabularyQueryOptions` from `src/queryClient.ts`,
-which caches for the session (`staleTime` and `gcTime` both `Infinity`) and
-keeps a failed load silent, since every consumer already renders around an
-empty list. Read those lists through the existing hooks or Outlet context
-rather than calling `useQuery` with the same key elsewhere. A write that
-changes one must invalidate its key explicitly, as the OpDiv mutations do;
-nothing under this policy refreshes on its own.
+which caches for the session (`staleTime` and `gcTime` both `Infinity`). Read
+those lists through the existing hooks or Outlet context rather than calling
+`useQuery` with the same key elsewhere. A write that changes one must
+invalidate its key explicitly, as the OpDiv mutations do; nothing under this
+policy refreshes on its own.
+
+`vocabularyQueryOptions` is cache settings only. What a failed load should do
+is decided per hook, because the three do not agree. System attributes and
+datacenter environments set `suppressErrorNotification`: every consumer renders
+around an empty list by falling back to the raw stored value, so a toast would
+report a degradation the user cannot see or act on. OpDivs does not, because
+one failure leaves the list empty for the whole session and the system form's
+Save stuck, so it sets `errorMessage` and lets the cache boundary toast.
 
 ### Operational data
 
@@ -256,7 +263,13 @@ The application `QueryCache` handles unhandled query failures:
 1. Errors marked by the auth interceptor are not notified again.
 2. Cancelled or unobserved queries remain silent.
 3. Other failures are normalized with `parseApiError` and shown once through
-   `notify`.
+   `notify`, unless `meta.errorMessage` supplies fixed text to show instead.
+
+Reach for `meta.errorMessage` when the failure has a consequence the user can
+act on that the server's own wording would not name. `useOpDivs` is the
+example: the parsed error says "An error occurred, please try again later",
+which does not tell anyone that OpDiv pickers are now empty and a reload is
+the fix.
 
 Queries that render their own failure state must opt out of the global
 snackbar:

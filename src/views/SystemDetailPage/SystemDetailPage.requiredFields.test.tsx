@@ -66,7 +66,8 @@ beforeEach(() => {
 function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
   mockCtx = {
     fismaSystems: [system],
-    setFismaSystems: jest.fn(),
+    // The page waits on this rather than on a non-empty list, since a scoped
+    // user with no active systems has an empty one all session.
     fismaSystemsLoaded: true,
     userInfo: {
       userid: '1',
@@ -88,7 +89,6 @@ function renderPage(system: FismaSystemType = NON_CMS_SYSTEM) {
         system_delegate_enabled: false,
       },
     ],
-    fetchFismaSystems: jest.fn().mockResolvedValue(undefined),
     showDecommissioned: false,
   }
   return renderWithProviders(

@@ -15,6 +15,7 @@ jest.mock('@/utils/notify', () => {
 import { screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import axiosInstance from '@/axiosConfig'
+import { queryKeys } from '@/api/keys'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import type { datacall } from '@/types'
 import { notify } from '@/utils/notify'
@@ -44,14 +45,14 @@ async function fillValidForm(user: ReturnType<typeof userEvent.setup>) {
   )
 }
 
-test('creates the data call, notifies, fires onCreated, and closes', async () => {
+test('creates the data call, invalidates the picker, and closes', async () => {
   const user = userEvent.setup()
   mock.onPost('/datacalls').reply(201)
-  const onCreated = jest.fn()
   const onClose = jest.fn()
-  renderWithQueryClient(
-    <DataCallModal open onClose={onClose} onCreated={onCreated} />
+  const { queryClient } = renderWithQueryClient(
+    <DataCallModal open onClose={onClose} />
   )
+  queryClient.setQueryData(queryKeys.datacalls.list(), [])
 
   await fillValidForm(user)
   await user.click(screen.getByRole('button', { name: /^create$/i }))
@@ -64,9 +65,13 @@ test('creates the data call, notifies, fires onCreated, and closes', async () =>
     cadence: 'annual',
     deadline: new Date(DEADLINE).toISOString(),
   })
-  // The callback is still what refreshes the caller's list; the mutation's
-  // invalidation reaches nothing until that read becomes a query.
-  await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1))
+  // The picker reads this key, so invalidating it is what makes the new call
+  // appear. There is no callback left to fire.
+  await waitFor(() =>
+    expect(
+      queryClient.getQueryState(queryKeys.datacalls.list())?.isInvalidated
+    ).toBe(true)
+  )
   expect(onClose).toHaveBeenCalledTimes(1)
 })
 
@@ -79,9 +84,7 @@ test('a duplicate name toasts the backend message and leaves the modal open', as
     .onPost('/datacalls')
     .reply(400, { error: 'not unique : (FY2027 Q4) already exists.' })
   const onClose = jest.fn()
-  renderWithQueryClient(
-    <DataCallModal open onClose={onClose} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={onClose} />)
 
   await fillValidForm(user)
   await user.click(screen.getByRole('button', { name: /^create$/i }))
@@ -108,9 +111,7 @@ test('a 400 field map lands under the Title field instead of a toast', async () 
     .onPost('/datacalls')
     .reply(400, { data: { datacall: 'a data call with this name exists' } })
   const onClose = jest.fn()
-  renderWithQueryClient(
-    <DataCallModal open onClose={onClose} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={onClose} />)
 
   await fillValidForm(user)
   await user.click(screen.getByRole('button', { name: /^create$/i }))
@@ -128,9 +129,7 @@ test('a 400 on a field the form has no input for is toasted, not swallowed', asy
     data: { questionnaire_versionid: 'no questionnaire version is published' },
   })
   const onClose = jest.fn()
-  renderWithQueryClient(
-    <DataCallModal open onClose={onClose} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={onClose} />)
 
   await fillValidForm(user)
   await user.click(screen.getByRole('button', { name: /^create$/i }))
@@ -154,10 +153,10 @@ test('a create started before the modal closes still lands and still reports', a
         release = () => resolve([201, {}])
       })
   )
-  const onCreated = jest.fn()
-  const { rerender } = renderWithQueryClient(
-    <DataCallModal open onClose={jest.fn()} onCreated={onCreated} />
+  const { rerender, queryClient } = renderWithQueryClient(
+    <DataCallModal open onClose={jest.fn()} />
   )
+  queryClient.setQueryData(queryKeys.datacalls.list(), [])
 
   await fillValidForm(user)
   await user.click(screen.getByRole('button', { name: /^create$/i }))
@@ -166,12 +165,14 @@ test('a create started before the modal closes still lands and still reports', a
   // Closing is not a cancel. The write is already on its way to the server and
   // aborting here would not un-commit it, so the request runs to completion and
   // the caller still learns the outcome.
-  rerender(
-    <DataCallModal open={false} onClose={jest.fn()} onCreated={onCreated} />
-  )
+  rerender(<DataCallModal open={false} onClose={jest.fn()} />)
   release()
 
-  await waitFor(() => expect(onCreated).toHaveBeenCalledTimes(1))
+  await waitFor(() =>
+    expect(
+      queryClient.getQueryState(queryKeys.datacalls.list())?.isInvalidated
+    ).toBe(true)
+  )
   expect(notify).toHaveBeenCalledWith(
     'Datacall has successfully been created',
     'success',
@@ -184,7 +185,7 @@ test('reopening after a close mid-create shows a clean, enabled form', async () 
   // Never resolves, so the create is still in flight when the modal closes.
   mock.onPost('/datacalls').reply(() => new Promise(() => {}))
   const { rerender } = renderWithQueryClient(
-    <DataCallModal open onClose={jest.fn()} onCreated={jest.fn()} />
+    <DataCallModal open onClose={jest.fn()} />
   )
 
   await fillValidForm(user)
@@ -196,10 +197,8 @@ test('reopening after a close mid-create shows a clean, enabled form', async () 
   // Close and reopen while that request is still outstanding. The modal stays
   // mounted, so without a reset the mutation's pending state would carry over
   // and strand the next open behind a disabled "Creating..." button.
-  rerender(
-    <DataCallModal open={false} onClose={jest.fn()} onCreated={jest.fn()} />
-  )
-  rerender(<DataCallModal open onClose={jest.fn()} onCreated={jest.fn()} />)
+  rerender(<DataCallModal open={false} onClose={jest.fn()} />)
+  rerender(<DataCallModal open onClose={jest.fn()} />)
 
   expect(
     screen.queryByRole('button', { name: /creating/i })
@@ -213,9 +212,7 @@ test('reopening after a close mid-create shows a clean, enabled form', async () 
 test('sends a quarterly cadence when one is picked, and trims the title', async () => {
   const user = userEvent.setup()
   mock.onPost('/datacalls').reply(201)
-  renderWithQueryClient(
-    <DataCallModal open onClose={jest.fn()} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={jest.fn()} />)
 
   await user.type(screen.getByLabelText(/^title/i), '  Spring check-in  ')
   await user.type(screen.getByLabelText(/^fiscal year/i), '2027')
@@ -234,9 +231,7 @@ test('sends a quarterly cadence when one is picked, and trims the title', async 
 
 test('holds Create until the fiscal year is four digits', async () => {
   const user = userEvent.setup()
-  renderWithQueryClient(
-    <DataCallModal open onClose={jest.fn()} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={jest.fn()} />)
 
   await user.type(screen.getByLabelText(/^title/i), TITLE)
   await user.type(screen.getByLabelText(/^deadline/i), DEADLINE)
@@ -256,9 +251,7 @@ test('holds Create until the fiscal year is four digits', async () => {
 
 test('a blank title or fiscal year is required on blur', async () => {
   const user = userEvent.setup()
-  renderWithQueryClient(
-    <DataCallModal open onClose={jest.fn()} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={jest.fn()} />)
 
   await user.click(screen.getByLabelText(/^title/i))
   await user.type(screen.getByLabelText(/^title/i), '   ')
@@ -275,9 +268,7 @@ test('a 400 fiscal_year field error lands under the Fiscal year field', async ()
   mock
     .onPost('/datacalls')
     .reply(400, { data: { fiscal_year: 'fiscal year is out of range' } })
-  renderWithQueryClient(
-    <DataCallModal open onClose={jest.fn()} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={jest.fn()} />)
 
   await fillValidForm(user)
   await user.click(screen.getByRole('button', { name: /^create$/i }))
@@ -290,9 +281,7 @@ test('a 400 fiscal_year field error lands under the Fiscal year field', async ()
 
 test('rejects title characters that would break the questionnaire link', async () => {
   const user = userEvent.setup()
-  renderWithQueryClient(
-    <DataCallModal open onClose={jest.fn()} onCreated={jest.fn()} />
-  )
+  renderWithQueryClient(<DataCallModal open onClose={jest.fn()} />)
 
   const title = screen.getByLabelText(/^title/i)
   await user.type(title, 'Q1/Q2 check-in')

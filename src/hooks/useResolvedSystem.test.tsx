@@ -1,5 +1,7 @@
 import { StrictMode, useState } from 'react'
 import { act, render, screen, waitFor } from '@testing-library/react'
+import { QueryClientProvider, type QueryClient } from '@tanstack/react-query'
+import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
 import type { FismaSystemType } from '@/types'
 
 // axiosConfig reads import.meta.env at module load and throws under @swc/jest.
@@ -32,7 +34,9 @@ const DEATH_STAR = {
 } as FismaSystemType
 
 let replaceList: (list: FismaSystemType[]) => void
+let currentList: FismaSystemType[]
 let retry: (() => void) | undefined
+let client: QueryClient
 
 function Probe({ id }: { id: number }) {
   const r = useResolvedSystem(id)
@@ -56,16 +60,15 @@ function Harness({
 }) {
   const [list, setList] = useState(initial)
   replaceList = setList
+  currentList = list
   return (
-    <MockCtx.Provider
-      value={{
-        fismaSystems: list,
-        setFismaSystems: setList,
-        fismaSystemsLoaded: loaded,
-      }}
-    >
-      <Probe id={id} />
-    </MockCtx.Provider>
+    <QueryClientProvider client={client}>
+      <MockCtx.Provider
+        value={{ fismaSystems: list, fismaSystemsLoaded: loaded }}
+      >
+        <Probe id={id} />
+      </MockCtx.Provider>
+    </QueryClientProvider>
   )
 }
 
@@ -75,6 +78,7 @@ const notFound = () =>
 
 beforeEach(() => {
   get.mockReset()
+  client = createTestQueryClient()
 })
 
 test('a system already in the list is found without a request', () => {
@@ -98,13 +102,16 @@ test('a user with no accessible systems reaches not-found, not an endless spinne
   expect(get).toHaveBeenCalledWith('/fismasystems/1001', expect.anything())
 })
 
-test('a system missing from the list is fetched by id and added to it', async () => {
+test('a system missing from the list is fetched by id and kept out of the list', async () => {
   get.mockResolvedValue({ data: { data: DEATH_STAR } })
   render(<Harness id={1001} initial={[]} loaded />)
   await waitFor(() =>
     expect(status()).toBe('found:Death Star Orbital Battle Station')
   )
   expect(get).toHaveBeenCalledTimes(1)
+  // The shared list stays what the server returned for the current view. A
+  // decommissioned system pushed into it would show up on the dashboard.
+  expect(currentList).toEqual([])
 })
 
 test('still resolves under StrictMode, which mounts effects twice in dev', async () => {
@@ -118,19 +125,26 @@ test('still resolves under StrictMode, which mounts effects twice in dev', async
   await waitFor(() => expect(status()).toBe('not-found'))
 })
 
-test('a replaced list starts a fresh lookup instead of reusing an old miss', async () => {
+test('a settled not-found stays put when the list is replaced', async () => {
   get.mockImplementation(notFound)
   render(<Harness id={1001} initial={[]} loaded />)
   await waitFor(() => expect(status()).toBe('not-found'))
 
-  // A refetch (after a save, say) replaces the list; the system may be
-  // fetchable now, so the old miss must not stand.
-  get.mockResolvedValue({ data: { data: DEATH_STAR } })
+  // A list refetch that still lacks the system says nothing new about it, so
+  // the page must not drop back to a spinner or ask again. A write to the
+  // system invalidates its by-id entry, and that is what looks it up again.
   act(() => replaceList([]))
-  expect(status()).toBe('resolving')
-  await waitFor(() =>
-    expect(status()).toBe('found:Death Star Orbital Battle Station')
-  )
+  expect(status()).toBe('not-found')
+  expect(get).toHaveBeenCalledTimes(1)
+})
+
+test('a replaced list that now holds the system finds it', async () => {
+  get.mockImplementation(notFound)
+  render(<Harness id={1001} initial={[]} loaded />)
+  await waitFor(() => expect(status()).toBe('not-found'))
+
+  act(() => replaceList([DEATH_STAR]))
+  expect(status()).toBe('found:Death Star Orbital Battle Station')
 })
 
 test('an invalid id is not-found without a request', () => {
@@ -174,7 +188,7 @@ test('a 401 keeps resolving rather than flashing the failure screen', async () =
   )
   render(<Harness id={1001} initial={[]} loaded />)
   await waitFor(() => expect(get).toHaveBeenCalled())
-  await new Promise((r) => setTimeout(r, 50))
+  await act(() => new Promise((r) => setTimeout(r, 50)))
   expect(status()).toBe('resolving')
 })
 
