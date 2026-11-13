@@ -3,6 +3,7 @@ import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import RiskPanel from './RiskPanel'
 import type { RiskRow, RiskSummary, TargetGap } from '../opdivAggregates'
 import { makeSystem } from '../testFixtures'
+import { colors } from '@/theme/tokens'
 
 const risk: RiskSummary = {
   highImpact: 0,
@@ -90,5 +91,36 @@ describe('RiskPanel header count', () => {
     expect(
       screen.getByText('no system is flagged HVA or High FIPS')
     ).toBeInTheDocument()
+  })
+
+  it('draws the em dash neutral, not as a good count', () => {
+    renderWithProviders(<RiskPanel risk={risk} gap={gap({})} />)
+    expect(screen.getByText('—')).toHaveStyle({ color: colors.neutral500 })
+  })
+
+  it('draws a zero count as good when every high-impact system clears the floor', () => {
+    renderWithProviders(
+      <RiskPanel
+        risk={{ ...risk, highImpact: 2, atOrAboveFloor: 2 }}
+        gap={gap({})}
+      />
+    )
+    expect(screen.getByText('0')).toHaveStyle({ color: colors.up })
+  })
+
+  it('draws the count as needing attention when a system is below the floor', () => {
+    const row: RiskRow = {
+      system: makeSystem({ fismaacronym: 'DSTAR' }),
+      reasons: ['HVA'],
+      score: 2.5,
+      tier: 'Initial',
+    }
+    renderWithProviders(
+      <RiskPanel
+        risk={{ ...risk, highImpact: 2, belowFloor: [row], atOrAboveFloor: 1 }}
+        gap={gap({})}
+      />
+    )
+    expect(screen.getByText('1')).toHaveStyle({ color: colors.down })
   })
 })

@@ -198,7 +198,9 @@ describe('useQuestionBreakdown', () => {
   })
 
   test('scores an option with no score value as a 1, like the backend', async () => {
-    mock.onGet('/fismasystems/7/questions').reply(200, { data: questions })
+    mock
+      .onGet('/fismasystems/7/questions?datacallid=4')
+      .reply(200, { data: questions })
     mock
       .onGet('scores?datacallid=4&fismasystemid=7&include=functionoption')
       .reply(200, {
