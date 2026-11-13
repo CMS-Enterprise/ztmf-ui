@@ -1,7 +1,9 @@
 import { screen } from '@testing-library/react'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
 import RiskPanel from './RiskPanel'
-import type { RiskSummary, TargetGap } from '../opdivAggregates'
+import type { RiskRow, RiskSummary, TargetGap } from '../opdivAggregates'
+import { makeSystem } from '../testFixtures'
+import { colors } from '@/theme/tokens'
 
 const risk: RiskSummary = {
   highImpact: 0,
@@ -45,5 +47,80 @@ describe('RiskPanel targets footer', () => {
   it('keeps "none asserted" when no system has a target', () => {
     renderWithProviders(<RiskPanel risk={risk} gap={gap({ noTarget: 4 })} />)
     expect(screen.getByText(/Targets: none asserted yet/)).toBeInTheDocument()
+  })
+})
+
+describe('RiskPanel rows', () => {
+  const withRows = (rows: RiskRow[]): RiskSummary => ({
+    ...risk,
+    highImpact: rows.length,
+    belowFloor: rows,
+  })
+
+  it('hides the score behind "-" on a Not Assessed row', () => {
+    const row: RiskRow = {
+      system: makeSystem({ fismaacronym: 'DSTAR' }),
+      reasons: ['HVA'],
+      score: 1.25,
+      tier: 'Not Assessed',
+    }
+    renderWithProviders(<RiskPanel risk={withRows([row])} gap={gap({})} />)
+    expect(screen.getByText('Not Assessed')).toBeInTheDocument()
+    expect(screen.getByText('-')).toBeInTheDocument()
+    expect(screen.queryByText('1.25')).not.toBeInTheDocument()
+  })
+
+  it('shows the score on an assessed row', () => {
+    const row: RiskRow = {
+      system: makeSystem({ fismaacronym: 'EXEC' }),
+      reasons: ['High FIPS'],
+      score: 2.5,
+      tier: 'Initial',
+    }
+    renderWithProviders(<RiskPanel risk={withRows([row])} gap={gap({})} />)
+    expect(screen.getByText('2.50')).toBeInTheDocument()
+    expect(screen.queryByText('-')).not.toBeInTheDocument()
+  })
+})
+
+describe('RiskPanel header count', () => {
+  it('shows the KPI em dash when no system is high impact', () => {
+    renderWithProviders(<RiskPanel risk={risk} gap={gap({})} />)
+    expect(screen.getByText('—')).toBeInTheDocument()
+    expect(screen.queryByText('-')).not.toBeInTheDocument()
+    expect(
+      screen.getByText('no system is flagged HVA or High FIPS')
+    ).toBeInTheDocument()
+  })
+
+  it('draws the em dash neutral, not as a good count', () => {
+    renderWithProviders(<RiskPanel risk={risk} gap={gap({})} />)
+    expect(screen.getByText('—')).toHaveStyle({ color: colors.neutral500 })
+  })
+
+  it('draws a zero count as good when every high-impact system clears the floor', () => {
+    renderWithProviders(
+      <RiskPanel
+        risk={{ ...risk, highImpact: 2, atOrAboveFloor: 2 }}
+        gap={gap({})}
+      />
+    )
+    expect(screen.getByText('0')).toHaveStyle({ color: colors.up })
+  })
+
+  it('draws the count as needing attention when a system is below the floor', () => {
+    const row: RiskRow = {
+      system: makeSystem({ fismaacronym: 'DSTAR' }),
+      reasons: ['HVA'],
+      score: 2.5,
+      tier: 'Initial',
+    }
+    renderWithProviders(
+      <RiskPanel
+        risk={{ ...risk, highImpact: 2, belowFloor: [row], atOrAboveFloor: 1 }}
+        gap={gap({})}
+      />
+    )
+    expect(screen.getByText('1')).toHaveStyle({ color: colors.down })
   })
 })
