@@ -1,8 +1,11 @@
 name: Nightly sync main -> impl
 
-# Opens a PR that brings `main` into `impl` each night for a human to review and
-# merge. Merging pushes to `impl`, which triggers the impl deploy via
-# orchestration-impl.
+# Opens a PR that brings `main` into `impl` when run by hand from the Actions
+# tab, for a human to review and merge. Merging pushes to `impl`, which triggers
+# the impl deploy via orchestration-impl.
+#
+# STOPPED: the nightly schedule is removed because `impl` and its syncs are being
+# retired. The workflow stays runnable by hand until it is deleted.
 #
 # WHY -X theirs (not a plain merge): main and impl are both squash-merged, so
 # they share no real ancestry -- their merge-base is stale (back at #363). A
@@ -21,20 +24,9 @@ name: Nightly sync main -> impl
 # read/write. BRITTLENESS: a fine-grained PAT expires (max ~1 year) and is tied
 # to its creator -- prefer a shared machine/service account and set a rotation
 # reminder; when it lapses the "Open PR" step 401s and no PR is opened.
-#
-# WHY no exact-midnight guard: GitHub cron is UTC and does not adjust for DST,
-# so both 07:20 (PDT midnight) and 08:20 (PST midnight) UTC are registered.
-# There is deliberately NO "is it exactly midnight?" guard -- the scheduler
-# routinely delays runs ~40 min, which tipped a strict hour==00 check past
-# midnight and skipped whole nights. Instead both crons simply run; the
-# "skip if a sync PR is already open" step dedupes them to one PR/night (the
-# near-midnight run opens it, the ~1h-later run finds it open and skips).
 
 on:
-  schedule:
-    - cron: '20 8 * * *' # ~midnight PST / ~01:20 PDT
-    - cron: '20 7 * * *' # ~midnight PDT / ~23:20 PST
-  workflow_dispatch: {} # allow an on-demand sync
+  workflow_dispatch: {} # on-demand sync only; the nightly schedule is removed
 
 permissions:
   contents: read # writes are done with the PAT, not GITHUB_TOKEN
