@@ -2,15 +2,16 @@ import {
   fireEvent,
   screen,
   waitFor,
+  within,
   act,
   configure as rtlConfigure,
 } from '@testing-library/react'
+import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import userEvent from '@testing-library/user-event'
 import { createMemoryRouter, RouterProvider } from 'react-router-dom'
 import { Routes as AppRoutes } from '@/router/constants'
 import { COMPLETE_HINT_MSG, NEXT_HINT_MSG } from '@/constants'
 import { apiPaths, queryKeys } from '@/api/keys'
-import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import type { userData } from '@/types'
 
 // Rendered-component coverage for three QuestionnairePage effect paths from
@@ -193,10 +194,8 @@ function makeCtx(overrides: Partial<Record<string, unknown>> = {}) {
     ],
     activeDatacallIds: [5],
     fismaSystems: [SSD_EX],
-    setFismaSystems: jest.fn(),
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
-    fetchFismaSystems: jest.fn(),
     datacenterEnvironments: [],
     opdivs: [],
     opdivsLoaded: true,
@@ -217,6 +216,38 @@ function renderAt(path: string) {
 
 const DEEP_LINK =
   '/questionnaire/system/1002/FY2026_Q1/identity/imperial-identity-verification'
+
+// The dashboard reads its aggregates and progress counts through the query
+// cache under the default stale time, and both are derived from answers. A
+// write here that does not invalidate leaves a user who saves and returns
+// within the minute reading their old score out of cache, which is the bug
+// the cache was introduced to fix.
+describe('score writes invalidate the cached reads', () => {
+  it('on a saved answer', async () => {
+    const user = userEvent.setup()
+    axios.get.mockImplementation((url: string) => {
+      if (url.includes('/questions'))
+        return Promise.resolve({ data: { data: QUESTIONS } })
+      if (url.includes('/options'))
+        return Promise.resolve({ data: { data: OPTIONS_7006 } })
+      return Promise.resolve({ data: { data: [] } })
+    })
+    axios.post.mockResolvedValue({ data: { data: {} } })
+
+    const { queryClient } = renderAt(DEEP_LINK)
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    await user.click(await screen.findByLabelText(/baseline/i))
+    await user.click(screen.getByText(/^Next question/i))
+
+    await waitFor(() => expect(saveScorePosts()).toHaveLength(1))
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: queryKeys.scores.all,
+      })
+    )
+  })
+})
 
 beforeEach(() => {
   jest.clearAllMocks()
@@ -986,9 +1017,11 @@ describe('QuestionnairePage justification integration', () => {
   function installMocks({
     insightRows = [INSIGHT_ROW] as unknown[],
     insightsResponse,
+    options = JUSTIFICATION_OPTIONS,
   }: {
     insightRows?: unknown[]
     insightsResponse?: Promise<InsightsResponse>
+    options?: unknown[]
   } = {}) {
     axios.get.mockImplementation((url: string) => {
       if (url === apiPaths.insights) {
@@ -1001,7 +1034,7 @@ describe('QuestionnairePage justification integration', () => {
       if (url.startsWith(apiPaths.scores.root))
         return Promise.resolve({ data: { data: [CARRY_FORWARD_SCORE] } })
       if (url.includes('/options'))
-        return Promise.resolve({ data: { data: JUSTIFICATION_OPTIONS } })
+        return Promise.resolve({ data: { data: options } })
       return Promise.resolve({ data: { data: [] } })
     })
     axios.post.mockResolvedValue({ data: {} })
@@ -1098,6 +1131,7 @@ describe('QuestionnairePage justification integration', () => {
     setMockCtx(
       insightsCtx({
         opdivs: [{ ...OPDIV_ROWS[0], insights_enabled: false }, OPDIV_ROWS[1]],
+        fismaSystems: [{ ...SSD_EX, fips: 'Low', hva: false }],
       })
     )
 
@@ -1105,7 +1139,7 @@ describe('QuestionnairePage justification integration', () => {
 
     // The justification review context still renders...
     expect(await screen.findByText('Review required')).toBeInTheDocument()
-    // ...and the federal-wide FIPS baseline treatment stays.
+    // ...and the federal-wide FIPS baseline stays, from the system record.
     expect(await screen.findByText('Low baseline')).toBeInTheDocument()
     // ...but every insights surface is suppressed, regardless of call name.
     expect(screen.queryByText('ZTMF Insights panel')).not.toBeInTheDocument()
@@ -1169,6 +1203,91 @@ describe('QuestionnairePage justification integration', () => {
     ).not.toBeInTheDocument()
     // Still blocked: the carried-forward response now requires review.
     expect(complete).toBeDisabled()
+  })
+
+  describe('FIPS baseline from the system record (#764)', () => {
+    // A system in the insights-disabled OpDiv (ACF), which the API never sends
+    // Insights rows for, so the baseline can only come from the record.
+    const FOUR_OPTIONS = [
+      { functionoptionid: 100, description: 'Traditional', score: 1 },
+      { functionoptionid: 101, description: 'Initial', score: 2 },
+      { functionoptionid: 102, description: 'Advanced', score: 3 },
+      { functionoptionid: 103, description: 'Optimal', score: 4 },
+    ]
+    const renderSystem = (record: {
+      fips: string | null
+      hva: boolean | null
+    }) => {
+      installMocks({ insightRows: [], options: FOUR_OPTIONS })
+      setMockCtx(
+        insightsCtx({ fismaSystems: [{ ...SSD_EX, opdiv_id: 2, ...record }] })
+      )
+      renderAt(DEEP_LINK)
+    }
+
+    it.each([
+      ['Low', 2],
+      ['Moderate', 1],
+    ])(
+      'shows the strip and markers for a %s system with no Insights payload',
+      async (fips, aboveCount) => {
+        renderSystem({ fips, hva: false })
+        expect(
+          await screen.findByText(`FIPS ${fips.toUpperCase()}`)
+        ).toBeInTheDocument()
+        expect(await screen.findByText(`${fips} baseline`)).toBeInTheDocument()
+        expect(
+          screen.getAllByText(`(above the ${fips} baseline)`, { exact: false })
+        ).toHaveLength(aboveCount)
+        expect(
+          screen.queryByText('ZTMF Insights panel')
+        ).not.toBeInTheDocument()
+      }
+    )
+
+    it('holds the strip and the markers until insights load, then shows both', async () => {
+      let resolveInsights: ((value: InsightsResponse) => void) | null = null
+      const insightsResponse = new Promise<InsightsResponse>((resolve) => {
+        resolveInsights = resolve
+      })
+      installMocks({ insightsResponse })
+      setMockCtx(
+        insightsCtx({ fismaSystems: [{ ...SSD_EX, fips: 'Low', hva: false }] })
+      )
+      renderAt(DEEP_LINK)
+
+      expect(
+        await screen.findByText('Checking for prior responses...')
+      ).toBeInTheDocument()
+      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
+
+      await act(async () => {
+        resolveInsights?.({ data: { data: [INSIGHT_ROW] } })
+      })
+
+      expect(await screen.findByText('ZTMF Insights panel')).toBeInTheDocument()
+      expect(screen.getByText('FIPS LOW')).toBeInTheDocument()
+      expect(screen.getByText('Low baseline')).toBeInTheDocument()
+    })
+
+    it('ignores a payload FIPS for an OpDiv with Insights turned off', async () => {
+      installMocks({ options: FOUR_OPTIONS })
+      setMockCtx(insightsCtx({ fismaSystems: [{ ...SSD_EX, opdiv_id: 2 }] }))
+      renderAt(DEEP_LINK)
+      expect(await screen.findByText('Traditional')).toBeInTheDocument()
+      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
+    })
+
+    it.each([
+      ['High', { fips: 'High', hva: false }],
+      ['an HVA', { fips: 'Low', hva: true }],
+      ['no FIPS', { fips: null, hva: false }],
+      ['an unknown HVA', { fips: 'Low', hva: null }],
+    ])('shows no baseline for %s', async (_label, record) => {
+      renderSystem(record)
+      expect(await screen.findByText('Traditional')).toBeInTheDocument()
+      expect(screen.queryByText(/baseline/i)).not.toBeInTheDocument()
+    })
   })
 
   it('keeps the plain four-row notes field when the question has no justification context', async () => {
@@ -1360,6 +1479,75 @@ describe('carried-forward confirmation', () => {
       return Promise.resolve({ data: { data: {} } })
     })
   }
+
+  // Overlays the history route with a full head row, swapped for `after` once
+  // the undo POST is sent, so a test can watch the server retire the button.
+  function serveHistory(
+    scoreid: number,
+    {
+      after = {},
+      undo,
+    }: { after?: Record<string, unknown>; undo?: () => Promise<unknown> } = {}
+  ) {
+    const head = {
+      revisionid: 91,
+      scoreid,
+      revision_no: 2,
+      kind: 'update',
+      createdat: '2026-09-18T14:02:11Z',
+      actor: { userid: 'u-1', name: 'Isso User', email: '', role: 'ISSO' },
+      prev: { optionname: 'Baseline', notes: 'carried justification' },
+      new: { optionname: 'Baseline', notes: 'edited this cycle' },
+      undoable: true,
+    }
+    let undone = false
+    const baseGet = axios.get.getMockImplementation()!
+    const basePost = axios.post.getMockImplementation()!
+    axios.get.mockImplementation((url: string) => {
+      if (url !== apiPaths.scores.revisions(scoreid)) return baseGet(url)
+      const current = undone ? { ...head, ...after } : head
+      return Promise.resolve({
+        data: {
+          data: {
+            scoreid,
+            fismasystemid: 1002,
+            datacallid: 5,
+            head: current,
+            revisions: [current],
+          },
+        },
+      })
+    })
+    axios.post.mockImplementation((url: string, ...rest: unknown[]) => {
+      if (url !== apiPaths.scores.undo(scoreid)) return basePost(url, ...rest)
+      undone = true
+      return undo ? undo() : basePost(url, ...rest)
+    })
+  }
+
+  // Same reason as the save path above: a confirm changes the answer's status,
+  // which the dashboard's progress count is derived from.
+  it('invalidates the cached score reads on a confirm', async () => {
+    installScoreMocks([carried7006()])
+
+    const { queryClient } = renderAt(DEEP_LINK)
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    fireEvent.click(
+      await screen.findByRole('button', {
+        name: 'Confirm this answer is still accurate',
+      })
+    )
+
+    await waitFor(() =>
+      expect(axios.put).toHaveBeenCalledWith(apiPaths.scores.confirm(6001))
+    )
+    await waitFor(() =>
+      expect(invalidate).toHaveBeenCalledWith({
+        queryKey: queryKeys.scores.all,
+      })
+    )
+  })
 
   it('badges an unconfirmed carried-forward answer in the question view and sidebar, and confirms it with one dedicated PUT', async () => {
     installScoreMocks([carried7006()])
@@ -1721,26 +1909,157 @@ describe('carried-forward confirmation', () => {
     ).toBeInTheDocument()
   })
 
-  it('refetches history when an undo is refused past the deadline', async () => {
+  it('drops the Undo button and keeps focus off <body> when an undo is refused past the deadline', async () => {
     // The interceptor toasts the 403 and tags it handled; the refetch is what
     // lets the server's call-closed reason take the stale button away.
     const edited = { ...carried7006('done'), notes: 'edited this cycle' }
     installScoreMocks([edited])
-    axios.post.mockRejectedValue({ __authHandled: true })
-    const historyReads = () =>
-      axios.get.mock.calls.filter(
-        ([url]: [string]) => url === apiPaths.scores.revisions(edited.scoreid)
-      ).length
+    serveHistory(edited.scoreid, {
+      after: { undoable: false, reason: 'This data call is closed.' },
+      undo: () => Promise.reject({ __authHandled: true }),
+    })
 
     renderAt(DEEP_LINK)
 
     const undoButton = await screen.findByRole('button', {
       name: 'Undo last change',
     })
-    const before = historyReads()
+    undoButton.focus()
     fireEvent.click(undoButton)
 
-    await waitFor(() => expect(historyReads()).toBeGreaterThan(before))
+    await waitFor(() =>
+      expect(
+        screen.queryByRole('button', { name: 'Undo last change' })
+      ).not.toBeInTheDocument()
+    )
+    expect(document.activeElement).toHaveAttribute('id', 'view-answer-history')
+  })
+
+  it('does not warn about an undo conflict once the user has moved to another question', async () => {
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    let reject: (reason: unknown) => void = () => {}
+    serveHistory(edited.scoreid, {
+      undo: () => new Promise((_resolve, rej) => (reject = rej)),
+    })
+
+    const { queryClient } = renderAt(DEEP_LINK)
+
+    fireEvent.click(
+      await screen.findByRole('button', { name: 'Undo last change' })
+    )
+    await waitFor(() =>
+      expect(
+        axios.post.mock.calls.some(
+          ([url]: [string]) => url === apiPaths.scores.undo(edited.scoreid)
+        )
+      ).toBe(true)
+    )
+    fireEvent.click(screen.getByText(/^Next question/i))
+    await act(async () => {
+      reject({
+        isAxiosError: true,
+        response: { status: 409, data: { code: 'REVISION_CONFLICT' } },
+      })
+    })
+
+    // Its stale head is dropped, to be refetched on return.
+    await waitFor(() =>
+      expect(
+        queryClient.getQueryState(queryKeys.scores.revisions(edited.scoreid))
+          ?.isInvalidated
+      ).toBe(true)
+    )
+    expect(
+      notifyMock.mock.calls.some(([message]) =>
+        String(message).startsWith('Someone else changed this answer')
+      )
+    ).toBe(false)
+  })
+
+  it('keeps focus inside the drawer after an undo from it', async () => {
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    serveHistory(edited.scoreid, {
+      after: { kind: 'undo', undoable: false },
+    })
+
+    renderAt(DEEP_LINK)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View history' }))
+    const drawer = await screen.findByRole('dialog', { name: 'Answer history' })
+    const undoButton = await within(drawer).findByRole('button', {
+      name: 'Undo last change',
+    })
+    undoButton.focus()
+    fireEvent.click(undoButton)
+
+    await waitFor(() =>
+      expect(
+        within(drawer).queryByRole('button', { name: 'Undo last change' })
+      ).not.toBeInTheDocument()
+    )
+    await waitFor(() => expect(document.activeElement).toBe(drawer))
+  })
+
+  it('returns focus to View history when the drawer closes while an undo from it is in flight', async () => {
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    let resolve: (value: unknown) => void = () => {}
+    serveHistory(edited.scoreid, {
+      after: { kind: 'undo', undoable: false },
+      undo: () => new Promise((res) => (resolve = res)),
+    })
+
+    renderAt(DEEP_LINK)
+
+    fireEvent.click(await screen.findByRole('button', { name: 'View history' }))
+    const drawer = await screen.findByRole('dialog', { name: 'Answer history' })
+    fireEvent.click(
+      await within(drawer).findByRole('button', { name: 'Undo last change' })
+    )
+    await waitFor(() =>
+      expect(
+        axios.post.mock.calls.some(
+          ([url]: [string]) => url === apiPaths.scores.undo(edited.scoreid)
+        )
+      ).toBe(true)
+    )
+    fireEvent.keyDown(drawer, { key: 'Escape' })
+    await act(async () => {
+      resolve({ data: { data: {} } })
+    })
+
+    await waitFor(() =>
+      expect(document.activeElement).toHaveAttribute(
+        'id',
+        'view-answer-history'
+      )
+    )
+  })
+
+  it('offers an admin Undo in the drawer on a closed call, but not in the strip', async () => {
+    // OWNER keeps write access past the deadline, and the server's admin
+    // bypass marks the head undoable.
+    const edited = { ...carried7006('done'), notes: 'edited this cycle' }
+    installScoreMocks([edited])
+    serveHistory(edited.scoreid)
+    setMockCtx(makeCtx(closedCallCtx()))
+
+    renderAt(DEEP_LINK)
+
+    // Checked before opening: the modal drawer aria-hides the page behind it.
+    const viewHistory = await screen.findByRole('button', {
+      name: 'View history',
+    })
+    expect(
+      screen.queryByRole('button', { name: 'Undo last change' })
+    ).not.toBeInTheDocument()
+    fireEvent.click(viewHistory)
+    const drawer = await screen.findByRole('dialog', { name: 'Answer history' })
+    expect(
+      await within(drawer).findByRole('button', { name: 'Undo last change' })
+    ).toBeInTheDocument()
   })
 
   it('shows the badge but no Confirm button to a read-only admin', async () => {

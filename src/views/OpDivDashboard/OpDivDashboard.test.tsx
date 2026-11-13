@@ -6,10 +6,11 @@
  * placeholders, and offers each header action only to the tier the backend
  * would accept it from.
  */
-import { screen, waitFor, within } from '@testing-library/react'
+import { act, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { Route, Routes, useLocation } from 'react-router-dom'
 import { renderWithProviders } from '@/test-utils/renderWithProviders'
+import { queryKeys } from '@/api/keys'
 import type { FismaSystemType, OpDiv, UserRole, userData } from '@/types'
 import { EXTREMES_PER_END } from './opdivAggregates'
 
@@ -43,6 +44,10 @@ let mockScoreRows: {
 }[]
 let mockUsers: userData[]
 let mockOpDivId: string
+// Aggregate rows for a single call, keyed by its id. The cadence probe asks
+// for the newest quarterly call on its own; a test answers it here. Every
+// other request gets mockScoreRows.
+let mockAggregatesByCall: Record<number, typeof mockScoreRows>
 let mockHistory: {
   datacallid: number
   fismasystemid: number
@@ -91,6 +96,8 @@ jest.mock('../Title/Context', () => ({
         datacall: 'FY26 ZTM',
         datecreated: '2025-10-01',
         deadline: '2026-09-11',
+        fiscal_year: 2026,
+        cadence: 'annual',
       },
     ],
     activeDatacallIds: [104],
@@ -99,6 +106,8 @@ jest.mock('../Title/Context', () => ({
       datacall: 'FY26 ZTM',
       datecreated: '2025-10-01',
       deadline: '2026-09-11',
+      fiscal_year: 2026,
+      cadence: 'annual',
     },
     setSelectedDatacall: jest.fn(),
     toggleActiveDatacall: jest.fn(),
@@ -120,15 +129,21 @@ jest.mock('@/components/DatacallContextCard/DatacallContextCard', () => ({
   __esModule: true,
   default: () => null,
 }))
+let mockSystemModalProps: Record<string, unknown> = {}
 jest.mock('@/views/EditSystemModal/EditSystemModal', () => ({
   __esModule: true,
-  default: () => null,
+  default: (props: object) => {
+    mockSystemModalProps = props as Record<string, unknown>
+    return null
+  },
 }))
 
 jest.mock('@/utils/scores', () => ({
   __esModule: true,
-  useDatacallAggregates: () => ({
-    scoresPerCall: [mockScoreRows],
+  useDatacallAggregates: (ids: number[]) => ({
+    scoresPerCall: [
+      (ids.length === 1 && mockAggregatesByCall[ids[0]]) || mockScoreRows,
+    ],
     isPending: false,
     isError: mockScoresError,
   }),
@@ -241,6 +256,7 @@ const makeUser = (role: UserRole): userData => ({
 beforeEach(() => {
   mockOpDivId = '7'
   mockContext = {}
+  mockAggregatesByCall = {}
   mockScoresError = false
   mockUsersError = false
   mockUser = makeUser('OWNER')
@@ -295,6 +311,29 @@ beforeEach(() => {
 const Landed = () => <p>landed on {useLocation().pathname}</p>
 
 describe('OpDivDashboard', () => {
+  // The header's Add system modal hands back the record it posted, but the
+  // server derives fields on write, so the list is refetched rather than
+  // having that copy spliced into shared state.
+  it('refreshes the system list after a system is created', async () => {
+    const { queryClient } = renderWithProviders(<OpDivDashboard />)
+    await waitFor(() =>
+      expect(mockSystemModalProps.onClose).toBeInstanceOf(Function)
+    )
+    const invalidate = jest.spyOn(queryClient, 'invalidateQueries')
+
+    act(() => {
+      ;(mockSystemModalProps.onClose as (s: unknown) => void)({
+        fismasystemid: 99,
+        fismaname: 'Death Star',
+        fismaacronym: 'DS',
+      })
+    })
+
+    expect(invalidate).toHaveBeenCalledWith({
+      queryKey: queryKeys.fismaSystems.lists(),
+    })
+  })
+
   it('names the OpDiv and renders its computed score', () => {
     renderWithProviders(<OpDivDashboard />)
 
@@ -713,21 +752,30 @@ describe('OpDivDashboard', () => {
     )
   })
 
-  it("anchors the pillars to the OpDiv's own cadence, not a newer CMS quarterly", () => {
-    const call = (datacallid: number, name: string, deadline: string) => ({
+  it("anchors the pillars to the OpDiv's own cadence, not a newer quarterly", () => {
+    const call = (
+      datacallid: number,
+      name: string,
+      deadline: string,
+      cadence: string
+    ) => ({
       datacallid,
       datacall: name,
       datecreated: '2024-10-01',
       deadline,
+      fiscal_year: 2025,
+      cadence,
     })
     mockContext = {
       datacalls: [
-        call(201, 'FY2025 Q4', '2025-09-30'),
-        call(200, 'FY25 ZTM', '2025-06-30'),
+        call(201, 'FY2025 Q4', '2025-09-30', 'quarterly'),
+        call(200, 'FY25 ZTM', '2025-06-30', 'annual'),
       ],
       activeDatacallIds: [201, 200],
       selectedDatacall: null,
     }
+    // None of this OpDiv's systems took part in the quarterly call.
+    mockAggregatesByCall = { 201: [] }
     renderWithProviders(<OpDivDashboard />)
     // The anchor is requested first; the prior call (if any) after it.
     expect(mockPillarCallIds[0]).toBe(200)
@@ -739,37 +787,87 @@ describe('OpDivDashboard', () => {
     )
   })
 
+  it('follows the quarterly cadence when its systems took part in the newest quarterly call', () => {
+    const call = (
+      datacallid: number,
+      name: string,
+      deadline: string,
+      cadence: string
+    ) => ({
+      datacallid,
+      datacall: name,
+      datecreated: '2024-10-01',
+      deadline,
+      fiscal_year: 2025,
+      cadence,
+    })
+    mockContext = {
+      datacalls: [
+        call(201, 'Q4 check-in', '2025-09-30', 'quarterly'),
+        call(200, 'Annual data call', '2025-06-30', 'annual'),
+      ],
+      activeDatacallIds: [201, 200],
+      selectedDatacall: null,
+    }
+    mockAggregatesByCall = {
+      201: [
+        {
+          datacallid: 201,
+          fismasystemid: 1,
+          systemscore: 3,
+          systemtier: 'Advanced',
+        },
+      ],
+    }
+    renderWithProviders(<OpDivDashboard />)
+    // The quarterly call is the newest one in this OpDiv's series.
+    expect(mockPillarCallIds[0]).toBe(201)
+    expect(
+      screen.getByText(/Quarterly calls, plus the newest annual call/)
+    ).toBeInTheDocument()
+  })
+
   it.each([
-    ['never borrows the other cadence', 'FY2027 Q1', undefined],
-    ['falls back to a call outside both cadences', 'Smoke Cycle', 300],
-  ])('anchors the pillars: %s', (_label, name, expected) => {
+    ['never borrows the other cadence', 'quarterly', undefined],
+    ['anchors a free-text annual title', 'annual', 300],
+  ])('anchors the pillars: %s', (_label, cadence, expected) => {
     mockContext = {
       datacalls: [
         {
           datacallid: 300,
-          datacall: name,
+          datacall: 'Smoke Cycle',
           datecreated: '2026-10-01',
           deadline: '2027-09-30',
+          fiscal_year: 2027,
+          cadence,
         },
       ],
       activeDatacallIds: [300],
       selectedDatacall: null,
     }
+    mockAggregatesByCall = { 300: [] }
     renderWithProviders(<OpDivDashboard />)
     expect(mockPillarCallIds[0]).toBe(expected)
   })
 
   it('offers a text table of the trend', () => {
-    const call = (datacallid: number, name: string, deadline: string) => ({
+    const call = (
+      datacallid: number,
+      name: string,
+      deadline: string,
+      fiscal_year: number
+    ) => ({
       datacallid,
       datacall: name,
       datecreated: '2024-10-01',
       deadline,
+      fiscal_year,
+      cadence: 'annual',
     })
     mockContext = {
       datacalls: [
-        call(103, 'FY25 ZTM', '2025-09-11'),
-        call(104, 'FY26 ZTM', '2026-09-11'),
+        call(103, 'FY25 ZTM', '2025-09-11', 2025),
+        call(104, 'FY26 ZTM', '2026-09-11', 2026),
       ],
     }
     mockHistory = [103, 104].flatMap((datacallid) =>

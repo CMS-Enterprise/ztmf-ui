@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import axiosInstance from '@/axiosConfig'
+import { apiPaths } from '@/api/keys'
 import { isAuthHandled } from '@/utils/notify'
 import { tierForScore } from '@/utils/tierStyles'
 import type { FismaQuestion, ScoreTier } from '@/types'
@@ -53,7 +54,7 @@ export interface QuestionBreakdownRow {
  *
  * Two endpoints feed this:
  *
- *   1. /fismasystems/{id}/questions  - question text + pillar + function
+ *   1. /fismasystems/{id}/questions?datacallid=... - question text + pillar + function
  *      name, keyed by functionid (each question has exactly one function).
  *   2. /scores?datacallid=...&fismasystemid=...&include=functionoption - the
  *      picked option per question, carrying functionid + the raw 1-4 score.
@@ -91,9 +92,12 @@ export function useQuestionBreakdown(
     async function load() {
       try {
         const [questionsRes, scoresRes] = await Promise.all([
-          axiosInstance.get(`/fismasystems/${fismasystemid}/questions`, {
-            signal: controller.signal,
-          }),
+          // The cycle's own questionnaire version (ztmf-misc#395); unpinned,
+          // the API serves the newest, whose functionids an older cycle lacks.
+          axiosInstance.get(
+            apiPaths.fismaSystems.questions(fismasystemid, datacallid),
+            { signal: controller.signal }
+          ),
           axiosInstance.get(
             `scores?datacallid=${datacallid}&fismasystemid=${fismasystemid}&include=functionoption`,
             { signal: controller.signal }

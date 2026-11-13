@@ -17,6 +17,12 @@ declare module '@tanstack/react-query' {
      */
     queryMeta: {
       suppressErrorNotification?: boolean
+      /**
+       * Fixed text to show instead of the parsed API error. For a read whose
+       * failure has a consequence the user can act on, where the server's own
+       * wording would not say what broke.
+       */
+      errorMessage?: string
     }
   }
 }
@@ -61,7 +67,7 @@ export function handleQueryError(
     return
   }
 
-  notify(parseApiError(error).message, 'error', {
+  notify(query.meta?.errorMessage ?? parseApiError(error).message, 'error', {
     key: query.queryHash,
     preventDuplicate: true,
   })
@@ -113,9 +119,12 @@ const queryClient = createQueryClient()
  * `gcTime` matters as much as `staleTime`. Several consumers live inside
  * modals that unmount, and the default five-minute collection would drop the
  * entry and refetch on the next open, which is the re-request on navigation
- * this policy exists to prevent. A failed load stays silent at the cache
- * boundary because every consumer already renders around an empty list, and
- * a query with no data is always stale, so the next mount retries anyway.
+ * this policy exists to prevent.
+ *
+ * These are cache settings only. Whether a failed load is worth a toast is a
+ * per-vocabulary question, not a property of caching it, so each hook sets its
+ * own error meta. A query with no data is always stale either way, so the next
+ * mount retries.
  *
  * Writes that change a vocabulary must invalidate its key explicitly; nothing
  * here will pick the change up on its own.
@@ -123,8 +132,7 @@ const queryClient = createQueryClient()
 export const vocabularyQueryOptions = {
   staleTime: Infinity,
   gcTime: Infinity,
-  meta: { suppressErrorNotification: true },
-} satisfies Pick<UseQueryOptions, 'staleTime' | 'gcTime' | 'meta'>
+} satisfies Pick<UseQueryOptions, 'staleTime' | 'gcTime'>
 
 /**
  * Options a resource hook forwards to its query. `enabled` defers the request,

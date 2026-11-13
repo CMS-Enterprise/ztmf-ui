@@ -20,6 +20,8 @@ export type AppEnvironment = {
   DEV_BANNER_MESSAGE: string
   DEV_FEEDBACK_URL: string
   DEV_CONTACT_EMAIL: string
+  // Help page contact address; blank hides the email button.
+  HELP_EMAIL: string
 }
 
 export type FormField = {
@@ -320,9 +322,8 @@ export type editSystemModalProps = {
 export type datacallModalProps = {
   open: boolean
   onClose: () => void
-  // Fired after a successful POST /datacalls so the parent can re-fetch
-  // its data-call list and the new call appears without a manual reload.
-  onCreated?: () => void
+  // Existing calls, to name the one the new call carries answers from.
+  datacalls?: datacall[]
 }
 
 export type ScoreData = {
@@ -410,11 +411,29 @@ export type users = {
   access_expires_at?: string | null
 }
 
+/** How often a data call's series runs. Picks the trend series it joins. */
+export type DatacallCadence = 'annual' | 'quarterly'
+
 export type datacall = {
   datacallid: number
+  // Free-text title. Display only: nothing reads a year or cadence out of it.
   datacall: string
   datecreated: string
   deadline: string
+  // Four-digit fiscal year the call belongs to, e.g. 2026.
+  fiscal_year: number
+  cadence: DatacallCadence
+  // Absent until the API pins calls to a version (ztmf-misc#397).
+  questionnaire_versionid?: number
+}
+
+export type QuestionnaireVersion = {
+  versionid: number
+  label: string
+  state: 'draft' | 'published' | 'archived'
+  parent_versionid: number | null
+  createdat: string
+  publishedat: string | null
 }
 
 export type FormValidType = {
@@ -507,6 +526,10 @@ export type ScoreDiffSide = {
 export type ScoreDiffEntry = {
   fismasystemid: number
   functionid: number
+  // The question's identity across questionnaire versions (ztmf-misc#395).
+  root_functionid: number
+  pillarid: number | null
+  pillar: string | null
   function: string
   question: string
   from: ScoreDiffSide | null

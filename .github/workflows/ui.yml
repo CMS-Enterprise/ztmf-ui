@@ -74,6 +74,9 @@ jobs:
           VITE_DEV_BANNER_MESSAGE: ${{ inputs.environment == 'dev' && secrets.DEV_BANNER_MESSAGE || '' }}
           VITE_DEV_FEEDBACK_URL: ${{ inputs.environment == 'dev' && secrets.DEV_FEEDBACK_URL || '' }}
           VITE_DEV_CONTACT_EMAIL: ${{ inputs.environment == 'dev' && secrets.DEV_CONTACT_EMAIL || '' }}
+          # Help page contact address, every environment. A secret only to keep
+          # it out of the repo; it is still readable in the shipped bundle.
+          VITE_HELP_EMAIL: ${{ secrets.HELP_EMAIL }}
         run: yarn build:${{ inputs.environment }}
 
       - name: Get AWS Creds

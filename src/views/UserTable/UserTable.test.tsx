@@ -27,7 +27,6 @@ jest.mock('../Title/Context', () => ({
   useContextProp: () => ({
     userInfo: mockUserInfo,
     fismaSystems: [],
-    setFismaSystems: jest.fn(),
     // The OpDiv catalog hook derives its projections from this shared list
     // (Title fetches /opdivs once), so the columns and filter read it here.
     opdivs: [
@@ -43,7 +42,6 @@ jest.mock('../Title/Context', () => ({
     setSelectedDatacall: jest.fn(),
     showDecommissioned: false,
     setShowDecommissioned: jest.fn(),
-    fetchFismaSystems: jest.fn(),
     dashboardSearch: '',
     setDashboardSearch: jest.fn(),
   }),
@@ -265,5 +263,16 @@ describe('UserTable', () => {
         screen.getByRole('combobox', { name: 'Filter by OpDiv' })
       ).toHaveValue('HHS')
     })
+  })
+})
+
+describe('UserTable pagination', () => {
+  test('starts at 25 rows per page like the other tables', async () => {
+    // With no pagination in initialState the grid fell back to MUI's 100.
+    renderWithProviders(<UserTable />)
+    await screen.findByText('Leia Organa')
+    expect(
+      screen.getByRole('combobox', { name: 'Rows per page' })
+    ).toHaveTextContent('25')
   })
 })

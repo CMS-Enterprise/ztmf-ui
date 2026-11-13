@@ -1,5 +1,7 @@
 import FismaTable from '../FismaTable/FismaTable'
 import { useCallback, useState, useMemo } from 'react'
+import { useQueryClient } from '@tanstack/react-query'
+import { queryKeys } from '@/api/keys'
 import { useDatacallAggregates, useDatacallProgress } from '@/utils/scores'
 import { useContextProp } from '../Title/Context'
 import { Box, Button, CircularProgress, Typography } from '@mui/material'
@@ -33,6 +35,7 @@ const SYSTEMS_TABLE_ID = 'dashboard-systems-table'
  * @returns {JSX.Element} The dashboard.
  */
 export default function HomePageContainer() {
+  const queryClient = useQueryClient()
   const [exporting, setExporting] = useState<boolean>(false)
   // Lifted so the Export CSV action can scope itself to the user's selection.
   // Empty array (default) -> export every system in the active datacall, which
@@ -46,8 +49,8 @@ export default function HomePageContainer() {
     selectedDatacall,
     activeDatacallIds,
     datacalls,
+    datacallsLoaded,
     fismaSystems,
-    setFismaSystems,
     userInfo,
     datacenterEnvironments,
     opdivs,
@@ -82,9 +85,9 @@ export default function HomePageContainer() {
   // the call each system most recently updated. Scores and progress are read
   // together because the chosen call depends on both. A single call's failure
   // yields an empty list rather than sinking the batch - see useDatacallAggregates.
-  const { scoresPerCall, isPending: scoresPending } =
+  const { scoresPerCall, isInitialLoad: scoresFirstLoad } =
     useDatacallAggregates(activeDatacallIds)
-  const { progressPerCall, isPending: progressPending } =
+  const { progressPerCall, isInitialLoad: progressFirstLoad } =
     useDatacallProgress(activeDatacallIds)
 
   const { scoreMap, progressMap, systemCallMap, chosenCallMap } = useMemo(
@@ -92,11 +95,19 @@ export default function HomePageContainer() {
     [activeDatacallIds, scoresPerCall, progressPerCall]
   )
 
-  // activeDatacallIds is [] on the first paint while Title is still fetching
-  // /datacalls, which is not "loaded and empty" - hold the spinner through that
-  // window too rather than flashing an empty dashboard.
+  // Three separate waits. The data calls decide which scores to ask for, so
+  // nothing can be rendered before they land. Once they have landed, a
+  // selection has not been derived yet for one paint, so hold through that
+  // too - but only when there are calls to select, or an environment with
+  // none would spin for good. After that, wait only while there is nothing
+  // to show: treating any read in flight as loading would swap the dashboard
+  // for a spinner whenever another call is switched on, unmounting
+  // FismaTable and taking the user's filters and sort with it.
   const loading =
-    activeDatacallIds.length === 0 || scoresPending || progressPending
+    !datacallsLoaded ||
+    (datacalls.length > 0 && activeDatacallIds.length === 0) ||
+    scoresFirstLoad ||
+    progressFirstLoad
 
   // The single call the export targets, or null (button disabled) when the
   // selection spans more than one call. Derivation logic + rationale live in
@@ -125,11 +136,14 @@ export default function HomePageContainer() {
     }
   }
 
-  // Mirrors the header Add-system flow: append the created system to the list
-  // when the modal returns a real (non-empty) record.
+  // Mirrors the header Add-system flow. The list is refetched rather than
+  // having the modal's record spliced in, so the row shown is the one the
+  // server stored, with whatever it derived on write.
   const handleCloseAdd = (newRowData: FismaSystemType) => {
     if (!_.isEqual(EMPTY_SYSTEM, newRowData)) {
-      setFismaSystems((prev) => [...prev, newRowData])
+      void queryClient.invalidateQueries({
+        queryKey: queryKeys.fismaSystems.lists(),
+      })
     }
     setAddOpen(false)
   }

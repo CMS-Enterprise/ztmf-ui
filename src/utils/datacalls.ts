@@ -1,11 +1,69 @@
-import { useMutation, useQueryClient } from '@tanstack/react-query'
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
+import type { QueryHookOptions } from '@/queryClient'
+import { EMPTY_LIST } from '@/utils/emptyList'
+import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
+import type { datacall, DatacallCadence } from '@/types'
+
+/**
+ * Reads every data call, newest deadline first.
+ *
+ * "Latest" means the furthest-out deadline rather than the highest id, because
+ * a historical load can carry a higher id than the real current call. The sort
+ * lives in `select` so every consumer sees the same order without repeating it,
+ * and so a refetch cannot briefly hand back an unsorted list.
+ *
+ * @param signal - Optional AbortSignal to cancel the request.
+ * @returns The data calls as served.
+ */
+export async function fetchDatacalls(
+  signal?: AbortSignal
+): Promise<datacall[]> {
+  const res = await axiosInstance.get<{ data: datacall[] | null }>(
+    apiPaths.datacalls.root,
+    { signal }
+  )
+  return res.data.data ?? []
+}
+
+/**
+ * Reads the deadline-sorted data calls for a component.
+ *
+ * @param options - `enabled`, for a layout that must not fetch before the
+ *   session loader has authenticated.
+ * @returns The sorted rows and whether the first load has settled.
+ */
+export function useDatacalls(options: QueryHookOptions = {}): {
+  datacalls: datacall[]
+  datacallsLoaded: boolean
+  datacallsError: boolean
+} {
+  const { data, isPending, isError } = useQuery({
+    queryKey: queryKeys.datacalls.list(),
+    queryFn: ({ signal }) => fetchDatacalls(signal),
+    select: sortDatacallsByDeadline,
+    enabled: options.enabled,
+    // Same reason as the systems list: the OpDiv dashboard renders this
+    // failure itself, through datacallsError.
+    meta: { suppressErrorNotification: true },
+  })
+  return {
+    datacalls: data ?? EMPTY_LIST,
+    datacallsLoaded: !isPending,
+    // The OpDiv dashboard renders its own message when this read fails.
+    datacallsError: isError,
+  }
+}
 
 /** Request body for POST /datacalls. */
 export type DatacallInput = {
-  /** Display name, upper-cased by the caller before it is sent. */
+  /** Free-text title. */
   datacall: string
+  /** Four-digit fiscal year, e.g. 2027. Required by the backend. */
+  fiscal_year: number
+  /** Optional; the backend defaults to annual. */
+  cadence?: DatacallCadence
   /** Deadline as an ISO 8601 timestamp. */
   deadline: string
 }
@@ -13,7 +71,7 @@ export type DatacallInput = {
 /**
  * Creates a data call.
  *
- * @param input - The name and deadline for the new call.
+ * @param input - The title, fiscal year, cadence and deadline for the new call.
  */
 export async function createDatacall(input: DatacallInput): Promise<void> {
   await axiosInstance.post(apiPaths.datacalls.root, input)

@@ -17,6 +17,12 @@ declare module 'axios' {
      * handling themselves.
      */
     skipAuthHandling?: boolean
+    /** Set to true to drop only the snackbar on a plain 403, while the
+     * interceptor keeps its 401 redirect, its not-provisioned redirect and
+     * its CSRF handling. For a request whose 403 the caller already renders,
+     * and where the toast would say something the page contradicts.
+     */
+    skipPermissionNotification?: boolean
   }
 }
 
