@@ -16,7 +16,7 @@ import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import { type QueryHookOptions } from '@/queryClient'
 import { EMPTY_LIST } from '@/utils/emptyList'
-import type { ScoreAggregate, ScoreProgress } from '@/types'
+import type { ScoreAggregate, ScoreDiffEntry, ScoreProgress } from '@/types'
 
 /** Historical data calls are immutable; only the newest call's rows move. */
 const HISTORY_STALE_MS = 5 * 60_000
@@ -62,6 +62,71 @@ export async function fetchScoreProgress(
     { signal }
   )
   return response.data.data ?? []
+}
+
+/**
+ * Fetches the answer-by-answer difference between two data calls for one
+ * system, in questionnaire order.
+ * @param {number} fromDatacallId - The older call.
+ * @param {number} toDatacallId - The newer call.
+ * @param {number} systemId - The system to compare.
+ * @param {AbortSignal} [signal] - Abort signal from the query.
+ * @returns {Promise<ScoreDiffEntry[]>} The diff rows.
+ */
+export async function fetchScoreDiff(
+  fromDatacallId: number,
+  toDatacallId: number,
+  systemId: number,
+  signal?: AbortSignal
+): Promise<ScoreDiffEntry[]> {
+  const response = await axiosInstance.get<{ data: ScoreDiffEntry[] | null }>(
+    apiPaths.scores.diff(fromDatacallId, toDatacallId, systemId),
+    { signal }
+  )
+  return response.data.data ?? []
+}
+
+/**
+ * The diff between two data calls for one system.
+ *
+ * Disabled until both ends are chosen and they differ, which is also what the
+ * caller's "pick two calls" empty state covers. Silent at the cache boundary:
+ * the comparison renders its own failure message, and a snackbar beside it
+ * would say the same thing twice.
+ *
+ * Nothing refetches this on reopen. A diff only changes when an answer does,
+ * and an answer write already invalidates the whole `scores` prefix.
+ *
+ * @param {number} [fromDatacallId] - The older call.
+ * @param {number} [toDatacallId] - The newer call.
+ * @param {number} systemId - The system to compare.
+ * @returns {UseQueryResult<ScoreDiffEntry[]>} The query result.
+ */
+export function useScoreDiff(
+  fromDatacallId: number | undefined,
+  toDatacallId: number | undefined,
+  systemId: number
+): UseQueryResult<ScoreDiffEntry[]> {
+  const ready =
+    fromDatacallId !== undefined &&
+    toDatacallId !== undefined &&
+    fromDatacallId !== toDatacallId
+  return useQuery({
+    queryKey: queryKeys.scores.diff(
+      fromDatacallId ?? 0,
+      toDatacallId ?? 0,
+      systemId
+    ),
+    queryFn: ({ signal }) =>
+      fetchScoreDiff(
+        fromDatacallId as number,
+        toDatacallId as number,
+        systemId,
+        signal
+      ),
+    enabled: ready,
+    meta: { suppressErrorNotification: true },
+  })
 }
 
 /**

@@ -19,20 +19,12 @@ import {
 } from '@mui/material'
 import ArrowForwardIcon from '@mui/icons-material/ArrowForward'
 import Modal from '@/components/ui/Modal'
-import axiosInstance from '@/axiosConfig'
-import { apiPaths } from '@/api/keys'
-import { isAuthHandled } from '@/utils/notify'
-import { sortDatacallsByDeadline } from '@/utils/sortDatacallsByDeadline'
+import { useScoreDiff } from '@/utils/scores'
+import { useDatacalls } from '@/utils/datacalls'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import AnswerSideCell from '@/components/AnswerSideCell/AnswerSideCell'
 import type { datacall, ScoreDiffEntry } from '@/types'
 import { formatDate, formatDateTime } from '@/utils/dates'
-
-const datacallsCache: { data: datacall[] | null; timestamp: number | null } = {
-  data: null,
-  timestamp: null,
-}
-
-const CACHE_DURATION = 10 * 60 * 1000
 
 interface ScoreDiffModalProps {
   open: boolean
@@ -51,13 +43,22 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   systemAcronym,
   selectedDataCallId,
 }) => {
-  const [datacalls, setDatacalls] = useState<datacall[]>([])
+  // Shared with the rest of the app, so opening this costs no request when
+  // the layout has already read the list, and the deadline sort comes from
+  // the hook's select rather than being repeated here.
+  const { datacalls } = useDatacalls({ enabled: open })
   const [fromDatacall, setFromDatacall] = useState<datacall | null>(null)
   const [toDatacall, setToDatacall] = useState<datacall | null>(null)
-  const [diffResults, setDiffResults] = useState<ScoreDiffEntry[]>([])
-  const [diffKey, setDiffKey] = useState(0)
-  const [loading, setLoading] = useState(false)
-  const [error, setError] = useState<string | null>(null)
+  const diffQuery = useScoreDiff(
+    fromDatacall?.datacallid,
+    toDatacall?.datacallid,
+    fismasystemid
+  )
+  const diffResults = diffQuery.data ?? EMPTY_LIST
+  const loading = diffQuery.isPending && diffQuery.isFetching
+  const error = diffQuery.isError
+    ? 'Failed to load diff. Please try again.'
+    : null
   const initialFocusRef = useRef<HTMLButtonElement>(null)
 
   // Focus close button on open for accessibility
@@ -70,57 +71,50 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     }
   }, [open])
 
-  // Reset transient state on close; bump diffKey on open so the diff
-  // re-fetches even when picker references haven't changed (cached datacalls).
+  // Reopening serves the cached diff, but a failed one is not worth keeping:
+  // the modal has no other retry, so without this a transient failure sticks
+  // until the pickers change or the page reloads.
+  const wasOpen = useRef(open)
   useEffect(() => {
-    if (open) {
-      setDiffKey((k) => k + 1)
-    } else {
-      setDiffResults([])
-      setError(null)
-    }
-  }, [open])
+    const reopened = open && !wasOpen.current
+    wasOpen.current = open
+    if (reopened && diffQuery.isError) void diffQuery.refetch()
+  }, [open, diffQuery])
 
-  // Fetch datacalls with cache; set defaults on first open
+  // Seed the pickers once per opening, and again if the caller's selected
+  // call changes underneath. Keyed rather than run on every datacalls change:
+  // the list is shared now, so a refetch while the modal is open would
+  // otherwise throw away whatever the user had picked.
+  const seededFor = useRef<string | null>(null)
+  // Drives the wait below. The code this replaced set the list and the
+  // defaults in one batch, so the pickers never rendered empty; reading the
+  // list from a query splits that into two renders unless the wait covers it.
+  const [seeded, setSeeded] = useState(false)
   useEffect(() => {
-    if (!open) return
-    const fetchDatacalls = async () => {
-      try {
-        const now = Date.now()
-        let sorted: datacall[]
-        if (
-          datacallsCache.data &&
-          datacallsCache.timestamp &&
-          now - datacallsCache.timestamp < CACHE_DURATION
-        ) {
-          sorted = datacallsCache.data
-        } else {
-          const res = await axiosInstance.get(apiPaths.datacalls.root)
-          // Order by deadline (furthest-out first), datacallid only as a
-          // tiebreak: historical loads can out-id the real current call (#393).
-          sorted = sortDatacallsByDeadline(res.data.data as datacall[])
-          datacallsCache.data = sorted
-          datacallsCache.timestamp = now
-        }
-        setDatacalls(sorted)
-        const toId = selectedDataCallId
-        const toDefault =
-          sorted.find((dc) => dc.datacallid === toId) ?? sorted[0] ?? null
-        // The default "from" is the call immediately older than "to" - i.e. the
-        // next entry in the deadline-sorted list, not the next-lower datacallid.
-        const toIndex = sorted.findIndex(
-          (dc) => dc.datacallid === toDefault?.datacallid
-        )
-        const fromDefault = toIndex >= 0 ? sorted[toIndex + 1] ?? null : null
-        setToDatacall(toDefault)
-        setFromDatacall(fromDefault)
-      } catch (err) {
-        if (isAuthHandled(err)) return
-        console.error('Error fetching datacalls:', err)
-      }
+    if (!open) {
+      seededFor.current = null
+      setSeeded(false)
+      return
     }
-    fetchDatacalls()
-  }, [open, selectedDataCallId])
+    if (datacalls.length === 0) return
+    const key = String(selectedDataCallId)
+    if (seededFor.current === key) return
+    seededFor.current = key
+
+    const toDefault =
+      datacalls.find((dc) => dc.datacallid === selectedDataCallId) ??
+      datacalls[0] ??
+      null
+    // The default "from" is the call immediately older than "to", i.e. the
+    // next entry in the deadline-sorted list, not the next-lower datacallid.
+    const toIndex = datacalls.findIndex(
+      (dc) => dc.datacallid === toDefault?.datacallid
+    )
+    const fromDefault = toIndex >= 0 ? datacalls[toIndex + 1] ?? null : null
+    setToDatacall(toDefault)
+    setFromDatacall(fromDefault)
+    setSeeded(true)
+  }, [open, datacalls, selectedDataCallId])
 
   // Group diff results by pillar. Rows arrive in questionnaire order
   // (scorediff.go sorts by pillars.ordr, questions.ordr, functions.ordr,
@@ -157,45 +151,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   }, [diffResults])
 
   // Fetch diff whenever both pickers are set and different.
-  // AbortController cancels any in-flight request when pickers change or the
-  // modal closes, preventing a stale response from overwriting a newer one.
-  useEffect(() => {
-    if (!fromDatacall || !toDatacall) return
-    if (fromDatacall.datacallid === toDatacall.datacallid) return
-
-    const controller = new AbortController()
-
-    setLoading(true)
-    setError(null)
-    setDiffResults([])
-
-    axiosInstance
-      .get(
-        apiPaths.scores.diff(
-          fromDatacall.datacallid,
-          toDatacall.datacallid,
-          fismasystemid
-        ),
-        { signal: controller.signal }
-      )
-      .then((res) => {
-        setDiffResults(res.data.data ?? [])
-      })
-      .catch((err) => {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(err)) {
-          setError('Failed to load diff. Please try again.')
-          return
-        }
-        setError('Failed to load diff. Please try again.')
-      })
-      .finally(() => {
-        if (!controller.signal.aborted) setLoading(false)
-      })
-
-    return () => controller.abort()
-  }, [fromDatacall, toDatacall, fismasystemid, diffKey])
-
   const renderOption = (
     props: React.HTMLAttributes<HTMLLIElement> & { key?: React.Key },
     option: datacall,
@@ -276,7 +231,7 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
       </Box>
 
       {/* Picker row - hidden behind a spinner until datacalls are loaded */}
-      {datacalls.length === 0 ? (
+      {datacalls.length === 0 || !seeded ? (
         <Box display="flex" justifyContent="center" py={2}>
           <CircularProgress size={24} aria-label="Loading datacalls" />
         </Box>

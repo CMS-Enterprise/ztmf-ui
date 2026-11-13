@@ -22,6 +22,7 @@ import {
   fetchScoreProgress,
   useDatacallAggregates,
   useDatacallProgress,
+  useScoreDiff,
 } from './scores'
 
 const mock = new MockAdapter(axiosInstance)
@@ -140,6 +141,45 @@ describe('score query options', () => {
 
     await waitFor(() => expect(agg.result.current.isPending).toBe(false))
     await waitFor(() => expect(prog.result.current.isPending).toBe(false))
+    expect(mockedNotify).not.toHaveBeenCalled()
+  })
+})
+
+const diffUrl = /\/scores\/diff/
+
+describe('useScoreDiff', () => {
+  it('does not ask the server to compare a data call with itself', async () => {
+    mock.onGet(diffUrl).reply(200, { data: [] })
+
+    const { result } = renderHook(() => useScoreDiff(5, 5, 1002), {
+      wrapper: queryWrapper(createTestQueryClient()),
+    })
+
+    await waitFor(() => expect(result.current.isPending).toBe(true))
+    expect(mock.history.get).toHaveLength(0)
+  })
+
+  it('waits until both ends are chosen', async () => {
+    mock.onGet(diffUrl).reply(200, { data: [] })
+
+    renderHook(() => useScoreDiff(5, undefined, 1002), {
+      wrapper: queryWrapper(createTestQueryClient()),
+    })
+
+    await new Promise((r) => setTimeout(r, 30))
+    expect(mock.history.get).toHaveLength(0)
+  })
+
+  // The comparison renders its own failure message, so a snackbar beside it
+  // would report the same thing twice.
+  it('keeps a failed diff out of the global snackbar', async () => {
+    mock.onGet(diffUrl).reply(500)
+
+    const { result } = renderHook(() => useScoreDiff(4, 5, 1002), {
+      wrapper: queryWrapper(createTestQueryClient()),
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
     expect(mockedNotify).not.toHaveBeenCalled()
   })
 })
