@@ -49,7 +49,8 @@ export type RiskPanelProps = {
  */
 function RiskListRow({ row }: { row: RiskRow }) {
   // Not Assessed still carries the API's 1.25 floor score; hide it the way
-  // ScoreCell and ScoreDisplay do so the row never reads as a measured 1.25.
+  // the Pillar Scores ScoreCell and ScoreDisplay do, so the row never reads
+  // as a measured 1.25.
   const scoreText =
     row.tier === 'Not Assessed' || row.score === undefined
       ? '-'
