@@ -1,6 +1,6 @@
 name: Quick Ticket
 description: Minimal issue for rapid capture - requires refinement before work begins
-labels: ["needs-refinement"]
+labels: ["needs-refinement", "area/frontend"]
 projects: ["CMS-Enterprise/44"]
 body:
   - type: dropdown
