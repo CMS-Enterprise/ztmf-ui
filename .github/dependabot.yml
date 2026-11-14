@@ -1,0 +1,23 @@
+version: 2
+updates:
+  # Security updates only: open-pull-requests-limit 0 keeps version updates
+  # off for each ecosystem. The entries exist so Dependabot's security PRs
+  # carry the shared labels instead of ecosystem labels it creates on its own.
+  - package-ecosystem: npm
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels:
+      - dependencies
+      - lang/typescript
+      - lang/javascript
+
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 0
+    labels:
+      - dependencies
+      - area/ci-cd
