@@ -1,4 +1,4 @@
-import { buildRadarData } from './radarData'
+import { buildRadarData, radarSeriesLabel } from './radarData'
 import type { PillarScore, ScoreAggregate } from '@/types'
 
 // A pillar absent from the comparison call used to plot as previous = 0, which
@@ -78,5 +78,18 @@ describe('buildRadarData', () => {
   it('returns an empty series when the anchor call has no pillar scores', () => {
     expect(buildRadarData(undefined, null)).toEqual([])
     expect(buildRadarData([], null)).toEqual([])
+  })
+})
+
+describe('radarSeriesLabel', () => {
+  // The tooltip used to label both rows with the comparison call's name.
+
+  it('labels each series with its own data call, as the legend does', () => {
+    expect(radarSeriesLabel('current', 'FY26 Q1', 'FY25 Q4')).toBe('FY26 Q1')
+    expect(radarSeriesLabel('previous', 'FY26 Q1', 'FY25 Q4')).toBe('FY25 Q4')
+  })
+
+  it('labels the single series of a view with no comparison', () => {
+    expect(radarSeriesLabel('current', 'Current', 'Previous')).toBe('Current')
   })
 })
