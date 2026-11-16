@@ -95,6 +95,10 @@ function OpDivsToolbar({
           height: 30,
           border: `1px solid ${colors.neutral200}`,
           borderRadius: `${radius.md}px`,
+          '&:focus-within': {
+            outline: `2px solid ${colors.primary}`,
+            outlineOffset: -1,
+          },
         }}
       >
         <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />

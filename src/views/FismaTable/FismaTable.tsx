@@ -213,6 +213,10 @@ function TableToolbar({
             '@media (min-width: 1100px)': {
               width: '50%',
             },
+            '&:focus-within': {
+              outline: `2px solid ${colors.primary}`,
+              outlineOffset: -1,
+            },
           }}
         >
           <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />

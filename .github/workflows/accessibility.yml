@@ -5,7 +5,7 @@ name: Accessibility
 # worse violation that the baseline does not already carry (ui#714 emptied it).
 # The SARIF pass runs first and unenforced, so the code scanning upload still
 # has a report to publish on the runs that fail.
-# NOT a required check yet - make it one to have it block merges.
+# "Frostfall 508 scan" is a required check on main, so a failure blocks merges.
 
 on:
   pull_request:

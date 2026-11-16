@@ -77,6 +77,11 @@ export function CompactSwitchLabel({
         '& .MuiSwitch-switchBase.Mui-disabled + .MuiSwitch-track': {
           opacity: 0.4,
         },
+        // MUI's focus ripple is white on this pale track: ring the pill instead.
+        '& .MuiSwitch-switchBase.Mui-focusVisible + .MuiSwitch-track': {
+          outline: `2px solid ${colors.primary}`,
+          outlineOffset: 2,
+        },
       }}
       control={
         <Switch
