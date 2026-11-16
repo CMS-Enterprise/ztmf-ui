@@ -14,7 +14,14 @@ server:
   baseUrl: http://localhost:5174
 
 defaults:
-  standard: section508
+  # CMS tests against WCAG 2.1 AA. frostfall runs every WCAG 2.0 and 2.1 A/AA
+  # rule for this standard, not only the rules 2.1 added.
+  standard: wcag21aa
+  # Keyboard-audit every page (frostfall/ rules: traps, unreachable controls,
+  # invisible focus). An audit Tabs through each stop, ~150ms apiece, so the
+  # dashboard needs more than the 30s default.
+  keyboard: true
+  timeout: 60s
 
 baseline: .frostfall-baseline.json
 
@@ -78,6 +85,8 @@ tests:
   # without navigating. See the fixture comment in _test_data_empire.sql for
   # why it is not on DS-1.
   - id: answer-history-drawer
+    # Only the drawer state matters here; the questionnaire test audits the page.
+    keyboard: false
     # Deep-linked to the fixture's question rather than relying on question
     # order, so a later reorder cannot move the scan off the fixture.
     path: '/#/questionnaire/system/1002/Audit_Fields_Smoke_Cycle/identity/imperial-identity-verification'
@@ -101,6 +110,12 @@ tests:
           # MUI puts role="presentation" on the Drawer root, not role="dialog",
           # so this scopes by id rather than by role.
           scope: '#answer-history-panel'
+      # Focus must move into the drawer on open and back to its trigger on close.
+      - expectFocus: { label: drawer-open, within: '#answer-history-panel' }
+      - keyboard: { label: drawer-open, scope: '#answer-history-panel' }
+      - press: Escape
+      - wait: 400ms
+      - expectFocus: { label: drawer-closed, name: View history }
 
   # Dedicated redesigned page (the old pillar-scores modal no longer exists).
   # The radar's labelled image mounts only after the seeded score payload has

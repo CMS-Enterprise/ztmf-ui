@@ -20,7 +20,7 @@ help:
 	@echo ""
 	@echo "Accessibility (Frostfall):"
 	@echo "  install-frostfall - Install the Frostfall scanner for this OS/arch"
-	@echo "  frostfall         - Quick 508 scan against the running local dev stack"
+	@echo "  frostfall         - Quick accessibility scan against the running local dev stack"
 	@echo "  frostfall-report  - Same scan, HTML report (frostfall-report.html)"
 	@echo "  frostfall-ci      - Full isolated scan: Empire stack + own vite (what CI runs)"
 
@@ -90,7 +90,7 @@ setup: install
 # Mirrors ../ztmf's install-emberfall: checksum-verified release binary into a
 # user-writable bin dir. Override for a system-wide install, e.g.
 # `make install-frostfall FROSTFALL_BIN_DIR=/usr/local/bin`.
-FROSTFALL_VERSION ?= v1.4.1
+FROSTFALL_VERSION ?= v1.6.1
 FROSTFALL_OS := $(shell uname -s)
 FROSTFALL_UNAME_M := $(shell uname -m)
 FROSTFALL_ARCH := $(if $(filter arm64 aarch64,$(FROSTFALL_UNAME_M)),arm64,x86_64)

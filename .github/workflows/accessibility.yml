@@ -1,11 +1,12 @@
 name: Accessibility
 
-# Enforcing 508 scan on every PR. The ci profile in .frostfall.yml expects
+# Enforcing accessibility scan (WCAG 2.1 AA, plus frostfall's keyboard audit)
+# on every PR. The ci profile in .frostfall.yml expects
 # severity: serious, so this job goes red when a PR introduces a serious or
 # worse violation that the baseline does not already carry (ui#714 emptied it).
 # The SARIF pass runs first and unenforced, so the code scanning upload still
 # has a report to publish on the runs that fail.
-# NOT a required check yet - make it one to have it block merges.
+# "Frostfall 508 scan" is a required check on main, so a failure blocks merges.
 
 on:
   pull_request:
@@ -31,8 +32,9 @@ jobs:
       # The isolated stack (compose-test.yml + Empire seed) lives in the
       # backend repo; the Makefile reaches it at ../ztmf, same as local runs.
       # Deliberately unpinned (tracks main): the stack and seed are meant to
-      # evolve with the backend, and this job is informational, so a breaking
-      # backend change showing up here is signal, not flake.
+      # evolve with the backend. This job is a required check, so a breaking
+      # backend change (a renamed fixture, a failed migration) blocks every
+      # ui PR until the seed and .frostfall.yml agree again.
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: CMS-Enterprise/ztmf
