@@ -49,6 +49,7 @@ import DataGridPaginationFooter from '@/components/ui/DataGridPaginationFooter'
 import CompactSwitchLabel from '@/components/ui/CompactSwitchLabel'
 import { colors, fonts, radius } from '@/theme/tokens'
 import { formatDate } from '@/utils/dates'
+import { focusWithinRing } from '@/components/ui/focusRing'
 
 // Short aliases for OpDiv codes longer than the 6-char column budget.
 const OPDIV_ALIASES: Record<string, string> = { REBELLION: 'REBEL' }
@@ -213,10 +214,7 @@ function TableToolbar({
             '@media (min-width: 1100px)': {
               width: '50%',
             },
-            '&:focus-within': {
-              outline: `2px solid ${colors.primary}`,
-              outlineOffset: -1,
-            },
+            ...focusWithinRing,
           }}
         >
           <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />

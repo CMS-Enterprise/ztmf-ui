@@ -20,7 +20,7 @@ help:
 	@echo ""
 	@echo "Accessibility (Frostfall):"
 	@echo "  install-frostfall - Install the Frostfall scanner for this OS/arch"
-	@echo "  frostfall         - Quick 508 scan against the running local dev stack"
+	@echo "  frostfall         - Quick accessibility scan against the running local dev stack"
 	@echo "  frostfall-report  - Same scan, HTML report (frostfall-report.html)"
 	@echo "  frostfall-ci      - Full isolated scan: Empire stack + own vite (what CI runs)"
 

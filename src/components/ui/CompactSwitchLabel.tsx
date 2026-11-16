@@ -46,6 +46,8 @@ export function CompactSwitchLabel({
           height: 18,
           padding: 0,
           mr: 1,
+          // MUI clips the root; the focus ring below sits outside the track.
+          overflow: 'visible',
         },
         '& .MuiSwitch-switchBase': {
           padding: 0,

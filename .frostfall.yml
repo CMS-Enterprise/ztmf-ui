@@ -14,7 +14,8 @@ server:
   baseUrl: http://localhost:5174
 
 defaults:
-  # CMS tests against WCAG 2.1 AA; axe's wcag21aa set includes the 2.0 AA rules.
+  # CMS tests against WCAG 2.1 AA. frostfall runs every WCAG 2.0 and 2.1 A/AA
+  # rule for this standard, not only the rules 2.1 added.
   standard: wcag21aa
   # Keyboard-audit every page (frostfall/ rules: traps, unreachable controls,
   # invisible focus). An audit Tabs through each stop, ~150ms apiece, so the

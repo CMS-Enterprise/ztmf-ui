@@ -7,6 +7,7 @@ import SearchIcon from '@mui/icons-material/Search'
 import CompactSwitchLabel from '@/components/ui/CompactSwitchLabel'
 import { colors, radius } from '@/theme/tokens'
 import type { OpDiv } from '@/types'
+import { focusWithinRing } from '@/components/ui/focusRing'
 
 /** Props for {@link UsersToolbar}. */
 export interface UsersToolbarProps {
@@ -79,10 +80,7 @@ export default function UsersToolbar({
           height: 30,
           border: `1px solid ${colors.border}`,
           borderRadius: `${radius.md}px`,
-          '&:focus-within': {
-            outline: `2px solid ${colors.primary}`,
-            outlineOffset: -1,
-          },
+          ...focusWithinRing,
         }}
       >
         <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />
