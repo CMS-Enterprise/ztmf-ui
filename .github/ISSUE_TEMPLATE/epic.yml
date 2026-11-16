@@ -1,6 +1,6 @@
 name: Epic
 description: Long-running issue tracking multiple sub-issues and relationships
-labels: ["epic"]
+labels: ["epic", "area/frontend"]
 projects: ["CMS-Enterprise/44"]
 body:
   - type: textarea
