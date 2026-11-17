@@ -1,5 +1,5 @@
 import { useMemo } from 'react'
-import { buildRadarData, radarSeriesLabel } from '../radarData'
+import { buildRadarData } from '../radarData'
 import Box from '@mui/material/Box'
 import {
   RadarChart,
@@ -110,9 +110,9 @@ export default function TrendRadar({
           )}
           <Legend wrapperStyle={{ fontSize: 12 }} />
           <Tooltip
-            formatter={(value: number, _name, item) => [
+            formatter={(value: number, name: string) => [
               value.toFixed(2),
-              radarSeriesLabel(item?.dataKey, currentName, previousName),
+              name,
             ]}
           />
         </RadarChart>

@@ -46,20 +46,3 @@ export function buildRadarData(
     previous: findComparisonPillarScore(comparisonScoreEntry, pillar.pillarid),
   }))
 }
-
-/**
- * The tooltip label for one radar series: the comparison call's name for the
- * `previous` series, the anchor call's name otherwise, so each row matches the
- * legend.
- *
- * Keyed off the series' dataKey because recharts hands a Tooltip formatter the
- * `<Radar>`'s `name` prop, which is already the data-call label; a check on
- * `name` stops matching once the series are named after their calls.
- */
-export function radarSeriesLabel(
-  dataKey: unknown,
-  currentName: string,
-  previousName: string
-): string {
-  return dataKey === 'previous' ? previousName : currentName
-}
