@@ -24,6 +24,9 @@ const CONFIG = {
   DEV_BANNER_MESSAGE: import.meta.env.VITE_DEV_BANNER_MESSAGE ?? '',
   DEV_FEEDBACK_URL: import.meta.env.VITE_DEV_FEEDBACK_URL ?? '',
   DEV_CONTACT_EMAIL: import.meta.env.VITE_DEV_CONTACT_EMAIL ?? '',
+
+  //* Help page contact address, injected from CI secrets in every environment
+  HELP_EMAIL: import.meta.env.VITE_HELP_EMAIL ?? '',
 } satisfies AppConfig
 
 export default CONFIG

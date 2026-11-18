@@ -22,6 +22,7 @@ export enum RouteIds {
   // lives under the OpDivs tab at OPDIVS_MANAGE.
   ADMIN_OPDIVS = 'admin-opdivs',
   ADMIN_EVENTS = 'admin-events',
+  HELP = 'help',
 }
 
 export enum RouteNames {
@@ -50,6 +51,7 @@ export enum Routes {
   OPDIV_DASHBOARD = `/${RouteIds.OPDIVS}/:opdivId`,
   ADMIN_OPDIVS = '/admin/opdivs',
   ADMIN_EVENTS = '/admin/events',
+  HELP = `/${RouteIds.HELP}`,
 }
 
 /**

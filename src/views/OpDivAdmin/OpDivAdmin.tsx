@@ -35,6 +35,7 @@ import { isUnscopedWriteAdmin } from '@/utils/userRoles'
 import { parseApiError } from '@/utils/apiErrors'
 import { isAuthHandled, notify } from '@/utils/notify'
 import type { OpDiv } from '@/types'
+import { focusWithinRing } from '@/components/ui/focusRing'
 
 const CODE_MAX = 16
 const NAME_MAX = 128
@@ -95,6 +96,7 @@ function OpDivsToolbar({
           height: 30,
           border: `1px solid ${colors.neutral200}`,
           borderRadius: `${radius.md}px`,
+          ...focusWithinRing,
         }}
       >
         <SearchIcon sx={{ fontSize: 14, color: colors.neutral500 }} />

@@ -78,16 +78,24 @@ export default function ActionsCell({
           sx={
             isSelf
               ? {
-                  opacity: 0.38,
                   cursor: 'not-allowed',
                   '&:hover': { backgroundColor: 'transparent' },
+                  // disableRipple removes the only focus indicator; replace it.
+                  '&.Mui-focusVisible': {
+                    outline: `2px solid ${colors.primary}`,
+                    outlineOffset: 2,
+                  },
                 }
               : undefined
           }
         >
           <DeleteIcon
             fontSize="small"
-            sx={{ color: isSelf ? colors.neutral400 : colors.neutral700 }}
+            // Dim the icon, not the button, so the focus ring keeps full strength.
+            sx={{
+              color: isSelf ? colors.neutral400 : colors.neutral700,
+              opacity: isSelf ? 0.38 : 1,
+            }}
           />
         </IconButton>
       </Tooltip>

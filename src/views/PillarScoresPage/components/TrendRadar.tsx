@@ -112,7 +112,7 @@ export default function TrendRadar({
           <Tooltip
             formatter={(value: number, name: string) => [
               value.toFixed(2),
-              name === 'current' ? currentName : previousName,
+              name,
             ]}
           />
         </RadarChart>

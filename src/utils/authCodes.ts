@@ -22,6 +22,11 @@ export type AuthCode = (typeof AuthCodes)[keyof typeof AuthCodes]
  * between the terminal "no account" UX and the retryable "session
  * expired" UX.
  */
+// Shown when the IdP lookup finds no provider for an email. Shared so the
+// help copy quotes exactly what the login page shows.
+export const UNKNOWN_EMAIL_MESSAGE =
+  "We can't determine an identity provider for that email. Contact your ZTMF administrator."
+
 export const SignInReasons = {
   NO_ACCOUNT: 'NO_ACCOUNT',
   EXPIRED: 'EXPIRED',
