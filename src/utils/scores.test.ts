@@ -170,6 +170,20 @@ describe('useScoreDiff', () => {
     expect(mock.history.get).toHaveLength(0)
   })
 
+  // suppressErrorNotification does not cover this case: handleQueryError
+  // returns early for an auth-handled error, so the snackbar that would
+  // double-report a 403 is the interceptor's, not the cache boundary's.
+  it('opts the diff read out of the interceptor permission snackbar', async () => {
+    mock.onGet(diffUrl).reply(403)
+
+    const { result } = renderHook(() => useScoreDiff(4, 5, 1002), {
+      wrapper: queryWrapper(createTestQueryClient()),
+    })
+
+    await waitFor(() => expect(result.current.isError).toBe(true))
+    expect(mock.history.get[0].skipPermissionNotification).toBe(true)
+  })
+
   // The comparison renders its own failure message, so a snackbar beside it
   // would report the same thing twice.
   it('keeps a failed diff out of the global snackbar', async () => {

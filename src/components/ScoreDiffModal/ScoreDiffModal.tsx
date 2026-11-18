@@ -49,10 +49,15 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
   const { datacalls } = useDatacalls({ enabled: open })
   const [fromDatacall, setFromDatacall] = useState<datacall | null>(null)
   const [toDatacall, setToDatacall] = useState<datacall | null>(null)
+  // Gated on open like the datacalls read above. This dialog stays mounted
+  // between openings, so an ungated query keeps observing: it would refetch
+  // in the background on every answer write, and never read the server again
+  // on reopen, which is wrong for data other people edit.
   const diffQuery = useScoreDiff(
     fromDatacall?.datacallid,
     toDatacall?.datacallid,
-    fismasystemid
+    fismasystemid,
+    { enabled: open }
   )
   const diffResults = diffQuery.data ?? EMPTY_LIST
   const loading = diffQuery.isPending && diffQuery.isFetching
@@ -70,16 +75,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
       return () => clearTimeout(timer)
     }
   }, [open])
-
-  // Reopening serves the cached diff, but a failed one is not worth keeping:
-  // the modal has no other retry, so without this a transient failure sticks
-  // until the pickers change or the page reloads.
-  const wasOpen = useRef(open)
-  useEffect(() => {
-    const reopened = open && !wasOpen.current
-    wasOpen.current = open
-    if (reopened && diffQuery.isError) void diffQuery.refetch()
-  }, [open, diffQuery])
 
   // Seed the pickers once per opening, and again if the caller's selected
   // call changes underneath. Keyed rather than run on every datacalls change:
@@ -150,7 +145,6 @@ const ScoreDiffModal: React.FC<ScoreDiffModalProps> = ({
     return sorted
   }, [diffResults])
 
-  // Fetch diff whenever both pickers are set and different.
   const renderOption = (
     props: React.HTMLAttributes<HTMLLIElement> & { key?: React.Key },
     option: datacall,

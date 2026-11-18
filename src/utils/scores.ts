@@ -81,7 +81,11 @@ export async function fetchScoreDiff(
 ): Promise<ScoreDiffEntry[]> {
   const response = await axiosInstance.get<{ data: ScoreDiffEntry[] | null }>(
     apiPaths.scores.diff(fromDatacallId, toDatacallId, systemId),
-    { signal }
+    // The comparison shows its own failure message. Without this a 403 also
+    // raises the interceptor's permission snackbar, and suppressing the cache
+    // boundary does not help: handleQueryError already returns early for an
+    // auth-handled error.
+    { signal, skipPermissionNotification: true }
   )
   return response.data.data ?? []
 }
@@ -94,18 +98,24 @@ export async function fetchScoreDiff(
  * the comparison renders its own failure message, and a snackbar beside it
  * would say the same thing twice.
  *
- * Nothing refetches this on reopen. A diff only changes when an answer does,
- * and an answer write already invalidates the whole `scores` prefix.
+ * Pass `enabled: open` from a modal. Both callers keep the dialog mounted and
+ * only toggle a prop, so without it the query stays an observer after close:
+ * it refetches in the background whenever an answer write invalidates the
+ * `scores` prefix, and a reopen never reads the server, so a change someone
+ * else made would show the old diff for as long as the page stays open.
  *
  * @param {number} [fromDatacallId] - The older call.
  * @param {number} [toDatacallId] - The newer call.
  * @param {number} systemId - The system to compare.
+ * @param {QueryHookOptions} [options] - `enabled`, for a caller that only
+ *   reads while it is open.
  * @returns {UseQueryResult<ScoreDiffEntry[]>} The query result.
  */
 export function useScoreDiff(
   fromDatacallId: number | undefined,
   toDatacallId: number | undefined,
-  systemId: number
+  systemId: number,
+  options: QueryHookOptions = {}
 ): UseQueryResult<ScoreDiffEntry[]> {
   const ready =
     fromDatacallId !== undefined &&
@@ -124,7 +134,7 @@ export function useScoreDiff(
         systemId,
         signal
       ),
-    enabled: ready,
+    enabled: ready && options.enabled !== false,
     meta: { suppressErrorNotification: true },
   })
 }

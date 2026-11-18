@@ -1,7 +1,9 @@
 import { screen, waitFor, fireEvent } from '@testing-library/react'
 import { render } from '@testing-library/react'
+import { act } from '@testing-library/react'
 import { QueryClientProvider } from '@tanstack/react-query'
 import { createTestQueryClient } from '@/test-utils/createTestQueryClient'
+import { queryKeys } from '@/api/keys'
 import { useDatacalls } from '@/utils/datacalls'
 import { renderWithQueryClient } from '@/test-utils/renderWithQueryClient'
 import ScoreDiffModal from './ScoreDiffModal'
@@ -350,16 +352,18 @@ describe('ScoreDiffModal', () => {
   // read is a cache hit and the entry never loses its observer. That is what
   // makes deleting the module-level cache safe: it was standing in for a
   // shared cache the app now has.
-  it('issues no datacalls request when the layout already holds the list', async () => {
+  it('leans on the layout observer rather than refetching the list', async () => {
     setupMocks()
     const client = createTestQueryClient()
-    const Layout = () => {
+    // The layout reads the list for the whole session; the modal comes and
+    // goes beneath it.
+    const Harness = ({ withModal }: { withModal: boolean }) => {
       useDatacalls({ enabled: true })
-      return <ScoreDiffModal {...DEFAULT_PROPS} />
+      return withModal ? <ScoreDiffModal {...DEFAULT_PROPS} /> : null
     }
-    const { unmount } = render(
+    const { rerender } = render(
       <QueryClientProvider client={client}>
-        <Layout />
+        <Harness withModal />
       </QueryClientProvider>
     )
     await screen.findByText('Does your org use MFA?')
@@ -367,22 +371,62 @@ describe('ScoreDiffModal', () => {
       mockGet.mock.calls.filter(([u]: [string]) => u === '/datacalls').length
     expect(datacallCalls()).toBe(1)
 
-    // Close the modal by unmounting it, then bring it back under the same
-    // client, the way navigating away and back does.
-    unmount()
-    render(
+    rerender(
       <QueryClientProvider client={client}>
-        <Layout />
+        <Harness withModal={false} />
+      </QueryClientProvider>
+    )
+
+    // The point: with the modal gone the entry still has a watcher, so its
+    // collection clock never starts. That is what replaces the module-level
+    // cache this migration deleted.
+    const entry = client
+      .getQueryCache()
+      .find({ queryKey: queryKeys.datacalls.list() })
+    expect(entry?.getObserversCount()).toBeGreaterThan(0)
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <Harness withModal />
       </QueryClientProvider>
     )
     await screen.findByText('Does your org use MFA?')
-
     expect(datacallCalls()).toBe(1)
   })
 
+  // Both callers keep this dialog mounted and only toggle `open`. An ungated
+  // query stays an observer after close, so an answer write elsewhere would
+  // refetch a diff nobody is looking at.
+  it('stops observing the diff once the modal closes', async () => {
+    setupMocks()
+    const client = createTestQueryClient()
+    const { rerender } = render(
+      <QueryClientProvider client={client}>
+        <ScoreDiffModal {...DEFAULT_PROPS} />
+      </QueryClientProvider>
+    )
+    await screen.findByText('Does your org use MFA?')
+    const diffCalls = () =>
+      mockGet.mock.calls.filter(([u]: [string]) => u.includes('/scores/diff'))
+        .length
+    expect(diffCalls()).toBe(1)
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <ScoreDiffModal {...DEFAULT_PROPS} open={false} />
+      </QueryClientProvider>
+    )
+    // What an answer write does. A closed modal must not answer it.
+    await act(async () => {
+      await client.invalidateQueries({ queryKey: queryKeys.scores.all })
+    })
+
+    expect(diffCalls()).toBe(1)
+  })
+
   // Reopening used to refetch because a counter forced the effect to re-run.
-  // A diff only changes when an answer does, and an answer write invalidates
-  // the whole scores prefix, so the cached rows are correct until then.
+  // Now the query re-enables on open, and inside the stale window that is a
+  // cache hit. A reopen after the window refetches.
   it('serves the cached diff when the modal is reopened', async () => {
     setupMocks()
     const { rerender } = renderWithQueryClient(
