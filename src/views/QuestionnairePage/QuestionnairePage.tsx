@@ -40,6 +40,7 @@ import {
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
 import { outlinedChipSx } from '@/utils/chipStyles'
+import { useFismaSystems } from '@/utils/fismaSystems'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
@@ -327,14 +328,43 @@ export default function QuestionnarePage() {
   // rather than resolved into a system here. The two shapes never overlap, so
   // an all-digit acronym cannot be mistaken for an id.
   const routeSystemId = parseSystemIdParam(systemParam)
+  // Legacy acronym links: every active-list match. One match redirects to the
+  // id form; the decommissioned list is only consulted when there is none.
+  const legacyActiveMatches = React.useMemo(
+    () => findSystemsByAcronym(fismaSystems, legacyAcronym),
+    [fismaSystems, legacyAcronym]
+  )
+  const routeSystemActive =
+    routeSystemId !== undefined &&
+    fismaSystems.some((s) => s.fismasystemid === routeSystemId)
   // The context list holds active systems only, so a deep link to a
   // decommissioned system would read as "not found" and mislead (its real
   // state is "no questionnaire available"). When the id (or legacy acronym)
-  // misses the active list, lazily fetch the decommissioned list once and
-  // retry against it. null = not fetched; [] = fetched (empty or failed).
-  const [decommissionedSystems, setDecommissionedSystems] = React.useState<
-    FismaSystemType[] | null
-  >(null)
+  // misses the active list, fetch the decommissioned list and retry against
+  // it. Once loaded it stays: a disabled query still serves its cached rows.
+  // null = not fetched; [] = fetched (empty or failed), so a failure lands on
+  // the not-found warning rather than an indefinite spinner.
+  const decommissionedLookup = useFismaSystems(true, {
+    enabled:
+      fismaSystemsLoaded &&
+      (!!systemParam || !!legacyAcronym) &&
+      !routeSystemActive &&
+      legacyActiveMatches.length === 0,
+  })
+  const {
+    fismaSystems: decommissionedRows,
+    fismaSystemsFetchedDecommissioned: decommissionedFetched,
+    fismaSystemsError: decommissionedFailed,
+  } = decommissionedLookup
+  const decommissionedSystems = React.useMemo<FismaSystemType[] | null>(
+    () =>
+      decommissionedFetched
+        ? decommissionedRows
+        : decommissionedFailed
+          ? []
+          : null,
+    [decommissionedFetched, decommissionedRows, decommissionedFailed]
+  )
   // OpDivs whose systems surface the internal ZTMF Insights layer
   // (opdivs.insights_enabled - CMS today). The gate keys on the SYSTEM's OpDiv,
   // not the viewed data call's name: the FY23-25 era used call tenant (CMS-named
@@ -362,46 +392,6 @@ export default function QuestionnarePage() {
     [fismaSystems, decommissionedSystems, routeSystemId]
   )
   const system = systemInfo?.fismasystemid
-  // Legacy acronym links: every active-list match. One match redirects to the
-  // id form; the decommissioned list is only consulted when there is none.
-  const legacyActiveMatches = React.useMemo(
-    () => findSystemsByAcronym(fismaSystems, legacyAcronym),
-    [fismaSystems, legacyAcronym]
-  )
-  React.useEffect(() => {
-    if (
-      system !== undefined ||
-      !fismaSystemsLoaded ||
-      (!systemParam && !legacyAcronym) ||
-      legacyActiveMatches.length > 0 ||
-      decommissionedSystems !== null
-    )
-      return
-    const controller = new AbortController()
-    const load = async () => {
-      try {
-        const res = await axiosInstance.get(apiPaths.fismaSystems.list(true), {
-          signal: controller.signal,
-        })
-        setDecommissionedSystems(res.data?.data ?? [])
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        // Resolution proceeds without the list; the not-found warning is the
-        // fallback rather than an indefinite spinner.
-        setDecommissionedSystems([])
-      }
-    }
-    void load()
-    return () => controller.abort()
-  }, [
-    system,
-    fismaSystemsLoaded,
-    systemParam,
-    legacyAcronym,
-    legacyActiveMatches.length,
-    decommissionedSystems,
-  ])
   // Redirect a pre-#732 acronym bookmark to the id form once the systems list
   // can answer. Exactly one match (active, else decommissioned) rewrites the
   // first segment in place and keeps the datacall / pillar / function tail, so
