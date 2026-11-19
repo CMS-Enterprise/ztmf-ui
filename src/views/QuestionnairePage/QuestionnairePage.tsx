@@ -41,6 +41,12 @@ import { outlinedChipSx } from '@/utils/chipStyles'
 import { useFismaSystems } from '@/utils/fismaSystems'
 import { useSystemInsights } from '@/utils/insights'
 import { functionOptionsQuery } from '@/utils/functionOptions'
+import {
+  QuestionScoreMap,
+  indexScoresByOption,
+  latestEditedAt,
+  questionScoresQuery,
+} from '@/utils/questionScores'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
@@ -104,9 +110,7 @@ import {
   parseSystemIdParam,
   questionnairePath,
 } from './deepLink'
-type questionScoreMap = {
-  [key: number]: QuestionScores
-}
+type questionScoreMap = QuestionScoreMap
 const CssTextField = styled(TextField)({
   '& .MuiOutlinedInput-root': {
     '& fieldset': {
@@ -238,27 +242,16 @@ export default function QuestionnarePage() {
     setQuestionScores: (scores: questionScoreMap) => void
   ): Promise<questionScoreMap | undefined> => {
     try {
-      const response = await axiosInstance.get(
-        apiPaths.scores.list(datacallID, systemId, true)
+      const rows = await queryClient.fetchQuery(
+        questionScoresQuery(datacallID, Number(systemId))
       )
-      const rows: QuestionScores[] = response.data.data ?? []
-      const hashTable: questionScoreMap = Object.assign(
-        {},
-        ...rows.map((item: QuestionScores) => ({
-          [item.functionoptionid]: item,
-        }))
-      )
+      const hashTable = indexScoresByOption(rows)
       setQuestionScores(hashTable)
       // Seed the "last saved" indicator from the freshest score row so the
       // header subtitle reads "last saved 2 min ago" on first paint instead
       // of waiting for a save in this session.
-      let maxAt = 0
-      for (const r of rows) {
-        if (!r.last_edited_at) continue
-        const t = new Date(r.last_edited_at).getTime()
-        if (Number.isFinite(t) && t > maxAt) maxAt = t
-      }
-      if (maxAt > 0) setLastSavedAt(new Date(maxAt))
+      const latest = latestEditedAt(rows)
+      if (latest) setLastSavedAt(latest)
       return hashTable
     } catch (error) {
       if (isAuthHandled(error)) return undefined
@@ -1057,28 +1050,17 @@ export default function QuestionnarePage() {
           }
           let hashTable: questionScoreMap = {}
           try {
-            const res = await axiosInstance.get(
-              apiPaths.scores.list(activeDataCallId, system, true),
-              { signal: controller.signal }
+            const rows = await queryClient.fetchQuery(
+              questionScoresQuery(activeDataCallId, system)
             )
-            const rows: QuestionScores[] = res.data.data ?? []
+            if (controller.signal.aborted) return
             // Assigned into the outer hashTable so the batch below commits
             // questions + scores + datacallID + questionId together.
-            hashTable = Object.assign(
-              {},
-              ...rows.map((item: QuestionScores) => ({
-                [item.functionoptionid]: item,
-              }))
-            )
+            hashTable = indexScoresByOption(rows)
             // Same seed as fetchQuestionScores so a freshly-loaded page
             // shows "last saved <time>" without needing a save first.
-            let maxAt = 0
-            for (const r of rows) {
-              if (!r.last_edited_at) continue
-              const t = new Date(r.last_edited_at).getTime()
-              if (Number.isFinite(t) && t > maxAt) maxAt = t
-            }
-            if (maxAt > 0) setLastSavedAt(new Date(maxAt))
+            const latest = latestEditedAt(rows)
+            if (latest) setLastSavedAt(latest)
           } catch (error) {
             if (controller.signal.aborted) return
             if (!isAuthHandled(error)) {
@@ -1125,6 +1107,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     datacalls,
+    queryClient,
   ])
   React.useEffect(() => {
     if (questionId) {
