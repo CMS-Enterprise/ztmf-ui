@@ -211,6 +211,11 @@ function renderAt(path: string) {
   )
   const provider = <RouterProvider router={router} />
   const utils = renderWithQueryClient(provider)
+  // Answer options are cached, so a second run of the question-load effect
+  // within the stale window would make no request and the "fetched once"
+  // assertions could not see it. Zero stale time on that key alone keeps them
+  // honest without making the questions observers refetch.
+  utils.queryClient.setQueryDefaults(['functions'], { staleTime: 0 })
   return { ...utils, rerender: () => utils.rerender(provider) }
 }
 
