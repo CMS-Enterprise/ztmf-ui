@@ -1956,6 +1956,13 @@ describe('carried-forward confirmation', () => {
       ).toBe(true)
     )
     fireEvent.click(screen.getByText(/^Next question/i))
+    // Moved on means the next question has loaded. Rejecting earlier races
+    // its load: while the old answer is still on screen its history query is
+    // observed, so the invalidation below refetches at once and never reads
+    // as invalidated.
+    expect(
+      await screen.findByText('Question for Imperial Device Management')
+    ).toBeInTheDocument()
     await act(async () => {
       reject({
         isAxiosError: true,
