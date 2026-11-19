@@ -40,6 +40,7 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import { outlinedChipSx } from '@/utils/chipStyles'
 import { useFismaSystems } from '@/utils/fismaSystems'
 import { useSystemInsights } from '@/utils/insights'
+import { functionOptionsQuery } from '@/utils/functionOptions'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
@@ -1139,11 +1140,14 @@ export default function QuestionnarePage() {
       let funcOptId: number = 0
       async function fetchOptions() {
         try {
-          const res = await axiosInstance.get(
-            apiPaths.functionOptions(activeQuestionId),
-            { signal: controller.signal }
+          // Through the query cache, so revisiting a question reuses its
+          // options instead of refetching them. The seeding below still runs
+          // here, in order, until it moves to derived state.
+          const optionRows = await queryClient.fetchQuery(
+            functionOptionsQuery(activeQuestionId)
           )
-          res.data.data.forEach((item: QuestionOption) => {
+          if (controller.signal.aborted) return
+          optionRows.forEach((item: QuestionOption) => {
             const choiceOpt: QuestionChoice = {
               label: item.description,
               value: item.functionoptionid,
@@ -1225,6 +1229,7 @@ export default function QuestionnarePage() {
     userInfo.userid,
     restoreDraft,
     resetDraftStatus,
+    queryClient,
   ])
 
   // Record that the user opened this question, so time-spent analytics can
