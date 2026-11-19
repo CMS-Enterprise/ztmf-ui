@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import type { QuestionScores } from '@/types'
@@ -47,6 +47,33 @@ export const questionScoresQuery = (datacallId: number, systemId: number) =>
     staleTime: 0,
     meta: { suppressErrorNotification: true },
   })
+
+/** Which system's answers, for which data call. */
+export type QuestionScoresKey = { systemId: number; datacallId: number }
+
+/**
+ * Renders a system's saved answers for one data call, or nothing while `key`
+ * is null.
+ *
+ * The page decides when to read the server: it awaits `fetchQuery` before it
+ * moves the key, and rereads explicitly after a save, confirm or undo. So
+ * this observer never refetches on its own account (infinite stale time).
+ * It still refetches when a score write invalidates the key, which is the
+ * only way the server's answers change under it.
+ *
+ * @param key - The system and data call, or null for none.
+ * @returns The rows, or undefined until a key is set and its data arrives.
+ */
+export function useQuestionScores(
+  key: QuestionScoresKey | null
+): QuestionScores[] | undefined {
+  const { data } = useQuery({
+    ...questionScoresQuery(key?.datacallId ?? 0, key?.systemId ?? 0),
+    enabled: key !== null,
+    staleTime: Infinity,
+  })
+  return data
+}
 
 /** Index rows by functionoptionid, the key the questionnaire looks them up by. */
 export function indexScoresByOption(rows: QuestionScores[]): QuestionScoreMap {
