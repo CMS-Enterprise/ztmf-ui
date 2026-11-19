@@ -11,7 +11,6 @@ import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
-import TextField from '@mui/material/TextField'
 import Tooltip from '@mui/material/Tooltip'
 import { visuallyHidden } from '@mui/utils'
 import {
@@ -21,7 +20,6 @@ import {
   QuestionScores,
 } from '@/types'
 import { Container } from '@mui/system'
-import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
@@ -58,7 +56,10 @@ import {
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
-import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
+import EvidenceNotesField, {
+  DEFAULT_NOTES_PROMPT,
+} from './components/EvidenceNotesField'
+import NotesFooter from './components/NotesFooter'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import AnswerHistoryPanel, {
@@ -124,32 +125,6 @@ import {
   questionnairePath,
 } from './deepLink'
 type questionScoreMap = QuestionScoreMap
-const CssTextField = styled(TextField)({
-  '& .MuiOutlinedInput-root': {
-    '& fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-    },
-    '&.Mui-focused fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-      boxShadow: '0px 0px 0px 3px #FFFFFF, 0px 0px 3px 6px #bd13b8',
-    },
-    '@supports (-moz-appearance:none)': {
-      paddingTop: '30px',
-      '& .MuiInputBase-inputMultiline': {
-        // paddingTop: '-15px',
-        height: '100%',
-        width: '100%',
-        scrollbarWidth: 'none',
-      },
-    },
-    '& .MuiInputBase-inputMultiline': {
-      msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
-      '&::-webkit-scrollbar': { display: 'none' },
-    },
-  },
-})
 // Ties the carried-forward guidance line to the Confirm button it explains, so
 // a screen reader hears the reason with the action.
 const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
@@ -1785,95 +1760,37 @@ export default function QuestionnarePage() {
                   maxLength={MAX_QUESTIONNAIRE_NOTES_LENGTH}
                 />
               ) : (
-                <>
-                  <Typography
-                    component="label"
-                    htmlFor="questionnaire-notes"
-                    sx={{
-                      display: 'block',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: colors.ink,
-                      mt: 3,
-                      mb: 0.5,
-                    }}
-                  >
-                    Supporting evidence{' '}
-                    <Box
-                      component="span"
-                      sx={{
-                        color: colors.neutral500,
-                        fontWeight: 500,
-                      }}
-                    >
-                      - optional
-                    </Box>
-                  </Typography>
-                  <CssTextField
-                    id="questionnaire-notes"
-                    multiline
-                    rows={4}
-                    fullWidth
-                    value={notes}
-                    disabled={isReadOnly}
-                    error={needsNotesUpdate}
-                    helperText={
-                      needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
-                    }
-                    placeholder={
-                      notePrompt ||
-                      'Link policies or screenshots in your evidence repo.'
-                    }
-                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
-                    onChange={(e) => {
-                      setNotes(e.target.value)
-                      draft.markEdited()
-                    }}
-                  />
-                </>
+                <EvidenceNotesField
+                  value={notes}
+                  onChange={(value) => {
+                    setNotes(value)
+                    draft.markEdited()
+                  }}
+                  notePrompt={notePrompt}
+                  disabled={isReadOnly}
+                  errorText={
+                    needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                  }
+                />
               )}
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 1,
-                  mt: 0.5,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <AISummaryBadge
-                    show={
-                      selectQuestionOption >= 0 &&
-                      questionScores[selectQuestionOption]
-                        ?.notes_is_ai_summary === true
-                    }
-                  />
-                  {!hasJustificationContext && (
-                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                      {notePrompt
-                        ? notePrompt
-                        : 'Link policies or screenshots in your evidence repo.'}
-                    </Typography>
-                  )}
-                </Box>
-                {/* JustificationField renders its own counter. */}
-                {!hasJustificationContext && !isReadOnly && (
-                  <Typography
-                    sx={{
-                      fontSize: 12,
-                      color:
-                        notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                          ? colors.danger
-                          : notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                            ? '#A34200'
-                            : colors.neutral500,
-                    }}
-                  >
-                    {notes.length} / {MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                  </Typography>
-                )}
-              </Box>
+              {/* JustificationField renders its own prompt and counter. */}
+              <NotesFooter
+                showAiBadge={
+                  selectQuestionOption >= 0 &&
+                  questionScores[selectQuestionOption]?.notes_is_ai_summary ===
+                    true
+                }
+                prompt={
+                  hasJustificationContext
+                    ? undefined
+                    : notePrompt || DEFAULT_NOTES_PROMPT
+                }
+                count={
+                  hasJustificationContext || isReadOnly
+                    ? undefined
+                    : notes.length
+                }
+              />
               {/* Carried-forward confirmation strip, in the same zone where
                   the prior-response flow surfaces its "review before
                   continuing" message, so every system shares one review area.
