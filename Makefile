@@ -90,7 +90,7 @@ setup: install
 # Mirrors ../ztmf's install-emberfall: checksum-verified release binary into a
 # user-writable bin dir. Override for a system-wide install, e.g.
 # `make install-frostfall FROSTFALL_BIN_DIR=/usr/local/bin`.
-FROSTFALL_VERSION ?= v1.6.1
+FROSTFALL_VERSION ?= v1.9.0
 FROSTFALL_OS := $(shell uname -s)
 FROSTFALL_UNAME_M := $(shell uname -m)
 FROSTFALL_ARCH := $(if $(filter arm64 aarch64,$(FROSTFALL_UNAME_M)),arm64,x86_64)
