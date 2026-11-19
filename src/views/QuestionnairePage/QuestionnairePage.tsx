@@ -51,6 +51,7 @@ import {
   indexScoresByOption,
   latestEditedAt,
   questionScoresQuery,
+  useQuestionScores,
 } from '@/utils/questionScores'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
@@ -173,9 +174,6 @@ export default function QuestionnarePage() {
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
-  const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
-    {}
-  )
   const [questionId, setQuestionId] = React.useState<number | null>(null)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
@@ -187,10 +185,11 @@ export default function QuestionnarePage() {
   // previous system's question or scores.
   const [navQuestionsKey, setNavQuestionsKey] =
     React.useState<SystemQuestionsKey | null>(null)
-  const [loadedQuestionsKey, setLoadedQuestionsKey] =
-    React.useState<SystemQuestionsKey | null>(null)
+  const [loadedKey, setLoadedKey] = React.useState<SystemQuestionsKey | null>(
+    null
+  )
   const navQuestions = useSystemQuestions(navQuestionsKey)
-  const loadedQuestions = useSystemQuestions(loadedQuestionsKey)
+  const loadedQuestions = useSystemQuestions(loadedKey)
   const { categories, stepFunctionId, functionIdIdx } = React.useMemo(
     () => buildQuestionNav(navQuestions ?? EMPTY_LIST),
     [navQuestions]
@@ -198,6 +197,13 @@ export default function QuestionnarePage() {
   const questions = React.useMemo(
     () => indexQuestionsByFunction(loadedQuestions ?? EMPTY_LIST),
     [loadedQuestions]
+  )
+  // Saved answers for the loaded system and data call, keyed by
+  // functionoptionid. Same key as the questions map, so they switch together.
+  const loadedScores = useQuestionScores(loadedKey)
+  const questionScores = React.useMemo<questionScoreMap>(
+    () => indexScoresByOption(loadedScores ?? EMPTY_LIST),
+    [loadedScores]
   )
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
@@ -257,20 +263,20 @@ export default function QuestionnarePage() {
   // strictly required for the selection to update, but it is retained as a clean
   // reset of the subtree when a re-seed changes the answer out of band.
   const [radioKey, setRadioKey] = React.useState(0)
-  // Returns the fresh map alongside committing it to state, so a caller that
-  // must reason over the authoritative data in the same tick (the Complete
-  // summary) does not have to read a not-yet-rendered state value. undefined
-  // on failure - callers fall back to the state they already had.
+  // Rereads the answers from the server into the cache, which re-renders
+  // questionScores when the system and data call are the loaded ones. Also
+  // returns the fresh map, so a caller that must reason over the
+  // authoritative data in the same tick (the Complete summary) does not have
+  // to read a not-yet-rendered value. undefined on failure - callers fall
+  // back to what they already had.
   const fetchQuestionScores = async (
-    systemId: number | string | undefined,
-    setQuestionScores: (scores: questionScoreMap) => void
+    systemId: number | string | undefined
   ): Promise<questionScoreMap | undefined> => {
     try {
       const rows = await queryClient.fetchQuery(
         questionScoresQuery(datacallID, Number(systemId))
       )
       const hashTable = indexScoresByOption(rows)
-      setQuestionScores(hashTable)
       // Seed the "last saved" indicator from the freshest score row so the
       // header subtitle reads "last saved 2 min ago" on first paint instead
       // of waiting for a save in this session.
@@ -655,7 +661,7 @@ export default function QuestionnarePage() {
   // and both requests, so this page adds none of its own.
   const answerHistory = useAnswerHistory({
     scoreid,
-    refetchScores: () => fetchQuestionScores(system, setQuestionScores),
+    refetchScores: () => fetchQuestionScores(system),
     // Moves whenever this answer is written, which is what makes the Undo
     // button appear the instant a save lands instead of on the next
     // navigation. status is included because a confirm changes it.
@@ -702,12 +708,16 @@ export default function QuestionnarePage() {
       )
       // Flip the badge immediately (role="status" announces the change);
       // the refetch then brings the authoritative row, audit fields included.
-      setQuestionScores((prev) => {
-        const entry = Object.entries(prev).find(([, s]) => s.scoreid === id)
-        if (!entry) return prev
-        return { ...prev, [entry[0]]: { ...entry[1], status: 'done' } }
-      })
-      fetchQuestionScores(system, setQuestionScores)
+      if (system !== undefined) {
+        queryClient.setQueryData(
+          questionScoresQuery(datacallID, system).queryKey,
+          (rows) =>
+            rows?.map((row) =>
+              row.scoreid === id ? { ...row, status: 'done' as const } : row
+            )
+        )
+      }
+      fetchQuestionScores(system)
       return true
     } catch (error) {
       if (isAuthHandled(error)) return false
@@ -787,7 +797,7 @@ export default function QuestionnarePage() {
       if (outcome.kind === 'conflict' || outcome.kind === 'refused') {
         // Someone else wrote the answer, or it drifted, so the one on screen
         // may be stale too.
-        if (sameCycle()) fetchQuestionScores(system, setQuestionScores)
+        if (sameCycle()) fetchQuestionScores(system)
         if (movedOn()) return
         if (outcome.kind === 'conflict') {
           notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
@@ -813,7 +823,7 @@ export default function QuestionnarePage() {
     if (!isReadOnly) {
       await saveResponse()
     }
-    const fresh = await fetchQuestionScores(system, setQuestionScores)
+    const fresh = await fetchQuestionScores(system)
     if (fresh) {
       // Re-seed the current question's saved state from the fresh map. The
       // old Complete re-seeded implicitly by navigating to question 1; this
@@ -928,7 +938,7 @@ export default function QuestionnarePage() {
           ? { ...current, needsSave: false }
           : current
       )
-      fetchQuestionScores(system, setQuestionScores)
+      fetchQuestionScores(system)
     } catch (error) {
       if (isAuthHandled(error)) return
       console.error('Error saving score:', error)
@@ -1047,15 +1057,14 @@ export default function QuestionnarePage() {
           if (questionsEmpty) {
             return
           }
-          let hashTable: questionScoreMap = {}
           try {
+            // Awaited here so the batch below commits questions + scores +
+            // datacallID + questionId together: useQuestionScores serves this
+            // cache entry on the render the key moves.
             const rows = await queryClient.fetchQuery(
               questionScoresQuery(activeDataCallId, system)
             )
             if (controller.signal.aborted) return
-            // Assigned into the outer hashTable so the batch below commits
-            // questions + scores + datacallID + questionId together.
-            hashTable = indexScoresByOption(rows)
             // Same seed as fetchQuestionScores so a freshly-loaded page
             // shows "last saved <time>" without needing a save first.
             const latest = latestEditedAt(rows)
@@ -1072,14 +1081,20 @@ export default function QuestionnarePage() {
             // component stays mounted). Returning here instead would leave the
             // sidebar/URL on the new system while the content stayed on the old
             // one. The [questionId] effect's finally clears the spinner.
+            // The empty list goes into the cache: an observer moved onto a
+            // key with no data would fetch it again at once. The next score
+            // write invalidates it.
+            queryClient.setQueryData(
+              questionScoresQuery(activeDataCallId, system).queryKey,
+              []
+            )
           }
           // Batch questions + scores + datacallID + questionId so the questionId
           // effect fires exactly once with the correct scores already in
           // questionScoresRef. This prevents a second effect run (and its
           // accompanying draft-clearing race) that would occur if questionScores
           // arrived as a separate update after questionId was already set.
-          setLoadedQuestionsKey(questionsKey)
-          setQuestionScores(hashTable)
+          setLoadedKey(questionsKey)
           setDatacallID(activeDataCallId)
           setQuestionId(targetFuncId ?? sortedFuncId[0])
         } catch (error) {
