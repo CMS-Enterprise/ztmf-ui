@@ -103,7 +103,7 @@ import {
   toSlug,
   encodeDatacallSlug,
   findSystemsByAcronym,
-  resolveDatacallBySlug,
+  resolveActiveDatacall,
   resolveFunctionTarget,
   parseSystemIdParam,
   questionnairePath,
@@ -1018,74 +1018,31 @@ export default function QuestionnarePage() {
         setLoadingQuestion(true)
         try {
           let questionsEmpty = false
-          let datacall = ''
-          let activeDataCallId: number
-          if (routeDatacallId && routeDatacall) {
-            // Opened for a specific system's own call from the dashboard. Read
-            // only when that call's own deadline has passed - not by comparing
-            // to the global latest, since two calls can be open at once.
-            datacall = encodeDatacallSlug(routeDatacall)
-            setDatacall(datacall)
-            activeDataCallId = routeDatacallId
-            setIsPastDeadline(
-              routeDeadline ? new Date() > new Date(routeDeadline) : true
-            )
-            datacallStateRef.current = {
+          // Dashboard route state, then the URL segment, then an explicit
+          // pick, then the latest call. See resolveActiveDatacall (#500).
+          // routeState is empty except on the dashboard path; see
+          // datacallStateRef's declaration for why.
+          const active = resolveActiveDatacall({
+            route: {
               datacallid: routeDatacallId,
               datacall: routeDatacall,
               deadline: routeDeadline,
-            }
-          } else {
-            // Cold deep link (no route state): resolve the cycle from the URL's
-            // data-call segment. Falls through to the selected/latest call when
-            // the segment is absent or unrecognized. (#500)
-            //
-            // These branches leave datacallStateRef empty - see its declaration.
-            // The cycle rides in the URL segment written by the canonical
-            // navigate below, so it survives re-runs and in-survey navigation
-            // without route state; a stale ref from a previous dashboard-opened
-            // call is also cleared here so it can't hijack a later system
-            // switch.
-            datacallStateRef.current = {}
-            const deepLinkDatacall = resolveDatacallBySlug(
-              datacalls,
-              datacallSlugRef.current
-            )
-            // "Not the latest call" does not mean "closed": two calls can be
-            // open at once (e.g. a CMS quarterly and an HHS annual), and
-            // "latest" only ranks deadlines. A non-latest pick just means the
-            // user chose a specific call; whether it reads as closed is
-            // decided by that call's own deadline below.
-            const isExplicitPick =
-              selectedDatacall !== null &&
-              selectedDatacall.datacallid !== latestDataCallId
-            if (deepLinkDatacall) {
-              datacall = encodeDatacallSlug(deepLinkDatacall.datacall)
-              setDatacall(datacall)
-              setIsPastDeadline(
-                deepLinkDatacall.deadline
-                  ? new Date() > new Date(deepLinkDatacall.deadline)
-                  : true
-              )
-              activeDataCallId = deepLinkDatacall.datacallid
-            } else if (isExplicitPick && selectedDatacall) {
-              datacall = encodeDatacallSlug(selectedDatacall.datacall)
-              setDatacall(datacall)
-              setIsPastDeadline(
-                selectedDatacall.deadline
-                  ? new Date() > new Date(selectedDatacall.deadline)
-                  : true
-              )
-              activeDataCallId = selectedDatacall.datacallid
-            } else {
-              datacall = encodeDatacallSlug(latestDatacall)
-              setDatacall(datacall)
-              setIsPastDeadline(
-                latestDeadline ? new Date() > new Date(latestDeadline) : true
-              )
-              activeDataCallId = latestDataCallId
-            }
-          }
+            },
+            datacallSlug: datacallSlugRef.current,
+            datacalls,
+            selectedDatacall,
+            latest: {
+              datacallid: latestDataCallId,
+              datacall: latestDatacall,
+              deadline: latestDeadline,
+            },
+            now: new Date(),
+          })
+          const datacall = active.slug
+          const activeDataCallId = active.datacallid
+          setDatacall(datacall)
+          setIsPastDeadline(active.isPastDeadline)
+          datacallStateRef.current = active.routeState
           // Hoisted so both the questions block and the final batch can access them.
           const questionData: Record<number, Question> = {}
           let sortedFuncId: number[] = []

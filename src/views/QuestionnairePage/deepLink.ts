@@ -108,3 +108,71 @@ export function resolveFunctionTarget(
   }
   return undefined
 }
+
+// The data call the questionnaire opens on, and the route state to carry with
+// it. `routeState` is non-empty only when the page was opened with a specific
+// call in location.state (from the dashboard). The other three paths leave it
+// empty on purpose: the URL's data-call segment carries the cycle, and writing
+// it into location.state would re-run the page's fetch (#524 review).
+export type ActiveDatacall = {
+  datacallid: number
+  slug: string
+  isPastDeadline: boolean
+  routeState: { datacallid?: number; datacall?: string; deadline?: string }
+}
+
+export type ResolveActiveDatacallInput = {
+  // location.state from a dashboard link, when present.
+  route: { datacallid?: number; datacall?: string; deadline?: string }
+  // The URL's :datacallid segment (a slug, not an id).
+  datacallSlug: string | undefined
+  datacalls: datacall[]
+  selectedDatacall: datacall | null
+  latest: { datacallid: number; datacall: string; deadline: string }
+  now: Date
+}
+
+// A call with no deadline reads as closed, matching the page's long-standing
+// behavior.
+const pastDeadline = (deadline: string | undefined, now: Date) =>
+  deadline ? now > new Date(deadline) : true
+
+// Pick the data call in priority order: route state from the dashboard, then
+// the URL segment (cold deep link, #500), then an explicit pick that isn't the
+// latest call, then the latest call. "Not the latest" does not mean "closed":
+// two calls can be open at once (e.g. a CMS quarterly and an HHS annual), so
+// each path decides read-only from that call's own deadline.
+export function resolveActiveDatacall({
+  route,
+  datacallSlug,
+  datacalls,
+  selectedDatacall,
+  latest,
+  now,
+}: ResolveActiveDatacallInput): ActiveDatacall {
+  if (route.datacallid && route.datacall) {
+    return {
+      datacallid: route.datacallid,
+      slug: encodeDatacallSlug(route.datacall),
+      isPastDeadline: pastDeadline(route.deadline, now),
+      routeState: {
+        datacallid: route.datacallid,
+        datacall: route.datacall,
+        deadline: route.deadline,
+      },
+    }
+  }
+  const fromSlug = resolveDatacallBySlug(datacalls, datacallSlug)
+  const explicitPick =
+    selectedDatacall !== null &&
+    selectedDatacall.datacallid !== latest.datacallid
+      ? selectedDatacall
+      : undefined
+  const pick = fromSlug ?? explicitPick ?? latest
+  return {
+    datacallid: pick.datacallid,
+    slug: encodeDatacallSlug(pick.datacall),
+    isPastDeadline: pastDeadline(pick.deadline, now),
+    routeState: {},
+  }
+}
