@@ -18,7 +18,6 @@ import {
   FismaQuestion,
   FismaSystemType,
   QuestionOption,
-  Question,
   QuestionChoice,
   QuestionScores,
 } from '@/types'
@@ -41,7 +40,12 @@ import { outlinedChipSx } from '@/utils/chipStyles'
 import { useFismaSystems } from '@/utils/fismaSystems'
 import { useSystemInsights } from '@/utils/insights'
 import { functionOptionsQuery } from '@/utils/functionOptions'
-import { systemQuestionsQuery } from '@/utils/systemQuestions'
+import {
+  SystemQuestionsKey,
+  systemQuestionsQuery,
+  useSystemQuestions,
+} from '@/utils/systemQuestions'
+import { EMPTY_LIST } from '@/utils/emptyList'
 import {
   QuestionScoreMap,
   indexScoresByOption,
@@ -89,7 +93,12 @@ import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
-import { addSpace, groupQuestionsByPillar, type Category } from './helpers'
+import {
+  addSpace,
+  buildQuestionNav,
+  indexQuestionsByFunction,
+  type Category,
+} from './helpers'
 // Aliased because a local state variable named `datacall` shadows the type.
 import type { datacall as Datacall } from '@/types'
 import ClosedDatacallBanner from './components/ClosedDatacallBanner'
@@ -170,7 +179,26 @@ export default function QuestionnarePage() {
   const [questionId, setQuestionId] = React.useState<number | null>(null)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
-  const [questions, setQuestions] = React.useState<Record<number, Question>>([])
+  // Two views of the questionnaire, each pointed at a cached query by its own
+  // key. The sidebar's key moves as soon as the questions arrive, so the list
+  // renders while scores are still loading. The questions map's key moves in
+  // the same update as scores and questionId, so the question-load effect
+  // (which depends on it) runs exactly once per load, never against the
+  // previous system's question or scores.
+  const [navQuestionsKey, setNavQuestionsKey] =
+    React.useState<SystemQuestionsKey | null>(null)
+  const [loadedQuestionsKey, setLoadedQuestionsKey] =
+    React.useState<SystemQuestionsKey | null>(null)
+  const navQuestions = useSystemQuestions(navQuestionsKey)
+  const loadedQuestions = useSystemQuestions(loadedQuestionsKey)
+  const { categories, stepFunctionId, functionIdIdx } = React.useMemo(
+    () => buildQuestionNav(navQuestions ?? EMPTY_LIST),
+    [navQuestions]
+  )
+  const questions = React.useMemo(
+    () => indexQuestionsByFunction(loadedQuestions ?? EMPTY_LIST),
+    [loadedQuestions]
+  )
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
@@ -181,11 +209,6 @@ export default function QuestionnarePage() {
   const [loadedResponseContextId, setLoadedResponseContextId] =
     React.useState('')
   const [noQuestions, setNoQuestions] = React.useState<boolean>(false)
-  const [categories, setCategories] = React.useState<Category[]>([])
-  const [stepFunctionId, setStepFunctionId] = React.useState<number[]>([])
-  const [functionIdIdx, setFunctionIdIdx] = React.useState<{
-    [key: number]: number
-  }>({})
   const [scoreid, setScoreId] = React.useState<number>(0)
   const [initQuestionChoice, setInitQuestionChoice] = React.useState<number>(-1)
   const [initNotes, setInitNotes] = React.useState<string>('')
@@ -954,7 +977,10 @@ export default function QuestionnarePage() {
           setIsPastDeadline(active.isPastDeadline)
           datacallStateRef.current = active.routeState
           // Hoisted so both the questions block and the final batch can access them.
-          const questionData: Record<number, Question> = {}
+          const questionsKey = {
+            systemId: system,
+            datacallId: activeDataCallId,
+          }
           let sortedFuncId: number[] = []
           // The function to open. Defaults to the first; overridden below when the
           // URL's :pillar/:function names a valid function (deep link, #500).
@@ -972,34 +998,12 @@ export default function QuestionnarePage() {
               setNoQuestions(true)
               setLoadingQuestion(false)
             } else {
-              data.forEach((question: FismaQuestion) => {
-                questionData[question.function.functionid] = {
-                  questionid: question.questionid,
-                  question: question.question,
-                  notesprompt: question.notesprompt,
-                  description: question.function.description,
-                  pillar: question.pillar.pillar,
-                  function: question.function.function,
-                }
-              })
               // The reduced-pillar rule is applied by the API for the cycle
               // requested above (ztmf#545), so whatever comes back is already
               // the right set, in the right order (ztmf-misc#393).
-              const categoriesData: Category[] = groupQuestionsByPillar(data)
-              sortedFuncId = categoriesData.flatMap((category) =>
-                category.steps.map((step) => step.function.functionid)
-              )
-              const funcIdToIdx = sortedFuncId.reduce(
-                (
-                  acc: { [key: number]: number },
-                  num: number,
-                  index: number
-                ) => {
-                  acc[num] = index
-                  return acc
-                },
-                {}
-              )
+              const nav = buildQuestionNav(data)
+              const categoriesData = nav.categories
+              sortedFuncId = nav.stepFunctionId
               // Honor the URL's :pillar/:function when they name a valid
               // function; otherwise open the first (#500).
               const target = resolveFunctionTarget(
@@ -1013,14 +1017,12 @@ export default function QuestionnarePage() {
               const targetFunctionName =
                 target?.functionName ??
                 categoriesData[0].steps[0].function.function
-              // Update sidebar/nav state immediately so the question list
-              // renders while scores are still loading. setQuestions,
-              // setDatacallID, and setQuestionId are deferred to the batch
-              // below - after scores arrive - so the questionId effect fires
-              // exactly once with the correct scores already in the ref.
-              setFunctionIdIdx(funcIdToIdx)
-              setStepFunctionId(sortedFuncId)
-              setCategories(categoriesData)
+              // Point the sidebar at these questions now so the list renders
+              // while scores are still loading. The questions map, datacallID
+              // and questionId move in the batch below - after scores arrive -
+              // so the questionId effect fires exactly once with the correct
+              // scores already in the ref.
+              setNavQuestionsKey(questionsKey)
               navigate(
                 questionnairePath(
                   system,
@@ -1076,7 +1078,7 @@ export default function QuestionnarePage() {
           // questionScoresRef. This prevents a second effect run (and its
           // accompanying draft-clearing race) that would occur if questionScores
           // arrived as a separate update after questionId was already set.
-          setQuestions(questionData)
+          setLoadedQuestionsKey(questionsKey)
           setQuestionScores(hashTable)
           setDatacallID(activeDataCallId)
           setQuestionId(targetFuncId ?? sortedFuncId[0])

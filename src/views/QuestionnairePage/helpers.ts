@@ -1,4 +1,4 @@
-import type { FismaQuestion } from '@/types'
+import type { FismaQuestion, Question } from '@/types'
 import { formatDateTime } from '@/utils/dates'
 
 /**
@@ -43,6 +43,59 @@ export const groupQuestionsByPillar = (
   })
 
   return categories
+}
+
+/**
+ * The sidebar's view of a questionnaire: pillars with their steps, every
+ * functionid in display order, and each functionid's position in that order
+ * (what Next and Back step through).
+ */
+export type QuestionNav = {
+  categories: Category[]
+  stepFunctionId: number[]
+  functionIdIdx: Record<number, number>
+}
+
+/**
+ * Builds the sidebar's view of a questionnaire payload, keeping API order.
+ *
+ * @param {FismaQuestion[]} questions - The questionnaire payload, in API order.
+ * @returns {QuestionNav} Categories, ordered functionids, and their positions.
+ */
+export const buildQuestionNav = (questions: FismaQuestion[]): QuestionNav => {
+  const categories = groupQuestionsByPillar(questions)
+  const stepFunctionId = categories.flatMap((category) =>
+    category.steps.map((step) => step.function.functionid)
+  )
+  const functionIdIdx: Record<number, number> = {}
+  stepFunctionId.forEach((functionid, index) => {
+    functionIdIdx[functionid] = index
+  })
+  return { categories, stepFunctionId, functionIdIdx }
+}
+
+/**
+ * Indexes a questionnaire payload by functionid, the id the page navigates by,
+ * keeping only what the question card renders.
+ *
+ * @param {FismaQuestion[]} questions - The questionnaire payload.
+ * @returns {Record<number, Question>} The card fields keyed by functionid.
+ */
+export const indexQuestionsByFunction = (
+  questions: FismaQuestion[]
+): Record<number, Question> => {
+  const byFunction: Record<number, Question> = {}
+  questions.forEach((question) => {
+    byFunction[question.function.functionid] = {
+      questionid: question.questionid,
+      question: question.question,
+      notesprompt: question.notesprompt,
+      description: question.function.description,
+      pillar: question.pillar.pillar,
+      function: question.function.function,
+    }
+  })
+  return byFunction
 }
 
 /**

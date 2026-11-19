@@ -3,6 +3,8 @@ import {
   addSpace,
   relativeTimeFrom,
   groupQuestionsByPillar,
+  buildQuestionNav,
+  indexQuestionsByFunction,
 } from './helpers'
 import type { FismaQuestion } from '@/types'
 
@@ -157,5 +159,58 @@ describe('groupQuestionsByPillar', () => {
     groupQuestionsByPillar(input)
 
     expect(input).toEqual(snapshot)
+  })
+})
+
+const fq = (
+  functionid: number,
+  pillar: string,
+  questionid = functionid + 100
+): FismaQuestion =>
+  ({
+    questionid,
+    question: `Q${functionid}`,
+    notesprompt: `N${functionid}`,
+    pillar: { pillar },
+    function: {
+      functionid,
+      function: `F${functionid}`,
+      description: `D${functionid}`,
+    },
+  }) as unknown as FismaQuestion
+
+describe('buildQuestionNav', () => {
+  test('orders steps by pillar in API order and indexes their positions', () => {
+    const nav = buildQuestionNav([
+      fq(3, 'Identity'),
+      fq(9, 'Devices'),
+      fq(1, 'Identity'),
+    ])
+    expect(nav.categories.map((c) => c.name)).toEqual(['Identity', 'Devices'])
+    expect(nav.stepFunctionId).toEqual([3, 1, 9])
+    expect(nav.functionIdIdx).toEqual({ 3: 0, 1: 1, 9: 2 })
+  })
+
+  test('is empty for no questions', () => {
+    expect(buildQuestionNav([])).toEqual({
+      categories: [],
+      stepFunctionId: [],
+      functionIdIdx: {},
+    })
+  })
+})
+
+describe('indexQuestionsByFunction', () => {
+  test('keys the card fields by functionid', () => {
+    expect(indexQuestionsByFunction([fq(7, 'Data')])).toEqual({
+      7: {
+        questionid: 107,
+        question: 'Q7',
+        notesprompt: 'N7',
+        description: 'D7',
+        pillar: 'Data',
+        function: 'F7',
+      },
+    })
   })
 })
