@@ -58,6 +58,7 @@ import EvidenceNotesField, {
 } from './components/EvidenceNotesField'
 import NotesFooter from './components/NotesFooter'
 import CarryForwardStrip from './components/CarryForwardStrip'
+import DraftStatusAlert from './components/DraftStatusAlert'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import AnswerHistoryPanel, {
@@ -1810,25 +1811,7 @@ export default function QuestionnarePage() {
                   )
                 }
               />
-              {draftStatus !== 'idle' && !isReadOnly && (
-                <Alert
-                  severity={
-                    draftStatus === 'saved'
-                      ? 'success'
-                      : draftStatus === 'error'
-                        ? 'error'
-                        : 'warning'
-                  }
-                  icon={false}
-                  sx={{ mt: 1, py: 0.5 }}
-                >
-                  {draftStatus === 'saved'
-                    ? 'Draft saved - click Next or Complete to save permanently.'
-                    : draftStatus === 'error'
-                      ? 'Draft could not be saved - click Next or Complete to save permanently.'
-                      : 'Draft restored - click Next or Complete to save permanently.'}
-                </Alert>
-              )}
+              {!isReadOnly && <DraftStatusAlert status={draftStatus} />}
               <AnswerHistoryPanel
                 open={answerHistory.open}
                 onClose={answerHistory.closeHistory}
