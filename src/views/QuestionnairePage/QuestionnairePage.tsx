@@ -1,12 +1,10 @@
 import * as React from 'react'
 import Box from '@mui/material/Box'
-import Chip from '@mui/material/Chip'
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import Typography from '@mui/material/Typography'
 import { useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Spinner } from '@cmsgov/design-system'
-import { colors, status } from '@/theme/tokens'
+import { colors } from '@/theme/tokens'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ui/PageHeader'
@@ -33,7 +31,6 @@ import {
   NEXT_HINT_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { outlinedChipSx } from '@/utils/chipStyles'
 import { useFismaSystems } from '@/utils/fismaSystems'
 import { useSystemInsights } from '@/utils/insights'
 import {
@@ -60,6 +57,7 @@ import EvidenceNotesField, {
   DEFAULT_NOTES_PROMPT,
 } from './components/EvidenceNotesField'
 import NotesFooter from './components/NotesFooter'
+import CarryForwardStrip from './components/CarryForwardStrip'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import AnswerHistoryPanel, {
@@ -125,9 +123,6 @@ import {
   questionnairePath,
 } from './deepLink'
 type questionScoreMap = QuestionScoreMap
-// Ties the carried-forward guidance line to the Confirm button it explains, so
-// a screen reader hears the reason with the action.
-const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
 // Ties the forward button's hint (Next or Complete) to the button as a
 // description, so keyboard and screen-reader users get it on focus rather than
 // on hover only.
@@ -1791,69 +1786,17 @@ export default function QuestionnarePage() {
                     : notes.length
                 }
               />
-              {/* Carried-forward confirmation strip, in the same zone where
-                  the prior-response flow surfaces its "review before
-                  continuing" message, so every system shares one review area.
-                  The chip is a role="status" live region, so confirming -
-                  which swaps its label in place - is announced (508). The
-                  button yields the moment the question is dirty (the edit is
-                  the explicit act; Next saves it), and Next itself never
-                  writes on an untouched question (#413). */}
-              {currentCarryState !== 'none' && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: 1,
-                    mt: 1.5,
-                  }}
-                >
-                  <Chip
-                    role="status"
-                    size="small"
-                    variant="outlined"
-                    color={
-                      currentCarryState === 'unconfirmed'
-                        ? 'warning'
-                        : 'success'
-                    }
-                    // Outlined warning reads at 3.1:1 on white; success
-                    // clears AA on its own (ui#714).
-                    sx={
-                      currentCarryState === 'unconfirmed'
-                        ? outlinedChipSx('warning')
-                        : undefined
-                    }
-                    label={
-                      currentCarryState === 'unconfirmed'
-                        ? 'Carried forward - not yet confirmed'
-                        : 'Updated this data call'
-                    }
-                  />
-                  {showConfirmButton && (
-                    <Button
-                      variant="outlined"
-                      color="success"
-                      size="small"
-                      startIcon={<CheckCircleOutlineIcon />}
-                      onClick={handleConfirmClick}
-                      disabled={confirming}
-                      aria-describedby={
-                        showCarryForwardHelper
-                          ? CARRY_FORWARD_HELPER_ID
-                          : undefined
-                      }
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Confirm this answer is still accurate
-                    </Button>
-                  )}
-                  {/* Third child of the existing strip: it already wraps and
-                      gaps, so no layout change. Hidden while the form is dirty
-                      - undoing saved state under unsaved edits would discard
-                      them silently. */}
-                  {showUndoButton && answerHistory.head && (
+              <CarryForwardStrip
+                state={currentCarryState}
+                showConfirm={showConfirmButton}
+                confirming={confirming}
+                onConfirm={handleConfirmClick}
+                showHelper={showCarryForwardHelper}
+                // Hidden while the form is dirty: undoing saved state under
+                // unsaved edits would discard them silently.
+                undo={
+                  showUndoButton &&
+                  answerHistory.head && (
                     <UndoAnswerButton
                       head={answerHistory.head}
                       disabled={answerHistory.undo.isPending}
@@ -1864,23 +1807,9 @@ export default function QuestionnarePage() {
                         savedAt: undoPrior?.createdat,
                       })}
                     />
-                  )}
-                </Box>
-              )}
-              {/* Sits where the prior-response flow puts its own review
-                  message, so both variants instruct in the same place.
-                  "before continuing" is advisory on purpose: Next is not
-                  blocked on this variant. Plain text, not a live region -
-                  the chip above owns the announcement. */}
-              {showCarryForwardHelper && (
-                <Typography
-                  id={CARRY_FORWARD_HELPER_ID}
-                  sx={{ mt: 0.5, fontSize: 12, color: status.warning.color }}
-                >
-                  Review the carried-forward answer and confirm it, or write a
-                  new justification, before continuing.
-                </Typography>
-              )}
+                  )
+                }
+              />
               {draftStatus !== 'idle' && !isReadOnly && (
                 <Alert
                   severity={
