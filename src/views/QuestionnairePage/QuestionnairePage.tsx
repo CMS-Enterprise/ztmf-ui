@@ -17,7 +17,6 @@ import { visuallyHidden } from '@mui/utils'
 import {
   FismaQuestion,
   FismaSystemType,
-  QuestionOption,
   QuestionChoice,
   QuestionScores,
 } from '@/types'
@@ -39,7 +38,10 @@ import { isAuthHandled, notify } from '@/utils/notify'
 import { outlinedChipSx } from '@/utils/chipStyles'
 import { useFismaSystems } from '@/utils/fismaSystems'
 import { useSystemInsights } from '@/utils/insights'
-import { functionOptionsQuery } from '@/utils/functionOptions'
+import {
+  functionOptionsQuery,
+  useFunctionOptions,
+} from '@/utils/functionOptions'
 import {
   SystemQuestionsKey,
   systemQuestionsQuery,
@@ -176,7 +178,14 @@ export default function QuestionnarePage() {
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
   const [questionId, setQuestionId] = React.useState<number | null>(null)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
-  const [options, setOptions] = React.useState<QuestionChoice[]>([])
+  // The function whose answer options are on screen. The question-load effect
+  // moves it once the answer has been seeded for that question, as it used to
+  // set the options themselves, so the choices and the seeded answer appear
+  // together.
+  const [optionsFunctionId, setOptionsFunctionId] = React.useState<
+    number | null
+  >(null)
+  const options = useFunctionOptions(optionsFunctionId) ?? EMPTY_LIST
   // Two views of the questionnaire, each pointed at a cached query by its own
   // key. The sidebar's key moves as soon as the questions arrive, so the list
   // renders while scores are still loading. The questions map's key moves in
@@ -1133,28 +1142,19 @@ export default function QuestionnarePage() {
       // a previous question or datacall doesn't bleed into the next render.
       setInitQuestionChoice(-1)
       resetDraftStatus()
-      const choices: QuestionChoice[] = []
       let funcOptId: number = 0
       async function fetchOptions() {
         try {
-          // Through the query cache, so revisiting a question reuses its
-          // options instead of refetching them. The seeding below still runs
-          // here, in order, until it moves to derived state.
+          // Awaited so the seeding below runs against this question's options;
+          // useFunctionOptions then serves the same entry once the id moves.
           const optionRows = await queryClient.fetchQuery(
             functionOptionsQuery(activeQuestionId)
           )
           if (controller.signal.aborted) return
-          optionRows.forEach((item: QuestionOption) => {
-            const choiceOpt: QuestionChoice = {
-              label: item.description,
-              value: item.functionoptionid,
-              score: item.score,
-            }
-            if (item.functionoptionid in questionScoresRef.current) {
-              funcOptId = item.functionoptionid
-              choiceOpt.defaultChecked = true
-            }
-            choices.push(choiceOpt)
+          const optionIds = optionRows.map((item) => item.functionoptionid)
+          // The saved answer is whichever option has a score row.
+          optionIds.forEach((id) => {
+            if (id in questionScoresRef.current) funcOptId = id
           })
           // Foundation of question
           setDescription(questions[questionId ?? 0]?.description ?? '')
@@ -1180,7 +1180,7 @@ export default function QuestionnarePage() {
           if (controller.signal.aborted) return
           const stored = await restoreDraft(
             { system: sys, questionId, datacallID },
-            choices.map((c) => c.value),
+            optionIds,
             controller.signal
           )
           if (stored === undefined) return
@@ -1189,14 +1189,10 @@ export default function QuestionnarePage() {
             // A notes-only draft (-1) restores the notes without pre-selecting
             // an answer.
             if (stored.selectQuestionOption !== -1) {
-              choices.forEach(
-                (c) =>
-                  (c.defaultChecked = c.value === stored.selectQuestionOption)
-              )
               setSelectQuestionOption(stored.selectQuestionOption)
             }
           }
-          setOptions(choices)
+          setOptionsFunctionId(activeQuestionId)
           // Mark this system x data call x question as the context the current
           // answer/notes were seeded for, so the prior-review initializer runs
           // only once the loaded state matches what is on screen.
@@ -1301,12 +1297,6 @@ export default function QuestionnarePage() {
     )
     // No change from the last-seeded state - nothing to correct.
     if (sel.choice === u.initQuestionChoice && sel.notes === u.initNotes) return
-    setOptions((prev) =>
-      prev.map((o) => ({
-        ...o,
-        defaultChecked: Number(o.value) === sel.funcOptId,
-      }))
-    )
     setSelectQuestionOption(sel.choice)
     setInitQuestionChoice(sel.choice)
     setNotes(sel.notes)
