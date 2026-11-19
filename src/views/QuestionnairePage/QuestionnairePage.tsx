@@ -106,7 +106,7 @@ import {
 import type { datacall as Datacall } from '@/types'
 import ClosedDatacallBanner from './components/ClosedDatacallBanner'
 import PillarRail from './components/PillarRail'
-import EyebrowLine from './components/EyebrowLine'
+import QuestionHeading from './components/QuestionHeading'
 import SectionRail from './components/SectionRail'
 import QuestionnaireProgress from './components/QuestionnaireProgress'
 import SaveIndicator from './components/SaveIndicator'
@@ -1714,38 +1714,14 @@ export default function QuestionnarePage() {
           }}
         />
         <Card sx={{ p: 3 }}>
-          <EyebrowLine
+          <QuestionHeading
             pillar={currentCategoryName}
             functionName={currentFunctionName}
             current={currentFunctionIndex + 1}
             total={currentCategory?.steps.length ?? 0}
+            question={question}
+            description={description}
           />
-          {/* The question is the card's heading - h2 under the PageHeader's
-              h1 so screen-reader users can jump straight to it. */}
-          <Typography
-            component="h2"
-            sx={{
-              fontSize: 18,
-              fontWeight: 700,
-              color: colors.ink,
-              mt: 0.75,
-              mb: 0.5,
-              lineHeight: 1.35,
-            }}
-          >
-            {question || ' '}
-          </Typography>
-          {description && (
-            <Typography
-              sx={{
-                fontSize: 13,
-                color: colors.neutral500,
-                mb: 2,
-              }}
-            >
-              {description}
-            </Typography>
-          )}
           {insightsPending && (
             <Typography
               role="status"
