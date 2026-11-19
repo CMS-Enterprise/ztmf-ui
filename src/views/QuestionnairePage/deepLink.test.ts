@@ -2,6 +2,7 @@ import {
   toSlug,
   encodeDatacallSlug,
   findSystemsByAcronym,
+  resolveActiveDatacall,
   resolveDatacallBySlug,
   resolveFunctionTarget,
   parseSystemIdParam,
@@ -176,5 +177,94 @@ describe('resolveFunctionTarget', () => {
     expect(
       resolveFunctionTarget(categories, 'identity', undefined)
     ).toBeUndefined()
+  })
+})
+
+describe('resolveActiveDatacall', () => {
+  const now = new Date('2026-06-15T00:00:00Z')
+  const open = '2026-07-01T00:00:00Z'
+  const closed = '2026-06-01T00:00:00Z'
+  const withDeadline = (d: datacall, deadline: string): datacall => ({
+    ...d,
+    deadline,
+  })
+  const latest = withDeadline(dc(9, 'FY 2026 Q3'), open)
+  const hhs = withDeadline(dc(7, 'HHS FY 2026'), open)
+  const old = withDeadline(dc(5, 'FY 2026 Q1'), closed)
+  const datacalls = [latest, hhs, old]
+  const base = {
+    route: {},
+    datacallSlug: undefined,
+    datacalls,
+    selectedDatacall: null,
+    latest,
+    now,
+  }
+
+  it('uses dashboard route state first and carries it as routeState', () => {
+    const route = { datacallid: 5, datacall: 'FY 2026 Q1', deadline: closed }
+    expect(
+      resolveActiveDatacall({
+        ...base,
+        route,
+        datacallSlug: 'HHS_FY_2026',
+        selectedDatacall: hhs,
+      })
+    ).toEqual({
+      datacallid: 5,
+      slug: 'FY_2026_Q1',
+      isPastDeadline: true,
+      routeState: route,
+    })
+  })
+
+  it('ignores route state without both id and name', () => {
+    const result = resolveActiveDatacall({ ...base, route: { datacallid: 5 } })
+    expect(result.datacallid).toBe(9)
+    expect(result.routeState).toEqual({})
+  })
+
+  it('falls back to the URL segment over the selected call', () => {
+    const result = resolveActiveDatacall({
+      ...base,
+      datacallSlug: 'fy_2026_q1',
+      selectedDatacall: hhs,
+    })
+    expect(result).toEqual({
+      datacallid: 5,
+      slug: 'FY_2026_Q1',
+      isPastDeadline: true,
+      routeState: {},
+    })
+  })
+
+  it('uses an explicit non-latest pick when the segment is unknown', () => {
+    const result = resolveActiveDatacall({
+      ...base,
+      datacallSlug: 'nope',
+      selectedDatacall: hhs,
+    })
+    expect(result.datacallid).toBe(7)
+    // A non-latest call that is still open is editable.
+    expect(result.isPastDeadline).toBe(false)
+  })
+
+  it('falls back to the latest call', () => {
+    expect(
+      resolveActiveDatacall({ ...base, selectedDatacall: latest })
+    ).toEqual({
+      datacallid: 9,
+      slug: 'FY_2026_Q3',
+      isPastDeadline: false,
+      routeState: {},
+    })
+  })
+
+  it('treats a missing deadline as closed', () => {
+    const result = resolveActiveDatacall({
+      ...base,
+      latest: { ...latest, deadline: '' },
+    })
+    expect(result.isPastDeadline).toBe(true)
   })
 })
