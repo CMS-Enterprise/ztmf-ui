@@ -41,6 +41,7 @@ import { outlinedChipSx } from '@/utils/chipStyles'
 import { useFismaSystems } from '@/utils/fismaSystems'
 import { useSystemInsights } from '@/utils/insights'
 import { functionOptionsQuery } from '@/utils/functionOptions'
+import { systemQuestionsQuery } from '@/utils/systemQuestions'
 import {
   QuestionScoreMap,
   indexScoresByOption,
@@ -959,18 +960,14 @@ export default function QuestionnarePage() {
           // URL's :pillar/:function names a valid function (deep link, #500).
           let targetFuncId: number | undefined
           try {
-            const response = await axiosInstance.get(
-              apiPaths.fismaSystems.questions(system, activeDataCallId),
-              { signal: controller.signal }
+            const data = await queryClient.fetchQuery(
+              systemQuestionsQuery(system, activeDataCallId)
             )
-            // Decommissioned systems join to zero functions, so the questions
-            // endpoint returns no rows. The Go backend serializes a nil
-            // slice as JSON null, so the response can be either { data: null }
-            // or { data: [] } depending on driver behavior - treat both as
-            // the empty-state signal. Surface a friendly message instead of
+            if (controller.signal.aborted) return
+            // Decommissioned systems have no questions (the fetcher reads the
+            // backend's null as []). Surface a friendly message instead of
             // crashing on categoriesData[0] below.
-            const data = response.data?.data
-            if (!data || (Array.isArray(data) && data.length === 0)) {
+            if (data.length === 0) {
               questionsEmpty = true
               setNoQuestions(true)
               setLoadingQuestion(false)
