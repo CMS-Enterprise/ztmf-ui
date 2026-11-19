@@ -92,12 +92,7 @@ import QuestionnaireProgress from './components/QuestionnaireProgress'
 import SaveIndicator from './components/SaveIndicator'
 import Link from '@mui/material/Link'
 import Card from '@/components/ui/Card'
-import {
-  saveDraft,
-  loadDraft,
-  clearDraft,
-  hasDeclinedDraft,
-} from './draftStore'
+import { useQuestionDraft } from './useQuestionDraft'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
   toSlug,
@@ -213,9 +208,6 @@ export default function QuestionnarePage() {
   // indicator reads "Saved just now / 2 min ago" without depending on the
   // questionScores re-fetch round trip.
   const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
-  const [draftStatus, setDraftStatus] = React.useState<
-    'idle' | 'restored' | 'saved' | 'error'
-  >('idle')
   // Review state for a carried-forward prior response, scoped to one
   // system x data call x question x prior-text context. needsSave marks a
   // resolved required review as an unsaved current-call action even when the
@@ -225,36 +217,11 @@ export default function QuestionnarePage() {
     state: PriorReviewState
     needsSave: boolean
   }>({ contextId: '', state: 'not-required', needsSave: false })
-  // Refs read inside setTimeout/event callbacks to get the current value
-  // without enrolling the effects in those deps (prevents extra re-runs).
-  const draftStatusRef = React.useRef(draftStatus)
-  draftStatusRef.current = draftStatus
   // Stable ref so fetchOptions always reads the latest scores without enrolling
   // questionScores as a dep of the questionId effect. Stale-closure-safe because
   // the ref updates synchronously on every render before any effect runs.
   const questionScoresRef = React.useRef(questionScores)
   questionScoresRef.current = questionScores
-  // Incremented on every explicit draft clear so in-flight debounced saves
-  // that fire after a clear don't resurrect the just-removed draft.
-  const saveGenRef = React.useRef(0)
-  // True while the current question has a stored draft this build declined to
-  // read (unrecognised format version). Suppresses the no-edits clearDraft so
-  // the app doesn't delete what draftStore deliberately preserved.
-  const declinedDraftRef = React.useRef(false)
-  // Mirrors the payload the debounced draft save would write, so unmount can
-  // flush it. The debounce cleanup cancels its own pending timer, and a route
-  // change away from this page (System Info, the Dashboard breadcrumb, browser
-  // back) tears the component down without firing beforeunload, so an edit made
-  // inside the 1s window was dropped. Carries the generation so a flush cannot
-  // resurrect a draft clearCurrentDraft deleted after the timer was scheduled.
-  const pendingDraftRef = React.useRef<{
-    userid: string
-    system: number
-    questionId: number
-    datacallID: number
-    draft: { selectQuestionOption: number; notes: string }
-    gen: number
-  } | null>(null)
   const unsavedRef = React.useRef({
     selectQuestionOption,
     initQuestionChoice,
@@ -314,7 +281,7 @@ export default function QuestionnarePage() {
   }
   const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSelectQuestionOption(Number(event.target.value))
-    if (draftStatus === 'restored') setDraftStatus('idle')
+    draft.markEdited()
   }
   const renderRadioGroup = (options: QuestionChoice[]) => {
     // Native-radio group (see QuestionRadioGroup) rather than CMSDS ChoiceList:
@@ -569,22 +536,34 @@ export default function QuestionnarePage() {
     }
   }
   const handleListItemClick = (index: number) => {
-    saveGenRef.current++
+    draft.invalidatePending()
     setLoadingQuestion(true)
     setSelectedIndex(index)
     setQuestionId(index)
   }
 
-  const clearCurrentDraft = () => {
-    saveGenRef.current++
-    if (system && questionId && datacallID > 0) {
-      void clearDraft(userInfo.userid, system, questionId, datacallID)
-    }
-    // An explicit clear (the answer is saved server-side now) is meant to remove
-    // the entry, declined or not, so nothing is left to suppress.
-    declinedDraftRef.current = false
-    setDraftStatus('idle')
-  }
+  // The localStorage draft for the question on screen (autosave, restore,
+  // unmount flush). clearCurrentDraft removes it once the answer is saved or
+  // abandoned.
+  const draft = useQuestionDraft({
+    userid: userInfo.userid,
+    system,
+    questionId,
+    datacallID,
+    isReadOnly,
+    loadingQuestion,
+    selectQuestionOption,
+    notes,
+    initQuestionChoice,
+    initNotes,
+  })
+  const draftStatus = draft.status
+  const {
+    restore: restoreDraft,
+    resetStatus: resetDraftStatus,
+    isRestored: isDraftRestored,
+  } = draft
+  const clearCurrentDraft = draft.clear
 
   // Keep insight, review, and card state scoped to one system x data call x
   // database question. React reuses this route component as those route values
@@ -876,7 +855,7 @@ export default function QuestionnarePage() {
   // back to question 1. Built from a freshly-awaited scores fetch so the
   // just-saved answer counts; falls back to the on-screen map on failure.
   const handleCompleteClick = async () => {
-    saveGenRef.current++
+    draft.invalidatePending()
     if (!isReadOnly) {
       await saveResponse()
     }
@@ -1219,7 +1198,7 @@ export default function QuestionnarePage() {
       // refetch window. Also resets draft indicators so stale status from
       // a previous question or datacall doesn't bleed into the next render.
       setInitQuestionChoice(-1)
-      setDraftStatus('idle')
+      resetDraftStatus()
       const choices: QuestionChoice[] = []
       let funcOptId: number = 0
       async function fetchOptions() {
@@ -1259,66 +1238,26 @@ export default function QuestionnarePage() {
           )
 
           // Restore any in-progress draft from localStorage, overriding the
-          // server-side values set above. Skipped for read-only sessions.
+          // server-side values set above. Read-only sessions evict it instead.
           const sys = systemRef.current
-          const uid = userInfo.userid
           if (controller.signal.aborted) return
-          // Reset per question - a declined entry belongs to one question, and a
-          // stale true here would suppress a legitimate clear on the next one.
-          declinedDraftRef.current = false
-          // Read-only sessions never load the draft again, so evict any lingering
-          // entry instead of letting it sit for the full TTL. Bump the save
-          // generation first: an autosave that fired just before isReadOnly
-          // flipped may still be mid-flight, and without the bump its isCurrent()
-          // checks would pass and rewrite the draft after this clear.
-          if (isReadOnly && sys && questionId && datacallID > 0) {
-            saveGenRef.current++
-            void clearDraft(uid, sys, questionId, datacallID)
-          }
-          const draft =
-            !isReadOnly && sys && questionId && datacallID > 0
-              ? await loadDraft(uid, sys, questionId, datacallID)
-              : null
-          // Guard: if the user navigated away while loadDraft was running
-          // (crypto.subtle.decrypt is genuinely async), discard its result
-          // rather than writing it into the now-active question's state.
-          if (controller.signal.aborted) return
-          if (draft) {
-            if (draft.selectQuestionOption === -1) {
-              // Notes-only draft - restore notes without pre-selecting an answer.
-              setNotes(draft.notes)
-              setDraftStatus('restored')
-            } else if (
-              choices.some((c) => c.value === draft.selectQuestionOption)
-            ) {
+          const stored = await restoreDraft(
+            { system: sys, questionId, datacallID },
+            choices.map((c) => c.value),
+            controller.signal
+          )
+          if (stored === undefined) return
+          if (stored) {
+            setNotes(stored.notes)
+            // A notes-only draft (-1) restores the notes without pre-selecting
+            // an answer.
+            if (stored.selectQuestionOption !== -1) {
               choices.forEach(
                 (c) =>
-                  (c.defaultChecked = c.value === draft.selectQuestionOption)
+                  (c.defaultChecked = c.value === stored.selectQuestionOption)
               )
-              setSelectQuestionOption(draft.selectQuestionOption)
-              setNotes(draft.notes)
-              setDraftStatus('restored')
-            } else {
-              // Draft references an option that no longer exists - evict it.
-              if (sys && questionId && datacallID > 0)
-                await clearDraft(uid, sys, questionId, datacallID)
-              if (controller.signal.aborted) return
-              setDraftStatus('idle')
+              setSelectQuestionOption(stored.selectQuestionOption)
             }
-          } else {
-            // Tell "none stored" from "one we declined" - the no-edits clear
-            // below would delete the latter. A ref, not draftStatus:
-            // that gets reset to 'idle' and 'error', re-arming the clear.
-            if (!isReadOnly && sys && questionId && datacallID > 0) {
-              declinedDraftRef.current = await hasDeclinedDraft(
-                uid,
-                sys,
-                questionId,
-                datacallID
-              )
-              if (controller.signal.aborted) return
-            }
-            setDraftStatus('idle')
           }
           setOptions(choices)
           // Mark this system x data call x question as the context the current
@@ -1342,7 +1281,15 @@ export default function QuestionnarePage() {
       fetchOptions()
       return () => controller.abort()
     }
-  }, [questionId, questions, isReadOnly, datacallID, userInfo.userid])
+  }, [
+    questionId,
+    questions,
+    isReadOnly,
+    datacallID,
+    userInfo.userid,
+    restoreDraft,
+    resetDraftStatus,
+  ])
 
   // Record that the user opened this question, so time-spent analytics can
   // bound how long it was worked on before the next question is opened (only
@@ -1368,122 +1315,6 @@ export default function QuestionnarePage() {
       }
     })()
   }, [system, datacallID, viewedQuestionId])
-
-  // Debounced draft save: 1 second after the user pauses editing, persist
-  // the current answer and notes to localStorage so a reload can recover them.
-  // Only fires when the user has actually changed something from the server-side
-  // initial values - prevents question-load state transitions from being
-  // mistakenly recorded as drafts on questions the user never touched.
-  React.useEffect(() => {
-    if (
-      isReadOnly ||
-      !system ||
-      !questionId ||
-      datacallID <= 0 ||
-      loadingQuestion
-    ) {
-      pendingDraftRef.current = null
-      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
-      return
-    }
-    if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
-      pendingDraftRef.current = null
-      saveGenRef.current++
-      // Skip clearDraft when a draft was just restored from storage - the draft
-      // values matching the server state does not mean the user reverted manually.
-      // Clearing it here would delete a valid in-progress draft on every page load
-      // when the server happens to be at the same state as the draft.
-      // A declined draft is skipped for the same reason: the entry is a real
-      // draft this build cannot read, and deleting it loses the user's text.
-      if (
-        system &&
-        questionId &&
-        datacallID > 0 &&
-        draftStatusRef.current !== 'restored' &&
-        !declinedDraftRef.current
-      )
-        void clearDraft(userInfo.userid, system, questionId, datacallID)
-      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
-      return
-    }
-    const currentGen = saveGenRef.current
-    const pending = {
-      userid: userInfo.userid,
-      system,
-      questionId,
-      datacallID,
-      draft: { selectQuestionOption, notes },
-      gen: currentGen,
-    }
-    pendingDraftRef.current = pending
-    const timer = setTimeout(() => {
-      if (saveGenRef.current !== currentGen) return
-      saveDraft(
-        pending.userid,
-        pending.system,
-        pending.questionId,
-        pending.datacallID,
-        pending.draft,
-        () => saveGenRef.current === currentGen
-      ).then((saved) => {
-        if (saveGenRef.current !== currentGen) return
-        // Clear by identity, not generation: a newer edit re-runs this effect
-        // and replaces the ref with a NEW object under the SAME generation
-        // (saveGenRef only moves on explicit clears), so a generation check
-        // here would let the older save's completion discard the newer edit's
-        // payload while its own debounce is still pending - and an unmount in
-        // that window would then flush nothing (#640 review). Gated on `saved`
-        // so a failed write stays in the ref for the unmount flush to retry.
-        if (saved && pendingDraftRef.current === pending)
-          pendingDraftRef.current = null
-        if (saved) {
-          // The stored entry is this build's now, so it is no longer declined.
-          declinedDraftRef.current = false
-          if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
-        } else {
-          setDraftStatus('error')
-        }
-      })
-    }, 1000)
-    return () => clearTimeout(timer)
-  }, [
-    selectQuestionOption,
-    notes,
-    isReadOnly,
-    system,
-    questionId,
-    datacallID,
-    initQuestionChoice,
-    initNotes,
-    loadingQuestion,
-    userInfo.userid,
-  ])
-
-  // Flush a pending draft on unmount. beforeunload below covers tab close and
-  // hard refresh, but it does not fire on in-app navigation, and the debounce
-  // cleanup cancels the timer that would have written the draft. Mount-once so
-  // the cleanup runs on unmount only, never on a dep change (flushing on every
-  // dep change would defeat the debounce and write on each keystroke).
-  // saveDraft takes primitives and touches no component state, so the write
-  // completes after this component is gone.
-  React.useEffect(() => {
-    return () => {
-      const pending = pendingDraftRef.current
-      // Reading the live generation is the point of this guard, not a staleness
-      // bug: it must reflect any clearCurrentDraft that ran after the timer was
-      // scheduled, so a flush cannot resurrect a just-deleted draft. Copying it
-      // into the effect body would freeze it at its mount value.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      if (!pending || saveGenRef.current !== pending.gen) return
-      void saveDraft(
-        pending.userid,
-        pending.system,
-        pending.questionId,
-        pending.datacallID,
-        pending.draft
-      )
-    }
-  }, [])
 
   // Warn before tab close or hard refresh when the active question has edits
   // that haven't been committed to the backend yet.
@@ -1521,7 +1352,7 @@ export default function QuestionnarePage() {
           u.selectQuestionOption !== u.initQuestionChoice ||
           u.notes !== u.initNotes ||
           u.priorReviewNeedsSave,
-        draftRestored: draftStatusRef.current === 'restored',
+        draftRestored: isDraftRestored(),
       })
     ) {
       return
@@ -1544,7 +1375,7 @@ export default function QuestionnarePage() {
     setInitNotes(sel.notes)
     setScoreId(sel.scoreid)
     setRadioKey((k) => k + 1)
-  }, [questionScores, questionId])
+  }, [questionScores, questionId, isDraftRestored])
 
   // A score copied from the prior data call has no edit event for the current
   // call. When its notes exactly match last_score_notes, keep that text as
@@ -2034,7 +1865,7 @@ export default function QuestionnarePage() {
                   value={notes}
                   onChange={(value) => {
                     setNotes(value)
-                    if (draftStatus === 'restored') setDraftStatus('idle')
+                    draft.markEdited()
                   }}
                   insight={currentInsight}
                   priorResponse={currentPriorResponse}
@@ -2092,7 +1923,7 @@ export default function QuestionnarePage() {
                     inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
                     onChange={(e) => {
                       setNotes(e.target.value)
-                      if (draftStatus === 'restored') setDraftStatus('idle')
+                      draft.markEdited()
                     }}
                   />
                 </>
@@ -2285,7 +2116,7 @@ export default function QuestionnarePage() {
                       setOpenAlert(true)
                       return
                     }
-                    saveGenRef.current++
+                    draft.invalidatePending()
                     if (questions[id]) {
                       const q = questions[id]
                       navigate(
@@ -2372,7 +2203,7 @@ export default function QuestionnarePage() {
                           void handleCompleteClick()
                           return
                         }
-                        saveGenRef.current++
+                        draft.invalidatePending()
                         const id = isLastQuestion
                           ? stepFunctionId[0]
                           : stepFunctionId[functionIdIdx[selectedIndex] + 1]
