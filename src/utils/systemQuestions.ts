@@ -1,4 +1,4 @@
-import { queryOptions } from '@tanstack/react-query'
+import { queryOptions, useQuery } from '@tanstack/react-query'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import type { FismaQuestion } from '@/types'
@@ -41,3 +41,28 @@ export const systemQuestionsQuery = (systemId: number, datacallId: number) =>
     queryFn: ({ signal }) => fetchSystemQuestions(systemId, datacallId, signal),
     meta: { suppressErrorNotification: true },
   })
+
+/** Which system's questionnaire, for which data call. */
+export type SystemQuestionsKey = { systemId: number; datacallId: number }
+
+/**
+ * Reads a system's questionnaire for one data call, or nothing while `key`
+ * is null.
+ *
+ * The key is the caller's to move. The questionnaire moves it only after it
+ * has awaited the same query through `fetchQuery`, so the read here is served
+ * from the cache on the render the key changes, and what it renders switches
+ * at the moment the page chooses rather than whenever the response lands.
+ *
+ * @param key - The system and data call, or null for none.
+ * @returns The rows, or undefined until a key is set and its data arrives.
+ */
+export function useSystemQuestions(
+  key: SystemQuestionsKey | null
+): FismaQuestion[] | undefined {
+  const { data } = useQuery({
+    ...systemQuestionsQuery(key?.systemId ?? 0, key?.datacallId ?? 0),
+    enabled: key !== null,
+  })
+  return data
+}
