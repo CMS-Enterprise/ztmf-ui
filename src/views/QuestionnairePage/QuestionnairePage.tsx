@@ -21,8 +21,6 @@ import {
   Question,
   QuestionChoice,
   QuestionScores,
-  Insight,
-  InsightPayload,
 } from '@/types'
 import { Container } from '@mui/system'
 import { styled } from '@mui/material/styles'
@@ -41,6 +39,7 @@ import {
 import { isAuthHandled, notify } from '@/utils/notify'
 import { outlinedChipSx } from '@/utils/chipStyles'
 import { useFismaSystems } from '@/utils/fismaSystems'
+import { useSystemInsights } from '@/utils/insights'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
@@ -166,20 +165,6 @@ export default function QuestionnarePage() {
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
   const [options, setOptions] = React.useState<QuestionChoice[]>([])
   const [questions, setQuestions] = React.useState<Record<number, Question>>([])
-  // ZTMF Insights keyed by DB questionid. Empty for every "off" case (OpDiv not
-  // enabled, not entitled, not yet synced) - the endpoint returns [] and the
-  // panel simply never renders, leaving the page unchanged.
-  const [insightsByQuestion, setInsightsByQuestion] = React.useState<
-    Map<number, InsightPayload>
-  >(new Map())
-  // Tracks which system the insights map belongs to and whether that system's
-  // one-shot lookup has settled. The initial lookup briefly blocks submission so
-  // a carried-forward response cannot be submitted before its required-review
-  // UI is known.
-  const [insightsLoadState, setInsightsLoadState] = React.useState<{
-    system?: number
-    settled: boolean
-  }>({ settled: false })
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
@@ -472,48 +457,13 @@ export default function QuestionnarePage() {
   }>({})
   const systemName = systemInfo?.fismaname ?? ''
 
-  // Fetch ZTMF Insights for this system once (not per question - one call
-  // returns every question's row). The initial lookup briefly blocks submission
-  // so a carried-forward response cannot be submitted before its required
-  // review UI is known. Failures and empty responses then leave the map empty.
-  React.useEffect(() => {
-    if (!system) return
-    const controller = new AbortController()
-    // Clear the previous system's insights up front so a system change can't
-    // briefly render stale badges/panel while the new fetch is in flight.
-    setInsightsByQuestion(new Map())
-    setInsightsLoadState({ system, settled: false })
-    const load = async () => {
-      try {
-        const res = await axiosInstance.get<{ data: Insight[] }>(
-          apiPaths.insights,
-          {
-            params: { fismasystemid: system },
-            signal: controller.signal,
-          }
-        )
-        const map = new Map<number, InsightPayload>()
-        for (const row of res.data?.data ?? []) {
-          if (row?.questionid != null && row.payload) {
-            map.set(row.questionid, row.payload)
-          }
-        }
-        setInsightsByQuestion(map)
-      } catch {
-        if (!controller.signal.aborted) {
-          // Insights are additive and optional; swallow errors and render the
-          // page exactly as it is without them.
-          setInsightsByQuestion(new Map())
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setInsightsLoadState({ system, settled: true })
-        }
-      }
-    }
-    void load()
-    return () => controller.abort()
-  }, [system])
+  // ZTMF Insights keyed by DB questionid, one read per system (one call
+  // returns every question's row). Empty for every "off" case and on failure,
+  // so the panel never renders and the page is unchanged. Until the system's
+  // lookup settles, submission is held so a carried-forward response cannot be
+  // submitted before its required review UI is known.
+  const { insightsByQuestion, settled: insightsSettled } =
+    useSystemInsights(system)
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -569,13 +519,9 @@ export default function QuestionnarePage() {
   // per-OpDiv capability list the gate below keys on. Without the second
   // condition a fast /insights response could enable Next/Complete before
   // /opdivs resolves, letting the panel pop in after the user advanced.
-  const insightsPending =
-    !!system &&
-    (insightsLoadState.system !== system ||
-      !insightsLoadState.settled ||
-      !opdivsLoaded)
+  const insightsPending = !!system && (!insightsSettled || !opdivsLoaded)
   const currentInsight =
-    insightsLoadState.system === system && currentDatabaseQuestionId != null
+    currentDatabaseQuestionId != null
       ? insightsByQuestion.get(currentDatabaseQuestionId)
       : undefined
   // ZTMF Insights are a per-OpDiv capability (opdivs.insights_enabled), so
