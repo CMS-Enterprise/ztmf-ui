@@ -9,8 +9,6 @@ import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
-import Tooltip from '@mui/material/Tooltip'
-import { visuallyHidden } from '@mui/utils'
 import {
   FismaQuestion,
   FismaSystemType,
@@ -59,6 +57,7 @@ import EvidenceNotesField, {
 import NotesFooter from './components/NotesFooter'
 import CarryForwardStrip from './components/CarryForwardStrip'
 import DraftStatusAlert from './components/DraftStatusAlert'
+import QuestionNavFooter from './components/QuestionNavFooter'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import AnswerHistoryPanel, {
@@ -109,8 +108,6 @@ import PillarRail from './components/PillarRail'
 import QuestionHeading from './components/QuestionHeading'
 import SectionRail from './components/SectionRail'
 import QuestionnaireProgress from './components/QuestionnaireProgress'
-import SaveIndicator from './components/SaveIndicator'
-import Link from '@mui/material/Link'
 import Card from '@/components/ui/Card'
 import { useQuestionDraft } from './useQuestionDraft'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
@@ -124,10 +121,6 @@ import {
   questionnairePath,
 } from './deepLink'
 type questionScoreMap = QuestionScoreMap
-// Ties the forward button's hint (Next or Complete) to the button as a
-// description, so keyboard and screen-reader users get it on focus rather than
-// on hover only.
-const NAV_HINT_ID = 'questionnaire-nav-hint'
 
 export default function QuestionnarePage() {
   const {
@@ -829,24 +822,25 @@ export default function QuestionnarePage() {
 
   // Jump link from the Complete summary: same slug navigation + list-click
   // path the sidebar uses, so the datacall context rides along (#501).
+  // Rewrite the URL's pillar/function segments for a question in place, with
+  // the datacall context riding along (#501). Skipped for a functionid the
+  // loaded questions do not have.
+  const showQuestionInUrl = (functionid: number) => {
+    const q = questions[functionid]
+    if (!q || system === undefined) return
+    navigate(
+      questionnairePath(system, datacall, toSlug(q.pillar), toSlug(q.function)),
+      { state: datacallStateRef.current, replace: true }
+    )
+  }
+
   const jumpToSummaryEntry = (entry: ConfirmSummaryEntry) => {
     setConfirmSummary(null)
     // Already on this question (e.g. the last question is itself unanswered):
     // just close the dialog. handleListItemClick would set loading for a
     // questionId change that never fires, stranding the spinner.
     if (entry.functionid === questionId) return
-    const q = questions[entry.functionid]
-    if (q && system !== undefined) {
-      navigate(
-        questionnairePath(
-          system,
-          datacall,
-          toSlug(q.pillar),
-          toSlug(q.function)
-        ),
-        { state: datacallStateRef.current, replace: true }
-      )
-    }
+    showQuestionInUrl(entry.functionid)
     handleListItemClick(entry.functionid)
   }
 
@@ -1478,15 +1472,52 @@ export default function QuestionnarePage() {
     ? addSpace(currentCategory.steps[currentFunctionIndex].function.function)
     : ''
 
+  // Leaving the question would drop an edit: a changed answer or notes, or a
+  // resolved prior-response review that still has to be saved. Moving away
+  // asks first.
+  const hasUnsavedEdits =
+    !isReadOnly &&
+    ((selectQuestionOption !== -1 &&
+      initQuestionChoice !== selectQuestionOption) ||
+      initNotes !== notes ||
+      priorReviewNeedsSave)
+
+  const handlePreviousClick = () => {
+    const id = stepFunctionId[functionIdIdx[selectedIndex] - 1]
+    if (hasUnsavedEdits) {
+      setStepId(id)
+      setOpenAlert(true)
+      return
+    }
+    draft.invalidatePending()
+    showQuestionInUrl(id)
+    setLoadingQuestion(true)
+    setQuestionId(id)
+    setSelectedIndex(id)
+  }
+
+  // Next saves the current question on its own (#705). Complete on the open
+  // call summarizes instead of silently wrapping to question 1; a closed call
+  // keeps the wrap-around, harmless paging for a historical viewer.
+  const handleNextClick = () => {
+    if (isLastQuestion && isOpenCall) {
+      void handleCompleteClick()
+      return
+    }
+    draft.invalidatePending()
+    const id = isLastQuestion
+      ? stepFunctionId[0]
+      : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+    showQuestionInUrl(id)
+    if (id !== questionId) setLoadingQuestion(true)
+    setQuestionId(id)
+    setSelectedIndex(id)
+    if (!isReadOnly) saveResponse()
+  }
+
   const navigateToFunction = (pillarName: string, fn: FismaQuestion) => {
     if (selectedIndex === fn.function.functionid) return
-    const dirty =
-      !isReadOnly &&
-      ((selectQuestionOption !== -1 &&
-        initQuestionChoice !== selectQuestionOption) ||
-        initNotes !== notes ||
-        priorReviewNeedsSave)
-    if (dirty) {
+    if (hasUnsavedEdits) {
       setStepId(fn.function.functionid)
       setOpenAlert(true)
       return
@@ -1822,151 +1853,28 @@ export default function QuestionnarePage() {
                 onUndo={handleUndoClick}
                 canUndo={showUndoButton}
               />
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  mt: 3,
-                  pt: 2,
-                  borderTop: `1px solid ${colors.neutral200}`,
+              <QuestionNavFooter
+                previousDisabled={selectedIndex === stepFunctionId[0]}
+                onPrevious={handlePreviousClick}
+                saveIndicator={{
+                  lastSavedAt,
+                  lastEditedAt: currentSavedScore?.last_edited_at ?? null,
+                  lastEditedBy: currentSavedScore?.last_edited_by ?? null,
+                  isReadOnly,
                 }}
-              >
-                <Button
-                  variant="text"
-                  color="primary"
-                  disabled={selectedIndex === stepFunctionId[0]}
-                  onClick={() => {
-                    const id = stepFunctionId[functionIdIdx[selectedIndex] - 1]
-                    if (
-                      !isReadOnly &&
-                      ((selectQuestionOption !== -1 &&
-                        initQuestionChoice !== selectQuestionOption) ||
-                        initNotes !== notes ||
-                        priorReviewNeedsSave)
-                    ) {
-                      setStepId(id)
-                      setOpenAlert(true)
-                      return
-                    }
-                    draft.invalidatePending()
-                    if (questions[id]) {
-                      const q = questions[id]
-                      navigate(
-                        questionnairePath(
-                          system,
-                          datacall,
-                          toSlug(q.pillar),
-                          toSlug(q.function)
-                        ),
-                        { state: datacallStateRef.current, replace: true }
-                      )
-                    }
-                    setLoadingQuestion(true)
-                    setQuestionId(id)
-                    setSelectedIndex(id)
-                  }}
-                  sx={{ fontSize: 13, fontWeight: 600 }}
-                >
-                  {'< Previous'}
-                </Button>
-                {/* The history trigger sits beside the save indicator rather
-                    than inside it. SaveIndicator renders LastEditedFooter as a
-                    Tooltip title, and a link in tooltip content is hover-only:
-                    unreachable by keyboard and absent from the DOM until the
-                    pointer arrives. Grouped in a Box so the row keeps its
-                    three-child space-between layout. */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <SaveIndicator
-                    lastSavedAt={lastSavedAt}
-                    lastEditedAt={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_at
-                        : null
-                    }
-                    lastEditedBy={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_by
-                        : null
-                    }
-                    isReadOnly={isReadOnly}
-                  />
-                  {/* Only offered when there is something to show. History
-                      stays readable on a closed call, where admins can still
-                      undo from the drawer but the strip is absent. */}
-                  {answerHistory.head && (
-                    <Link
-                      id="view-answer-history"
-                      component="button"
-                      type="button"
-                      onClick={answerHistory.openHistory}
-                      // Matches the SaveIndicator text it sits beside.
-                      sx={{ fontSize: 12, fontWeight: 600 }}
-                    >
-                      View history
-                    </Link>
-                  )}
-                </Box>
-                {/* Tooltip states that the forward action saves this
-                    question on its own (#705). describeChild so MUI applies
-                    aria-description, not aria-label, over the button text;
-                    the visually-hidden span mirrors it for keyboard/SR users.
-                    Empty title (read-only, or last-on-closed-call) suppresses
-                    the tooltip. */}
-                <Tooltip title={navHintMsg} describeChild>
-                  <span>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      disabled={
-                        needsNotesUpdate ||
-                        insightsPending ||
-                        priorReviewState === 'pending' ||
-                        priorReviewState === 'initializing'
-                      }
-                      aria-describedby={navHintMsg ? NAV_HINT_ID : undefined}
-                      onClick={() => {
-                        // Complete on the open call summarizes instead of
-                        // silently wrapping to question 1. A closed call keeps
-                        // the wrap-around - harmless paging for a historical
-                        // viewer.
-                        if (isLastQuestion && isOpenCall) {
-                          void handleCompleteClick()
-                          return
-                        }
-                        draft.invalidatePending()
-                        const id = isLastQuestion
-                          ? stepFunctionId[0]
-                          : stepFunctionId[functionIdIdx[selectedIndex] + 1]
-                        if (questions[id]) {
-                          const q = questions[id]
-                          navigate(
-                            questionnairePath(
-                              system,
-                              datacall,
-                              toSlug(q.pillar),
-                              toSlug(q.function)
-                            ),
-                            { state: datacallStateRef.current, replace: true }
-                          )
-                        }
-                        if (id !== questionId) setLoadingQuestion(true)
-                        setQuestionId(id)
-                        setSelectedIndex(id)
-                        if (!isReadOnly) saveResponse()
-                      }}
-                      sx={{ fontSize: 13 }}
-                    >
-                      {isLastQuestion ? 'Complete' : 'Next question >'}
-                    </Button>
-                    <Box component="span" id={NAV_HINT_ID} sx={visuallyHidden}>
-                      {navHintMsg}
-                    </Box>
-                  </span>
-                </Tooltip>
-              </Box>
+                onViewHistory={
+                  answerHistory.head ? answerHistory.openHistory : undefined
+                }
+                nextDisabled={
+                  needsNotesUpdate ||
+                  insightsPending ||
+                  priorReviewState === 'pending' ||
+                  priorReviewState === 'initializing'
+                }
+                onNext={handleNextClick}
+                nextLabel={isLastQuestion ? 'Complete' : 'Next question >'}
+                navHint={navHintMsg}
+              />
             </>
           )}
         </Card>
