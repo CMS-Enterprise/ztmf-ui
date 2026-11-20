@@ -81,4 +81,65 @@ describe('useSystemInsights', () => {
     expect(result.current.settled).toBe(false)
     expect(result.current.insightsByQuestion.size).toBe(0)
   })
+
+  it('does not settle on a cached failure until the reread lands', async () => {
+    const client = createTestQueryClient()
+    const wrapper = queryWrapper(client)
+    mock.onGet('/insights').replyOnce(500)
+    const first = renderHook(() => useSystemInsights(7), { wrapper })
+    await waitFor(() => expect(first.result.current.settled).toBe(true))
+    first.unmount()
+
+    let release: () => void = () => {}
+    mock.onGet('/insights').replyOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([200, { data: [{ questionid: 1, payload }] }])
+        })
+    )
+    const second = renderHook(() => useSystemInsights(7), { wrapper })
+    expect(second.result.current.settled).toBe(false)
+    await waitFor(() => expect(mock.history.get).toHaveLength(2))
+    release()
+    await waitFor(() => expect(second.result.current.settled).toBe(true))
+    expect(second.result.current.insightsByQuestion.size).toBe(1)
+  })
+
+  it('does not settle on a stale cached success until the reread lands', async () => {
+    const client = createTestQueryClient()
+    const wrapper = queryWrapper(client)
+    mock.onGet('/insights').replyOnce(200, { data: null })
+    const first = renderHook(() => useSystemInsights(7), { wrapper })
+    await waitFor(() => expect(first.result.current.settled).toBe(true))
+    first.unmount()
+    // Past the stale window: the next mount reads the server again.
+    await client.invalidateQueries()
+
+    let release: () => void = () => {}
+    mock.onGet('/insights').replyOnce(
+      () =>
+        new Promise((resolve) => {
+          release = () => resolve([200, { data: [{ questionid: 1, payload }] }])
+        })
+    )
+    const second = renderHook(() => useSystemInsights(7), { wrapper })
+    expect(second.result.current.settled).toBe(false)
+    await waitFor(() => expect(mock.history.get).toHaveLength(2))
+    release()
+    await waitFor(() => expect(second.result.current.settled).toBe(true))
+    expect(second.result.current.insightsByQuestion.size).toBe(1)
+  })
+
+  it('settles at once on a fresh cached success', async () => {
+    const client = createTestQueryClient()
+    const wrapper = queryWrapper(client)
+    mock.onGet('/insights').reply(200, { data: [{ questionid: 1, payload }] })
+    const first = renderHook(() => useSystemInsights(7), { wrapper })
+    await waitFor(() => expect(first.result.current.settled).toBe(true))
+    first.unmount()
+
+    const second = renderHook(() => useSystemInsights(7), { wrapper })
+    expect(second.result.current.settled).toBe(true)
+    expect(mock.history.get).toHaveLength(1)
+  })
 })

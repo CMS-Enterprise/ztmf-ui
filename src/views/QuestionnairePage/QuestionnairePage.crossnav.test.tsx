@@ -41,10 +41,24 @@ jest.mock('@/utils/notify', () => {
   }
 })
 
+// A tiny store so a test can change the context after render and have the
+// page re-render with it, as the real provider would.
 let mockCtx: Record<string, unknown>
+const mockCtxListeners = new Set<() => void>()
 jest.mock('../Title/Context', () => ({
-  useContextProp: () => mockCtx,
+  useContextProp: () =>
+    jest.requireActual('react').useSyncExternalStore(
+      (listener: () => void) => {
+        mockCtxListeners.add(listener)
+        return () => mockCtxListeners.delete(listener)
+      },
+      () => mockCtx
+    ),
 }))
+function setCtx(next: Record<string, unknown>) {
+  mockCtx = next
+  mockCtxListeners.forEach((listener) => listener())
+}
 
 const QUESTIONS = [
   {
@@ -289,4 +303,35 @@ it('does not lose a newer edit made while an earlier save is in flight', async (
 
   expect(saveDraft).toHaveBeenCalledTimes(2)
   expect(saveDraft.mock.calls[1][4].notes).toBe('AB')
+})
+
+it('clears the spinner when a reload lands on the same question', async () => {
+  // A context change (here the data-call list refetching with new contents)
+  // reloads the page for the same system, data call and question. Every key
+  // the question-load effect watches ends up equal to what it was, so the
+  // spinner the reload set must still be cleared.
+  mockGet.mockImplementation((url: string) => {
+    if (url.includes('/questions'))
+      return Promise.resolve({ data: { data: QUESTIONS } })
+    if (url.includes('/options'))
+      return Promise.resolve({ data: { data: OPTIONS_7006 } })
+    return Promise.resolve({ data: { data: [] } })
+  })
+  const scoreCalls = () =>
+    mockGet.mock.calls.filter(
+      (c) => typeof c[0] === 'string' && (c[0] as string).startsWith('/scores')
+    )
+
+  renderPage()
+  await screen.findByLabelText(/supporting evidence/i)
+  const before = scoreCalls().length
+
+  act(() =>
+    setCtx({ ...mockCtx, datacalls: [...(mockCtx.datacalls as unknown[])] })
+  )
+
+  await waitFor(() => expect(scoreCalls().length).toBeGreaterThan(before))
+  expect(
+    await screen.findByLabelText(/supporting evidence/i)
+  ).toBeInTheDocument()
 })
