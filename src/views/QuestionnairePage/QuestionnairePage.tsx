@@ -120,7 +120,6 @@ import {
   parseSystemIdParam,
   questionnairePath,
 } from './deepLink'
-type questionScoreMap = QuestionScoreMap
 
 export default function QuestionnarePage() {
   const {
@@ -179,7 +178,7 @@ export default function QuestionnarePage() {
   // Saved answers for the loaded system and data call, keyed by
   // functionoptionid. Same key as the questions map, so they switch together.
   const loadedScores = useQuestionScores(loadedKey)
-  const questionScores = React.useMemo<questionScoreMap>(
+  const questionScores = React.useMemo<QuestionScoreMap>(
     () => indexScoresByOption(loadedScores ?? EMPTY_LIST),
     [loadedScores]
   )
@@ -247,9 +246,9 @@ export default function QuestionnarePage() {
   // authoritative data in the same tick (the Complete summary) does not have
   // to read a not-yet-rendered value. undefined on failure - callers fall
   // back to what they already had.
-  const fetchQuestionScores = async (
+  const rereadQuestionScores = async (
     systemId: number | string | undefined
-  ): Promise<questionScoreMap | undefined> => {
+  ): Promise<QuestionScoreMap | undefined> => {
     try {
       const rows = await queryClient.fetchQuery({
         ...questionScoresQuery(datacallID, Number(systemId)),
@@ -640,7 +639,7 @@ export default function QuestionnarePage() {
   // and both requests, so this page adds none of its own.
   const answerHistory = useAnswerHistory({
     scoreid,
-    refetchScores: () => fetchQuestionScores(system),
+    refetchScores: () => rereadQuestionScores(system),
     // Moves whenever this answer is written, which is what makes the Undo
     // button appear the instant a save lands instead of on the next
     // navigation. status is included because a confirm changes it.
@@ -696,7 +695,7 @@ export default function QuestionnarePage() {
             )
         )
       }
-      fetchQuestionScores(system)
+      rereadQuestionScores(system)
       return true
     } catch (error) {
       if (isAuthHandled(error)) return false
@@ -776,7 +775,7 @@ export default function QuestionnarePage() {
       if (outcome.kind === 'conflict' || outcome.kind === 'refused') {
         // Someone else wrote the answer, or it drifted, so the one on screen
         // may be stale too.
-        if (sameCycle()) fetchQuestionScores(system)
+        if (sameCycle()) rereadQuestionScores(system)
         if (movedOn()) return
         if (outcome.kind === 'conflict') {
           notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
@@ -802,7 +801,7 @@ export default function QuestionnarePage() {
     if (!isReadOnly) {
       await saveResponse()
     }
-    const fresh = await fetchQuestionScores(system)
+    const fresh = await rereadQuestionScores(system)
     if (fresh) {
       // Re-seed the current question's saved state from the fresh map. The
       // old Complete re-seeded implicitly by navigating to question 1; this
@@ -826,8 +825,6 @@ export default function QuestionnarePage() {
     )
   }
 
-  // Jump link from the Complete summary: same slug navigation + list-click
-  // path the sidebar uses, so the datacall context rides along (#501).
   // Rewrite the URL's pillar/function segments for a question in place, with
   // the datacall context riding along (#501). Skipped for a functionid the
   // loaded questions do not have.
@@ -840,6 +837,8 @@ export default function QuestionnarePage() {
     )
   }
 
+  // Jump link from the Complete summary: same slug navigation + list-click
+  // path the sidebar uses, so the datacall context rides along (#501).
   const jumpToSummaryEntry = (entry: ConfirmSummaryEntry) => {
     setConfirmSummary(null)
     // Already on this question (e.g. the last question is itself unanswered):
@@ -918,7 +917,7 @@ export default function QuestionnarePage() {
           ? { ...current, needsSave: false }
           : current
       )
-      fetchQuestionScores(system)
+      rereadQuestionScores(system)
     } catch (error) {
       if (isAuthHandled(error)) return
       console.error('Error saving score:', error)
@@ -1047,7 +1046,7 @@ export default function QuestionnarePage() {
               retry: false,
             })
             if (controller.signal.aborted) return
-            // Same seed as fetchQuestionScores so a freshly-loaded page
+            // Same seed as rereadQuestionScores so a freshly-loaded page
             // shows "last saved <time>" without needing a save first.
             const latest = latestEditedAt(rows)
             if (latest) setLastSavedAt(latest)
