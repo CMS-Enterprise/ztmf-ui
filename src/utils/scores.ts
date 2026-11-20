@@ -16,7 +16,7 @@ import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import { type QueryHookOptions } from '@/queryClient'
 import { EMPTY_LIST } from '@/utils/emptyList'
-import type { ScoreAggregate, ScoreProgress } from '@/types'
+import type { ScoreAggregate, ScoreDiffEntry, ScoreProgress } from '@/types'
 
 /** Historical data calls are immutable; only the newest call's rows move. */
 const HISTORY_STALE_MS = 5 * 60_000
@@ -62,6 +62,81 @@ export async function fetchScoreProgress(
     { signal }
   )
   return response.data.data ?? []
+}
+
+/**
+ * Fetches the answer-by-answer difference between two data calls for one
+ * system, in questionnaire order.
+ * @param {number} fromDatacallId - The older call.
+ * @param {number} toDatacallId - The newer call.
+ * @param {number} systemId - The system to compare.
+ * @param {AbortSignal} [signal] - Abort signal from the query.
+ * @returns {Promise<ScoreDiffEntry[]>} The diff rows.
+ */
+export async function fetchScoreDiff(
+  fromDatacallId: number,
+  toDatacallId: number,
+  systemId: number,
+  signal?: AbortSignal
+): Promise<ScoreDiffEntry[]> {
+  const response = await axiosInstance.get<{ data: ScoreDiffEntry[] | null }>(
+    apiPaths.scores.diff(fromDatacallId, toDatacallId, systemId),
+    // The comparison shows its own failure message. Without this a 403 also
+    // raises the interceptor's permission snackbar, and suppressing the cache
+    // boundary does not help: handleQueryError already returns early for an
+    // auth-handled error.
+    { signal, skipPermissionNotification: true }
+  )
+  return response.data.data ?? []
+}
+
+/**
+ * The diff between two data calls for one system.
+ *
+ * Disabled until both ends are chosen and they differ, which is also what the
+ * caller's "pick two calls" empty state covers. Silent at the cache boundary:
+ * the comparison renders its own failure message, and a snackbar beside it
+ * would say the same thing twice.
+ *
+ * Pass `enabled: open` from a modal. Both callers keep the dialog mounted and
+ * only toggle a prop, so without it the query stays an observer after close:
+ * it refetches in the background whenever an answer write invalidates the
+ * `scores` prefix, and a reopen never reads the server, so a change someone
+ * else made would show the old diff for as long as the page stays open.
+ *
+ * @param {number} [fromDatacallId] - The older call.
+ * @param {number} [toDatacallId] - The newer call.
+ * @param {number} systemId - The system to compare.
+ * @param {QueryHookOptions} [options] - `enabled`, for a caller that only
+ *   reads while it is open.
+ * @returns {UseQueryResult<ScoreDiffEntry[]>} The query result.
+ */
+export function useScoreDiff(
+  fromDatacallId: number | undefined,
+  toDatacallId: number | undefined,
+  systemId: number,
+  options: QueryHookOptions = {}
+): UseQueryResult<ScoreDiffEntry[]> {
+  const ready =
+    fromDatacallId !== undefined &&
+    toDatacallId !== undefined &&
+    fromDatacallId !== toDatacallId
+  return useQuery({
+    queryKey: queryKeys.scores.diff(
+      fromDatacallId ?? 0,
+      toDatacallId ?? 0,
+      systemId
+    ),
+    queryFn: ({ signal }) =>
+      fetchScoreDiff(
+        fromDatacallId as number,
+        toDatacallId as number,
+        systemId,
+        signal
+      ),
+    enabled: ready && options.enabled !== false,
+    meta: { suppressErrorNotification: true },
+  })
 }
 
 /**
