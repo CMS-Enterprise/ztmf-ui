@@ -211,6 +211,11 @@ function renderAt(path: string) {
   )
   const provider = <RouterProvider router={router} />
   const utils = renderWithQueryClient(provider)
+  // Answer options are cached, so a second run of the question-load effect
+  // within the stale window would make no request and the "fetched once"
+  // assertions could not see it. Zero stale time on that key alone keeps them
+  // honest without making the questions observers refetch.
+  utils.queryClient.setQueryDefaults(['functions'], { staleTime: 0 })
   return { ...utils, rerender: () => utils.rerender(provider) }
 }
 
@@ -1956,6 +1961,13 @@ describe('carried-forward confirmation', () => {
       ).toBe(true)
     )
     fireEvent.click(screen.getByText(/^Next question/i))
+    // Moved on means the next question has loaded. Rejecting earlier races
+    // its load: while the old answer is still on screen its history query is
+    // observed, so the invalidation below refetches at once and never reads
+    // as invalidated.
+    expect(
+      await screen.findByText('Question for Imperial Device Management')
+    ).toBeInTheDocument()
     await act(async () => {
       reject({
         isAxiosError: true,

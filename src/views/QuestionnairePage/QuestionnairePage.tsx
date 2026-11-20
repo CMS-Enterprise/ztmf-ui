@@ -1,31 +1,21 @@
 import * as React from 'react'
 import Box from '@mui/material/Box'
-import Chip from '@mui/material/Chip'
-import CheckCircleOutlineIcon from '@mui/icons-material/CheckCircleOutline'
 import Typography from '@mui/material/Typography'
 import { useParams } from 'react-router-dom'
 import { useQueryClient } from '@tanstack/react-query'
 import { Spinner } from '@cmsgov/design-system'
-import { colors, status } from '@/theme/tokens'
+import { colors } from '@/theme/tokens'
 import Alert from '@mui/material/Alert'
 import BreadCrumbs from '@/components/BreadCrumbs/BreadCrumbs'
 import PageHeader from '@/components/ui/PageHeader'
 import DatacallContextCard from '@/components/DatacallContextCard/DatacallContextCard'
-import TextField from '@mui/material/TextField'
-import Tooltip from '@mui/material/Tooltip'
-import { visuallyHidden } from '@mui/utils'
 import {
   FismaQuestion,
   FismaSystemType,
-  QuestionOption,
-  Question,
   QuestionChoice,
   QuestionScores,
-  Insight,
-  InsightPayload,
 } from '@/types'
 import { Container } from '@mui/system'
-import { styled } from '@mui/material/styles'
 import axiosInstance from '@/axiosConfig'
 import { apiPaths, queryKeys } from '@/api/keys'
 import { useNavigate, useLocation, Link as RouterLink } from 'react-router-dom'
@@ -39,11 +29,35 @@ import {
   NEXT_HINT_MSG,
 } from '@/constants'
 import { isAuthHandled, notify } from '@/utils/notify'
-import { outlinedChipSx } from '@/utils/chipStyles'
+import { useFismaSystems } from '@/utils/fismaSystems'
+import { useSystemInsights } from '@/utils/insights'
+import {
+  functionOptionsQuery,
+  useFunctionOptions,
+} from '@/utils/functionOptions'
+import {
+  SystemQuestionsKey,
+  systemQuestionsQuery,
+  useSystemQuestions,
+} from '@/utils/systemQuestions'
+import { EMPTY_LIST } from '@/utils/emptyList'
+import {
+  QuestionScoreMap,
+  indexScoresByOption,
+  latestEditedAt,
+  questionScoresQuery,
+  useQuestionScores,
+} from '@/utils/questionScores'
 import Button from '@mui/material/Button'
 import ConfirmDialog from '@/components/ConfirmDialog/ConfirmDialog'
 import ScoreDiffModal from '@/components/ScoreDiffModal/ScoreDiffModal'
-import AISummaryBadge from '@/components/AISummaryBadge/AISummaryBadge'
+import EvidenceNotesField, {
+  DEFAULT_NOTES_PROMPT,
+} from './components/EvidenceNotesField'
+import NotesFooter from './components/NotesFooter'
+import CarryForwardStrip from './components/CarryForwardStrip'
+import DraftStatusAlert from './components/DraftStatusAlert'
+import QuestionNavFooter from './components/QuestionNavFooter'
 import { useContextProp } from '../Title/Context'
 import { isAdmin, isReadOnlyAdmin, hasSystemAccess } from '@/utils/userRoles'
 import AnswerHistoryPanel, {
@@ -81,69 +95,31 @@ import {
   shouldPersistResponse,
   needsNotesUpdateForChoiceChange,
 } from './saveGuard'
-import { addSpace, groupQuestionsByPillar, type Category } from './helpers'
+import {
+  addSpace,
+  buildQuestionNav,
+  indexQuestionsByFunction,
+  type Category,
+} from './helpers'
 // Aliased because a local state variable named `datacall` shadows the type.
 import type { datacall as Datacall } from '@/types'
 import ClosedDatacallBanner from './components/ClosedDatacallBanner'
 import PillarRail from './components/PillarRail'
-import EyebrowLine from './components/EyebrowLine'
+import QuestionHeading from './components/QuestionHeading'
 import SectionRail from './components/SectionRail'
 import QuestionnaireProgress from './components/QuestionnaireProgress'
-import SaveIndicator from './components/SaveIndicator'
-import Link from '@mui/material/Link'
 import Card from '@/components/ui/Card'
-import {
-  saveDraft,
-  loadDraft,
-  clearDraft,
-  hasDeclinedDraft,
-} from './draftStore'
+import { useQuestionDraft } from './useQuestionDraft'
 import { deriveScoreSelection, shouldReseedAnswer } from './scoreSelection'
 import {
   toSlug,
   encodeDatacallSlug,
   findSystemsByAcronym,
-  resolveDatacallBySlug,
+  resolveActiveDatacall,
   resolveFunctionTarget,
   parseSystemIdParam,
   questionnairePath,
 } from './deepLink'
-type questionScoreMap = {
-  [key: number]: QuestionScores
-}
-const CssTextField = styled(TextField)({
-  '& .MuiOutlinedInput-root': {
-    '& fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-    },
-    '&.Mui-focused fieldset': {
-      borderColor: '#000000',
-      borderWidth: '2px',
-      boxShadow: '0px 0px 0px 3px #FFFFFF, 0px 0px 3px 6px #bd13b8',
-    },
-    '@supports (-moz-appearance:none)': {
-      paddingTop: '30px',
-      '& .MuiInputBase-inputMultiline': {
-        // paddingTop: '-15px',
-        height: '100%',
-        width: '100%',
-        scrollbarWidth: 'none',
-      },
-    },
-    '& .MuiInputBase-inputMultiline': {
-      msOverflowStyle: 'none', // Hide scrollbar in IE/Edge
-      '&::-webkit-scrollbar': { display: 'none' },
-    },
-  },
-})
-// Ties the carried-forward guidance line to the Confirm button it explains, so
-// a screen reader hears the reason with the action.
-const CARRY_FORWARD_HELPER_ID = 'carried-forward-confirm-helper'
-// Ties the forward button's hint (Next or Complete) to the button as a
-// description, so keyboard and screen-reader users get it on focus rather than
-// on hover only.
-const NAV_HINT_ID = 'questionnaire-nav-hint'
 
 export default function QuestionnarePage() {
   const {
@@ -163,27 +139,49 @@ export default function QuestionnarePage() {
   const [diffModalOpen, setDiffModalOpen] = React.useState(false)
   const isReadOnly =
     isReadOnlyAdmin(userInfo) || (isPastDeadline && !isAdmin(userInfo))
-  const [questionScores, setQuestionScores] = React.useState<questionScoreMap>(
-    {}
-  )
   const [questionId, setQuestionId] = React.useState<number | null>(null)
   const [openAlert, setOpenAlert] = React.useState<boolean>(false)
-  const [options, setOptions] = React.useState<QuestionChoice[]>([])
-  const [questions, setQuestions] = React.useState<Record<number, Question>>([])
-  // ZTMF Insights keyed by DB questionid. Empty for every "off" case (OpDiv not
-  // enabled, not entitled, not yet synced) - the endpoint returns [] and the
-  // panel simply never renders, leaving the page unchanged.
-  const [insightsByQuestion, setInsightsByQuestion] = React.useState<
-    Map<number, InsightPayload>
-  >(new Map())
-  // Tracks which system the insights map belongs to and whether that system's
-  // one-shot lookup has settled. The initial lookup briefly blocks submission so
-  // a carried-forward response cannot be submitted before its required-review
-  // UI is known.
-  const [insightsLoadState, setInsightsLoadState] = React.useState<{
-    system?: number
-    settled: boolean
-  }>({ settled: false })
+  // The function whose answer options are on screen. The question-load effect
+  // moves it once the answer has been seeded for that question, as it used to
+  // set the options themselves, so the choices and the seeded answer appear
+  // together.
+  const [optionsFunctionId, setOptionsFunctionId] = React.useState<
+    number | null
+  >(null)
+  const options = useFunctionOptions(optionsFunctionId) ?? EMPTY_LIST
+  // Two views of the questionnaire, each pointed at a cached query by its own
+  // key. The sidebar's key moves as soon as the questions arrive, so the list
+  // renders while scores are still loading. The questions map's key moves in
+  // the same update as scores and questionId, so the question-load effect
+  // (which depends on it) runs exactly once per load, never against the
+  // previous system's question or scores.
+  const [navQuestionsKey, setNavQuestionsKey] =
+    React.useState<SystemQuestionsKey | null>(null)
+  const [loadedKey, setLoadedKey] = React.useState<SystemQuestionsKey | null>(
+    null
+  )
+  // Bumped at the end of every page load. A reload can land on the same
+  // system, data call and question, which leaves the key, questionId and
+  // datacallID unchanged. The question-load effect depends on this counter so
+  // it still runs, re-seeds the answer and clears the spinner the load set.
+  const [loadCount, setLoadCount] = React.useState(0)
+  const navQuestions = useSystemQuestions(navQuestionsKey)
+  const loadedQuestions = useSystemQuestions(loadedKey)
+  const { categories, stepFunctionId, functionIdIdx } = React.useMemo(
+    () => buildQuestionNav(navQuestions ?? EMPTY_LIST),
+    [navQuestions]
+  )
+  const questions = React.useMemo(
+    () => indexQuestionsByFunction(loadedQuestions ?? EMPTY_LIST),
+    [loadedQuestions]
+  )
+  // Saved answers for the loaded system and data call, keyed by
+  // functionoptionid. Same key as the questions map, so they switch together.
+  const loadedScores = useQuestionScores(loadedKey)
+  const questionScores = React.useMemo<QuestionScoreMap>(
+    () => indexScoresByOption(loadedScores ?? EMPTY_LIST),
+    [loadedScores]
+  )
   const [question, setQuestion] = React.useState<string>('')
   const [datacallID, setDatacallID] = React.useState<number>(0)
   const [datacall, setDatacall] = React.useState<string>('')
@@ -194,11 +192,6 @@ export default function QuestionnarePage() {
   const [loadedResponseContextId, setLoadedResponseContextId] =
     React.useState('')
   const [noQuestions, setNoQuestions] = React.useState<boolean>(false)
-  const [categories, setCategories] = React.useState<Category[]>([])
-  const [stepFunctionId, setStepFunctionId] = React.useState<number[]>([])
-  const [functionIdIdx, setFunctionIdIdx] = React.useState<{
-    [key: number]: number
-  }>({})
   const [scoreid, setScoreId] = React.useState<number>(0)
   const [initQuestionChoice, setInitQuestionChoice] = React.useState<number>(-1)
   const [initNotes, setInitNotes] = React.useState<string>('')
@@ -213,9 +206,6 @@ export default function QuestionnarePage() {
   // indicator reads "Saved just now / 2 min ago" without depending on the
   // questionScores re-fetch round trip.
   const [lastSavedAt, setLastSavedAt] = React.useState<Date | null>(null)
-  const [draftStatus, setDraftStatus] = React.useState<
-    'idle' | 'restored' | 'saved' | 'error'
-  >('idle')
   // Review state for a carried-forward prior response, scoped to one
   // system x data call x question x prior-text context. needsSave marks a
   // resolved required review as an unsaved current-call action even when the
@@ -225,36 +215,11 @@ export default function QuestionnarePage() {
     state: PriorReviewState
     needsSave: boolean
   }>({ contextId: '', state: 'not-required', needsSave: false })
-  // Refs read inside setTimeout/event callbacks to get the current value
-  // without enrolling the effects in those deps (prevents extra re-runs).
-  const draftStatusRef = React.useRef(draftStatus)
-  draftStatusRef.current = draftStatus
   // Stable ref so fetchOptions always reads the latest scores without enrolling
   // questionScores as a dep of the questionId effect. Stale-closure-safe because
   // the ref updates synchronously on every render before any effect runs.
   const questionScoresRef = React.useRef(questionScores)
   questionScoresRef.current = questionScores
-  // Incremented on every explicit draft clear so in-flight debounced saves
-  // that fire after a clear don't resurrect the just-removed draft.
-  const saveGenRef = React.useRef(0)
-  // True while the current question has a stored draft this build declined to
-  // read (unrecognised format version). Suppresses the no-edits clearDraft so
-  // the app doesn't delete what draftStore deliberately preserved.
-  const declinedDraftRef = React.useRef(false)
-  // Mirrors the payload the debounced draft save would write, so unmount can
-  // flush it. The debounce cleanup cancels its own pending timer, and a route
-  // change away from this page (System Info, the Dashboard breadcrumb, browser
-  // back) tears the component down without firing beforeunload, so an edit made
-  // inside the 1s window was dropped. Carries the generation so a flush cannot
-  // resurrect a draft clearCurrentDraft deleted after the timer was scheduled.
-  const pendingDraftRef = React.useRef<{
-    userid: string
-    system: number
-    questionId: number
-    datacallID: number
-    draft: { selectQuestionOption: number; notes: string }
-    gen: number
-  } | null>(null)
   const unsavedRef = React.useRef({
     selectQuestionOption,
     initQuestionChoice,
@@ -275,36 +240,26 @@ export default function QuestionnarePage() {
   // strictly required for the selection to update, but it is retained as a clean
   // reset of the subtree when a re-seed changes the answer out of band.
   const [radioKey, setRadioKey] = React.useState(0)
-  // Returns the fresh map alongside committing it to state, so a caller that
-  // must reason over the authoritative data in the same tick (the Complete
-  // summary) does not have to read a not-yet-rendered state value. undefined
-  // on failure - callers fall back to the state they already had.
-  const fetchQuestionScores = async (
-    systemId: number | string | undefined,
-    setQuestionScores: (scores: questionScoreMap) => void
-  ): Promise<questionScoreMap | undefined> => {
+  // Rereads the answers from the server into the cache, which re-renders
+  // questionScores when the system and data call are the loaded ones. Also
+  // returns the fresh map, so a caller that must reason over the
+  // authoritative data in the same tick (the Complete summary) does not have
+  // to read a not-yet-rendered value. undefined on failure - callers fall
+  // back to what they already had.
+  const rereadQuestionScores = async (
+    systemId: number | string | undefined
+  ): Promise<QuestionScoreMap | undefined> => {
     try {
-      const response = await axiosInstance.get(
-        apiPaths.scores.list(datacallID, systemId, true)
-      )
-      const rows: QuestionScores[] = response.data.data ?? []
-      const hashTable: questionScoreMap = Object.assign(
-        {},
-        ...rows.map((item: QuestionScores) => ({
-          [item.functionoptionid]: item,
-        }))
-      )
-      setQuestionScores(hashTable)
+      const rows = await queryClient.fetchQuery({
+        ...questionScoresQuery(datacallID, Number(systemId)),
+        retry: false,
+      })
+      const hashTable = indexScoresByOption(rows)
       // Seed the "last saved" indicator from the freshest score row so the
       // header subtitle reads "last saved 2 min ago" on first paint instead
       // of waiting for a save in this session.
-      let maxAt = 0
-      for (const r of rows) {
-        if (!r.last_edited_at) continue
-        const t = new Date(r.last_edited_at).getTime()
-        if (Number.isFinite(t) && t > maxAt) maxAt = t
-      }
-      if (maxAt > 0) setLastSavedAt(new Date(maxAt))
+      const latest = latestEditedAt(rows)
+      if (latest) setLastSavedAt(latest)
       return hashTable
     } catch (error) {
       if (isAuthHandled(error)) return undefined
@@ -314,7 +269,7 @@ export default function QuestionnarePage() {
   }
   const handleChoiceChange = (event: React.ChangeEvent<HTMLInputElement>) => {
     setSelectQuestionOption(Number(event.target.value))
-    if (draftStatus === 'restored') setDraftStatus('idle')
+    draft.markEdited()
   }
   const renderRadioGroup = (options: QuestionChoice[]) => {
     // Native-radio group (see QuestionRadioGroup) rather than CMSDS ChoiceList:
@@ -360,14 +315,43 @@ export default function QuestionnarePage() {
   // rather than resolved into a system here. The two shapes never overlap, so
   // an all-digit acronym cannot be mistaken for an id.
   const routeSystemId = parseSystemIdParam(systemParam)
+  // Legacy acronym links: every active-list match. One match redirects to the
+  // id form; the decommissioned list is only consulted when there is none.
+  const legacyActiveMatches = React.useMemo(
+    () => findSystemsByAcronym(fismaSystems, legacyAcronym),
+    [fismaSystems, legacyAcronym]
+  )
+  const routeSystemActive =
+    routeSystemId !== undefined &&
+    fismaSystems.some((s) => s.fismasystemid === routeSystemId)
   // The context list holds active systems only, so a deep link to a
   // decommissioned system would read as "not found" and mislead (its real
   // state is "no questionnaire available"). When the id (or legacy acronym)
-  // misses the active list, lazily fetch the decommissioned list once and
-  // retry against it. null = not fetched; [] = fetched (empty or failed).
-  const [decommissionedSystems, setDecommissionedSystems] = React.useState<
-    FismaSystemType[] | null
-  >(null)
+  // misses the active list, fetch the decommissioned list and retry against
+  // it. Once loaded it stays: a disabled query still serves its cached rows.
+  // null = not fetched; [] = fetched (empty or failed), so a failure lands on
+  // the not-found warning rather than an indefinite spinner.
+  const decommissionedLookup = useFismaSystems(true, {
+    enabled:
+      fismaSystemsLoaded &&
+      (!!systemParam || !!legacyAcronym) &&
+      !routeSystemActive &&
+      legacyActiveMatches.length === 0,
+  })
+  const {
+    fismaSystems: decommissionedRows,
+    fismaSystemsFetchedDecommissioned: decommissionedFetched,
+    fismaSystemsError: decommissionedFailed,
+  } = decommissionedLookup
+  const decommissionedSystems = React.useMemo<FismaSystemType[] | null>(
+    () =>
+      decommissionedFetched
+        ? decommissionedRows
+        : decommissionedFailed
+          ? []
+          : null,
+    [decommissionedFetched, decommissionedRows, decommissionedFailed]
+  )
   // OpDivs whose systems surface the internal ZTMF Insights layer
   // (opdivs.insights_enabled - CMS today). The gate keys on the SYSTEM's OpDiv,
   // not the viewed data call's name: the FY23-25 era used call tenant (CMS-named
@@ -395,46 +379,6 @@ export default function QuestionnarePage() {
     [fismaSystems, decommissionedSystems, routeSystemId]
   )
   const system = systemInfo?.fismasystemid
-  // Legacy acronym links: every active-list match. One match redirects to the
-  // id form; the decommissioned list is only consulted when there is none.
-  const legacyActiveMatches = React.useMemo(
-    () => findSystemsByAcronym(fismaSystems, legacyAcronym),
-    [fismaSystems, legacyAcronym]
-  )
-  React.useEffect(() => {
-    if (
-      system !== undefined ||
-      !fismaSystemsLoaded ||
-      (!systemParam && !legacyAcronym) ||
-      legacyActiveMatches.length > 0 ||
-      decommissionedSystems !== null
-    )
-      return
-    const controller = new AbortController()
-    const load = async () => {
-      try {
-        const res = await axiosInstance.get(apiPaths.fismaSystems.list(true), {
-          signal: controller.signal,
-        })
-        setDecommissionedSystems(res.data?.data ?? [])
-      } catch (error) {
-        if (controller.signal.aborted) return
-        if (isAuthHandled(error)) return
-        // Resolution proceeds without the list; the not-found warning is the
-        // fallback rather than an indefinite spinner.
-        setDecommissionedSystems([])
-      }
-    }
-    void load()
-    return () => controller.abort()
-  }, [
-    system,
-    fismaSystemsLoaded,
-    systemParam,
-    legacyAcronym,
-    legacyActiveMatches.length,
-    decommissionedSystems,
-  ])
   // Redirect a pre-#732 acronym bookmark to the id form once the systems list
   // can answer. Exactly one match (active, else decommissioned) rewrites the
   // first segment in place and keeps the datacall / pillar / function tail, so
@@ -515,48 +459,13 @@ export default function QuestionnarePage() {
   }>({})
   const systemName = systemInfo?.fismaname ?? ''
 
-  // Fetch ZTMF Insights for this system once (not per question - one call
-  // returns every question's row). The initial lookup briefly blocks submission
-  // so a carried-forward response cannot be submitted before its required
-  // review UI is known. Failures and empty responses then leave the map empty.
-  React.useEffect(() => {
-    if (!system) return
-    const controller = new AbortController()
-    // Clear the previous system's insights up front so a system change can't
-    // briefly render stale badges/panel while the new fetch is in flight.
-    setInsightsByQuestion(new Map())
-    setInsightsLoadState({ system, settled: false })
-    const load = async () => {
-      try {
-        const res = await axiosInstance.get<{ data: Insight[] }>(
-          apiPaths.insights,
-          {
-            params: { fismasystemid: system },
-            signal: controller.signal,
-          }
-        )
-        const map = new Map<number, InsightPayload>()
-        for (const row of res.data?.data ?? []) {
-          if (row?.questionid != null && row.payload) {
-            map.set(row.questionid, row.payload)
-          }
-        }
-        setInsightsByQuestion(map)
-      } catch {
-        if (!controller.signal.aborted) {
-          // Insights are additive and optional; swallow errors and render the
-          // page exactly as it is without them.
-          setInsightsByQuestion(new Map())
-        }
-      } finally {
-        if (!controller.signal.aborted) {
-          setInsightsLoadState({ system, settled: true })
-        }
-      }
-    }
-    void load()
-    return () => controller.abort()
-  }, [system])
+  // ZTMF Insights keyed by DB questionid, one read per system (one call
+  // returns every question's row). Empty for every "off" case and on failure,
+  // so the panel never renders and the page is unchanged. Until the system's
+  // lookup settles, submission is held so a carried-forward response cannot be
+  // submitted before its required review UI is known.
+  const { insightsByQuestion, settled: insightsSettled } =
+    useSystemInsights(system)
   const [selectedIndex, setSelectedIndex] = React.useState(1)
   const handleConfirmReturn = (confirm: boolean) => {
     if (confirm) {
@@ -569,22 +478,34 @@ export default function QuestionnarePage() {
     }
   }
   const handleListItemClick = (index: number) => {
-    saveGenRef.current++
+    draft.invalidatePending()
     setLoadingQuestion(true)
     setSelectedIndex(index)
     setQuestionId(index)
   }
 
-  const clearCurrentDraft = () => {
-    saveGenRef.current++
-    if (system && questionId && datacallID > 0) {
-      void clearDraft(userInfo.userid, system, questionId, datacallID)
-    }
-    // An explicit clear (the answer is saved server-side now) is meant to remove
-    // the entry, declined or not, so nothing is left to suppress.
-    declinedDraftRef.current = false
-    setDraftStatus('idle')
-  }
+  // The localStorage draft for the question on screen (autosave, restore,
+  // unmount flush). clearCurrentDraft removes it once the answer is saved or
+  // abandoned.
+  const draft = useQuestionDraft({
+    userid: userInfo.userid,
+    system,
+    questionId,
+    datacallID,
+    isReadOnly,
+    loadingQuestion,
+    selectQuestionOption,
+    notes,
+    initQuestionChoice,
+    initNotes,
+  })
+  const draftStatus = draft.status
+  const {
+    restore: restoreDraft,
+    resetStatus: resetDraftStatus,
+    isRestored: isDraftRestored,
+  } = draft
+  const clearCurrentDraft = draft.clear
 
   // Keep insight, review, and card state scoped to one system x data call x
   // database question. React reuses this route component as those route values
@@ -600,13 +521,9 @@ export default function QuestionnarePage() {
   // per-OpDiv capability list the gate below keys on. Without the second
   // condition a fast /insights response could enable Next/Complete before
   // /opdivs resolves, letting the panel pop in after the user advanced.
-  const insightsPending =
-    !!system &&
-    (insightsLoadState.system !== system ||
-      !insightsLoadState.settled ||
-      !opdivsLoaded)
+  const insightsPending = !!system && (!insightsSettled || !opdivsLoaded)
   const currentInsight =
-    insightsLoadState.system === system && currentDatabaseQuestionId != null
+    currentDatabaseQuestionId != null
       ? insightsByQuestion.get(currentDatabaseQuestionId)
       : undefined
   // ZTMF Insights are a per-OpDiv capability (opdivs.insights_enabled), so
@@ -722,7 +639,7 @@ export default function QuestionnarePage() {
   // and both requests, so this page adds none of its own.
   const answerHistory = useAnswerHistory({
     scoreid,
-    refetchScores: () => fetchQuestionScores(system, setQuestionScores),
+    refetchScores: () => rereadQuestionScores(system),
     // Moves whenever this answer is written, which is what makes the Undo
     // button appear the instant a save lands instead of on the next
     // navigation. status is included because a confirm changes it.
@@ -769,12 +686,16 @@ export default function QuestionnarePage() {
       )
       // Flip the badge immediately (role="status" announces the change);
       // the refetch then brings the authoritative row, audit fields included.
-      setQuestionScores((prev) => {
-        const entry = Object.entries(prev).find(([, s]) => s.scoreid === id)
-        if (!entry) return prev
-        return { ...prev, [entry[0]]: { ...entry[1], status: 'done' } }
-      })
-      fetchQuestionScores(system, setQuestionScores)
+      if (system !== undefined) {
+        queryClient.setQueryData(
+          questionScoresQuery(datacallID, system).queryKey,
+          (rows) =>
+            rows?.map((row) =>
+              row.scoreid === id ? { ...row, status: 'done' as const } : row
+            )
+        )
+      }
+      rereadQuestionScores(system)
       return true
     } catch (error) {
       if (isAuthHandled(error)) return false
@@ -854,7 +775,7 @@ export default function QuestionnarePage() {
       if (outcome.kind === 'conflict' || outcome.kind === 'refused') {
         // Someone else wrote the answer, or it drifted, so the one on screen
         // may be stale too.
-        if (sameCycle()) fetchQuestionScores(system, setQuestionScores)
+        if (sameCycle()) rereadQuestionScores(system)
         if (movedOn()) return
         if (outcome.kind === 'conflict') {
           notify(UNDO_CONFLICT_MESSAGE, 'warning', { autoHideDuration: 4000 })
@@ -876,11 +797,11 @@ export default function QuestionnarePage() {
   // back to question 1. Built from a freshly-awaited scores fetch so the
   // just-saved answer counts; falls back to the on-screen map on failure.
   const handleCompleteClick = async () => {
-    saveGenRef.current++
+    draft.invalidatePending()
     if (!isReadOnly) {
       await saveResponse()
     }
-    const fresh = await fetchQuestionScores(system, setQuestionScores)
+    const fresh = await rereadQuestionScores(system)
     if (fresh) {
       // Re-seed the current question's saved state from the fresh map. The
       // old Complete re-seeded implicitly by navigating to question 1; this
@@ -904,6 +825,18 @@ export default function QuestionnarePage() {
     )
   }
 
+  // Rewrite the URL's pillar/function segments for a question in place, with
+  // the datacall context riding along (#501). Skipped for a functionid the
+  // loaded questions do not have.
+  const showQuestionInUrl = (functionid: number) => {
+    const q = questions[functionid]
+    if (!q || system === undefined) return
+    navigate(
+      questionnairePath(system, datacall, toSlug(q.pillar), toSlug(q.function)),
+      { state: datacallStateRef.current, replace: true }
+    )
+  }
+
   // Jump link from the Complete summary: same slug navigation + list-click
   // path the sidebar uses, so the datacall context rides along (#501).
   const jumpToSummaryEntry = (entry: ConfirmSummaryEntry) => {
@@ -912,18 +845,7 @@ export default function QuestionnarePage() {
     // just close the dialog. handleListItemClick would set loading for a
     // questionId change that never fires, stranding the spinner.
     if (entry.functionid === questionId) return
-    const q = questions[entry.functionid]
-    if (q && system !== undefined) {
-      navigate(
-        questionnairePath(
-          system,
-          datacall,
-          toSlug(q.pillar),
-          toSlug(q.function)
-        ),
-        { state: datacallStateRef.current, replace: true }
-      )
-    }
+    showQuestionInUrl(entry.functionid)
     handleListItemClick(entry.functionid)
   }
 
@@ -995,7 +917,7 @@ export default function QuestionnarePage() {
           ? { ...current, needsSave: false }
           : current
       )
-      fetchQuestionScores(system, setQuestionScores)
+      rereadQuestionScores(system)
     } catch (error) {
       if (isAuthHandled(error)) return
       console.error('Error saving score:', error)
@@ -1018,125 +940,60 @@ export default function QuestionnarePage() {
         setLoadingQuestion(true)
         try {
           let questionsEmpty = false
-          let datacall = ''
-          let activeDataCallId: number
-          if (routeDatacallId && routeDatacall) {
-            // Opened for a specific system's own call from the dashboard. Read
-            // only when that call's own deadline has passed - not by comparing
-            // to the global latest, since two calls can be open at once.
-            datacall = encodeDatacallSlug(routeDatacall)
-            setDatacall(datacall)
-            activeDataCallId = routeDatacallId
-            setIsPastDeadline(
-              routeDeadline ? new Date() > new Date(routeDeadline) : true
-            )
-            datacallStateRef.current = {
+          // Dashboard route state, then the URL segment, then an explicit
+          // pick, then the latest call. See resolveActiveDatacall (#500).
+          // routeState is empty except on the dashboard path; see
+          // datacallStateRef's declaration for why.
+          const active = resolveActiveDatacall({
+            route: {
               datacallid: routeDatacallId,
               datacall: routeDatacall,
               deadline: routeDeadline,
-            }
-          } else {
-            // Cold deep link (no route state): resolve the cycle from the URL's
-            // data-call segment. Falls through to the selected/latest call when
-            // the segment is absent or unrecognized. (#500)
-            //
-            // These branches leave datacallStateRef empty - see its declaration.
-            // The cycle rides in the URL segment written by the canonical
-            // navigate below, so it survives re-runs and in-survey navigation
-            // without route state; a stale ref from a previous dashboard-opened
-            // call is also cleared here so it can't hijack a later system
-            // switch.
-            datacallStateRef.current = {}
-            const deepLinkDatacall = resolveDatacallBySlug(
-              datacalls,
-              datacallSlugRef.current
-            )
-            // "Not the latest call" does not mean "closed": two calls can be
-            // open at once (e.g. a CMS quarterly and an HHS annual), and
-            // "latest" only ranks deadlines. A non-latest pick just means the
-            // user chose a specific call; whether it reads as closed is
-            // decided by that call's own deadline below.
-            const isExplicitPick =
-              selectedDatacall !== null &&
-              selectedDatacall.datacallid !== latestDataCallId
-            if (deepLinkDatacall) {
-              datacall = encodeDatacallSlug(deepLinkDatacall.datacall)
-              setDatacall(datacall)
-              setIsPastDeadline(
-                deepLinkDatacall.deadline
-                  ? new Date() > new Date(deepLinkDatacall.deadline)
-                  : true
-              )
-              activeDataCallId = deepLinkDatacall.datacallid
-            } else if (isExplicitPick && selectedDatacall) {
-              datacall = encodeDatacallSlug(selectedDatacall.datacall)
-              setDatacall(datacall)
-              setIsPastDeadline(
-                selectedDatacall.deadline
-                  ? new Date() > new Date(selectedDatacall.deadline)
-                  : true
-              )
-              activeDataCallId = selectedDatacall.datacallid
-            } else {
-              datacall = encodeDatacallSlug(latestDatacall)
-              setDatacall(datacall)
-              setIsPastDeadline(
-                latestDeadline ? new Date() > new Date(latestDeadline) : true
-              )
-              activeDataCallId = latestDataCallId
-            }
-          }
+            },
+            datacallSlug: datacallSlugRef.current,
+            datacalls,
+            selectedDatacall,
+            latest: {
+              datacallid: latestDataCallId,
+              datacall: latestDatacall,
+              deadline: latestDeadline,
+            },
+            now: new Date(),
+          })
+          const datacall = active.slug
+          const activeDataCallId = active.datacallid
+          setDatacall(datacall)
+          setIsPastDeadline(active.isPastDeadline)
+          datacallStateRef.current = active.routeState
           // Hoisted so both the questions block and the final batch can access them.
-          const questionData: Record<number, Question> = {}
+          const questionsKey = {
+            systemId: system,
+            datacallId: activeDataCallId,
+          }
           let sortedFuncId: number[] = []
           // The function to open. Defaults to the first; overridden below when the
           // URL's :pillar/:function names a valid function (deep link, #500).
           let targetFuncId: number | undefined
           try {
-            const response = await axiosInstance.get(
-              apiPaths.fismaSystems.questions(system, activeDataCallId),
-              { signal: controller.signal }
-            )
-            // Decommissioned systems join to zero functions, so the questions
-            // endpoint returns no rows. The Go backend serializes a nil
-            // slice as JSON null, so the response can be either { data: null }
-            // or { data: [] } depending on driver behavior - treat both as
-            // the empty-state signal. Surface a friendly message instead of
+            const data = await queryClient.fetchQuery({
+              ...systemQuestionsQuery(system, activeDataCallId),
+              retry: false,
+            })
+            if (controller.signal.aborted) return
+            // Decommissioned systems have no questions (the fetcher reads the
+            // backend's null as []). Surface a friendly message instead of
             // crashing on categoriesData[0] below.
-            const data = response.data?.data
-            if (!data || (Array.isArray(data) && data.length === 0)) {
+            if (data.length === 0) {
               questionsEmpty = true
               setNoQuestions(true)
               setLoadingQuestion(false)
             } else {
-              data.forEach((question: FismaQuestion) => {
-                questionData[question.function.functionid] = {
-                  questionid: question.questionid,
-                  question: question.question,
-                  notesprompt: question.notesprompt,
-                  description: question.function.description,
-                  pillar: question.pillar.pillar,
-                  function: question.function.function,
-                }
-              })
               // The reduced-pillar rule is applied by the API for the cycle
               // requested above (ztmf#545), so whatever comes back is already
               // the right set, in the right order (ztmf-misc#393).
-              const categoriesData: Category[] = groupQuestionsByPillar(data)
-              sortedFuncId = categoriesData.flatMap((category) =>
-                category.steps.map((step) => step.function.functionid)
-              )
-              const funcIdToIdx = sortedFuncId.reduce(
-                (
-                  acc: { [key: number]: number },
-                  num: number,
-                  index: number
-                ) => {
-                  acc[num] = index
-                  return acc
-                },
-                {}
-              )
+              const nav = buildQuestionNav(data)
+              const categoriesData = nav.categories
+              sortedFuncId = nav.stepFunctionId
               // Honor the URL's :pillar/:function when they name a valid
               // function; otherwise open the first (#500).
               const target = resolveFunctionTarget(
@@ -1150,14 +1007,12 @@ export default function QuestionnarePage() {
               const targetFunctionName =
                 target?.functionName ??
                 categoriesData[0].steps[0].function.function
-              // Update sidebar/nav state immediately so the question list
-              // renders while scores are still loading. setQuestions,
-              // setDatacallID, and setQuestionId are deferred to the batch
-              // below - after scores arrive - so the questionId effect fires
-              // exactly once with the correct scores already in the ref.
-              setFunctionIdIdx(funcIdToIdx)
-              setStepFunctionId(sortedFuncId)
-              setCategories(categoriesData)
+              // Point the sidebar at these questions now so the list renders
+              // while scores are still loading. The questions map, datacallID
+              // and questionId move in the batch below - after scores arrive -
+              // so the questionId effect fires exactly once with the correct
+              // scores already in the ref.
+              setNavQuestionsKey(questionsKey)
               navigate(
                 questionnairePath(
                   system,
@@ -1182,30 +1037,19 @@ export default function QuestionnarePage() {
           if (questionsEmpty) {
             return
           }
-          let hashTable: questionScoreMap = {}
           try {
-            const res = await axiosInstance.get(
-              apiPaths.scores.list(activeDataCallId, system, true),
-              { signal: controller.signal }
-            )
-            const rows: QuestionScores[] = res.data.data ?? []
-            // Assigned into the outer hashTable so the batch below commits
-            // questions + scores + datacallID + questionId together.
-            hashTable = Object.assign(
-              {},
-              ...rows.map((item: QuestionScores) => ({
-                [item.functionoptionid]: item,
-              }))
-            )
-            // Same seed as fetchQuestionScores so a freshly-loaded page
+            // Awaited here so the batch below commits questions + scores +
+            // datacallID + questionId together: useQuestionScores serves this
+            // cache entry on the render the key moves.
+            const rows = await queryClient.fetchQuery({
+              ...questionScoresQuery(activeDataCallId, system),
+              retry: false,
+            })
+            if (controller.signal.aborted) return
+            // Same seed as rereadQuestionScores so a freshly-loaded page
             // shows "last saved <time>" without needing a save first.
-            let maxAt = 0
-            for (const r of rows) {
-              if (!r.last_edited_at) continue
-              const t = new Date(r.last_edited_at).getTime()
-              if (Number.isFinite(t) && t > maxAt) maxAt = t
-            }
-            if (maxAt > 0) setLastSavedAt(new Date(maxAt))
+            const latest = latestEditedAt(rows)
+            if (latest) setLastSavedAt(latest)
           } catch (error) {
             if (controller.signal.aborted) return
             if (!isAuthHandled(error)) {
@@ -1218,16 +1062,23 @@ export default function QuestionnarePage() {
             // component stays mounted). Returning here instead would leave the
             // sidebar/URL on the new system while the content stayed on the old
             // one. The [questionId] effect's finally clears the spinner.
+            // The empty list goes into the cache: an observer moved onto a
+            // key with no data would fetch it again at once. The next score
+            // write invalidates it.
+            queryClient.setQueryData(
+              questionScoresQuery(activeDataCallId, system).queryKey,
+              []
+            )
           }
           // Batch questions + scores + datacallID + questionId so the questionId
           // effect fires exactly once with the correct scores already in
           // questionScoresRef. This prevents a second effect run (and its
           // accompanying draft-clearing race) that would occur if questionScores
           // arrived as a separate update after questionId was already set.
-          setQuestions(questionData)
-          setQuestionScores(hashTable)
+          setLoadedKey(questionsKey)
           setDatacallID(activeDataCallId)
           setQuestionId(targetFuncId ?? sortedFuncId[0])
+          setLoadCount((n) => n + 1)
         } catch (error) {
           if (controller.signal.aborted) return
           if (isAuthHandled(error)) {
@@ -1252,6 +1103,7 @@ export default function QuestionnarePage() {
     latestDatacall,
     latestDeadline,
     datacalls,
+    queryClient,
   ])
   React.useEffect(() => {
     if (questionId) {
@@ -1262,26 +1114,21 @@ export default function QuestionnarePage() {
       // refetch window. Also resets draft indicators so stale status from
       // a previous question or datacall doesn't bleed into the next render.
       setInitQuestionChoice(-1)
-      setDraftStatus('idle')
-      const choices: QuestionChoice[] = []
+      resetDraftStatus()
       let funcOptId: number = 0
       async function fetchOptions() {
         try {
-          const res = await axiosInstance.get(
-            apiPaths.functionOptions(activeQuestionId),
-            { signal: controller.signal }
-          )
-          res.data.data.forEach((item: QuestionOption) => {
-            const choiceOpt: QuestionChoice = {
-              label: item.description,
-              value: item.functionoptionid,
-              score: item.score,
-            }
-            if (item.functionoptionid in questionScoresRef.current) {
-              funcOptId = item.functionoptionid
-              choiceOpt.defaultChecked = true
-            }
-            choices.push(choiceOpt)
+          // Awaited so the seeding below runs against this question's options;
+          // useFunctionOptions then serves the same entry once the id moves.
+          const optionRows = await queryClient.fetchQuery({
+            ...functionOptionsQuery(activeQuestionId),
+            retry: false,
+          })
+          if (controller.signal.aborted) return
+          const optionIds = optionRows.map((item) => item.functionoptionid)
+          // The saved answer is whichever option has a score row.
+          optionIds.forEach((id) => {
+            if (id in questionScoresRef.current) funcOptId = id
           })
           // Foundation of question
           setDescription(questions[questionId ?? 0]?.description ?? '')
@@ -1302,68 +1149,24 @@ export default function QuestionnarePage() {
           )
 
           // Restore any in-progress draft from localStorage, overriding the
-          // server-side values set above. Skipped for read-only sessions.
+          // server-side values set above. Read-only sessions evict it instead.
           const sys = systemRef.current
-          const uid = userInfo.userid
           if (controller.signal.aborted) return
-          // Reset per question - a declined entry belongs to one question, and a
-          // stale true here would suppress a legitimate clear on the next one.
-          declinedDraftRef.current = false
-          // Read-only sessions never load the draft again, so evict any lingering
-          // entry instead of letting it sit for the full TTL. Bump the save
-          // generation first: an autosave that fired just before isReadOnly
-          // flipped may still be mid-flight, and without the bump its isCurrent()
-          // checks would pass and rewrite the draft after this clear.
-          if (isReadOnly && sys && questionId && datacallID > 0) {
-            saveGenRef.current++
-            void clearDraft(uid, sys, questionId, datacallID)
-          }
-          const draft =
-            !isReadOnly && sys && questionId && datacallID > 0
-              ? await loadDraft(uid, sys, questionId, datacallID)
-              : null
-          // Guard: if the user navigated away while loadDraft was running
-          // (crypto.subtle.decrypt is genuinely async), discard its result
-          // rather than writing it into the now-active question's state.
-          if (controller.signal.aborted) return
-          if (draft) {
-            if (draft.selectQuestionOption === -1) {
-              // Notes-only draft - restore notes without pre-selecting an answer.
-              setNotes(draft.notes)
-              setDraftStatus('restored')
-            } else if (
-              choices.some((c) => c.value === draft.selectQuestionOption)
-            ) {
-              choices.forEach(
-                (c) =>
-                  (c.defaultChecked = c.value === draft.selectQuestionOption)
-              )
-              setSelectQuestionOption(draft.selectQuestionOption)
-              setNotes(draft.notes)
-              setDraftStatus('restored')
-            } else {
-              // Draft references an option that no longer exists - evict it.
-              if (sys && questionId && datacallID > 0)
-                await clearDraft(uid, sys, questionId, datacallID)
-              if (controller.signal.aborted) return
-              setDraftStatus('idle')
+          const stored = await restoreDraft(
+            { system: sys, questionId, datacallID },
+            optionIds,
+            controller.signal
+          )
+          if (stored === undefined) return
+          if (stored) {
+            setNotes(stored.notes)
+            // A notes-only draft (-1) restores the notes without pre-selecting
+            // an answer.
+            if (stored.selectQuestionOption !== -1) {
+              setSelectQuestionOption(stored.selectQuestionOption)
             }
-          } else {
-            // Tell "none stored" from "one we declined" - the no-edits clear
-            // below would delete the latter. A ref, not draftStatus:
-            // that gets reset to 'idle' and 'error', re-arming the clear.
-            if (!isReadOnly && sys && questionId && datacallID > 0) {
-              declinedDraftRef.current = await hasDeclinedDraft(
-                uid,
-                sys,
-                questionId,
-                datacallID
-              )
-              if (controller.signal.aborted) return
-            }
-            setDraftStatus('idle')
           }
-          setOptions(choices)
+          setOptionsFunctionId(activeQuestionId)
           // Mark this system x data call x question as the context the current
           // answer/notes were seeded for, so the prior-review initializer runs
           // only once the loaded state matches what is on screen.
@@ -1385,7 +1188,17 @@ export default function QuestionnarePage() {
       fetchOptions()
       return () => controller.abort()
     }
-  }, [questionId, questions, isReadOnly, datacallID, userInfo.userid])
+  }, [
+    questionId,
+    questions,
+    loadCount,
+    isReadOnly,
+    datacallID,
+    userInfo.userid,
+    restoreDraft,
+    resetDraftStatus,
+    queryClient,
+  ])
 
   // Record that the user opened this question, so time-spent analytics can
   // bound how long it was worked on before the next question is opened (only
@@ -1411,122 +1224,6 @@ export default function QuestionnarePage() {
       }
     })()
   }, [system, datacallID, viewedQuestionId])
-
-  // Debounced draft save: 1 second after the user pauses editing, persist
-  // the current answer and notes to localStorage so a reload can recover them.
-  // Only fires when the user has actually changed something from the server-side
-  // initial values - prevents question-load state transitions from being
-  // mistakenly recorded as drafts on questions the user never touched.
-  React.useEffect(() => {
-    if (
-      isReadOnly ||
-      !system ||
-      !questionId ||
-      datacallID <= 0 ||
-      loadingQuestion
-    ) {
-      pendingDraftRef.current = null
-      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
-      return
-    }
-    if (selectQuestionOption === initQuestionChoice && notes === initNotes) {
-      pendingDraftRef.current = null
-      saveGenRef.current++
-      // Skip clearDraft when a draft was just restored from storage - the draft
-      // values matching the server state does not mean the user reverted manually.
-      // Clearing it here would delete a valid in-progress draft on every page load
-      // when the server happens to be at the same state as the draft.
-      // A declined draft is skipped for the same reason: the entry is a real
-      // draft this build cannot read, and deleting it loses the user's text.
-      if (
-        system &&
-        questionId &&
-        datacallID > 0 &&
-        draftStatusRef.current !== 'restored' &&
-        !declinedDraftRef.current
-      )
-        void clearDraft(userInfo.userid, system, questionId, datacallID)
-      if (draftStatusRef.current !== 'idle') setDraftStatus('idle')
-      return
-    }
-    const currentGen = saveGenRef.current
-    const pending = {
-      userid: userInfo.userid,
-      system,
-      questionId,
-      datacallID,
-      draft: { selectQuestionOption, notes },
-      gen: currentGen,
-    }
-    pendingDraftRef.current = pending
-    const timer = setTimeout(() => {
-      if (saveGenRef.current !== currentGen) return
-      saveDraft(
-        pending.userid,
-        pending.system,
-        pending.questionId,
-        pending.datacallID,
-        pending.draft,
-        () => saveGenRef.current === currentGen
-      ).then((saved) => {
-        if (saveGenRef.current !== currentGen) return
-        // Clear by identity, not generation: a newer edit re-runs this effect
-        // and replaces the ref with a NEW object under the SAME generation
-        // (saveGenRef only moves on explicit clears), so a generation check
-        // here would let the older save's completion discard the newer edit's
-        // payload while its own debounce is still pending - and an unmount in
-        // that window would then flush nothing (#640 review). Gated on `saved`
-        // so a failed write stays in the ref for the unmount flush to retry.
-        if (saved && pendingDraftRef.current === pending)
-          pendingDraftRef.current = null
-        if (saved) {
-          // The stored entry is this build's now, so it is no longer declined.
-          declinedDraftRef.current = false
-          if (draftStatusRef.current !== 'restored') setDraftStatus('saved')
-        } else {
-          setDraftStatus('error')
-        }
-      })
-    }, 1000)
-    return () => clearTimeout(timer)
-  }, [
-    selectQuestionOption,
-    notes,
-    isReadOnly,
-    system,
-    questionId,
-    datacallID,
-    initQuestionChoice,
-    initNotes,
-    loadingQuestion,
-    userInfo.userid,
-  ])
-
-  // Flush a pending draft on unmount. beforeunload below covers tab close and
-  // hard refresh, but it does not fire on in-app navigation, and the debounce
-  // cleanup cancels the timer that would have written the draft. Mount-once so
-  // the cleanup runs on unmount only, never on a dep change (flushing on every
-  // dep change would defeat the debounce and write on each keystroke).
-  // saveDraft takes primitives and touches no component state, so the write
-  // completes after this component is gone.
-  React.useEffect(() => {
-    return () => {
-      const pending = pendingDraftRef.current
-      // Reading the live generation is the point of this guard, not a staleness
-      // bug: it must reflect any clearCurrentDraft that ran after the timer was
-      // scheduled, so a flush cannot resurrect a just-deleted draft. Copying it
-      // into the effect body would freeze it at its mount value.
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-      if (!pending || saveGenRef.current !== pending.gen) return
-      void saveDraft(
-        pending.userid,
-        pending.system,
-        pending.questionId,
-        pending.datacallID,
-        pending.draft
-      )
-    }
-  }, [])
 
   // Warn before tab close or hard refresh when the active question has edits
   // that haven't been committed to the backend yet.
@@ -1564,7 +1261,7 @@ export default function QuestionnarePage() {
           u.selectQuestionOption !== u.initQuestionChoice ||
           u.notes !== u.initNotes ||
           u.priorReviewNeedsSave,
-        draftRestored: draftStatusRef.current === 'restored',
+        draftRestored: isDraftRestored(),
       })
     ) {
       return
@@ -1575,19 +1272,13 @@ export default function QuestionnarePage() {
     )
     // No change from the last-seeded state - nothing to correct.
     if (sel.choice === u.initQuestionChoice && sel.notes === u.initNotes) return
-    setOptions((prev) =>
-      prev.map((o) => ({
-        ...o,
-        defaultChecked: Number(o.value) === sel.funcOptId,
-      }))
-    )
     setSelectQuestionOption(sel.choice)
     setInitQuestionChoice(sel.choice)
     setNotes(sel.notes)
     setInitNotes(sel.notes)
     setScoreId(sel.scoreid)
     setRadioKey((k) => k + 1)
-  }, [questionScores, questionId])
+  }, [questionScores, questionId, isDraftRestored])
 
   // A score copied from the prior data call has no edit event for the current
   // call. When its notes exactly match last_score_notes, keep that text as
@@ -1791,15 +1482,52 @@ export default function QuestionnarePage() {
     ? addSpace(currentCategory.steps[currentFunctionIndex].function.function)
     : ''
 
+  // Leaving the question would drop an edit: a changed answer or notes, or a
+  // resolved prior-response review that still has to be saved. Moving away
+  // asks first.
+  const hasUnsavedEdits =
+    !isReadOnly &&
+    ((selectQuestionOption !== -1 &&
+      initQuestionChoice !== selectQuestionOption) ||
+      initNotes !== notes ||
+      priorReviewNeedsSave)
+
+  const handlePreviousClick = () => {
+    const id = stepFunctionId[functionIdIdx[selectedIndex] - 1]
+    if (hasUnsavedEdits) {
+      setStepId(id)
+      setOpenAlert(true)
+      return
+    }
+    draft.invalidatePending()
+    showQuestionInUrl(id)
+    setLoadingQuestion(true)
+    setQuestionId(id)
+    setSelectedIndex(id)
+  }
+
+  // Next saves the current question on its own (#705). Complete on the open
+  // call summarizes instead of silently wrapping to question 1; a closed call
+  // keeps the wrap-around, harmless paging for a historical viewer.
+  const handleNextClick = () => {
+    if (isLastQuestion && isOpenCall) {
+      void handleCompleteClick()
+      return
+    }
+    draft.invalidatePending()
+    const id = isLastQuestion
+      ? stepFunctionId[0]
+      : stepFunctionId[functionIdIdx[selectedIndex] + 1]
+    showQuestionInUrl(id)
+    if (id !== questionId) setLoadingQuestion(true)
+    setQuestionId(id)
+    setSelectedIndex(id)
+    if (!isReadOnly) saveResponse()
+  }
+
   const navigateToFunction = (pillarName: string, fn: FismaQuestion) => {
     if (selectedIndex === fn.function.functionid) return
-    const dirty =
-      !isReadOnly &&
-      ((selectQuestionOption !== -1 &&
-        initQuestionChoice !== selectQuestionOption) ||
-        initNotes !== notes ||
-        priorReviewNeedsSave)
-    if (dirty) {
+    if (hasUnsavedEdits) {
       setStepId(fn.function.functionid)
       setOpenAlert(true)
       return
@@ -1998,38 +1726,14 @@ export default function QuestionnarePage() {
           }}
         />
         <Card sx={{ p: 3 }}>
-          <EyebrowLine
+          <QuestionHeading
             pillar={currentCategoryName}
             functionName={currentFunctionName}
             current={currentFunctionIndex + 1}
             total={currentCategory?.steps.length ?? 0}
+            question={question}
+            description={description}
           />
-          {/* The question is the card's heading - h2 under the PageHeader's
-              h1 so screen-reader users can jump straight to it. */}
-          <Typography
-            component="h2"
-            sx={{
-              fontSize: 18,
-              fontWeight: 700,
-              color: colors.ink,
-              mt: 0.75,
-              mb: 0.5,
-              lineHeight: 1.35,
-            }}
-          >
-            {question || ' '}
-          </Typography>
-          {description && (
-            <Typography
-              sx={{
-                fontSize: 13,
-                color: colors.neutral500,
-                mb: 2,
-              }}
-            >
-              {description}
-            </Typography>
-          )}
           {insightsPending && (
             <Typography
               role="status"
@@ -2077,7 +1781,7 @@ export default function QuestionnarePage() {
                   value={notes}
                   onChange={(value) => {
                     setNotes(value)
-                    if (draftStatus === 'restored') setDraftStatus('idle')
+                    draft.markEdited()
                   }}
                   insight={currentInsight}
                   priorResponse={currentPriorResponse}
@@ -2093,158 +1797,48 @@ export default function QuestionnarePage() {
                   maxLength={MAX_QUESTIONNAIRE_NOTES_LENGTH}
                 />
               ) : (
-                <>
-                  <Typography
-                    component="label"
-                    htmlFor="questionnaire-notes"
-                    sx={{
-                      display: 'block',
-                      fontSize: 13,
-                      fontWeight: 600,
-                      color: colors.ink,
-                      mt: 3,
-                      mb: 0.5,
-                    }}
-                  >
-                    Supporting evidence{' '}
-                    <Box
-                      component="span"
-                      sx={{
-                        color: colors.neutral500,
-                        fontWeight: 500,
-                      }}
-                    >
-                      - optional
-                    </Box>
-                  </Typography>
-                  <CssTextField
-                    id="questionnaire-notes"
-                    multiline
-                    rows={4}
-                    fullWidth
-                    value={notes}
-                    disabled={isReadOnly}
-                    error={needsNotesUpdate}
-                    helperText={
-                      needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
-                    }
-                    placeholder={
-                      notePrompt ||
-                      'Link policies or screenshots in your evidence repo.'
-                    }
-                    inputProps={{ maxLength: MAX_QUESTIONNAIRE_NOTES_LENGTH }}
-                    onChange={(e) => {
-                      setNotes(e.target.value)
-                      if (draftStatus === 'restored') setDraftStatus('idle')
-                    }}
-                  />
-                </>
-              )}
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  gap: 1,
-                  mt: 0.5,
-                }}
-              >
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <AISummaryBadge
-                    show={
-                      selectQuestionOption >= 0 &&
-                      questionScores[selectQuestionOption]
-                        ?.notes_is_ai_summary === true
-                    }
-                  />
-                  {!hasJustificationContext && (
-                    <Typography sx={{ fontSize: 12, color: colors.neutral500 }}>
-                      {notePrompt
-                        ? notePrompt
-                        : 'Link policies or screenshots in your evidence repo.'}
-                    </Typography>
-                  )}
-                </Box>
-                {/* JustificationField renders its own counter. */}
-                {!hasJustificationContext && !isReadOnly && (
-                  <Typography
-                    sx={{
-                      fontSize: 12,
-                      color:
-                        notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH
-                          ? colors.danger
-                          : notes.length >= MAX_QUESTIONNAIRE_NOTES_LENGTH * 0.9
-                            ? '#A34200'
-                            : colors.neutral500,
-                    }}
-                  >
-                    {notes.length} / {MAX_QUESTIONNAIRE_NOTES_LENGTH}
-                  </Typography>
-                )}
-              </Box>
-              {/* Carried-forward confirmation strip, in the same zone where
-                  the prior-response flow surfaces its "review before
-                  continuing" message, so every system shares one review area.
-                  The chip is a role="status" live region, so confirming -
-                  which swaps its label in place - is announced (508). The
-                  button yields the moment the question is dirty (the edit is
-                  the explicit act; Next saves it), and Next itself never
-                  writes on an untouched question (#413). */}
-              {currentCarryState !== 'none' && (
-                <Box
-                  sx={{
-                    display: 'flex',
-                    alignItems: 'center',
-                    flexWrap: 'wrap',
-                    gap: 1,
-                    mt: 1.5,
+                <EvidenceNotesField
+                  value={notes}
+                  onChange={(value) => {
+                    setNotes(value)
+                    draft.markEdited()
                   }}
-                >
-                  <Chip
-                    role="status"
-                    size="small"
-                    variant="outlined"
-                    color={
-                      currentCarryState === 'unconfirmed'
-                        ? 'warning'
-                        : 'success'
-                    }
-                    // Outlined warning reads at 3.1:1 on white; success
-                    // clears AA on its own (ui#714).
-                    sx={
-                      currentCarryState === 'unconfirmed'
-                        ? outlinedChipSx('warning')
-                        : undefined
-                    }
-                    label={
-                      currentCarryState === 'unconfirmed'
-                        ? 'Carried forward - not yet confirmed'
-                        : 'Updated this data call'
-                    }
-                  />
-                  {showConfirmButton && (
-                    <Button
-                      variant="outlined"
-                      color="success"
-                      size="small"
-                      startIcon={<CheckCircleOutlineIcon />}
-                      onClick={handleConfirmClick}
-                      disabled={confirming}
-                      aria-describedby={
-                        showCarryForwardHelper
-                          ? CARRY_FORWARD_HELPER_ID
-                          : undefined
-                      }
-                      sx={{ textTransform: 'none' }}
-                    >
-                      Confirm this answer is still accurate
-                    </Button>
-                  )}
-                  {/* Third child of the existing strip: it already wraps and
-                      gaps, so no layout change. Hidden while the form is dirty
-                      - undoing saved state under unsaved edits would discard
-                      them silently. */}
-                  {showUndoButton && answerHistory.head && (
+                  notePrompt={notePrompt}
+                  disabled={isReadOnly}
+                  errorText={
+                    needsNotesUpdate ? NOTES_UPDATE_REQUIRED_MSG : undefined
+                  }
+                />
+              )}
+              {/* JustificationField renders its own prompt and counter. */}
+              <NotesFooter
+                showAiBadge={
+                  selectQuestionOption >= 0 &&
+                  questionScores[selectQuestionOption]?.notes_is_ai_summary ===
+                    true
+                }
+                prompt={
+                  hasJustificationContext
+                    ? undefined
+                    : notePrompt || DEFAULT_NOTES_PROMPT
+                }
+                count={
+                  hasJustificationContext || isReadOnly
+                    ? undefined
+                    : notes.length
+                }
+              />
+              <CarryForwardStrip
+                state={currentCarryState}
+                showConfirm={showConfirmButton}
+                confirming={confirming}
+                onConfirm={handleConfirmClick}
+                showHelper={showCarryForwardHelper}
+                // Hidden while the form is dirty: undoing saved state under
+                // unsaved edits would discard them silently.
+                undo={
+                  showUndoButton &&
+                  answerHistory.head && (
                     <UndoAnswerButton
                       head={answerHistory.head}
                       disabled={answerHistory.undo.isPending}
@@ -2255,42 +1849,10 @@ export default function QuestionnarePage() {
                         savedAt: undoPrior?.createdat,
                       })}
                     />
-                  )}
-                </Box>
-              )}
-              {/* Sits where the prior-response flow puts its own review
-                  message, so both variants instruct in the same place.
-                  "before continuing" is advisory on purpose: Next is not
-                  blocked on this variant. Plain text, not a live region -
-                  the chip above owns the announcement. */}
-              {showCarryForwardHelper && (
-                <Typography
-                  id={CARRY_FORWARD_HELPER_ID}
-                  sx={{ mt: 0.5, fontSize: 12, color: status.warning.color }}
-                >
-                  Review the carried-forward answer and confirm it, or write a
-                  new justification, before continuing.
-                </Typography>
-              )}
-              {draftStatus !== 'idle' && !isReadOnly && (
-                <Alert
-                  severity={
-                    draftStatus === 'saved'
-                      ? 'success'
-                      : draftStatus === 'error'
-                        ? 'error'
-                        : 'warning'
-                  }
-                  icon={false}
-                  sx={{ mt: 1, py: 0.5 }}
-                >
-                  {draftStatus === 'saved'
-                    ? 'Draft saved - click Next or Complete to save permanently.'
-                    : draftStatus === 'error'
-                      ? 'Draft could not be saved - click Next or Complete to save permanently.'
-                      : 'Draft restored - click Next or Complete to save permanently.'}
-                </Alert>
-              )}
+                  )
+                }
+              />
+              {!isReadOnly && <DraftStatusAlert status={draftStatus} />}
               <AnswerHistoryPanel
                 open={answerHistory.open}
                 onClose={answerHistory.closeHistory}
@@ -2301,151 +1863,28 @@ export default function QuestionnarePage() {
                 onUndo={handleUndoClick}
                 canUndo={showUndoButton}
               />
-              <Box
-                sx={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  mt: 3,
-                  pt: 2,
-                  borderTop: `1px solid ${colors.neutral200}`,
+              <QuestionNavFooter
+                previousDisabled={selectedIndex === stepFunctionId[0]}
+                onPrevious={handlePreviousClick}
+                saveIndicator={{
+                  lastSavedAt,
+                  lastEditedAt: currentSavedScore?.last_edited_at ?? null,
+                  lastEditedBy: currentSavedScore?.last_edited_by ?? null,
+                  isReadOnly,
                 }}
-              >
-                <Button
-                  variant="text"
-                  color="primary"
-                  disabled={selectedIndex === stepFunctionId[0]}
-                  onClick={() => {
-                    const id = stepFunctionId[functionIdIdx[selectedIndex] - 1]
-                    if (
-                      !isReadOnly &&
-                      ((selectQuestionOption !== -1 &&
-                        initQuestionChoice !== selectQuestionOption) ||
-                        initNotes !== notes ||
-                        priorReviewNeedsSave)
-                    ) {
-                      setStepId(id)
-                      setOpenAlert(true)
-                      return
-                    }
-                    saveGenRef.current++
-                    if (questions[id]) {
-                      const q = questions[id]
-                      navigate(
-                        questionnairePath(
-                          system,
-                          datacall,
-                          toSlug(q.pillar),
-                          toSlug(q.function)
-                        ),
-                        { state: datacallStateRef.current, replace: true }
-                      )
-                    }
-                    setLoadingQuestion(true)
-                    setQuestionId(id)
-                    setSelectedIndex(id)
-                  }}
-                  sx={{ fontSize: 13, fontWeight: 600 }}
-                >
-                  {'< Previous'}
-                </Button>
-                {/* The history trigger sits beside the save indicator rather
-                    than inside it. SaveIndicator renders LastEditedFooter as a
-                    Tooltip title, and a link in tooltip content is hover-only:
-                    unreachable by keyboard and absent from the DOM until the
-                    pointer arrives. Grouped in a Box so the row keeps its
-                    three-child space-between layout. */}
-                <Box sx={{ display: 'flex', alignItems: 'center', gap: 1 }}>
-                  <SaveIndicator
-                    lastSavedAt={lastSavedAt}
-                    lastEditedAt={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_at
-                        : null
-                    }
-                    lastEditedBy={
-                      initQuestionChoice !== -1 &&
-                      questionScores[initQuestionChoice]
-                        ? questionScores[initQuestionChoice].last_edited_by
-                        : null
-                    }
-                    isReadOnly={isReadOnly}
-                  />
-                  {/* Only offered when there is something to show. History
-                      stays readable on a closed call, where admins can still
-                      undo from the drawer but the strip is absent. */}
-                  {answerHistory.head && (
-                    <Link
-                      id="view-answer-history"
-                      component="button"
-                      type="button"
-                      onClick={answerHistory.openHistory}
-                      // Matches the SaveIndicator text it sits beside.
-                      sx={{ fontSize: 12, fontWeight: 600 }}
-                    >
-                      View history
-                    </Link>
-                  )}
-                </Box>
-                {/* Tooltip states that the forward action saves this
-                    question on its own (#705). describeChild so MUI applies
-                    aria-description, not aria-label, over the button text;
-                    the visually-hidden span mirrors it for keyboard/SR users.
-                    Empty title (read-only, or last-on-closed-call) suppresses
-                    the tooltip. */}
-                <Tooltip title={navHintMsg} describeChild>
-                  <span>
-                    <Button
-                      variant="contained"
-                      color="primary"
-                      disabled={
-                        needsNotesUpdate ||
-                        insightsPending ||
-                        priorReviewState === 'pending' ||
-                        priorReviewState === 'initializing'
-                      }
-                      aria-describedby={navHintMsg ? NAV_HINT_ID : undefined}
-                      onClick={() => {
-                        // Complete on the open call summarizes instead of
-                        // silently wrapping to question 1. A closed call keeps
-                        // the wrap-around - harmless paging for a historical
-                        // viewer.
-                        if (isLastQuestion && isOpenCall) {
-                          void handleCompleteClick()
-                          return
-                        }
-                        saveGenRef.current++
-                        const id = isLastQuestion
-                          ? stepFunctionId[0]
-                          : stepFunctionId[functionIdIdx[selectedIndex] + 1]
-                        if (questions[id]) {
-                          const q = questions[id]
-                          navigate(
-                            questionnairePath(
-                              system,
-                              datacall,
-                              toSlug(q.pillar),
-                              toSlug(q.function)
-                            ),
-                            { state: datacallStateRef.current, replace: true }
-                          )
-                        }
-                        if (id !== questionId) setLoadingQuestion(true)
-                        setQuestionId(id)
-                        setSelectedIndex(id)
-                        if (!isReadOnly) saveResponse()
-                      }}
-                      sx={{ fontSize: 13 }}
-                    >
-                      {isLastQuestion ? 'Complete' : 'Next question >'}
-                    </Button>
-                    <Box component="span" id={NAV_HINT_ID} sx={visuallyHidden}>
-                      {navHintMsg}
-                    </Box>
-                  </span>
-                </Tooltip>
-              </Box>
+                onViewHistory={
+                  answerHistory.head ? answerHistory.openHistory : undefined
+                }
+                nextDisabled={
+                  needsNotesUpdate ||
+                  insightsPending ||
+                  priorReviewState === 'pending' ||
+                  priorReviewState === 'initializing'
+                }
+                onNext={handleNextClick}
+                nextLabel={isLastQuestion ? 'Complete' : 'Next question >'}
+                navHint={navHintMsg}
+              />
             </>
           )}
         </Card>
