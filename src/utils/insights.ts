@@ -43,6 +43,12 @@ const EMPTY_INSIGHTS: ReadonlyMap<number, InsightPayload> = new Map()
  * failure, which the questionnaire uses to hold submission while a
  * carried-forward response's review UI is still unknown.
  *
+ * A cache entry from an earlier visit only counts as settled when it is a
+ * success that is still fresh. A cached failure, or a success past its stale
+ * window, is read again on mount, and `settled` waits for that read. Otherwise
+ * a stale or failed entry would let a carried-forward answer be submitted
+ * before the insights that decide its review arrive.
+ *
  * Keyed per system, so switching systems never shows the previous system's
  * insights while the new ones load.
  *
@@ -52,7 +58,7 @@ export function useSystemInsights(systemId: number | undefined): {
   insightsByQuestion: ReadonlyMap<number, InsightPayload>
   settled: boolean
 } {
-  const { data, isPending } = useQuery({
+  const { data, isSuccess, isStale, isFetchedAfterMount } = useQuery({
     queryKey: queryKeys.insights(systemId ?? 0),
     queryFn: ({ signal }) => fetchSystemInsights(systemId as number, signal),
     enabled: !!systemId,
@@ -61,6 +67,6 @@ export function useSystemInsights(systemId: number | undefined): {
   })
   return {
     insightsByQuestion: data ?? EMPTY_INSIGHTS,
-    settled: !!systemId && !isPending,
+    settled: !!systemId && (isFetchedAfterMount || (isSuccess && !isStale)),
   }
 }

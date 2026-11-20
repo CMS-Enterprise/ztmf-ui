@@ -53,6 +53,9 @@ export type SystemQuestionsKey = { systemId: number; datacallId: number }
  * has awaited the same query through `fetchQuery`, so the read here is served
  * from the cache on the render the key changes, and what it renders switches
  * at the moment the page chooses rather than whenever the response lands.
+ * Infinite stale time for the same reason: a background refetch (on
+ * reconnect, say) that brought back changed rows would hand the page new
+ * questions mid-edit and re-seed the answer over the user's changes.
  *
  * @param key - The system and data call, or null for none.
  * @returns The rows, or undefined until a key is set and its data arrives.
@@ -63,6 +66,7 @@ export function useSystemQuestions(
   const { data } = useQuery({
     ...systemQuestionsQuery(key?.systemId ?? 0, key?.datacallId ?? 0),
     enabled: key !== null,
+    staleTime: Infinity,
   })
   return data
 }

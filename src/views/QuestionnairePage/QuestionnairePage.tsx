@@ -161,6 +161,11 @@ export default function QuestionnarePage() {
   const [loadedKey, setLoadedKey] = React.useState<SystemQuestionsKey | null>(
     null
   )
+  // Bumped at the end of every page load. A reload can land on the same
+  // system, data call and question, which leaves the key, questionId and
+  // datacallID unchanged. The question-load effect depends on this counter so
+  // it still runs, re-seeds the answer and clears the spinner the load set.
+  const [loadCount, setLoadCount] = React.useState(0)
   const navQuestions = useSystemQuestions(navQuestionsKey)
   const loadedQuestions = useSystemQuestions(loadedKey)
   const { categories, stepFunctionId, functionIdIdx } = React.useMemo(
@@ -246,9 +251,10 @@ export default function QuestionnarePage() {
     systemId: number | string | undefined
   ): Promise<questionScoreMap | undefined> => {
     try {
-      const rows = await queryClient.fetchQuery(
-        questionScoresQuery(datacallID, Number(systemId))
-      )
+      const rows = await queryClient.fetchQuery({
+        ...questionScoresQuery(datacallID, Number(systemId)),
+        retry: false,
+      })
       const hashTable = indexScoresByOption(rows)
       // Seed the "last saved" indicator from the freshest score row so the
       // header subtitle reads "last saved 2 min ago" on first paint instead
@@ -970,9 +976,10 @@ export default function QuestionnarePage() {
           // URL's :pillar/:function names a valid function (deep link, #500).
           let targetFuncId: number | undefined
           try {
-            const data = await queryClient.fetchQuery(
-              systemQuestionsQuery(system, activeDataCallId)
-            )
+            const data = await queryClient.fetchQuery({
+              ...systemQuestionsQuery(system, activeDataCallId),
+              retry: false,
+            })
             if (controller.signal.aborted) return
             // Decommissioned systems have no questions (the fetcher reads the
             // backend's null as []). Surface a friendly message instead of
@@ -1035,9 +1042,10 @@ export default function QuestionnarePage() {
             // Awaited here so the batch below commits questions + scores +
             // datacallID + questionId together: useQuestionScores serves this
             // cache entry on the render the key moves.
-            const rows = await queryClient.fetchQuery(
-              questionScoresQuery(activeDataCallId, system)
-            )
+            const rows = await queryClient.fetchQuery({
+              ...questionScoresQuery(activeDataCallId, system),
+              retry: false,
+            })
             if (controller.signal.aborted) return
             // Same seed as fetchQuestionScores so a freshly-loaded page
             // shows "last saved <time>" without needing a save first.
@@ -1071,6 +1079,7 @@ export default function QuestionnarePage() {
           setLoadedKey(questionsKey)
           setDatacallID(activeDataCallId)
           setQuestionId(targetFuncId ?? sortedFuncId[0])
+          setLoadCount((n) => n + 1)
         } catch (error) {
           if (controller.signal.aborted) return
           if (isAuthHandled(error)) {
@@ -1112,9 +1121,10 @@ export default function QuestionnarePage() {
         try {
           // Awaited so the seeding below runs against this question's options;
           // useFunctionOptions then serves the same entry once the id moves.
-          const optionRows = await queryClient.fetchQuery(
-            functionOptionsQuery(activeQuestionId)
-          )
+          const optionRows = await queryClient.fetchQuery({
+            ...functionOptionsQuery(activeQuestionId),
+            retry: false,
+          })
           if (controller.signal.aborted) return
           const optionIds = optionRows.map((item) => item.functionoptionid)
           // The saved answer is whichever option has a score row.
@@ -1182,6 +1192,7 @@ export default function QuestionnarePage() {
   }, [
     questionId,
     questions,
+    loadCount,
     isReadOnly,
     datacallID,
     userInfo.userid,
