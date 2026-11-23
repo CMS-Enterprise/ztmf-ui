@@ -246,7 +246,7 @@ Response: `{ data: datacall[] }`
 | 15  | Both close controls             | X and Close button each fire `onClose`                             |
 | 16  | Retry on reopen after failure   | A failed diff refetches when the modal reopens                     |
 | 17  | List keeps its observer         | With the modal gone, the layout still observes `/datacalls`        |
-| 18  | Diff stops observing on close   | A `scores` invalidation after close makes no `/scores/diff` call   |
+| 18  | Answer write while closed       | No `/scores/diff` call while closed; reopening then refetches      |
 | 19  | Cached diff on reopen           | Reopening inside the stale window makes no new `/scores/diff` call |
 
 ---

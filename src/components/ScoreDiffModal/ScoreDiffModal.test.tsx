@@ -396,8 +396,9 @@ describe('ScoreDiffModal', () => {
 
   // Both callers keep this dialog mounted and only toggle `open`. An ungated
   // query stays an observer after close, so an answer write elsewhere would
-  // refetch a diff nobody is looking at.
-  it('stops observing the diff once the modal closes', async () => {
+  // refetch a diff nobody is looking at. The write still marks the entry
+  // stale, so the next opening has to read the server again.
+  it('ignores an answer write while closed and refetches on reopen', async () => {
     setupMocks()
     const client = createTestQueryClient()
     const { rerender } = render(
@@ -422,6 +423,13 @@ describe('ScoreDiffModal', () => {
     })
 
     expect(diffCalls()).toBe(1)
+
+    rerender(
+      <QueryClientProvider client={client}>
+        <ScoreDiffModal {...DEFAULT_PROPS} open={true} />
+      </QueryClientProvider>
+    )
+    await waitFor(() => expect(diffCalls()).toBe(2))
   })
 
   // Reopening used to refetch because a counter forced the effect to re-run.
