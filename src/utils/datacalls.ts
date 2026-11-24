@@ -80,11 +80,8 @@ export async function createDatacall(input: DatacallInput): Promise<void> {
 /**
  * Mutation that creates a data call.
  *
- * On success every cached data-call list is invalidated. Nothing reads that
- * key yet: the layout still holds the list in component state and refreshes
- * it through a callback the modal fires. The invalidation is here so the
- * refresh works on its own once that read becomes a query, and the callback
- * goes away at the same time.
+ * On success every cached data-call list is invalidated, which is what the
+ * layout's picker and the comparison modal both refresh from.
  *
  * Not awaited, so the dialog closes on the write rather than waiting for a
  * list that nothing is rendering from yet. Error handling stays with the
