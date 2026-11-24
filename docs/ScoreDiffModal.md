@@ -88,57 +88,49 @@ export type ScoreDiffEntry = {
 | `systemAcronym`      | `string`     | Shown in dialog title alongside `systemName` |
 | `selectedDataCallId` | `number?`    | Pre-seeds the "To" picker default            |
 
-### 4.2 Module-Level Caches
+### 4.2 Reads
 
-One cache lives at module scope (outside the component) so it survives close/open cycles:
+Both reads are TanStack Query hooks; the modal holds no cache of its own.
 
-```ts
-const datacallsCache: { data: datacall[] | null; timestamp: number | null }
-const CACHE_DURATION = 10 * 60 * 1000 // 10 minutes
-```
+| Read               | Hook                                                  | Notes                                                                                                                |
+| ------------------ | ----------------------------------------------------- | -------------------------------------------------------------------------------------------------------------------- |
+| `GET /datacalls`   | `useDatacalls({ enabled: open })`                     | Shared with the layout, which observes the same key all session, so opening this is a cache hit                      |
+| `GET /scores/diff` | `useScoreDiff(from, to, systemId, { enabled: open })` | Keyed on the pair and the system; sends `skipPermissionNotification` so a 403 does not toast beside the inline alert |
 
-- `datacallsCache` — full sorted list of all data calls; one copy per page load
-- The **diff response is never cached** — re-fetches on every open and picker change
-- Clearing requires a full page refresh
+Both are gated on `open`. The dialog stays mounted between openings, so an
+ungated query would keep observing: it would refetch in the background on
+every answer write, and never read the server again on reopen.
+
+The module-level `datacallsCache` and its ten-minute `CACHE_DURATION` are
+gone. A reopen inside the stale window costs no request, and a reopen after
+a failure retries, both because the query re-enables rather than because the
+component tracks it.
 
 ### 4.3 State
 
-| Variable       | Type               | Purpose                                            |
-| -------------- | ------------------ | -------------------------------------------------- |
-| `datacalls`    | `datacall[]`       | Sorted list for the two pickers                    |
-| `fromDatacall` | `datacall \| null` | "From" picker selection                            |
-| `toDatacall`   | `datacall \| null` | "To" picker selection                              |
-| `diffResults`  | `ScoreDiffEntry[]` | Raw entries from the API                           |
-| `diffKey`      | `number`           | Counter incremented on each open to force re-fetch |
-| `loading`      | `boolean`          | True while diff API call is in-flight              |
-| `error`        | `string \| null`   | Rendered in an Alert on fetch failure              |
+| Variable       | Type               | Purpose                                     |
+| -------------- | ------------------ | ------------------------------------------- |
+| `fromDatacall` | `datacall \| null` | "From" picker selection                     |
+| `toDatacall`   | `datacall \| null` | "To" picker selection                       |
+| `seeded`       | `boolean`          | Whether the pickers have their defaults yet |
+
+`datacalls`, `diffResults`, `loading` and `error` all come off the queries.
+`diffKey`, a counter that forced a refetch on every open, is gone with them.
 
 ### 4.4 useEffect Lifecycle
 
 **Effect 1 — Accessibility focus** (`deps: [open]`)  
 Focuses the close button 100 ms after open. Cleanup cancels the timer if the modal closes before it fires.
 
-**Effect 2 — Open/close reset** (`deps: [open]`)  
-On open: increments `diffKey`. On close: clears `diffResults` and `error`.
-
-`diffKey` is the mechanism for forcing a fresh diff fetch on every reopen. When datacall objects are served from the module cache, the same object references return, so `fromDatacall`/`toDatacall` don't change between opens — React would skip the diff effect without this counter.
-
-**Effect 3 — Datacalls fetch** (`deps: [open, selectedDataCallId]`)  
-Fetches `GET /datacalls`, sorts by deadline (furthest-out first, `datacallid` as tiebreak), writes to cache. Sets picker defaults:
+**Effect 2 — Picker defaults** (`deps: [open, datacalls, selectedDataCallId]`)  
+Seeds the pickers once per opening, keyed on `selectedDataCallId` so a refetch
+of the shared list while the modal is open does not discard the user's
+choices. Sets:
 
 - **To** = data call matching `selectedDataCallId`, or newest if not found
 - **From** = the next-older call by deadline
 
-**Effect 4 — Diff fetch** (`deps: [fromDatacall, toDatacall, fismasystemid, diffKey]`)  
-Skips if either picker is null or both reference the same data call. Otherwise calls:
-
-```
-GET /scores/diff?from={from}&to={to}&fismasystemid={id}
-```
-
-Sets `loading = true`, clears previous results and error before the call. On success: populates `diffResults`. On failure: sets error string. Finally: clears `loading`.
-
-An `AbortController` is created per run; `signal` is passed to axios. The `.catch` and `.finally` handlers guard on `controller.signal.aborted` so state is never written after the modal closes or pickers change mid-flight.
+The wait covers seeding as well as loading, so the pickers never render empty.
 
 ### 4.5 groupedResults (useMemo)
 
@@ -233,26 +225,29 @@ Response: `{ data: datacall[] }`
 
 ## 7. Test Coverage
 
-16 tests in `ScoreDiffModal.test.tsx`. The module-level cache is busted before each test by advancing a mocked `Date.now()` past the 10-minute TTL.
+19 tests in `ScoreDiffModal.test.tsx`. Each test gets a fresh query client, so no cached state carries over and the clock does not need mocking.
 
-| #   | Test                            | What it validates                                                 |
-| --- | ------------------------------- | ----------------------------------------------------------------- |
-| 1   | `open=false` → no dialog        | Modal absent from DOM when closed                                 |
-| 2   | System name/acronym in title    | Title string interpolation                                        |
-| 3   | Extra-wide dialog               | Dialog uses the comparison-table size                             |
-| 4   | Spinner while datacalls loading | Loading indicator visible before fetch resolves                   |
-| 5   | To/From defaults                | To = `selectedDataCallId`; From = the next-older call by deadline |
-| 6   | Latest by deadline              | Furthest-out deadline is "latest", not the highest `datacallid`   |
-| 7   | Correct diff query params       | URL includes `?from=N&to=M&fismasystemid=K`                       |
-| 8   | Empty state message             | "No changes between these two datacalls."                         |
-| 9   | Error alert on failure          | Alert renders on network error                                    |
-| 10  | Full row render                 | All 6 columns populated                                           |
-| 11  | Notes shown/hidden              | Notes rendered when present; absent when null                     |
-| 12  | Null side → "No answer"         | One-sided rows render correctly                                   |
-| 13  | Pillar grouping                 | Groups by each row's pillar in API order, no `/questions` request |
-| 14  | Row without a pillar            | Lands under "Other"                                               |
-| 15  | Both close controls             | X and Close button each fire `onClose`                            |
-| 16  | Re-fetch on reopen              | New `/scores/diff` call fires after close → reopen                |
+| #   | Test                            | What it validates                                                  |
+| --- | ------------------------------- | ------------------------------------------------------------------ |
+| 1   | `open=false` → no dialog        | Modal absent from DOM when closed                                  |
+| 2   | System name/acronym in title    | Title string interpolation                                         |
+| 3   | Extra-wide dialog               | Dialog uses the comparison-table size                              |
+| 4   | Spinner while datacalls loading | Loading indicator visible before fetch resolves                    |
+| 5   | To/From defaults                | To = `selectedDataCallId`; From = the next-older call by deadline  |
+| 6   | Latest by deadline              | Furthest-out deadline is "latest", not the highest `datacallid`    |
+| 7   | Correct diff query params       | URL includes `?from=N&to=M&fismasystemid=K`                        |
+| 8   | Empty state message             | "No changes between these two datacalls."                          |
+| 9   | Error alert on failure          | Alert renders on network error                                     |
+| 10  | Full row render                 | All 6 columns populated                                            |
+| 11  | Notes shown/hidden              | Notes rendered when present; absent when null                      |
+| 12  | Null side → "No answer"         | One-sided rows render correctly                                    |
+| 13  | Pillar grouping                 | Groups by each row's pillar in API order, no `/questions` request  |
+| 14  | Row without a pillar            | Lands under "Other"                                                |
+| 15  | Both close controls             | X and Close button each fire `onClose`                             |
+| 16  | Retry on reopen after failure   | A failed diff refetches when the modal reopens                     |
+| 17  | List keeps its observer         | With the modal gone, the layout still observes `/datacalls`        |
+| 18  | Answer write while closed       | No `/scores/diff` call while closed; reopening then refetches      |
+| 19  | Cached diff on reopen           | Reopening inside the stale window makes no new `/scores/diff` call |
 
 ---
 
@@ -278,9 +273,9 @@ an ESLint `no-restricted-imports` rule refuses to let them back.
 
 **Pillar from the diff row** — the diff endpoint carries each row's `pillarid` / `pillar` (ztmf-misc#395). The modal used to map `functionid` to a pillar through `/fismasystems/:id/questions`, but that list is one questionnaire version, and two cycles can pin different ones.
 
-**Module-level caches vs React state** — module scope survives component unmount/remount across close/open cycles, matching the pattern used by `PillarScoresModal`. Tradeoff: clearing requires a full page refresh.
+**Queries instead of a module cache** — the module-level cache survived unmount, which React state could not, but it also survived sign-out and was invisible to `queryClient.clear()`. The query cache gives the same survival through the layout's observer on the data-call key, and a write that invalidates the `scores` prefix reaches the diff without the modal knowing.
 
-**`diffKey` counter** — React's `Object.is` dependency comparison means cached object references don't change between opens, so the diff effect wouldn't re-run without a reliably-changing dependency. `diffKey` is that dependency.
+**Gated on `open` rather than a refetch counter** — the dialog stays mounted between openings, so the queries have to close with it. The old `diffKey` counter existed because cached object references do not change between opens, so the diff effect would not re-run; re-enabling a disabled query replaces it, and also handles the retry-after-failure case the counter did not.
 
 **Same-call prevention** — `getOptionDisabled` disables whichever data call is already selected in the opposite picker, preventing a always-empty self-diff.
 
@@ -304,6 +299,6 @@ Prerequisites: a FISMA system with ≥2 data calls and ≥1 answer that changed 
 | 8   | Pick two calls with no changes        | "No changes between these two datacalls." empty state                  |
 | 9   | Find a null-from row                  | "No answer" renders italic in From cell                                |
 | 10  | Find a row with no attribution        | "Unknown" renders in Changed by cell                                   |
-| 11  | Close and reopen the modal            | Fresh diff fetch; no stale data flash                                  |
+| 11  | Close and reopen within a minute      | Same rows, no new `/scores/diff` request; after a minute it refetches  |
 | 12  | Keyboard navigation                   | Tab → button, Enter → modal, Tab through controls, Escape → close      |
 | 13  | Screen reader                         | Dialog announced with title + description; table columns as headers    |
