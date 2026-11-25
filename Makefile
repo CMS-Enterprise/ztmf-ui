@@ -87,10 +87,16 @@ setup: install
 	@echo "Run 'make dev' to start the development server"
 
 # --- Frostfall (axe-core accessibility scanner) install settings -------------
-# Mirrors ../ztmf's install-emberfall: checksum-verified release binary into a
-# user-writable bin dir. Override for a system-wide install, e.g.
+# Release binary into a user-writable bin dir. Override for a system-wide install, e.g.
 # `make install-frostfall FROSTFALL_BIN_DIR=/usr/local/bin`.
-FROSTFALL_VERSION ?= v1.6.1
+# Each archive's sha256 is pinned here and must also be in the release's checksums.txt,
+# so a release re-uploaded after review fails the install. A new version means changing
+# FROSTFALL_VERSION and all four hashes together.
+FROSTFALL_VERSION := v1.9.0
+FROSTFALL_SHA256_Darwin_arm64 := 29f6d4fcac57ebbc015682fc7ba58bae307ea6f4eb41a8a4ec91ab982e5fc55f
+FROSTFALL_SHA256_Darwin_x86_64 := 1ed46f8a1ca171afd103027d307d7f202cd1ed8e2ebd1df8d7117a6bd065c4d7
+FROSTFALL_SHA256_Linux_arm64 := 2b28b7af644cd1ed717afc37cc16256896727522c8346c309621e5d0288f4591
+FROSTFALL_SHA256_Linux_x86_64 := 310a6fc45a2de1a7e7efb4e597b825de29c9cce44e52714fb9b2f112fdbe21dc
 FROSTFALL_OS := $(shell uname -s)
 FROSTFALL_UNAME_M := $(shell uname -m)
 FROSTFALL_ARCH := $(if $(filter arm64 aarch64,$(FROSTFALL_UNAME_M)),arm64,x86_64)
@@ -110,7 +116,11 @@ install-frostfall:
 	@mkdir -p $(FROSTFALL_BIN_DIR)
 	@curl -fsSL $(FROSTFALL_URL) -o /tmp/$(FROSTFALL_ASSET)
 	@curl -fsSL $(FROSTFALL_CHECKSUMS_URL) -o /tmp/frostfall_checksums.txt
-	@cd /tmp && grep " $(FROSTFALL_ASSET)$$" frostfall_checksums.txt | if command -v sha256sum >/dev/null 2>&1; then sha256sum -c -; else shasum -a 256 -c -; fi
+	@want="$(FROSTFALL_SHA256_$(FROSTFALL_OS)_$(FROSTFALL_ARCH))"; \
+	if [ -z "$$want" ]; then echo "No pinned sha256 for $(FROSTFALL_ASSET)."; rm -f /tmp/$(FROSTFALL_ASSET) /tmp/frostfall_checksums.txt; exit 1; fi; \
+	got=$$(if command -v sha256sum >/dev/null 2>&1; then sha256sum /tmp/$(FROSTFALL_ASSET); else shasum -a 256 /tmp/$(FROSTFALL_ASSET); fi | cut -d' ' -f1); \
+	if [ "$$got" != "$$want" ]; then echo "$(FROSTFALL_ASSET) is $$got, pinned $$want."; rm -f /tmp/$(FROSTFALL_ASSET) /tmp/frostfall_checksums.txt; exit 1; fi; \
+	if ! grep -qx "$$want  $(FROSTFALL_ASSET)" /tmp/frostfall_checksums.txt; then echo "$(FROSTFALL_ASSET)'s pinned sha256 is not in the release's checksums.txt."; rm -f /tmp/$(FROSTFALL_ASSET) /tmp/frostfall_checksums.txt; exit 1; fi
 	@tar -xzf /tmp/$(FROSTFALL_ASSET) -C $(FROSTFALL_BIN_DIR) frostfall
 	@chmod +x $(FROSTFALL_BIN_DIR)/frostfall
 	@rm -f /tmp/$(FROSTFALL_ASSET) /tmp/frostfall_checksums.txt
